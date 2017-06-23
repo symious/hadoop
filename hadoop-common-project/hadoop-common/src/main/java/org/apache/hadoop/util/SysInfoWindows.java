@@ -170,7 +170,7 @@ public class SysInfoWindows extends SysInfo {
 
   /** {@inheritDoc} */
   @Override
-  public int getNumProcessors() {
+  public synchronized int getNumProcessors() {
     refreshIfNeeded();
     return numProcessors;
   }
@@ -197,7 +197,7 @@ public class SysInfoWindows extends SysInfo {
 
   /** {@inheritDoc} */
   @Override
-  public float getCpuUsagePercentage() {
+  public synchronized float getCpuUsagePercentage() {
     refreshIfNeeded();
     float ret = cpuUsage;
     if (ret != -1) {
@@ -218,7 +218,7 @@ public class SysInfoWindows extends SysInfo {
 
   /** {@inheritDoc} */
   @Override
-  public float getNumVCoresUsed() {
+  public synchronized float getNumVCoresUsed() {
     refreshIfNeeded();
     float ret = cpuUsage;
     if (ret != -1) {
