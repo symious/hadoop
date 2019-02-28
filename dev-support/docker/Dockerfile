@@ -181,6 +181,7 @@ RUN apt-get -q update \
 # Install pylint at fixed version (2.0.0 removed python2 support)
 # https://github.com/PyCQA/pylint/issues/2294
 ####
+RUN pip2 install isort==4.3.8
 RUN pip2 install pylint==1.9.2
 
 ####
