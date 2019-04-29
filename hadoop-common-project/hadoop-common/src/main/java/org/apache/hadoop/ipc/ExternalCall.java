@@ -36,6 +36,11 @@ public abstract class ExternalCall<T> extends Call {
     this.action = action;
   }
 
+  @Override
+  public String getDetailedMetricsName() {
+    return "(external)";
+  }
+
   public abstract UserGroupInformation getRemoteUser();
 
   public final T get() throws InterruptedException, ExecutionException {
