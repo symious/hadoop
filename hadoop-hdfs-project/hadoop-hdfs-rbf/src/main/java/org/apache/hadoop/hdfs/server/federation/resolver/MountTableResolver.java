@@ -423,7 +423,14 @@ public class MountTableResolver
       };
       return this.locationCache.get(path, meh);
     } catch (ExecutionException e) {
-      throw new IOException(e);
+      Throwable cause = e.getCause();
+      final IOException ioe;
+      if (cause instanceof IOException) {
+        ioe = (IOException) cause;
+      } else {
+        ioe = new IOException(cause);
+      }
+      throw ioe;
     } finally {
       readLock.unlock();
     }
@@ -443,8 +450,8 @@ public class MountTableResolver
     } else {
       // Not found, use default location
       if (!defaultNSEnable) {
-        throw new IOException("Cannot find locations for " + path + ", " +
-            "because the default nameservice is disabled to read or write");
+        throw new RouterResolveException("Cannot find locations for " + path
+            + ", because the default nameservice is disabled to read or write");
       }
       RemoteLocation remoteLocation =
           new RemoteLocation(defaultNameService, path, path);

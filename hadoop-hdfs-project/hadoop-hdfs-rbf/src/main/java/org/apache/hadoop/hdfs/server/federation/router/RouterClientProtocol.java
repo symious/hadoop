@@ -69,6 +69,7 @@ import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamespaceInfo
 import org.apache.hadoop.hdfs.server.federation.resolver.FileSubclusterResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
+import org.apache.hadoop.hdfs.server.federation.resolver.RouterResolveException;
 import org.apache.hadoop.hdfs.server.federation.router.RouterRpcServer.RouterRpcServerAuditLogger;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
 import org.apache.hadoop.hdfs.server.namenode.AuditLogger;
@@ -855,25 +856,8 @@ public class RouterClientProtocol implements ClientProtocol {
       boolean needLocation) throws IOException {
     rpcServer.checkOperation(OperationCategory.READ);
 
-    // Locate the dir and fetch the listing
-    final List<RemoteLocation> locations =
-        rpcServer.getLocationsForPath(src, true);
-    RemoteMethod method = new RemoteMethod("getListing",
-        new Class<?>[] {String.class, startAfter.getClass(), boolean.class},
-        new RemoteParam(), startAfter, needLocation);
-    String operationName = "getListing";
-    String invokeType = null;
-    Map<RemoteLocation, DirectoryListing> listings = null;
-    try {
-      invokeType = INVOKE_TYPE_CONCURRENT;
-      listings = rpcClient.invokeConcurrent(
-          locations, method, false, false, DirectoryListing.class);
-    } catch (AccessControlException e) {
-      logAuditEvent(false, operationName, invokeType, src);
-      throw e;
-    }
-    logAuditEvent(true, operationName, invokeType, src);
-
+    Map<RemoteLocation, DirectoryListing> listings =
+            getListingInt(src, startAfter, needLocation);
     Map<String, HdfsFileStatus> nnListing = new TreeMap<>();
     int totalRemainingEntries = 0;
     int remainingEntries = 0;
@@ -933,7 +917,9 @@ public class RouterClientProtocol implements ClientProtocol {
           date = dates.get(child);
         }
         // TODO add number of children
-        HdfsFileStatus dirStatus = getMountPointStatus(child, 0, date);
+        Path childPath = new Path(src, child);
+        HdfsFileStatus dirStatus =
+            getMountPointStatus(childPath.toString(), 0, date);
 
         // This may overwrite existing listing entries with the mount point
         // TODO don't add if already there?
@@ -2219,5 +2205,38 @@ public class RouterClientProtocol implements ClientProtocol {
       LOG.error("Cannot get mount point", e);
     }
     return modTime;
+  }
+
+  /**
+   * Get listing on remote locations.
+   */
+  private Map<RemoteLocation, DirectoryListing> getListingInt(
+    String src, byte[] startAfter, boolean needLocation) throws IOException {
+    String operationName = "getListing";
+    String invokeType = null;
+    invokeType = INVOKE_TYPE_CONCURRENT;
+    Map<RemoteLocation, DirectoryListing> listings = null;
+    try {
+      // Locate the dir and fetch the listing.
+      List<RemoteLocation> locations =
+          rpcServer.getLocationsForPath(src, false, false);
+      if (locations.isEmpty()){
+        return listings;
+      }
+      RemoteMethod method = new RemoteMethod("getListing",
+        new Class<?>[]{String.class, startAfter.getClass(), boolean.class},
+        new RemoteParam(), startAfter, needLocation);
+      listings = rpcClient.invokeConcurrent(
+          locations, method, false, false, DirectoryListing.class);
+      logAuditEvent(true, operationName, invokeType, src);
+      return listings;
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    } catch (RouterResolveException e) {
+      LOG.debug("Cannot get locations for {}, {}.", src, e.getMessage());
+      logAuditEvent(false, operationName, invokeType, src);
+      return listings;
+    }
   }
 }

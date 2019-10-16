@@ -17,17 +17,18 @@
  */
 package org.apache.hadoop.hdfs.server.federation.router;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.URISyntaxException;
+import java.security.PrivilegedExceptionAction;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.Callable;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
@@ -49,11 +50,16 @@ import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntr
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntriesResponse;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.RemoveMountTableEntryRequest;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
+import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.hadoop.test.LambdaTestUtils;
 import org.apache.hadoop.util.Time;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import static org.junit.Assert.*;
 
 /**
  * Test a router end-to-end including the MountTable.
@@ -69,6 +75,7 @@ public class TestRouterMountTable {
   private static long startTime;
   private static FileSystem nnFs0;
   private static FileSystem nnFs1;
+  private static FileSystem routerFs;
 
   @BeforeClass
   public static void globalSetUp() throws Exception {
@@ -92,6 +99,7 @@ public class TestRouterMountTable {
     nnFs0 = nnContext0.getFileSystem();
     nnFs1 = nnContext1.getFileSystem();
     routerContext = cluster.getRandomRouter();
+    routerFs = routerContext.getFileSystem();
     Router router = routerContext.getRouter();
     routerProtocol = routerContext.getClient().getNamenode();
     mountTable = (MountTableResolver) router.getSubclusterResolver();
@@ -136,7 +144,6 @@ public class TestRouterMountTable {
     assertTrue(addMountTable(regularEntry));
 
     // Create a folder which should show in all locations
-    final FileSystem routerFs = routerContext.getFileSystem();
     assertTrue(routerFs.mkdirs(new Path("/regular/newdir")));
 
     FileStatus dirStatusNn =
@@ -249,6 +256,121 @@ public class TestRouterMountTable {
   }
 
   /**
+   * Verify that the file/dir status with IOException in getMountPointStatus.
+   */
+  @Test
+  public void testGetMountPointStatusWithIOException()
+      throws IOException, InterruptedException {
+    try {
+      // Add mount table entry.
+      MountTable addEntry = MountTable.newInstance("/testA",
+          Collections.singletonMap("ns0", "/testA"));
+      assertTrue(addMountTable(addEntry));
+      addEntry = MountTable.newInstance("/testA/testB",
+          Collections.singletonMap("ns0", "/testA/testB"));
+      addEntry.setOwnerName("userB");
+      addEntry.setGroupName("groupB");
+      assertTrue(addMountTable(addEntry));
+      addEntry = MountTable.newInstance("/testB",
+          Collections.singletonMap("ns0", "/test1/testB"));
+      assertTrue(addMountTable(addEntry));
+
+      assertTrue(nnFs0.mkdirs(new Path("/test1")));
+      nnFs0.setPermission(new Path("/test1"),
+          FsPermission.createImmutable((short) 0700));
+
+      // Use mock user to getListing through router.
+      UserGroupInformation user = UserGroupInformation.createUserForTesting(
+          "mock_user", new String[] {"mock_group"});
+
+      // Create an interface for lambda first
+      final LambdaTestUtils.VoidCallable voidCallable =
+            new LambdaTestUtils.VoidCallable(){
+              @Override
+              public void call() throws Exception {
+                getListing("/testA");
+              }
+            };
+      // Converts VoidCallable objects to be used in anything that takes a Callable
+      final Callable<Void> callable = new LambdaTestUtils.VoidCaller(voidCallable);
+      // Converts a void-returning closure to an action which {@code doAs} can call
+      user.doAs(new PrivilegedExceptionAction<Void>() {
+        @Override
+        public Void run() throws Exception {
+          return callable.call();
+        }
+      });
+    } finally {
+      nnFs0.delete(new Path("/test1"), true);
+    }
+  }
+
+  /**
+   * GetListing of testPath through router.
+   */
+  private void getListing(String testPath)
+      throws IOException, URISyntaxException {
+    ClientProtocol clientProtocol1 =
+        routerContext.getClient().getNamenode();
+    DirectoryListing listing = clientProtocol1.getListing(testPath,
+        HdfsFileStatus.EMPTY_NAME, false);
+
+    assertEquals(1, listing.getPartialListing().length);
+    HdfsFileStatus fileStatus = listing.getPartialListing()[0];
+    String currentOwner = fileStatus.getOwner();
+    String currentGroup = fileStatus.getGroup();
+    String currentFileName =
+        fileStatus.getFullPath(new Path("/")).getName();
+
+    assertEquals("testB", currentFileName);
+    assertEquals("userB", currentOwner);
+    assertEquals("groupB", currentGroup);
+  }
+
+  @Test
+  public void testListNonExistPath() throws Exception {
+    mountTable.setDefaultNSEnable(false);
+    LambdaTestUtils.intercept(FileNotFoundException.class,
+        "File /base does not exist.",
+        "Expect FileNotFoundException.",
+        new Callable<Object>() {
+          @Override
+          public Object call() throws Exception {
+            return routerFs.listStatus(new Path("/base"));
+          }
+        });
+  }
+
+  @Test
+  public void testListWhenDisableDefaultMountTable() throws IOException {
+    mountTable.setDefaultNSEnable(false);
+    /**
+     * /base/dir1 -> ns0:/base/dir1
+     * /base/dir2 -> ns0:/base/dir2
+     */
+    assertTrue(addMountTable(createEntry("/base/dir1", "ns0", "/base/dir1",
+        "group2", "owner2", (short) 0750)));
+    assertTrue(addMountTable(createEntry("/base/dir2", "ns0", "/base/dir2",
+        "group3", "owner3", (short) 0755)));
+
+    FileStatus[] list = routerFs.listStatus(new Path("/base"));
+    assertEquals(2, list.length);
+    for (FileStatus status : list) {
+      if (status.getPath().toUri().getPath().equals("/base/dir1")) {
+        assertEquals("group2", status.getGroup());
+        assertEquals("owner2", status.getOwner());
+        assertEquals((short) 0750, status.getPermission().toShort());
+      } else if (status.getPath().toUri().getPath().equals("/base/dir2")) {
+        assertEquals("group3", status.getGroup());
+        assertEquals("owner3", status.getOwner());
+        assertEquals((short) 0755, status.getPermission().toShort());
+      } else {
+        fail("list result should be either /base/dir1 or /base/dir2.");
+      }
+    }
+  }
+
+  /**
    * Verify permission for a mount point when the actual destination is not
    * present. It returns the permissions of the mount point.
    */
@@ -261,10 +383,20 @@ public class TestRouterMountTable {
     addEntry.setOwnerName("owner1");
     addEntry.setMode(FsPermission.createImmutable((short) 0775));
     assertTrue(addMountTable(addEntry));
-    FileStatus[] list = routerContext.getFileSystem().listStatus(new Path("/"));
+    FileStatus[] list = routerFs.listStatus(new Path("/"));
     assertEquals("group1", list[0].getGroup());
     assertEquals("owner1", list[0].getOwner());
     assertEquals((short) 0775, list[0].getPermission().toShort());
+  }
+
+  private MountTable createEntry(String mountPath, String ns, String remotePath,
+      String group, String owner, short permission) throws IOException {
+    MountTable entry = MountTable
+        .newInstance(mountPath, Collections.singletonMap(ns, remotePath));
+    entry.setGroupName(group);
+    entry.setOwnerName(owner);
+    entry.setMode(FsPermission.createImmutable(permission));
+    return entry;
   }
 
   /**
@@ -282,8 +414,7 @@ public class TestRouterMountTable {
       nnFs0.setOwner(new Path("/tmp/testdir"), "Aowner", "Agroup");
       nnFs0.setPermission(new Path("/tmp/testdir"),
           FsPermission.createImmutable((short) 775));
-      FileStatus[] list =
-          routerContext.getFileSystem().listStatus(new Path("/"));
+      FileStatus[] list = routerFs.listStatus(new Path("/"));
       assertEquals("Agroup", list[0].getGroup());
       assertEquals("Aowner", list[0].getOwner());
       assertEquals((short) 775, list[0].getPermission().toShort());
@@ -313,8 +444,7 @@ public class TestRouterMountTable {
       nnFs1.setOwner(new Path("/tmp/testdir01"), "Aowner", "Agroup");
       nnFs1.setPermission(new Path("/tmp/testdir01"),
           FsPermission.createImmutable((short) 775));
-      FileStatus[] list =
-          routerContext.getFileSystem().listStatus(new Path("/"));
+      FileStatus[] list = routerFs.listStatus(new Path("/"));
       assertEquals("Agroup", list[0].getGroup());
       assertEquals("Aowner", list[0].getOwner());
       assertEquals((short) 775, list[0].getPermission().toShort());
@@ -347,8 +477,7 @@ public class TestRouterMountTable {
       nnFs1.setOwner(new Path("/tmp/testdir01"), "Aowner01", "Agroup01");
       nnFs1.setPermission(new Path("/tmp/testdir01"),
           FsPermission.createImmutable((short) 755));
-      FileStatus[] list =
-          routerContext.getFileSystem().listStatus(new Path("/"));
+      FileStatus[] list = routerFs.listStatus(new Path("/"));
       assertTrue("Agroup".equals(list[0].getGroup())
           || "Agroup01".equals(list[0].getGroup()));
       assertTrue("Aowner".equals(list[0].getOwner())
@@ -374,8 +503,7 @@ public class TestRouterMountTable {
     addEntry.setOwnerName("owner1");
     assertTrue(addMountTable(addEntry));
     HdfsFileStatus finfo = routerProtocol.getFileInfo("/testdir");
-    FileStatus[] finfo1 =
-        routerContext.getFileSystem().listStatus(new Path("/"));
+    FileStatus[] finfo1 = routerFs.listStatus(new Path("/"));
     assertEquals("owner1", finfo.getOwner());
     assertEquals("owner1", finfo1[0].getOwner());
     assertEquals("group1", finfo.getGroup());
