@@ -43,6 +43,15 @@ The implementations of `FileSystem` shipped with Apache Hadoop
 All the requirements of a valid FileSystem are considered implicit preconditions and postconditions:
 all operations on a valid FileSystem MUST result in a new FileSystem that is also valid.
 
+## Feasible features
+
+### <a name="ProtectedDirectories"></a>Protected directories
+
+HDFS has the notion of *Protected Directories*, which are declared in
+the option `fs.protected.directories`. Any attempt to delete or rename
+such a directory or a parent thereof raises an `AccessControlException`.
+Accordingly, any attempt to delete the root directory SHALL, if there is
+a protected directory, result in such an exception being raised.
 
 ## Predicates and other state access operations
 
