@@ -199,6 +199,10 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
       FEDERATION_ROUTER_PREFIX + "mount-table.cache.enable";
   public static final boolean FEDERATION_MOUNT_TABLE_CACHE_ENABLE_DEFAULT =
       true;
+  public static final String FEDERATION_MOUNT_TABLE_CACHE_EXPIRE_MINUTE =
+          FEDERATION_ROUTER_PREFIX + "mount-table.cache.expire.minute";
+  public static final long FEDERATION_MOUNT_TABLE_CACHE_EXPIRE_MINUTE_DEFAULT =
+          TimeUnit.MINUTES.toMinutes(10);
 
   // HDFS Router-based federation admin
   public static final String DFS_ROUTER_ADMIN_HANDLER_COUNT_KEY =

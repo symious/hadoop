@@ -61,6 +61,13 @@ public class RemoteLocation extends RemoteLocationContext {
     this.srcPath = sPath;
   }
 
+  public RemoteLocation(RemoteLocation other, String tail){
+    this.nameserviceId = other.nameserviceId;
+    this.namenodeId = other.namenodeId;
+    this.dstPath = other.dstPath + tail;
+    this.srcPath = other.srcPath + tail;
+  }
+
   @Override
   public String getNameserviceId() {
     String ret = this.nameserviceId;
@@ -84,4 +91,5 @@ public class RemoteLocation extends RemoteLocationContext {
   public String toString() {
     return getNameserviceId() + "->" + this.dstPath;
   }
+
 }
