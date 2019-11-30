@@ -209,4 +209,14 @@ public class PathLocation {
     }
     return destinations.get(0);
   }
+
+  public PathLocation addTail(String tail){
+    String srcPath = this.sourcePath + tail;
+    List<RemoteLocation> destinations = new LinkedList<>();
+    for(RemoteLocation loc: this.destinations){
+      destinations.add(new RemoteLocation(loc, tail));
+    }
+    return new PathLocation(srcPath, destinations, this.destOrder);
+  }
+
 }

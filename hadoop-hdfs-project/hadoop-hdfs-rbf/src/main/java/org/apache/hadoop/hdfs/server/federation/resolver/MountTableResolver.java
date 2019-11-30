@@ -47,6 +47,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -61,6 +63,7 @@ import org.apache.hadoop.hdfs.server.federation.store.StateStoreUnavailableExcep
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntriesRequest;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntriesResponse;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
+import org.apache.hadoop.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -389,7 +392,15 @@ public class MountTableResolver
   }
 
   @Override
-  public PathLocation getDestinationForPath(final String path)
+  public PathLocation getDestinationForPath(final String path) throws IOException {
+    String dirPrefix = getDirPrefix(path);
+    String pathTail = path.substring(dirPrefix.length());
+    PathLocation pathLocation = getDestinationForPathInner(dirPrefix);
+    return pathLocation.addTail(pathTail);
+  }
+
+
+  public PathLocation getDestinationForPathInner(final String path)
       throws IOException {
     verifyMountTable();
     readLock.lock();
@@ -657,5 +668,43 @@ public class MountTableResolver
   @VisibleForTesting
   public void setDefaultNSEnable(boolean defaultNSRWEnable) {
     this.defaultNSEnable = defaultNSRWEnable;
+  }
+
+  public static String getDirPrefix(String path){
+    final String HEX_PATTERN = "\\p{XDigit}";
+    final String UUID_PATTERN = HEX_PATTERN + "{8}-" +
+            HEX_PATTERN + "{4}-" + HEX_PATTERN + "{4}-" + HEX_PATTERN + "{4}-" +
+            HEX_PATTERN + "{12}";
+    final String ATTEMPT_PATTERN =
+            "attempt_\\d+_\\d{4}_._\\d{6}_\\d{2}";
+    final String PART_FILE_PATTERN = "(.*)/part-\\d+-" + UUID_PATTERN;
+    final String[] TO_IGNORE_PATTERNS = {
+            PART_FILE_PATTERN,
+            "(.+)\\.COPYING$",
+            "(.+)\\._COPYING_.*$",
+            "(.+)\\.tmp$",
+            "_temp/(.+)$",
+            "_temporary/(.+)\\." + UUID_PATTERN + "$",
+            "(.*)_temporary/\\d/_temporary/" + ATTEMPT_PATTERN + "/(.+)$"};
+    /** Pattern for temporary files (or of the individual patterns). */
+    final Pattern TO_IGNORE_PATTERN =
+            Pattern.compile(StringUtils.join("|", TO_IGNORE_PATTERNS));
+
+    StringBuilder sb = new StringBuilder();
+    Matcher matcher = TO_IGNORE_PATTERN.matcher(path);
+    if (matcher.find()) {
+      for (int i=1; i <= matcher.groupCount(); i++) {
+        String match = matcher.group(i);
+        if (match != null) {
+          sb.append(match);
+        }
+      }
+    }
+    if (sb.length() > 0) {
+      String ret = sb.toString();
+      LOG.debug("Extracted {} from {}", ret, path);
+      return ret;
+    }
+    return path;
   }
 }
