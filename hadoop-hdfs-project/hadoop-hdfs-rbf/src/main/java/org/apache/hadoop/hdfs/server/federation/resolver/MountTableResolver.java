@@ -393,6 +393,9 @@ public class MountTableResolver
 
   @Override
   public PathLocation getDestinationForPath(final String path) throws IOException {
+    if(locationCache.getIfPresent(path) != null){
+      return getDestinationForPathInner(path);
+    }
     String dirPrefix = getDirPrefix(path);
     String pathTail = path.substring(dirPrefix.length());
     PathLocation pathLocation = getDestinationForPathInner(dirPrefix);
@@ -697,6 +700,7 @@ public class MountTableResolver
         String match = matcher.group(i);
         if (match != null) {
           sb.append(match);
+          break;
         }
       }
     }
