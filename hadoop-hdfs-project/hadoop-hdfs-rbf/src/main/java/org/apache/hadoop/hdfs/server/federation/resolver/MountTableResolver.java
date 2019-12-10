@@ -681,14 +681,16 @@ public class MountTableResolver
     final String ATTEMPT_PATTERN =
             "attempt_\\d+_\\d{4}_._\\d{6}_\\d{2}";
     final String PART_FILE_PATTERN = "(.*)/part-\\d+-" + UUID_PATTERN;
+    final String SPARK_STAGING_PATTERN = "(.*)/.spark-staging";
+    final String SPAKR_STAGING_PATTERN2 = "(.*)/.sparkStaging";
+    final String TEMPORARY_PATTERN = "(.*)/_temporary";
     final String[] TO_IGNORE_PATTERNS = {
             PART_FILE_PATTERN,
+            SPARK_STAGING_PATTERN,
+            TEMPORARY_PATTERN,
+            SPAKR_STAGING_PATTERN2,
             "(.+)\\.COPYING$",
-            "(.+)\\._COPYING_.*$",
-            "(.+)\\.tmp$",
-            "_temp/(.+)$",
-            "_temporary/(.+)\\." + UUID_PATTERN + "$",
-            "(.*)_temporary/\\d/_temporary/" + ATTEMPT_PATTERN + "/(.+)$"};
+            "(.+)\\._COPYING_.*$"};
     /** Pattern for temporary files (or of the individual patterns). */
     final Pattern TO_IGNORE_PATTERN =
             Pattern.compile(StringUtils.join("|", TO_IGNORE_PATTERNS));
