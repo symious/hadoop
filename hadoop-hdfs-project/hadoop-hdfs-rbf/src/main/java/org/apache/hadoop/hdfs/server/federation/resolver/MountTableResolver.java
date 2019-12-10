@@ -40,10 +40,7 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -55,6 +52,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.server.federation.resolver.order.DestinationOrder;
+import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
 import org.apache.hadoop.hdfs.server.federation.router.Router;
 import org.apache.hadoop.hdfs.server.federation.store.MountTableStore;
 import org.apache.hadoop.hdfs.server.federation.store.StateStoreCache;
@@ -140,7 +138,12 @@ public class MountTableResolver
       int maxCacheSize = conf.getInt(
           FEDERATION_MOUNT_TABLE_MAX_CACHE_SIZE,
           FEDERATION_MOUNT_TABLE_MAX_CACHE_SIZE_DEFAULT);
+      long mountTableCacheExpireTimeMs = conf.getTimeDuration(
+              RBFConfigKeys.FEDERATION_MOUNT_TABLE_CACHE_EXPIRE_MINUTE,
+              RBFConfigKeys.FEDERATION_MOUNT_TABLE_CACHE_EXPIRE_MINUTE_DEFAULT,
+              TimeUnit.MINUTES);
       this.locationCache = CacheBuilder.newBuilder()
+          .expireAfterAccess(mountTableCacheExpireTimeMs, TimeUnit.MINUTES)
           .maximumSize(maxCacheSize)
           .build();
     } else {
