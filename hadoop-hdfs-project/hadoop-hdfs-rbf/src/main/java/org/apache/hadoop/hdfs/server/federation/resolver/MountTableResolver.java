@@ -396,12 +396,13 @@ public class MountTableResolver
 
   @Override
   public PathLocation getDestinationForPath(final String path) throws IOException {
-    if(locationCache.getIfPresent(path) != null){
-      return getDestinationForPathInner(path);
+    PathLocation pathLocation = null;
+    if( (pathLocation = locationCache.getIfPresent(path)) != null){
+      return pathLocation;
     }
     String dirPrefix = getDirPrefix(path);
     String pathTail = path.substring(dirPrefix.length());
-    PathLocation pathLocation = getDestinationForPathInner(dirPrefix);
+    pathLocation = getDestinationForPathInner(dirPrefix);
     return pathLocation.addTail(pathTail);
   }
 
