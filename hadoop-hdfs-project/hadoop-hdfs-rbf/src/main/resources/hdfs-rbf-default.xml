@@ -136,6 +136,14 @@
   </property>
 
   <property>
+    <name>dfs.federation.router.connection.multiple</name>
+    <value>false</value>
+    <description>
+      Enhancing IPC client throughput via multiple connections per user.
+    </description>
+  </property>
+
+  <property>
     <name>dfs.federation.router.metrics.enable</name>
     <value>true</value>
     <description>

@@ -1671,7 +1671,7 @@ public class Client implements AutoCloseable {
       return ticket;
     }
     
-    private int getRpcTimeout() {
+    int getRpcTimeout() {
       return rpcTimeout;
     }
     
@@ -1704,6 +1704,10 @@ public class Client implements AutoCloseable {
     
     int getPingInterval() {
       return pingInterval;
+    }
+
+    public RetryPolicy getRetryPolicy(){
+      return connectionRetryPolicy;
     }
     
     @VisibleForTesting
