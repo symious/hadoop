@@ -109,6 +109,9 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
       FEDERATION_ROUTER_PREFIX + "connection.clean.ms";
   public static final long DFS_ROUTER_NAMENODE_CONNECTION_CLEAN_MS_DEFAULT =
       TimeUnit.SECONDS.toMillis(10);
+  public static final String DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE =
+      FEDERATION_ROUTER_PREFIX + "connection.multiple";
+  public static final boolean DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE_DEFAULT = false;
 
   // HDFS Router RPC client
   public static final String DFS_ROUTER_CLIENT_THREADS_SIZE =
