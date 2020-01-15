@@ -40,19 +40,19 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.TreeSet;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.server.federation.resolver.order.DestinationOrder;
+import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
 import org.apache.hadoop.hdfs.server.federation.router.Router;
 import org.apache.hadoop.hdfs.server.federation.store.MountTableStore;
 import org.apache.hadoop.hdfs.server.federation.store.StateStoreCache;
@@ -61,6 +61,7 @@ import org.apache.hadoop.hdfs.server.federation.store.StateStoreUnavailableExcep
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntriesRequest;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntriesResponse;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
+import org.apache.hadoop.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -137,7 +138,12 @@ public class MountTableResolver
       int maxCacheSize = conf.getInt(
           FEDERATION_MOUNT_TABLE_MAX_CACHE_SIZE,
           FEDERATION_MOUNT_TABLE_MAX_CACHE_SIZE_DEFAULT);
+      long mountTableCacheExpireTimeMs = conf.getTimeDuration(
+              RBFConfigKeys.FEDERATION_MOUNT_TABLE_CACHE_EXPIRE_MINUTE,
+              RBFConfigKeys.FEDERATION_MOUNT_TABLE_CACHE_EXPIRE_MINUTE_DEFAULT,
+              TimeUnit.MINUTES);
       this.locationCache = CacheBuilder.newBuilder()
+          .expireAfterAccess(mountTableCacheExpireTimeMs, TimeUnit.MINUTES)
           .maximumSize(maxCacheSize)
           .build();
     } else {
@@ -389,7 +395,19 @@ public class MountTableResolver
   }
 
   @Override
-  public PathLocation getDestinationForPath(final String path)
+  public PathLocation getDestinationForPath(final String path) throws IOException {
+    PathLocation pathLocation = null;
+    if(this.locationCache != null && (pathLocation = locationCache.getIfPresent(path)) != null){
+      return pathLocation;
+    }
+    String dirPrefix = getDirPrefix(path);
+    String pathTail = path.substring(dirPrefix.length());
+    pathLocation = getDestinationForPathInner(dirPrefix);
+    return pathLocation.addTail(pathTail);
+  }
+
+
+  public PathLocation getDestinationForPathInner(final String path)
       throws IOException {
     verifyMountTable();
     readLock.lock();
@@ -657,5 +675,46 @@ public class MountTableResolver
   @VisibleForTesting
   public void setDefaultNSEnable(boolean defaultNSRWEnable) {
     this.defaultNSEnable = defaultNSRWEnable;
+  }
+
+  public static String getDirPrefix(String path){
+    final String HEX_PATTERN = "\\p{XDigit}";
+    final String UUID_PATTERN = HEX_PATTERN + "{8}-" +
+            HEX_PATTERN + "{4}-" + HEX_PATTERN + "{4}-" + HEX_PATTERN + "{4}-" +
+            HEX_PATTERN + "{12}";
+    final String ATTEMPT_PATTERN =
+            "attempt_\\d+_\\d{4}_._\\d{6}_\\d{2}";
+    final String PART_FILE_PATTERN = "(.*)/part-\\d+-" + UUID_PATTERN;
+    final String SPARK_STAGING_PATTERN = "(.*)/.spark-staging";
+    final String SPAKR_STAGING_PATTERN2 = "(.*)/.sparkStaging";
+    final String TEMPORARY_PATTERN = "(.*)/_temporary";
+    final String[] TO_IGNORE_PATTERNS = {
+            PART_FILE_PATTERN,
+            SPARK_STAGING_PATTERN,
+            TEMPORARY_PATTERN,
+            SPAKR_STAGING_PATTERN2,
+            "(.+)\\.COPYING$",
+            "(.+)\\._COPYING_.*$"};
+    /** Pattern for temporary files (or of the individual patterns). */
+    final Pattern TO_IGNORE_PATTERN =
+            Pattern.compile(StringUtils.join("|", TO_IGNORE_PATTERNS));
+
+    StringBuilder sb = new StringBuilder();
+    Matcher matcher = TO_IGNORE_PATTERN.matcher(path);
+    if (matcher.find()) {
+      for (int i=1; i <= matcher.groupCount(); i++) {
+        String match = matcher.group(i);
+        if (match != null) {
+          sb.append(match);
+          break;
+        }
+      }
+    }
+    if (sb.length() > 0) {
+      String ret = sb.toString();
+      LOG.debug("Extracted {} from {}", ret, path);
+      return ret;
+    }
+    return path;
   }
 }
