@@ -303,7 +303,7 @@ public class WritableRpcEngine implements RpcEngine {
     throws IOException {
     return getProxy(protocol, clientVersion, connId.getAddress(),
         connId.ticket, conf, factory, connId.getRpcTimeout(),
-        connId.getRetryPolicy(), null);
+        connId.getRetryPolicy(), null, null);
   }
 
   /** Construct a client-side proxy object that implements the named protocol,
@@ -338,11 +338,12 @@ public class WritableRpcEngine implements RpcEngine {
                       int numHandlers, int numReaders, int queueSizePerHandler,
                       boolean verbose, Configuration conf,
                       SecretManager<? extends TokenIdentifier> secretManager,
-                      String portRangeConfig, AlignmentContext alignmentContext)
+                      String portRangeConfig, AlignmentContext alignmentContext,
+                      boolean rpcPasswordAuthenticate)
     throws IOException {
     return new Server(protocolClass, protocolImpl, conf, bindAddress, port,
         numHandlers, numReaders, queueSizePerHandler, verbose, secretManager,
-        portRangeConfig, alignmentContext);
+        portRangeConfig, alignmentContext, rpcPasswordAuthenticate);
   }
 
 
@@ -424,7 +425,7 @@ public class WritableRpcEngine implements RpcEngine {
         throws IOException {
       this(null, protocolImpl,  conf,  bindAddress,   port,
           numHandlers,  numReaders,  queueSizePerHandler,  verbose,
-          secretManager, null, null);
+          secretManager, null, null, false);
     }
 
     /**
@@ -443,13 +444,15 @@ public class WritableRpcEngine implements RpcEngine {
         Configuration conf, String bindAddress,  int port,
         int numHandlers, int numReaders, int queueSizePerHandler,
         boolean verbose, SecretManager<? extends TokenIdentifier> secretManager,
-        String portRangeConfig, AlignmentContext alignmentContext)
+        String portRangeConfig, AlignmentContext alignmentContext,
+        boolean rpcPasswordAuthenticate)
         throws IOException {
       super(bindAddress, port, null, numHandlers, numReaders,
           queueSizePerHandler, conf,
           classNameBase(protocolImpl.getClass().getName()), secretManager,
           portRangeConfig);
       setAlignmentContext(alignmentContext);
+      setRpcPasswordAuthenticate(rpcPasswordAuthenticate);
       this.verbose = verbose;
       
       

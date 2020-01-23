@@ -143,6 +143,8 @@ public class Client implements AutoCloseable {
   
   final static int CONNECTION_CONTEXT_CALL_ID = -3;
 
+  final static String HADOOP_USER_RPCPASSWORD = "HADOOP_USER_RPCPASSWORD";
+
   /**
    * Executor on which IPC calls' parameters are sent.
    * Deferring the sending of parameters to a separate
@@ -1000,11 +1002,19 @@ public class Client implements AutoCloseable {
     private void writeConnectionContext(ConnectionId remoteId,
                                         AuthMethod authMethod)
                                             throws IOException {
+      String rpcPassword = remoteId.ticket.getUserRpcPassword();
+      if (rpcPassword == null) {
+        rpcPassword = System.getenv(HADOOP_USER_RPCPASSWORD);
+        if (rpcPassword == null) {
+          rpcPassword = System.getProperty(HADOOP_USER_RPCPASSWORD);
+        }
+      }
       // Write out the ConnectionHeader
       IpcConnectionContextProto message = ProtoUtil.makeIpcConnectionContext(
           RPC.getProtocolName(remoteId.getProtocol()),
           remoteId.getTicket(),
-          authMethod);
+          authMethod,
+          rpcPassword);
       RpcRequestHeaderProto connectionContextHeader = ProtoUtil
           .makeRpcRequestHeader(RpcKind.RPC_PROTOCOL_BUFFER,
               OperationProto.RPC_FINAL_PACKET, CONNECTION_CONTEXT_CALL_ID,

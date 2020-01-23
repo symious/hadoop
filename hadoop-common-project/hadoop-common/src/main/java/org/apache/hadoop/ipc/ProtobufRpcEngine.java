@@ -351,13 +351,14 @@ public class ProtobufRpcEngine implements RpcEngine {
       String bindAddress, int port, int numHandlers, int numReaders,
       int queueSizePerHandler, boolean verbose, Configuration conf,
       SecretManager<? extends TokenIdentifier> secretManager,
-      String portRangeConfig, AlignmentContext alignmentContext)
+      String portRangeConfig, AlignmentContext alignmentContext,
+      boolean rpcPasswordAuthenticate)
       throws IOException {
     return new Server(protocol, protocolImpl, conf, bindAddress, port,
         numHandlers, numReaders, queueSizePerHandler, verbose, secretManager,
-        portRangeConfig, alignmentContext);
+        portRangeConfig, alignmentContext, rpcPasswordAuthenticate);
   }
-  
+
   public static class Server extends RPC.Server {
 
     static final ThreadLocal<ProtobufRpcEngineCallback> currentCallback =
@@ -430,12 +431,14 @@ public class ProtobufRpcEngine implements RpcEngine {
         Configuration conf, String bindAddress, int port, int numHandlers,
         int numReaders, int queueSizePerHandler, boolean verbose,
         SecretManager<? extends TokenIdentifier> secretManager,
-        String portRangeConfig, AlignmentContext alignmentContext)
+        String portRangeConfig, AlignmentContext alignmentContext,
+        boolean rpcPasswordAuthenticate)
         throws IOException {
       super(bindAddress, port, null, numHandlers,
           numReaders, queueSizePerHandler, conf, classNameBase(protocolImpl
               .getClass().getName()), secretManager, portRangeConfig);
       setAlignmentContext(alignmentContext);
+      setRpcPasswordAuthenticate(rpcPasswordAuthenticate);
       this.verbose = verbose;
       registerProtocolAndImpl(RPC.RpcKind.RPC_PROTOCOL_BUFFER, protocolClass,
           protocolImpl);

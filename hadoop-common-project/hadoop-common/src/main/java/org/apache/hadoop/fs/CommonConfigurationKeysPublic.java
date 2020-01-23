@@ -603,6 +603,111 @@ public class CommonConfigurationKeysPublic {
    * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
    * core-default.xml</a>
    */
+  public static final String  HADOOP_SECURITY_RPC_PASSWORD_MAPPING =
+          "hadoop.security.rpc-password.mapping";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String  HADOOP_SECURITY_RPC_PASSWORD_CACHE_SECS =
+          "hadoop.security.rpc-password.cache.secs";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final long HADOOP_SECURITY_RPC_PASSWORD_CACHE_SECS_DEFAULT =
+          300;
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String  HADOOP_SECURITY_RPC_PASSWORD_NEGATIVE_CACHE_SECS =
+          "hadoop.security.rpc-password.negative-cache.secs";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final long HADOOP_SECURITY_RPC_PASSWORD_NEGATIVE_CACHE_SECS_DEFAULT =
+          30;
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String HADOOP_SECURITY_RPC_PASSWORD_CACHE_WARN_AFTER_MS =
+          "hadoop.security.rpc-password.cache.warn.after.ms";
+  public static final long HADOOP_SECURITY_RPC_PASSWORD_CACHE_WARN_AFTER_MS_DEFAULT =
+          5000;
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String HADOOP_SECURITY_RPC_PASSWORD_CACHE_BACKGROUND_RELOAD =
+          "hadoop.security.rpc-password.cache.background.reload";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final boolean
+          HADOOP_SECURITY_RPC_PASSWORD_CACHE_BACKGROUND_RELOAD_DEFAULT = false;
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String
+          HADOOP_SECURITY_RPC_PASSWORD_CACHE_BACKGROUND_RELOAD_THREADS =
+          "hadoop.security.rpc-password.cache.background.reload.threads";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final int
+          HADOOP_SECURITY_RPC_PASSWORD_CACHE_BACKGROUND_RELOAD_THREADS_DEFAULT = 3;
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String
+          HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE=
+          "hadoop.security.rpc-password.shadow.file";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String
+          HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_DEFAULT=
+          "/etc/hadoop/shadow";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String
+          HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_SEC=
+          "hadoop.security.rpc-password.shadow.file.cache.sec";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final int
+          HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_SEC_DEFAULT=
+          300;
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
   public static final String  HADOOP_SECURITY_AUTHENTICATION =
     "hadoop.security.authentication";
   /**
