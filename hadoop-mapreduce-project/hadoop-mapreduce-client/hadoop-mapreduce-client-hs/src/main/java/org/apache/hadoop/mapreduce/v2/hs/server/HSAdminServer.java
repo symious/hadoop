@@ -30,6 +30,7 @@ import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.mapreduce.v2.jobhistory.JHAdminConfig;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.Groups;
+import org.apache.hadoop.security.RpcPassword;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.AccessControlList;
 import org.apache.hadoop.security.authorize.ProxyUsers;
@@ -203,6 +204,17 @@ public class HSAdminServer extends AbstractService implements HSAdminProtocol {
 
     HSAuditLogger.logSuccess(user.getShortUserName(),
         "refreshUserToGroupsMappings", HISTORY_ADMIN_SERVER);
+  }
+
+  @Override
+  public void refreshUserToRpcPasswordMappings() throws IOException {
+
+    UserGroupInformation user = checkAcls("refreshUserToRpcPasswordMappings");
+
+    RpcPassword.getUserToRpcPasswordMappingService().refresh();
+
+    HSAuditLogger.logSuccess(user.getShortUserName(),
+            "refreshUserToRpcPasswordMappings", HISTORY_ADMIN_SERVER);
   }
 
   @Override

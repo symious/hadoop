@@ -53,4 +53,11 @@ public interface RefreshUserMappingsProtocol {
    */
   @Idempotent
   public void refreshSuperUserGroupsConfiguration() throws IOException;
+
+  /**
+   * Refresh user to rpc password mappings.
+   * @throws IOException
+   */
+  @Idempotent
+  public void refreshUserToRpcPasswordMappings() throws IOException;
 }

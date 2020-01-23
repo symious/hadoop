@@ -53,6 +53,18 @@ message RefreshSuperUserGroupsConfigurationResponseProto {
 }
 
 /**
+ *  Refresh user to rpc password mappings request.
+ */
+message RefreshUserToRpcPasswordMappingsRequestProto {
+}
+
+/**
+ * void response
+ */
+message RefreshUserToRpcPasswordMappingsResponseProto {
+}
+
+/**
  * Protocol to refresh the user mappings.
  */
 service RefreshUserMappingsProtocolService {
@@ -67,4 +79,10 @@ service RefreshUserMappingsProtocolService {
    */
   rpc refreshSuperUserGroupsConfiguration(RefreshSuperUserGroupsConfigurationRequestProto)
       returns(RefreshSuperUserGroupsConfigurationResponseProto);
+
+  /**
+   * Refresh user to rpc password mappings.
+   */
+  rpc refreshUserToRpcPasswordMappings(RefreshUserToRpcPasswordMappingsRequestProto)
+  returns(RefreshUserToRpcPasswordMappingsResponseProto);
 }

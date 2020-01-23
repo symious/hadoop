@@ -198,6 +198,7 @@ import org.apache.hadoop.net.Node;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.Groups;
 import org.apache.hadoop.security.SecurityUtil;
+import org.apache.hadoop.security.RpcPassword;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.AuthorizationException;
 import org.apache.hadoop.security.authorize.ProxyUsers;
@@ -1769,6 +1770,13 @@ public class NameNodeRpcServer implements NamenodeProtocols {
         getRemoteUser().getShortUserName());
     Groups.getUserToGroupsMappingService().refresh();
     namesystem.logAuditEvent(true, "refreshUserToGroupsMappings", null);
+  }
+
+  @Override // RefreshUserMappingsPolicyProtocol
+  public void refreshUserToRpcPasswordMappings() throws IOException {
+    LOG.info("Refreshing all user-to-password mappings. Requested by user: " +
+            getRemoteUser().getShortUserName());
+    RpcPassword.getUserToRpcPasswordMappingService().refresh();
   }
 
   @Override // RefreshAuthorizationPolicyProtocol
