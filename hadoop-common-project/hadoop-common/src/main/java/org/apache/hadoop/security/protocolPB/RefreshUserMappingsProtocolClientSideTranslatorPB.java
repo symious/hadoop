@@ -28,6 +28,7 @@ import org.apache.hadoop.ipc.RpcClientUtil;
 import org.apache.hadoop.security.RefreshUserMappingsProtocol;
 import org.apache.hadoop.security.proto.RefreshUserMappingsProtocolProtos.RefreshSuperUserGroupsConfigurationRequestProto;
 import org.apache.hadoop.security.proto.RefreshUserMappingsProtocolProtos.RefreshUserToGroupsMappingsRequestProto;
+import org.apache.hadoop.security.proto.RefreshUserMappingsProtocolProtos.RefreshUserToRpcPasswordMappingsRequestProto;
 
 import com.google.protobuf.RpcController;
 import com.google.protobuf.ServiceException;
@@ -46,6 +47,10 @@ public class RefreshUserMappingsProtocolClientSideTranslatorPB implements
   private final static RefreshSuperUserGroupsConfigurationRequestProto
   VOID_REFRESH_SUPERUSER_GROUPS_CONFIGURATION_REQUEST = 
       RefreshSuperUserGroupsConfigurationRequestProto.newBuilder().build();
+
+  private final static RefreshUserToRpcPasswordMappingsRequestProto
+          VOID_REFRESH_USER_TO_RPC_PASSWORD_MAPPING_REQUEST =
+          RefreshUserToRpcPasswordMappingsRequestProto.newBuilder().build();
 
   public RefreshUserMappingsProtocolClientSideTranslatorPB(
       RefreshUserMappingsProtocolPB rpcProxy) {
@@ -72,6 +77,16 @@ public class RefreshUserMappingsProtocolClientSideTranslatorPB implements
     try {
       rpcProxy.refreshSuperUserGroupsConfiguration(NULL_CONTROLLER,
           VOID_REFRESH_SUPERUSER_GROUPS_CONFIGURATION_REQUEST);
+    } catch (ServiceException se) {
+      throw ProtobufHelper.getRemoteException(se);
+    }
+  }
+
+  @Override
+  public void refreshUserToRpcPasswordMappings() throws IOException {
+    try {
+      rpcProxy.refreshUserToRpcPasswordMappings(NULL_CONTROLLER,
+              VOID_REFRESH_USER_TO_RPC_PASSWORD_MAPPING_REQUEST);
     } catch (ServiceException se) {
       throw ProtobufHelper.getRemoteException(se);
     }
