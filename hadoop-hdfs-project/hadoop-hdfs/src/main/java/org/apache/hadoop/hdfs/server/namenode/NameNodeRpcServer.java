@@ -434,6 +434,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
         .setInstance(clientNNPbService).setBindAddress(bindHost)
         .setPort(rpcAddr.getPort()).setNumHandlers(handlerCount)
         .setVerbose(false)
+        .setRpcPasswordAuthenticate(true)
         .setSecretManager(namesystem.getDelegationTokenSecretManager()).build();
 
     // Add all the RPC protocols that the namenode implements

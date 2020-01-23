@@ -145,6 +145,7 @@ message RpcResponseHeaderProto {
    FATAL_DESERIALIZING_REQUEST = 13;     // could not deserilize rpc request
    FATAL_VERSION_MISMATCH = 14;          // Ipc Layer version mismatch
    FATAL_UNAUTHORIZED = 15;              // Auth failed
+   FATAL_RPC_UNAUTHENTICATED = 16;       // RPC Authen failed
   }
 
   required uint32 callId = 1; // callId used in Request
