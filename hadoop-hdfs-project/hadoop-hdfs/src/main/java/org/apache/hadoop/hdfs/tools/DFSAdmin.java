@@ -447,6 +447,7 @@ public class DFSAdmin extends FsShell {
     "\t[-upgrade <query | finalize>]\n" +
     "\t[-refreshServiceAcl]\n" +
     "\t[-refreshUserToGroupsMappings]\n" +
+    "\t[-refreshUserToRpcPasswordMappings]\n" +
     "\t[-refreshSuperUserGroupsConfiguration]\n" +
     "\t[-refreshCallQueue]\n" +
     "\t[-refresh <host:ipc_port> <key> [arg1..argn]\n" +
@@ -1178,8 +1179,11 @@ public class DFSAdmin extends FsShell {
     
     String refreshUserToGroupsMappings = 
       "-refreshUserToGroupsMappings: Refresh user-to-groups mappings\n";
-    
-    String refreshSuperUserGroupsConfiguration = 
+
+    String refreshUserToRpcPasswordMappings =
+      "-refreshUserToRpcPasswordMappings: Refresh user-to-rpcPassword mappings\n";
+
+    String refreshSuperUserGroupsConfiguration =
       "-refreshSuperUserGroupsConfiguration: Refresh superuser proxy groups mappings\n";
 
     String refreshCallQueue = "-refreshCallQueue: Reload the call queue from config\n";
@@ -1311,6 +1315,8 @@ public class DFSAdmin extends FsShell {
       System.out.println(refreshServiceAcl);
     } else if ("refreshUserToGroupsMappings".equals(cmd)) {
       System.out.println(refreshUserToGroupsMappings);
+    } else if ("refreshUserToRpcPasswordMappings".equals(cmd)) {
+      System.out.println(refreshUserToRpcPasswordMappings);
     } else if ("refreshSuperUserGroupsConfiguration".equals(cmd)) {
       System.out.println(refreshSuperUserGroupsConfiguration);
     } else if ("refreshCallQueue".equals(cmd)) {
@@ -1367,6 +1373,7 @@ public class DFSAdmin extends FsShell {
       System.out.println(ClearSpaceQuotaCommand.DESCRIPTION);
       System.out.println(refreshServiceAcl);
       System.out.println(refreshUserToGroupsMappings);
+      System.out.println(refreshUserToRpcPasswordMappings);
       System.out.println(refreshSuperUserGroupsConfiguration);
       System.out.println(refreshCallQueue);
       System.out.println(genericRefresh);
@@ -1715,7 +1722,60 @@ public class DFSAdmin extends FsShell {
     
     return 0;
   }
-  
+
+  /**
+   * Refresh the user-to-rpcPassword mappings on the {@link NameNode}.
+   * @return exitcode 0 on success, non-zero on failure
+   * @throws IOException
+   */
+  public int refreshUserToRpcPasswordMappings() throws IOException {
+    // Get the current configuration
+    Configuration conf = getConf();
+
+    // for security authorization
+    // server principal for this call
+    // should be NN's one.
+    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_SERVICE_USER_NAME_KEY,
+            conf.get(DFSConfigKeys.DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY, ""));
+
+    DistributedFileSystem dfs = getDFS();
+    URI dfsUri = dfs.getUri();
+    boolean isHaEnabled = HAUtilClient.isLogicalUri(conf, dfsUri);
+
+    if (isHaEnabled) {
+      // Run refreshUserToRpcPasswordMapings for all NNs if HA is enabled
+      String nsId = dfsUri.getHost();
+      List<ProxyAndInfo<RefreshUserMappingsProtocol>> proxies =
+              HAUtil.getProxiesForAllNameNodesInNameservice(conf, nsId,
+                      RefreshUserMappingsProtocol.class);
+      List<IOException> exceptions = new ArrayList<>();
+      for (ProxyAndInfo<RefreshUserMappingsProtocol> proxy : proxies) {
+        try{
+          proxy.getProxy().refreshUserToRpcPasswordMappings();
+          System.out.println("Refresh user to rpc-password mapping successful for "
+                  + proxy.getAddress());
+        }catch (IOException ioe){
+          System.out.println("Refresh user to rpc-password mapping failed for "
+                  + proxy.getAddress());
+          exceptions.add(ioe);
+        }
+      }
+      if(!exceptions.isEmpty()){
+        throw MultipleIOException.createIOException(exceptions);
+      }
+    } else {
+      // Create the client
+      RefreshUserMappingsProtocol refreshProtocol =
+              NameNodeProxies.createProxy(conf, FileSystem.getDefaultUri(conf),
+                      RefreshUserMappingsProtocol.class).getProxy();
+
+      // Refresh the user-to-rpcPassword mappings
+      refreshProtocol.refreshUserToRpcPasswordMappings();
+      System.out.println("Refresh user to rpc-password mapping successful");
+    }
+
+    return 0;
+  }
 
   /**
    * refreshSuperUserGroupsConfiguration {@link NameNode}.
@@ -2120,6 +2180,9 @@ public class DFSAdmin extends FsShell {
     } else if ("-refreshUserToGroupsMappings".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
                          + " [-refreshUserToGroupsMappings]");
+    } else if ("-refreshUserToRpcPasswordMappings".equals(cmd)) {
+      System.err.println("Usage: hdfs dfsadmin"
+              + " [-refreshUserToRpcPasswordMappings]");
     } else if ("-refreshSuperUserGroupsConfiguration".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
                          + " [-refreshSuperUserGroupsConfiguration]");
@@ -2273,6 +2336,11 @@ public class DFSAdmin extends FsShell {
         printUsage(cmd);
         return exitCode;
       }
+    } else if ("-refreshUserToRpcPasswordMappings".equals(cmd)) {
+      if (argv.length != 1) {
+        printUsage(cmd);
+        return exitCode;
+      }
     } else if ("-printTopology".equals(cmd)) {
       if(argv.length != 1) {
         printUsage(cmd);
@@ -2386,6 +2454,8 @@ public class DFSAdmin extends FsShell {
         exitCode = refreshServiceAcl();
       } else if ("-refreshUserToGroupsMappings".equals(cmd)) {
         exitCode = refreshUserToGroupsMappings();
+      } else if ("-refreshUserToRpcPasswordMappings".equals(cmd)) {
+        exitCode = refreshUserToRpcPasswordMappings();
       } else if ("-refreshSuperUserGroupsConfiguration".equals(cmd)) {
         exitCode = refreshSuperUserGroupsConfiguration();
       } else if ("-refreshCallQueue".equals(cmd)) {
