@@ -472,6 +472,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
         .setVerbose(false)
         .setSecretManager(namesystem.getDelegationTokenSecretManager())
         .setAlignmentContext(stateIdContext)
+        .setRpcPasswordAuthenticate(true)
         .build();
 
     // Add all the RPC protocols that the namenode implements

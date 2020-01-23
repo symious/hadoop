@@ -83,6 +83,7 @@ import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.ha.HealthCheckFailedException;
 import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.io.MD5Hash;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.ipc.CallQueueManager.CallQueueOverflowException;
@@ -175,6 +176,15 @@ public abstract class Server {
    */
   public void setAlignmentContext(AlignmentContext alignmentContext) {
     this.alignmentContext = alignmentContext;
+  }
+
+  /**
+   * Set rpcPasswordAuthenticate to pass enable/disable info thru RPC.
+   *
+   * @param rpcPasswordAuthenticate enable/disable RPC Password Authenticate
+   */
+  public void setRpcPasswordAuthenticate(boolean rpcPasswordAuthenticate) {
+    this.rpcPasswordAuthenticate = rpcPasswordAuthenticate;
   }
 
   /**
@@ -497,6 +507,7 @@ public abstract class Server {
   private Handler[] handlers = null;
 
   private boolean logSlowRPC = false;
+  private boolean rpcPasswordAuthenticate;
 
   /**
    * Checks if LogSlowRPC is set true.
@@ -515,6 +526,13 @@ public abstract class Server {
     this.logSlowRPC = logSlowRPCFlag;
   }
 
+  /**
+   * Checks if rpcPasswordAuthenticate is set true.
+   * @return true, if rpcPasswordAuthenticate is set true, false, otherwise.
+   */
+  protected boolean isRpcPasswordAuthenticate() {
+    return rpcPasswordAuthenticate;
+  }
 
   /**
    * Logs a Slow RPC Request.
@@ -2488,6 +2506,9 @@ public abstract class Server {
           }
         }
       }
+      if (isRpcPasswordAuthenticate()) {
+        authenticateConnection();
+      }
       authorizeConnection();
       // don't set until after authz because connection isn't established
       connectionContextRead = true;
@@ -2781,7 +2802,48 @@ public abstract class Server {
             RpcErrorCodeProto.FATAL_INVALID_RPC_HEADER,
             "Unknown out of band call #" + callId);
       }
-    }    
+    }
+
+    /**
+     * Authenticate user with password
+     * @throws RpcServerException - user is not allowed to connect
+     */
+    private void authenticateConnection() throws RpcServerException {
+      try{
+        // authenticate proxy user
+        String userName = null;
+        String rpcPassword = null;
+        if (user != null) {
+          if (user.getRealUser() != null) {
+            userName = user.getRealUser().getUserName();
+            rpcPassword = user.getRealUser().getUserRpcPassword();
+          } else {
+            userName = user.getUserName();
+            rpcPassword = user.getUserRpcPassword();
+          }
+        } else {
+          throw new IOException("Illegal user error.");
+        }
+
+        if (!UserGroupInformation.createRemoteUser(userName).isBypassUser()) {
+          String serverRpcPassword = UserGroupInformation.createRemoteUser(userName).getRpcPassword();
+          if (serverRpcPassword == null) {
+            throw new IOException("No rpcPassword record on server side for user: " + userName);
+          }
+          if (rpcPassword == null || !serverRpcPassword.equals(MD5Hash.digest(rpcPassword).toString())) {
+            throw new IOException("Rpc Authentication failed for user: " + userName);
+          }
+        }
+        rpcMetrics.incrAuthenticationSuccesses();
+      } catch (IOException ie) {
+        LOG.info("Connection Authentication from " + this
+                + " for protocol " + connectionContext.getProtocol()
+                + " is failed for user " + user);
+        rpcMetrics.incrAuthenticationFailures();
+        throw new FatalRpcServerException(
+                RpcErrorCodeProto.FATAL_RPC_UNAUTHENTICATED, ie);
+      }
+    }
 
     /**
      * Authorize proxy users to access this server
@@ -3045,8 +3107,8 @@ public abstract class Server {
     this(bindAddress, port, rpcRequestClass, handlerCount, numReaders, 
         queueSizePerHandler, conf, serverName, secretManager, null);
   }
-  
-  /** 
+
+  /**
    * Constructs a server listening on the named port and address.  Parameters passed must
    * be of the named class.  The <code>handlerCount</code> determines
    * the number of handler threads that will be used to process calls.

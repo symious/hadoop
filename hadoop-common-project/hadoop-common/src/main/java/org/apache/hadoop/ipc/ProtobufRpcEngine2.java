@@ -345,7 +345,8 @@ public class ProtobufRpcEngine2 implements RpcEngine {
       String bindAddress, int port, int numHandlers, int numReaders,
       int queueSizePerHandler, boolean verbose, Configuration conf,
       SecretManager<? extends TokenIdentifier> secretManager,
-      String portRangeConfig, AlignmentContext alignmentContext)
+      String portRangeConfig, AlignmentContext alignmentContext,
+      boolean rpcPasswordAuthenticate)
       throws IOException {
     return new Server(protocol, protocolImpl, conf, bindAddress, port,
         numHandlers, numReaders, queueSizePerHandler, verbose, secretManager,

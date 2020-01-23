@@ -327,18 +327,19 @@ public class WritableRpcEngine implements RpcEngine {
                       int numHandlers, int numReaders, int queueSizePerHandler,
                       boolean verbose, Configuration conf,
                       SecretManager<? extends TokenIdentifier> secretManager,
-                      String portRangeConfig, AlignmentContext alignmentContext)
+                      String portRangeConfig, AlignmentContext alignmentContext,
+                      boolean rpcPasswordAuthenticate)
     throws IOException {
     return new Server(protocolClass, protocolImpl, conf, bindAddress, port,
         numHandlers, numReaders, queueSizePerHandler, verbose, secretManager,
-        portRangeConfig, alignmentContext);
+        portRangeConfig, alignmentContext, rpcPasswordAuthenticate);
   }
 
 
   /** An RPC Server. */
   @Deprecated
   public static class Server extends RPC.Server {
-    /** 
+    /**
      * Construct an RPC server.
      * @param instance the instance whose methods will be called
      * @param conf the configuration to use
@@ -414,7 +415,7 @@ public class WritableRpcEngine implements RpcEngine {
         throws IOException {
       this(null, protocolImpl,  conf,  bindAddress,   port,
           numHandlers,  numReaders,  queueSizePerHandler,  verbose,
-          secretManager, null, null);
+          secretManager, null, null, false);
     }
 
     /**
@@ -433,13 +434,15 @@ public class WritableRpcEngine implements RpcEngine {
         Configuration conf, String bindAddress,  int port,
         int numHandlers, int numReaders, int queueSizePerHandler,
         boolean verbose, SecretManager<? extends TokenIdentifier> secretManager,
-        String portRangeConfig, AlignmentContext alignmentContext)
+        String portRangeConfig, AlignmentContext alignmentContext,
+        boolean rpcPasswordAuthenticate)
         throws IOException {
       super(bindAddress, port, null, numHandlers, numReaders,
           queueSizePerHandler, conf,
           serverNameFromClass(protocolImpl.getClass()), secretManager,
           portRangeConfig);
       setAlignmentContext(alignmentContext);
+      setRpcPasswordAuthenticate(rpcPasswordAuthenticate);
       this.verbose = verbose;
       
       

@@ -85,7 +85,7 @@ public abstract class ProtoUtil {
    */
   public static IpcConnectionContextProto makeIpcConnectionContext(
       final String protocol,
-      final UserGroupInformation ugi, final AuthMethod authMethod) {
+      final UserGroupInformation ugi, final AuthMethod authMethod, final String rpcPassword) {
     IpcConnectionContextProto.Builder result = IpcConnectionContextProto.newBuilder();
     if (protocol != null) {
       result.setProtocol(protocol);
@@ -110,6 +110,9 @@ public abstract class ProtoUtil {
         if (ugi.getRealUser() != null) {
           ugiProto.setRealUser(ugi.getRealUser().getUserName());
         }
+        if (rpcPassword != null) {
+          ugiProto.setRpcPassword(rpcPassword);
+        }
       }
     }   
     result.setUserInfo(ugiProto);
@@ -130,15 +133,31 @@ public abstract class ProtoUtil {
     String effectiveUser = userInfo.hasEffectiveUser() ? userInfo
         .getEffectiveUser() : null;
     String realUser = userInfo.hasRealUser() ? userInfo.getRealUser() : null;
-    if (effectiveUser != null) {
-      if (realUser != null) {
-        UserGroupInformation realUserUgi = UserGroupInformation
-            .createRemoteUser(realUser);
-        ugi = UserGroupInformation
-            .createProxyUser(effectiveUser, realUserUgi);
-      } else {
-        ugi = org.apache.hadoop.security.UserGroupInformation
-            .createRemoteUser(effectiveUser);
+    String rpcPassword = userInfo.hasRpcPassword() ? userInfo.getRpcPassword() : null;
+    if (rpcPassword != null) {
+      if (effectiveUser != null) {
+        if (realUser != null) {
+          UserGroupInformation realUserUgi = UserGroupInformation
+                  .createRemoteUser(realUser, rpcPassword);
+          ugi = UserGroupInformation
+                  .createProxyUser(effectiveUser, realUserUgi);
+        } else {
+          ugi = org.apache.hadoop.security.UserGroupInformation
+                  .createRemoteUser(effectiveUser, rpcPassword);
+        }
+      }
+
+    }else {
+      if (effectiveUser != null) {
+        if (realUser != null) {
+          UserGroupInformation realUserUgi = UserGroupInformation
+                  .createRemoteUser(realUser);
+          ugi = UserGroupInformation
+                  .createProxyUser(effectiveUser, realUserUgi);
+        } else {
+          ugi = org.apache.hadoop.security.UserGroupInformation
+                  .createRemoteUser(effectiveUser);
+        }
       }
     }
     return ugi;

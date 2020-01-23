@@ -53,7 +53,7 @@ public interface RpcEngine {
                   AtomicBoolean fallbackToSimpleAuth,
                   AlignmentContext alignmentContext) throws IOException;
 
-  /** 
+  /**
    * Construct a server for a protocol implementation instance.
    * 
    * @param protocol the class of protocol to use
@@ -69,6 +69,7 @@ public interface RpcEngine {
    * @param portRangeConfig A config parameter that can be used to restrict
    *        the range of ports used when port is 0 (an ephemeral port)
    * @param alignmentContext provides server state info on client responses
+   * @param rpcPasswordAuthenticate If we use password to authenticate the connection.
    * @return The Server instance
    * @throws IOException on any error
    */
@@ -78,7 +79,9 @@ public interface RpcEngine {
                        Configuration conf, 
                        SecretManager<? extends TokenIdentifier> secretManager,
                        String portRangeConfig,
-                       AlignmentContext alignmentContext) throws IOException;
+                       AlignmentContext alignmentContext,
+                       boolean rpcPasswordAuthenticate) throws IOException;
+
 
   /**
    * Returns a proxy for ProtocolMetaInfoPB, which uses the given connection

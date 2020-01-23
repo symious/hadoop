@@ -49,6 +49,7 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -267,6 +268,8 @@ public class UserGroupInformation {
   private static AuthenticationMethod authenticationMethod;
   /** Server-side groups fetching service */
   private static Groups groups;
+  /** Server-side password fetching service */
+  private static RpcPassword rpcPassword;
   /** Min time (in seconds) before relogin for Kerberos */
   private static long kerberosMinSecondsBeforeRelogin;
   /** Boolean flag to enable auto-renewal for keytab based loging. */
@@ -278,7 +281,7 @@ public class UserGroupInformation {
 
   private static Configuration conf;
 
-  
+
   /**Environment variable pointing to the token cache file*/
   public static final String HADOOP_TOKEN_FILE_LOCATION = 
       "HADOOP_TOKEN_FILE_LOCATION";
@@ -337,6 +340,7 @@ public class UserGroupInformation {
     if (!(groups instanceof TestingGroups)) {
       groups = Groups.getUserToGroupsMappingService(conf);
     }
+    rpcPassword = RpcPassword.getUserToRpcPasswordMappingService(conf);
     UserGroupInformation.conf = conf;
 
     if (metrics.getGroupsQuantiles == null) {
@@ -421,6 +425,7 @@ public class UserGroupInformation {
   private final Subject subject;
   // All non-static fields must be read-only caches that come from the subject.
   private final User user;
+  private String userRpcPassword;
 
   private static String OS_LOGIN_MODULE_NAME;
   private static Class<? extends Principal> OS_PRINCIPAL_CLASS;
@@ -796,12 +801,27 @@ public class UserGroupInformation {
     // logged in ugi if it's different
     loginUserRef.set(ugi);
   }
-  
+
   private String getKeytab() {
     HadoopLoginContext login = getLogin();
     return (login != null)
       ? login.getConfiguration().getParameters().get(LoginParam.KEYTAB)
       : null;
+  }
+
+  /**
+   * set RpcPassword for UGI
+   */
+  private void setUserRpcPassword(String rpcPassword) {
+    this.userRpcPassword = rpcPassword;
+  }
+
+  /**
+   * Get the rpcPassword of UGI
+   * @return rpcPassword
+   */
+  public String getUserRpcPassword() {
+    return userRpcPassword;
   }
 
   /**
@@ -822,7 +842,7 @@ public class UserGroupInformation {
     // have removed the keytab from priv creds.  instead, check login params.
     return hasKerberosCredentials() && isHadoopLogin() && getKeytab() != null;
   }
-  
+
   /**
    *  Is this user logged in from a ticket (but no keytab) managed by the UGI?
    * @return true if the credentials are from a ticket cache.
@@ -1400,7 +1420,19 @@ public class UserGroupInformation {
   public static UserGroupInformation createRemoteUser(String user) {
     return createRemoteUser(user, AuthMethod.SIMPLE);
   }
-  
+
+  /**
+   * Create a user from a login name. It is intended to be used for remote
+   * users in RPC, since it won't have any credentials.
+   * @param user the full user principal name, must not be empty or null
+   * @return the UserGroupInformation for the remote user.
+   */
+  @InterfaceAudience.Public
+  @InterfaceStability.Evolving
+  public static UserGroupInformation createRemoteUser(String user, String rpcPassword) {
+    return createRemoteUser(user, AuthMethod.SIMPLE, rpcPassword);
+  }
+
   /**
    * Create a user from a login name. It is intended to be used for remote
    * users in RPC, since it won't have any credentials.
@@ -1410,12 +1442,27 @@ public class UserGroupInformation {
   @InterfaceAudience.Public
   @InterfaceStability.Evolving
   public static UserGroupInformation createRemoteUser(String user, AuthMethod authMethod) {
+    return createRemoteUser(user, authMethod, null);
+  }
+
+  /**
+   * Create a user from a login name. It is intended to be used for remote
+   * users in RPC, since it won't have any credentials.
+   * @param user the full user principal name, must not be empty or null
+   * @return the UserGroupInformation for the remote user.
+   */
+  @InterfaceAudience.Public
+  @InterfaceStability.Evolving
+  public static UserGroupInformation createRemoteUser(String user, AuthMethod authMethod, String rpcPassword) {
     if (user == null || user.isEmpty()) {
       throw new IllegalArgumentException("Null user");
     }
     Subject subject = new Subject();
     subject.getPrincipals().add(new User(user));
     UserGroupInformation result = new UserGroupInformation(subject);
+    if (rpcPassword != null) {
+      result.setUserRpcPassword(rpcPassword);
+    }
     result.setAuthenticationMethod(authMethod);
     return result;
   }
@@ -1738,6 +1785,42 @@ public class UserGroupInformation {
   }
 
   /**
+   * check if the user is a bypass user
+   * @return if the user is a bypass user
+   */
+  public boolean isBypassUser() {
+    ensureInitialized();
+    try{
+      return rpcPassword.isBypassUser(getShortUserName());
+    } catch (IOException ie) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Failed to get password for user " + getShortUserName()
+                + " by " + ie);
+        LOG.trace("TRACE", ie);
+      }
+      return false;
+    }
+  }
+
+  /**
+   * get the rpcPassword for this user
+   * @return user's rpcPassword
+   */
+  public String getRpcPassword() {
+    ensureInitialized();;
+    try{
+      return rpcPassword.getRpcPassword(getShortUserName());
+    } catch (IOException ie) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Failed to get password for user " + getShortUserName()
+                + " by " + ie);
+        LOG.trace("TRACE", ie);
+      }
+      return null;
+    }
+  }
+
+  /**
    * Return the username.
    */
   @Override
@@ -1818,7 +1901,8 @@ public class UserGroupInformation {
     } else if (o == null || getClass() != o.getClass()) {
       return false;
     } else {
-      return subject == ((UserGroupInformation) o).subject;
+      return subject == ((UserGroupInformation) o).subject &&
+              Objects.equals(userRpcPassword, ((UserGroupInformation) o).userRpcPassword);
     }
   }
 
@@ -1827,7 +1911,7 @@ public class UserGroupInformation {
    */
   @Override
   public int hashCode() {
-    return System.identityHashCode(subject);
+    return System.identityHashCode(subject) + (userRpcPassword == null ? 0 : userRpcPassword.hashCode());
   }
 
   /**

@@ -762,7 +762,8 @@ public class RPC {
     private SecretManager<? extends TokenIdentifier> secretManager = null;
     private String portRangeConfig = null;
     private AlignmentContext alignmentContext = null;
-    
+    private boolean rpcPasswordAuthenticate = false;
+
     public Builder(Configuration conf) {
       this.conf = conf;
     }
@@ -827,10 +828,16 @@ public class RPC {
       this.portRangeConfig = portRangeConfig;
       return this;
     }
-    
+
     /** Default: null */
     public Builder setAlignmentContext(AlignmentContext alignmentContext) {
       this.alignmentContext = alignmentContext;
+      return this;
+    }
+
+    /** Default: false */
+    public Builder setRpcPasswordAuthenticate(boolean rpcPasswordAuthenticate) {
+      this.rpcPasswordAuthenticate = rpcPasswordAuthenticate;
       return this;
     }
 
@@ -854,7 +861,7 @@ public class RPC {
           this.protocol, this.instance, this.bindAddress, this.port,
           this.numHandlers, this.numReaders, this.queueSizePerHandler,
           this.verbose, this.conf, this.secretManager, this.portRangeConfig,
-          this.alignmentContext);
+          this.alignmentContext, this.rpcPasswordAuthenticate);
     }
   }
   

@@ -349,11 +349,12 @@ public class ProtobufRpcEngine implements RpcEngine {
       String bindAddress, int port, int numHandlers, int numReaders,
       int queueSizePerHandler, boolean verbose, Configuration conf,
       SecretManager<? extends TokenIdentifier> secretManager,
-      String portRangeConfig, AlignmentContext alignmentContext)
+      String portRangeConfig, AlignmentContext alignmentContext,
+      boolean rpcPasswordAuthenticate)
       throws IOException {
     return new Server(protocol, protocolImpl, conf, bindAddress, port,
         numHandlers, numReaders, queueSizePerHandler, verbose, secretManager,
-        portRangeConfig, alignmentContext);
+        portRangeConfig, alignmentContext, rpcPasswordAuthenticate);
   }
   
   public static class Server extends RPC.Server {
@@ -429,15 +430,17 @@ public class ProtobufRpcEngine implements RpcEngine {
     public Server(Class<?> protocolClass, Object protocolImpl,
         Configuration conf, String bindAddress, int port, int numHandlers,
         int numReaders, int queueSizePerHandler, boolean verbose,
-        SecretManager<? extends TokenIdentifier> secretManager, 
-        String portRangeConfig, AlignmentContext alignmentContext)
+        SecretManager<? extends TokenIdentifier> secretManager,
+        String portRangeConfig, AlignmentContext alignmentContext,
+        boolean rpcPasswordAuthenticate)
         throws IOException {
       super(bindAddress, port, null, numHandlers,
           numReaders, queueSizePerHandler, conf,
           serverNameFromClass(protocolImpl.getClass()), secretManager,
           portRangeConfig);
       setAlignmentContext(alignmentContext);
-      this.verbose = verbose;  
+      setRpcPasswordAuthenticate(rpcPasswordAuthenticate);
+      this.verbose = verbose;
       registerProtocolAndImpl(RPC.RpcKind.RPC_PROTOCOL_BUFFER, protocolClass,
           protocolImpl);
     }
@@ -499,15 +502,15 @@ public class ProtobufRpcEngine implements RpcEngine {
         RequestHeaderProto rpcRequest = request.getRequestHeader();
         String methodName = rpcRequest.getMethodName();
 
-        /** 
+        /**
          * RPCs for a particular interface (ie protocol) are done using a
          * IPC connection that is setup using rpcProxy.
-         * The rpcProxy's has a declared protocol name that is 
-         * sent form client to server at connection time. 
-         * 
-         * Each Rpc call also sends a protocol name 
+         * The rpcProxy's has a declared protocol name that is
+         * sent form client to server at connection time.
+         *
+         * Each Rpc call also sends a protocol name
          * (called declaringClassprotocolName). This name is usually the same
-         * as the connection protocol name except in some cases. 
+         * as the connection protocol name except in some cases.
          * For example metaProtocols such ProtocolInfoProto which get info
          * about the protocol reuse the connection but need to indicate that
          * the actual protocol is different (i.e. the protocol is
@@ -515,20 +518,20 @@ public class ProtobufRpcEngine implements RpcEngine {
          * the declaringClassProtocolName field is set to the ProtocolInfoProto.
          */
 
-        String declaringClassProtoName = 
+        String declaringClassProtoName =
             rpcRequest.getDeclaringClassProtocolName();
         long clientVersion = rpcRequest.getClientProtocolVersion();
         if (server.verbose)
-          LOG.info("Call: connectionProtocolName=" + connectionProtocolName + 
+          LOG.info("Call: connectionProtocolName=" + connectionProtocolName +
               ", method=" + methodName);
         
-        ProtoClassProtoImpl protocolImpl = getProtocolImpl(server, 
+        ProtoClassProtoImpl protocolImpl = getProtocolImpl(server,
                               declaringClassProtoName, clientVersion);
         BlockingService service = (BlockingService) protocolImpl.protocolImpl;
         MethodDescriptor methodDescriptor = service.getDescriptorForType()
             .findMethodByName(methodName);
         if (methodDescriptor == null) {
-          String msg = "Unknown method " + methodName + " called on " 
+          String msg = "Unknown method " + methodName + " called on "
                                 + connectionProtocolName + " protocol.";
           LOG.warn(msg);
           throw new RpcNoSuchMethodException(msg);
