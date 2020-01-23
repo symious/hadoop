@@ -25,6 +25,8 @@ import org.apache.hadoop.security.proto.RefreshUserMappingsProtocolProtos.Refres
 import org.apache.hadoop.security.proto.RefreshUserMappingsProtocolProtos.RefreshSuperUserGroupsConfigurationResponseProto;
 import org.apache.hadoop.security.proto.RefreshUserMappingsProtocolProtos.RefreshUserToGroupsMappingsRequestProto;
 import org.apache.hadoop.security.proto.RefreshUserMappingsProtocolProtos.RefreshUserToGroupsMappingsResponseProto;
+import org.apache.hadoop.security.proto.RefreshUserMappingsProtocolProtos.RefreshUserToRpcPasswordMappingsRequestProto;
+import org.apache.hadoop.security.proto.RefreshUserMappingsProtocolProtos.RefreshUserToRpcPasswordMappingsResponseProto;
 
 import com.google.protobuf.RpcController;
 import com.google.protobuf.ServiceException;
@@ -41,6 +43,10 @@ public class RefreshUserMappingsProtocolServerSideTranslatorPB implements Refres
   VOID_REFRESH_SUPERUSER_GROUPS_CONFIGURATION_RESPONSE = 
       RefreshSuperUserGroupsConfigurationResponseProto.newBuilder()
       .build();
+
+  private final static RefreshUserToRpcPasswordMappingsResponseProto
+          VOID_REFRESH_USER_RPC_PASSWORD_MAPPING_RESPONSE =
+          RefreshUserToRpcPasswordMappingsResponseProto.newBuilder().build();
 
   public RefreshUserMappingsProtocolServerSideTranslatorPB(RefreshUserMappingsProtocol impl) {
     this.impl = impl;
@@ -70,5 +76,18 @@ public class RefreshUserMappingsProtocolServerSideTranslatorPB implements Refres
       throw new ServiceException(e);
     }
     return VOID_REFRESH_SUPERUSER_GROUPS_CONFIGURATION_RESPONSE;
+  }
+
+  @Override
+  public RefreshUserToRpcPasswordMappingsResponseProto
+      refreshUserToRpcPasswordMappings(RpcController controller,
+      RefreshUserToRpcPasswordMappingsRequestProto request)
+      throws ServiceException {
+    try {
+      impl.refreshUserToRpcPasswordMappings();
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
+    return VOID_REFRESH_USER_RPC_PASSWORD_MAPPING_RESPONSE;
   }
 }
