@@ -339,11 +339,22 @@ public class ProtobufRpcEngine implements RpcEngine {
       SecretManager<? extends TokenIdentifier> secretManager,
       String portRangeConfig)
       throws IOException {
-    return new Server(protocol, protocolImpl, conf, bindAddress, port,
-        numHandlers, numReaders, queueSizePerHandler, verbose, secretManager,
-        portRangeConfig);
+    return getServer(protocol, protocolImpl, bindAddress, port, numHandlers, numReaders,
+      queueSizePerHandler, verbose, conf, secretManager, portRangeConfig, false);
   }
-  
+
+  @Override
+  public RPC.Server getServer(Class<?> protocol, Object protocolImpl,
+      String bindAddress, int port, int numHandlers, int numReaders,
+      int queueSizePerHandler, boolean verbose, Configuration conf,
+      SecretManager<? extends TokenIdentifier> secretManager,
+      String portRangeConfig, boolean rpcPasswordAuthenticate)
+      throws IOException {
+    return new Server(protocol, protocolImpl, conf, bindAddress, port,
+      numHandlers, numReaders, queueSizePerHandler, verbose, secretManager,
+      portRangeConfig, rpcPasswordAuthenticate);
+  }
+
   public static class Server extends RPC.Server {
 
     static final ThreadLocal<ProtobufRpcEngineCallback> currentCallback =
@@ -416,13 +427,19 @@ public class ProtobufRpcEngine implements RpcEngine {
         Configuration conf, String bindAddress, int port, int numHandlers,
         int numReaders, int queueSizePerHandler, boolean verbose,
         SecretManager<? extends TokenIdentifier> secretManager, 
-        String portRangeConfig)
+        String portRangeConfig, boolean rpcPasswordAuthenticate)
         throws IOException {
       super(bindAddress, port, null, numHandlers,
+<<<<<<< HEAD
           numReaders, queueSizePerHandler, conf,
           serverNameFromClass(protocolImpl.getClass()), secretManager,
           portRangeConfig);
       this.verbose = verbose;  
+=======
+          numReaders, queueSizePerHandler, conf, classNameBase(protocolImpl
+              .getClass().getName()), secretManager, portRangeConfig, rpcPasswordAuthenticate);
+      this.verbose = verbose;
+>>>>>>> 3635913a687... SPDE-6799. Add RpcPassword Authentication while doing RPC connection.
       registerProtocolAndImpl(RPC.RpcKind.RPC_PROTOCOL_BUFFER, protocolClass,
           protocolImpl);
     }

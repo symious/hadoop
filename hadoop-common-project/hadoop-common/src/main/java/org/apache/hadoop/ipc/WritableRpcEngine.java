@@ -325,11 +325,24 @@ public class WritableRpcEngine implements RpcEngine {
                       SecretManager<? extends TokenIdentifier> secretManager,
                       String portRangeConfig) 
     throws IOException {
-    return new Server(protocolClass, protocolImpl, conf, bindAddress, port,
-        numHandlers, numReaders, queueSizePerHandler, verbose, secretManager,
-        portRangeConfig);
+    return getServer(protocolClass, protocolImpl, bindAddress, port, numHandlers, numReaders,
+            queueSizePerHandler, verbose, conf, secretManager, portRangeConfig, false);
   }
 
+  /* Construct a server for a protocol implementation instance listening on a
+   * port and address. */
+  @Override
+  public RPC.Server getServer(Class<?> protocolClass,
+                              Object protocolImpl, String bindAddress, int port,
+                              int numHandlers, int numReaders, int queueSizePerHandler,
+                              boolean verbose, Configuration conf,
+                              SecretManager<? extends TokenIdentifier> secretManager,
+                              String portRangeConfig, boolean rpcPasswordAuthenticate)
+          throws IOException {
+    return new Server(protocolClass, protocolImpl, conf, bindAddress, port,
+            numHandlers, numReaders, queueSizePerHandler, verbose, secretManager,
+            portRangeConfig, rpcPasswordAuthenticate);
+  }
 
   /** An RPC Server. */
   @Deprecated
@@ -361,7 +374,7 @@ public class WritableRpcEngine implements RpcEngine {
         Configuration conf, String bindAddress, int port) 
       throws IOException {
       this(protocolClass, protocolImpl, conf,  bindAddress, port, 1, -1, -1,
-          false, null, null);
+          false, null, null, false);
     }
     
     /** 
@@ -383,7 +396,7 @@ public class WritableRpcEngine implements RpcEngine {
             throws IOException {
        this(null, protocolImpl,  conf,  bindAddress,   port,
                    numHandlers,  numReaders,  queueSizePerHandler,  verbose, 
-                   secretManager, null);
+                   secretManager, null, false);
    
     }
     
@@ -402,12 +415,12 @@ public class WritableRpcEngine implements RpcEngine {
         Configuration conf, String bindAddress,  int port,
         int numHandlers, int numReaders, int queueSizePerHandler, 
         boolean verbose, SecretManager<? extends TokenIdentifier> secretManager,
-        String portRangeConfig) 
+        String portRangeConfig, boolean rpcPasswordAuthenticate)
         throws IOException {
       super(bindAddress, port, null, numHandlers, numReaders,
           queueSizePerHandler, conf,
           serverNameFromClass(protocolImpl.getClass()), secretManager,
-          portRangeConfig);
+          portRangeConfig, rpcPasswordAuthenticate);
 
       this.verbose = verbose;
       

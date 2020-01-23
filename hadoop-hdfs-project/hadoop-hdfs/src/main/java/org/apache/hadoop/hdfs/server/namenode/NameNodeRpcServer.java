@@ -454,6 +454,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
         .setPort(rpcAddr.getPort())
         .setNumHandlers(handlerCount)
         .setVerbose(false)
+        .setRpcPasswordAuthenticate(true)
         .setSecretManager(namesystem.getDelegationTokenSecretManager())
         .build();
 

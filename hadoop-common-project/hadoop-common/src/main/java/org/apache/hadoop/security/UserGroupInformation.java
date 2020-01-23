@@ -47,6 +47,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -278,6 +279,8 @@ public class UserGroupInformation {
   private static AuthenticationMethod authenticationMethod;
   /** Server-side groups fetching service */
   private static Groups groups;
+  /** Server-side password fetching service */
+  private static RpcPassword rpcPassword;
   /** Min time (in seconds) before relogin for Kerberos */
   private static long kerberosMinSecondsBeforeRelogin;
   /** The configuration to use */
@@ -336,6 +339,7 @@ public class UserGroupInformation {
     if (!(groups instanceof TestingGroups)) {
       groups = Groups.getUserToGroupsMappingService(conf);
     }
+    rpcPassword = RpcPassword.getUserToRpcPasswordMappingService(conf);
     UserGroupInformation.conf = conf;
 
     if (metrics.getGroupsQuantiles == null) {
@@ -402,7 +406,7 @@ public class UserGroupInformation {
   private final Subject subject;
   // All non-static fields must be read-only caches that come from the subject.
   private final User user;
-
+  private String userRpcPassword;
   private static String OS_LOGIN_MODULE_NAME;
   private static Class<? extends Principal> OS_PRINCIPAL_CLASS;
   
@@ -775,6 +779,21 @@ public class UserGroupInformation {
     // if this is to become stable, should probably logout the currently
     // logged in ugi if it's different
     loginUserRef.set(ugi);
+  }
+
+  /**
+   * set RpcPassword for UGI
+   */
+  private void setUserRpcPassword(String rpcPassword) {
+    this.userRpcPassword = rpcPassword;
+  }
+
+  /**
+   * Get the rpcPassword of UGI
+   * @return rpcPassword
+   */
+  public String getUserRpcPassword() {
+    return userRpcPassword;
   }
   
   private String getKeytab() {
@@ -1255,7 +1274,19 @@ public class UserGroupInformation {
   public static UserGroupInformation createRemoteUser(String user) {
     return createRemoteUser(user, AuthMethod.SIMPLE);
   }
-  
+
+  /**
+   * Create a user from a login name. It is intended to be used for remote
+   * users in RPC, since it won't have any credentials.
+   * @param user the full user principal name, must not be empty or null
+   * @return the UserGroupInformation for the remote user.
+   */
+  @InterfaceAudience.Public
+  @InterfaceStability.Evolving
+  public static UserGroupInformation createRemoteUser(String user, String rpcPassword) {
+    return createRemoteUser(user, AuthMethod.SIMPLE, rpcPassword);
+  }
+
   /**
    * Create a user from a login name. It is intended to be used for remote
    * users in RPC, since it won't have any credentials.
@@ -1265,12 +1296,27 @@ public class UserGroupInformation {
   @InterfaceAudience.Public
   @InterfaceStability.Evolving
   public static UserGroupInformation createRemoteUser(String user, AuthMethod authMethod) {
+    return createRemoteUser(user, authMethod, null);
+  }
+
+  /**
+   * Create a user from a login name. It is intended to be used for remote
+   * users in RPC, since it won't have any credentials.
+   * @param user the full user principal name, must not be empty or null
+   * @return the UserGroupInformation for the remote user.
+   */
+  @InterfaceAudience.Public
+  @InterfaceStability.Evolving
+  public static UserGroupInformation createRemoteUser(String user, AuthMethod authMethod, String rpcPassword) {
     if (user == null || user.isEmpty()) {
       throw new IllegalArgumentException("Null user");
     }
     Subject subject = new Subject();
     subject.getPrincipals().add(new User(user));
     UserGroupInformation result = new UserGroupInformation(subject);
+    if (rpcPassword != null) {
+      result.setUserRpcPassword(rpcPassword);
+    }
     result.setAuthenticationMethod(authMethod);
     return result;
   }
@@ -1363,8 +1409,6 @@ public class UserGroupInformation {
     return null;
   }
 
-
-  
   /**
    * This class is used for storing the groups for testing. It stores a local
    * map that has the translation of usernames to groups.
@@ -1557,7 +1601,7 @@ public class UserGroupInformation {
     final Credentials credentials;
     final Set<Credentials> credentialsSet =
       subject.getPrivateCredentials(Credentials.class);
-    if (!credentialsSet.isEmpty()){
+    if (!credentialsSet.isEmpty()) {
       credentials = credentialsSet.iterator().next();
     } else {
       credentials = new Credentials();
@@ -1593,6 +1637,42 @@ public class UserGroupInformation {
         LOG.trace("TRACE", ie);
       }
       return Collections.emptyList();
+    }
+  }
+
+  /**
+   * check if the user is a bypass user
+   * @return if the user is a bypass user
+   */
+  public boolean isBypassUser() {
+    ensureInitialized();
+    try{
+      return rpcPassword.isBypassUser(getShortUserName());
+    } catch (IOException ie) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Failed to get password for user " + getShortUserName()
+                + " by " + ie);
+        LOG.trace("TRACE", ie);
+      }
+      return false;
+    }
+  }
+
+  /**
+   * get the rpcPassword for this user
+   * @return user's rpcPassword
+   */
+  public String getRpcPassword() {
+    ensureInitialized();;
+    try{
+      return rpcPassword.getRpcPassword(getShortUserName());
+    } catch (IOException ie) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Failed to get password for user " + getShortUserName()
+                + " by " + ie);
+        LOG.trace("TRACE", ie);
+      }
+      return null;
     }
   }
 
@@ -1677,7 +1757,8 @@ public class UserGroupInformation {
     } else if (o == null || getClass() != o.getClass()) {
       return false;
     } else {
-      return subject == ((UserGroupInformation) o).subject;
+      return subject == ((UserGroupInformation) o).subject &&
+              Objects.equals(userRpcPassword, ((UserGroupInformation) o).userRpcPassword);
     }
   }
 
@@ -1686,7 +1767,7 @@ public class UserGroupInformation {
    */
   @Override
   public int hashCode() {
-    return System.identityHashCode(subject);
+    return System.identityHashCode(subject) + (userRpcPassword == null ? 0 : userRpcPassword.hashCode());
   }
 
   /**

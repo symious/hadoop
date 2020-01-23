@@ -63,7 +63,7 @@ public class ConnectionPoolId implements Comparable<ConnectionPoolId> {
   public int hashCode() {
     int hash = new HashCodeBuilder(17, 31)
         .append(this.nnId)
-        .append(this.ugi.toString())
+        .append(this.ugi.hashCode())
         .append(this.getTokenIds())
         .append(this.protocol)
         .toHashCode();
@@ -77,7 +77,7 @@ public class ConnectionPoolId implements Comparable<ConnectionPoolId> {
       if (!this.nnId.equals(other.nnId)) {
         return false;
       }
-      if (!this.ugi.toString().equals(other.ugi.toString())) {
+      if (!this.ugi.equals(other.ugi)) {
         return false;
       }
       String thisTokens = this.getTokenIds().toString();

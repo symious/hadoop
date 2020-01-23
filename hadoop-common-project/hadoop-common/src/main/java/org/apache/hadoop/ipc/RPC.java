@@ -719,6 +719,7 @@ public class RPC {
     private final Configuration conf;    
     private SecretManager<? extends TokenIdentifier> secretManager = null;
     private String portRangeConfig = null;
+    private boolean rpcPasswordAuthenticate = false;
     
     public Builder(Configuration conf) {
       this.conf = conf;
@@ -784,7 +785,13 @@ public class RPC {
       this.portRangeConfig = portRangeConfig;
       return this;
     }
-    
+
+    /** Default: false */
+    public Builder setRpcPasswordAuthenticate(boolean rpcPasswordAuthenticate) {
+      this.rpcPasswordAuthenticate = rpcPasswordAuthenticate;
+      return this;
+    }
+
     /**
      * Build the RPC Server. 
      * @throws IOException on error
@@ -804,7 +811,8 @@ public class RPC {
       return getProtocolEngine(this.protocol, this.conf).getServer(
           this.protocol, this.instance, this.bindAddress, this.port,
           this.numHandlers, this.numReaders, this.queueSizePerHandler,
-          this.verbose, this.conf, this.secretManager, this.portRangeConfig);
+          this.verbose, this.conf, this.secretManager, this.portRangeConfig,
+          this.rpcPasswordAuthenticate);
     }
   }
   
@@ -990,9 +998,9 @@ public class RPC {
                      int numReaders, int queueSizePerHandler,
                      Configuration conf, String serverName, 
                      SecretManager<? extends TokenIdentifier> secretManager,
-                     String portRangeConfig) throws IOException {
+                     String portRangeConfig, boolean rpcPasswordAuthenticate) throws IOException {
       super(bindAddress, port, paramClass, handlerCount, numReaders, queueSizePerHandler,
-            conf, serverName, secretManager, portRangeConfig);
+            conf, serverName, secretManager, portRangeConfig, rpcPasswordAuthenticate);
       initProtocolMetaInfo(conf);
     }
     
