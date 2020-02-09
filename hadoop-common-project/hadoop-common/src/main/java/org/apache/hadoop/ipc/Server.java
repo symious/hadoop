@@ -75,6 +75,8 @@ import org.apache.hadoop.classification.InterfaceAudience.Public;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configuration.IntegerRanges;
+import org.apache.hadoop.crypto.bcrypt.BCryptPasswordEncoder;
+import org.apache.hadoop.crypto.bcrypt.PasswordEncoder;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.io.IOUtils;
@@ -446,6 +448,7 @@ public abstract class Server {
 
   private boolean logSlowRPC = false;
   private final boolean rpcPasswordAuthenticate;
+  private final PasswordEncoder passwordEncoder;
 
   /**
    * Checks if LogSlowRPC is set true.
@@ -2499,7 +2502,7 @@ public abstract class Server {
           if (serverRpcPassword == null) {
             throw new IOException("No rpcPassword record on server side for user: " + userName);
           }
-          if (rpcPassword == null || !serverRpcPassword.equals(MD5Hash.digest(rpcPassword).toString())) {
+          if (rpcPassword == null || !passwordEncoder.matches(rpcPassword, serverRpcPassword)) {
             throw new IOException("Rpc Authentication failed for user: " + userName);
           }
         }
@@ -2801,6 +2804,7 @@ public abstract class Server {
         CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC,
         CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_DEFAULT));
     this.rpcPasswordAuthenticate = rpcPasswordAuthenticate;
+    this.passwordEncoder = new BCryptPasswordEncoder();
 
     // Create the responder here
     responder = new Responder();
