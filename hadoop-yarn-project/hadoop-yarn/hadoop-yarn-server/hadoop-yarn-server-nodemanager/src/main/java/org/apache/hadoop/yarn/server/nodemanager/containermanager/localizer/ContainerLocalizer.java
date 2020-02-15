@@ -102,6 +102,7 @@ public class ContainerLocalizer {
       new FsPermission((short) 0755);
 
   private final String user;
+  private final String userRpcPassword;
   private final String appId;
   private final List<Path> localDirs;
   private final String localizerId;
@@ -118,6 +119,12 @@ public class ContainerLocalizer {
   public ContainerLocalizer(FileContext lfs, String user, String appId,
       String localizerId, List<Path> localDirs,
       RecordFactory recordFactory) throws IOException {
+    this(lfs, user, null, appId, localizerId, localDirs, recordFactory);
+  }
+
+  public ContainerLocalizer(FileContext lfs, String user, String userRpcPassword, String appId,
+      String localizerId, List<Path> localDirs,
+      RecordFactory recordFactory) throws IOException {
     if (null == user) {
       throw new IOException("Cannot initialize for null user");
     }
@@ -126,6 +133,7 @@ public class ContainerLocalizer {
     }
     this.lfs = lfs;
     this.user = user;
+    this.userRpcPassword = userRpcPassword;
     this.appId = appId;
     this.localDirs = localDirs;
     this.localizerId = localizerId;
@@ -183,7 +191,7 @@ public class ContainerLocalizer {
 
     // create user context
     UserGroupInformation ugi =
-      UserGroupInformation.createRemoteUser(user);
+      UserGroupInformation.createRemoteUser(user, userRpcPassword);
     for (Token<? extends TokenIdentifier> token : creds.getAllTokens()) {
       ugi.addToken(token);
     }

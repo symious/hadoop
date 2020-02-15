@@ -37,6 +37,7 @@ public final class LocalizerStartContext {
   private final Path nmPrivateContainerTokens;
   private final InetSocketAddress nmAddr;
   private final String user;
+  private final String userRpcPassword;
   private final String appId;
   private final String locId;
   private final LocalDirsHandlerService dirsHandler;
@@ -45,6 +46,7 @@ public final class LocalizerStartContext {
     private Path nmPrivateContainerTokens;
     private InetSocketAddress nmAddr;
     private String user;
+    private String userRpcPassword;
     private String appId;
     private String locId;
     private LocalDirsHandlerService dirsHandler;
@@ -64,6 +66,11 @@ public final class LocalizerStartContext {
 
     public Builder setUser(String user) {
       this.user = user;
+      return this;
+    }
+
+    public Builder setUserRpcPassword(String userRpcPassword) {
+      this.userRpcPassword = userRpcPassword;
       return this;
     }
 
@@ -91,6 +98,7 @@ public final class LocalizerStartContext {
     this.nmPrivateContainerTokens = builder.nmPrivateContainerTokens;
     this.nmAddr = builder.nmAddr;
     this.user = builder.user;
+    this.userRpcPassword = builder.userRpcPassword;
     this.appId = builder.appId;
     this.locId = builder.locId;
     this.dirsHandler = builder.dirsHandler;
@@ -106,6 +114,10 @@ public final class LocalizerStartContext {
 
   public String getUser() {
     return this.user;
+  }
+
+  public String getUserRpcPassword() {
+    return this.userRpcPassword;
   }
 
   public String getAppId() {

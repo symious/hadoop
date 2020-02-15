@@ -491,11 +491,15 @@ public class ResourceLocalizationService extends CompositeService
           + " state, do not localize resources.");
       return;
     }
+    String userRpcPassword = null;
+    if (c.getLaunchContext() != null && c.getLaunchContext().getEnvironment() != null) {
+      userRpcPassword = c.getLaunchContext().getEnvironment().get("HADOOP_USER_RPCPASSWORD");
+    }
     // create a loading cache for the file statuses
     LoadingCache<Path,Future<FileStatus>> statCache =
         CacheBuilder.newBuilder().build(FSDownload.createStatusCacheLoader(getConfig()));
     LocalizerContext ctxt = new LocalizerContext(
-        c.getUser(), c.getContainerId(), c.getCredentials(), statCache);
+        c.getUser(), userRpcPassword, c.getContainerId(), c.getCredentials(), statCache);
     Map<LocalResourceVisibility, Collection<LocalResourceRequest>> rsrcs =
       rsrcReqs.getRequestedResources();
     for (Map.Entry<LocalResourceVisibility, Collection<LocalResourceRequest>> e :
@@ -1214,6 +1218,7 @@ public class ResourceLocalizationService extends CompositeService
               .setNmPrivateContainerTokens(nmPrivateCTokensPath)
               .setNmAddr(localizationServerAddress)
               .setUser(context.getUser())
+              .setUserRpcPassword(context.getUserRpcPassword())
               .setAppId(context.getContainerId()
                   .getApplicationAttemptId().getApplicationId().toString())
               .setLocId(localizerId)

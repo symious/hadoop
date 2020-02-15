@@ -411,14 +411,14 @@ public class TestDefaultContainerExecutor {
     DefaultContainerExecutor mockExec =
         spy(new DefaultContainerExecutor(mockLfs) {
           @Override
-          public ContainerLocalizer createContainerLocalizer(String user,
+          public ContainerLocalizer createContainerLocalizer(String user, String userRpcPassowrd,
               String appId, String locId, List<String> localDirs,
               FileContext localizerFc) throws IOException {
 
             // Spy on the localizer and make it return valid heart-beat
             // responses even though there is no real NodeManager.
             ContainerLocalizer localizer =
-                super.createContainerLocalizer(user, appId, locId, localDirs,
+                super.createContainerLocalizer(user, userRpcPassowrd, appId, locId, localDirs,
                   localizerFc);
             ContainerLocalizer spyLocalizer = spy(localizer);
             LocalizationProtocol nmProxy = mock(LocalizationProtocol.class);
