@@ -30,6 +30,7 @@ import com.google.common.cache.LoadingCache;
 public class LocalizerContext {
 
   private final String user;
+  private final String userRpcPassword;
   private final ContainerId containerId;
   private final Credentials credentials;
   private final LoadingCache<Path,Future<FileStatus>> statCache;
@@ -42,7 +43,14 @@ public class LocalizerContext {
   public LocalizerContext(String user, ContainerId containerId,
       Credentials credentials,
       LoadingCache<Path,Future<FileStatus>> statCache) {
+    this(user, null, containerId, credentials, statCache);
+  }
+
+  public LocalizerContext(String user, String userRpcPassword,
+      ContainerId containerId, Credentials credentials,
+      LoadingCache<Path, Future<FileStatus>> statCache) {
     this.user = user;
+    this.userRpcPassword = userRpcPassword;
     this.containerId = containerId;
     this.credentials = credentials;
     this.statCache = statCache;
@@ -50,6 +58,10 @@ public class LocalizerContext {
 
   public String getUser() {
     return user;
+  }
+
+  public String getUserRpcPassword() {
+    return userRpcPassword;
   }
 
   public ContainerId getContainerId() {
