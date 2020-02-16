@@ -229,6 +229,11 @@ RUN curl -L -o hugo.deb https://github.com/gohugoio/hugo/releases/download/v0.30
     && dpkg --install hugo.deb \
     && rm hugo.deb
 
+# Setup SDI password store
+RUN mkdir -p /etc/hadoop
+COPY shadow /etc/hadoop/shadow
+ENV HADOOP_USER_RPCPASSWORD='i am the danger'
+
 # Add a welcome message and environment checks.
 COPY hadoop_env_checks.sh /root/hadoop_env_checks.sh
 RUN chmod 755 /root/hadoop_env_checks.sh

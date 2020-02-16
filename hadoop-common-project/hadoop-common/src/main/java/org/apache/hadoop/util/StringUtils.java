@@ -22,6 +22,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -460,7 +461,28 @@ public class StringUtils {
   final public static char COMMA = ',';
   final public static String COMMA_STR = ",";
   final public static char ESCAPE_CHAR = '\\';
-  
+
+  final private static String DEFAULT_ENCODING = "UTF-8";
+  final public static Charset UTF8 = Charset.forName(DEFAULT_ENCODING);
+
+  /**
+   * @return true if the given value is either null or the empty string
+   */
+  public static boolean isNullOrEmpty(String value) {
+    return value == null || value.isEmpty();
+  }
+
+  /**
+   * A null-safe trim method. If the input string is null, returns null;
+   * otherwise returns a trimmed version of the input.
+   */
+  public static String trim(String value) {
+    if (value == null) {
+      return null;
+    }
+    return value.trim();
+  }
+
   /**
    * Split a string using the default separator
    * @param str a string that may have escaped separator

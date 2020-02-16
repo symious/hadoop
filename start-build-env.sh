@@ -57,6 +57,8 @@ else # boot2docker uid and gid
   GROUP_ID=50
 fi
 
+USER_NAME=walter
+
 docker build -t "hadoop-build-${USER_ID}" - <<UserSpecificDocker
 FROM hadoop-build
 RUN groupadd --non-unique -g ${GROUP_ID} ${USER_NAME}
