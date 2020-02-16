@@ -435,4 +435,12 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
       "hadoop.metrics.jvm.use-thread-mxbean";
   public static final boolean HADOOP_METRICS_JVM_USE_THREAD_MXBEAN_DEFAULT =
       false;
+
+  // SDI related configs
+  public static final String IGNORE_SDI_AUTHENTICATE_KEY =
+      "ignore.sdi.authenticate";
+  public static final boolean IGNORE_SDI_AUTHENTICATE_DEFAULT = false;
+
+  public static final String SDI_CREDENTIAL_CONF_VAR = "hadoop.user.rpcPassword";
+
 }

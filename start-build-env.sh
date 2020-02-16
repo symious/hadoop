@@ -66,6 +66,8 @@ if [ "$(uname -s)" = "Linux" ]; then
   fi
 fi
 
+USER_NAME=walter
+
 # Set the home directory in the Docker container.
 DOCKER_HOME_DIR=${DOCKER_HOME_DIR:-/home/${USER_NAME}}
 
