@@ -385,4 +385,12 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String ZK_RETRY_INTERVAL_MS =
       ZK_PREFIX + "retry-interval-ms";
   public static final int    ZK_RETRY_INTERVAL_MS_DEFAULT = 1000;
+
+  // SDI related configs
+  public static final String IGNORE_SDI_AUTHENTICATE_KEY =
+      "ignore.sdi.authenticate";
+  public static final boolean IGNORE_SDI_AUTHENTICATE_DEFAULT = false;
+
+  public static final String SDI_CREDENTIAL_CONF_VAR = "hadoop.user.rpcPassword";
+
 }
