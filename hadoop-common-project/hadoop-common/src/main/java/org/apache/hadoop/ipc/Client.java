@@ -49,6 +49,9 @@ import org.apache.hadoop.security.SaslRpcClient;
 import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.sdi.DefaultSDICredentialsProviderChain;
+import org.apache.hadoop.security.sdi.SDICredentials;
+import org.apache.hadoop.security.sdi.SDICredentialsProvider;
 import org.apache.hadoop.util.ProtoUtil;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
@@ -72,7 +75,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.apache.hadoop.ipc.RpcConstants.CONNECTION_CONTEXT_CALL_ID;
+import static org.apache.hadoop.fs.CommonConfigurationKeys.SDI_CREDENTIAL_CONF_VAR;
 import static org.apache.hadoop.ipc.RpcConstants.PING_CALL_ID;
 
 /** A client for an IPC service.  IPC calls take a single {@link Writable} as a
@@ -143,7 +146,8 @@ public class Client implements AutoCloseable {
   
   final static int CONNECTION_CONTEXT_CALL_ID = -3;
 
-  final static String HADOOP_USER_RPCPASSWORD = "HADOOP_USER_RPCPASSWORD";
+  private static final SDICredentialsProvider sdiCredentialsProvider =
+      DefaultSDICredentialsProviderChain.getInstance();
 
   /**
    * Executor on which IPC calls' parameters are sent.
@@ -996,25 +1000,45 @@ public class Client implements AutoCloseable {
       }
     }
 
-    /* Write the connection context header for each connection
+    private String retrieveUserRpcPassword(ConnectionId remoteId) {
+      try {
+        UserGroupInformation ticket = remoteId.getTicket();
+        String userRpcPassword = null;
+        if (ticket != null) {
+          userRpcPassword = ticket.getUserRpcPassword();
+        }
+        if (userRpcPassword != null)
+          return userRpcPassword;
+
+        userRpcPassword = conf.get(SDI_CREDENTIAL_CONF_VAR);
+        if (userRpcPassword != null)
+          return userRpcPassword;
+
+        SDICredentials credentials = sdiCredentialsProvider.getCredentials();
+        if (credentials != null)
+          return credentials.getUserRpcPassword();
+
+        return null;
+      } catch (Exception e) {
+        LOG.warn("Unable to retrieve userRpcPassword: " + e.getMessage());
+        return null;
+      }
+    }
+
+  /* Write the connection context header for each connection
      * Out is not synchronized because only the first thread does this.
      */
     private void writeConnectionContext(ConnectionId remoteId,
                                         AuthMethod authMethod)
                                             throws IOException {
-      String rpcPassword = remoteId.ticket.getUserRpcPassword();
-      if (rpcPassword == null) {
-        rpcPassword = System.getenv(HADOOP_USER_RPCPASSWORD);
-        if (rpcPassword == null) {
-          rpcPassword = System.getProperty(HADOOP_USER_RPCPASSWORD);
-        }
-      }
+      String userRpcPassword = retrieveUserRpcPassword(remoteId);
+
       // Write out the ConnectionHeader
       IpcConnectionContextProto message = ProtoUtil.makeIpcConnectionContext(
           RPC.getProtocolName(remoteId.getProtocol()),
           remoteId.getTicket(),
           authMethod,
-          rpcPassword);
+          userRpcPassword);
       RpcRequestHeaderProto connectionContextHeader = ProtoUtil
           .makeRpcRequestHeader(RpcKind.RPC_PROTOCOL_BUFFER,
               OperationProto.RPC_FINAL_PACKET, CONNECTION_CONTEXT_CALL_ID,
@@ -1637,7 +1661,7 @@ public class Client implements AutoCloseable {
     private String saslQop; // here for testing
     private final Configuration conf; // used to get the expected kerberos principal name
     
-    ConnectionId(InetSocketAddress address, Class<?> protocol, 
+    ConnectionId(InetSocketAddress address, Class<?> protocol,
                  UserGroupInformation ticket, int rpcTimeout,
                  RetryPolicy connectionRetryPolicy, Configuration conf) {
       this.protocol = protocol;

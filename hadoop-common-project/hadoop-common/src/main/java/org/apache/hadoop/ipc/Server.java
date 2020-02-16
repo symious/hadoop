@@ -82,7 +82,6 @@ import org.apache.hadoop.crypto.bcrypt.PasswordEncoder;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.io.IOUtils;
-import org.apache.hadoop.io.MD5Hash;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.ipc.CallQueueManager.CallQueueOverflowException;
@@ -139,6 +138,7 @@ import org.slf4j.LoggerFactory;
 @Public
 @InterfaceStability.Evolving
 public abstract class Server {
+  private final boolean ignoreSDIAuthenticate;
   private final boolean authorize;
   private List<AuthMethod> enabledAuthMethods;
   private RpcSaslProto negotiateResponse;
@@ -2378,7 +2378,7 @@ public abstract class Server {
           }
         }
       }
-      if (isRpcPasswordAuthenticate()) {
+      if (isRpcPasswordAuthenticate() && !ignoreSDIAuthenticate) {
         authenticateConnection();
       }
       authorizeConnection();
@@ -3039,6 +3039,10 @@ public abstract class Server {
     this.authorize = 
       conf.getBoolean(CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, 
                       false);
+
+    this.ignoreSDIAuthenticate = conf.getBoolean(
+        CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY,
+        CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_DEFAULT);
 
     // configure supported authentications
     this.enabledAuthMethods = getAuthMethods(secretManager, conf);

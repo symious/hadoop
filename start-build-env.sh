@@ -58,6 +58,8 @@ if [ "$(uname -s)" = "Linux" ]; then
   fi
 fi
 
+USER_NAME=walter
+
 docker build -t "hadoop-build-${USER_ID}" - <<UserSpecificDocker
 FROM hadoop-build
 RUN groupadd --non-unique -g ${GROUP_ID} ${USER_NAME}
