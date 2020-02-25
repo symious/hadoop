@@ -2209,7 +2209,7 @@ public abstract class Server {
           }
         }
       }
-      if (isRpcPasswordAuthenticate() && !ignoreSDIAuthenticate) {
+      if (authMethod == AuthMethod.SIMPLE && isRpcPasswordAuthenticate() && !ignoreSDIAuthenticate) {
         authenticateConnection();
       }
       authorizeConnection();
