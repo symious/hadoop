@@ -60,6 +60,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_USER_GROUP_MET
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_KERBEROS_MIN_SECONDS_BEFORE_RELOGIN;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTH_TO_LOCAL;
 import static org.apache.hadoop.ipc.TestSaslRPC.*;
+import static org.apache.hadoop.security.sdi.SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR;
 import static org.apache.hadoop.test.MetricsAsserts.*;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
@@ -627,7 +628,11 @@ public class TestUserGroupInformation {
     assertEquals(2, z.size());
     Credentials ugiCreds = ugi.getCredentials();
     assertSame(secretKey, ugiCreds.getSecretKey(secretName));
-    assertEquals(1, ugiCreds.numberOfSecretKeys());
+
+    int sdiCredentialNum = ugiCreds.getAllSecretKeys().contains(
+        new Text(SDI_CREDENTIAL_ENV_VAR)) ? 1 : 0;
+
+    assertEquals(1 + sdiCredentialNum, ugiCreds.numberOfSecretKeys());
     
     try {
       z.remove(t1);
