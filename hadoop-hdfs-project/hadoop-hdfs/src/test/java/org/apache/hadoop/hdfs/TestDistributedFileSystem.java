@@ -1473,13 +1473,13 @@ public class TestDistributedFileSystem {
     try {
       cluster.waitActive();
       DistributedFileSystem dfs = cluster.getFileSystem();
-      // Write 10 MB to a dummy socket to ensure the write times out
+      // Write 20 MB to a dummy socket to ensure the write times out
       ServerSocket socket = new ServerSocket(0);
       Peer peer = dfs.getClient().newConnectedPeer(
         (InetSocketAddress) socket.getLocalSocketAddress(), null, null);
       long start = Time.now();
       try {
-        byte[] buf = new byte[10 * 1024 * 1024];
+        byte[] buf = new byte[20 * 1024 * 1024];
         peer.getOutputStream().write(buf);
         long delta = Time.now() - start;
         Assert.fail("write finish in " + delta + " ms" + "but should timedout");
