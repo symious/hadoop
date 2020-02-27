@@ -93,6 +93,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doThrow;
+import static org.apache.hadoop.security.sdi.SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
@@ -683,7 +684,11 @@ public class TestUserGroupInformation {
     assertEquals(2, z.size());
     Credentials ugiCreds = ugi.getCredentials();
     assertSame(secretKey, ugiCreds.getSecretKey(secretName));
-    assertEquals(1, ugiCreds.numberOfSecretKeys());
+
+    int sdiCredentialNum = ugiCreds.getAllSecretKeys().contains(
+        new Text(SDI_CREDENTIAL_ENV_VAR)) ? 1 : 0;
+
+    assertEquals(1 + sdiCredentialNum, ugiCreds.numberOfSecretKeys());
     
     try {
       z.remove(t1);
