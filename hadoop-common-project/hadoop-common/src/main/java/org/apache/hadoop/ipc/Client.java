@@ -1000,32 +1000,7 @@ public class Client implements AutoCloseable {
       }
     }
 
-//    private String retrieveUserRpcPassword(ConnectionId remoteId) {
-//      try {
-//        UserGroupInformation ticket = remoteId.getTicket();
-//        String userRpcPassword = null;
-//        if (ticket != null) {
-//          userRpcPassword = ticket.getUserRpcPassword();
-//        }
-//        if (userRpcPassword != null)
-//          return userRpcPassword;
-//
-//        userRpcPassword = conf.get(SDI_CREDENTIAL_CONF_VAR);
-//        if (userRpcPassword != null)
-//          return userRpcPassword;
-//
-//        SDICredentials credentials = sdiCredentialsProvider.getCredentials();
-//        if (credentials != null)
-//          return credentials.getUserRpcPassword();
-//
-//        return null;
-//      } catch (Exception e) {
-//        LOG.warn("Unable to retrieve userRpcPassword: " + e.getMessage());
-//        return null;
-//      }
-//    }
-
-  /* Write the connection context header for each connection
+    /* Write the connection context header for each connection
      * Out is not synchronized because only the first thread does this.
      */
     private void writeConnectionContext(ConnectionId remoteId,
