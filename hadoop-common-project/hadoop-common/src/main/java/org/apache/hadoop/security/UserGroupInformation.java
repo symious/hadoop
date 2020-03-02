@@ -1687,8 +1687,8 @@ public class UserGroupInformation {
    * get the rpcPassword for this user
    * @return user's rpcPassword
    */
-  public String getRpcPassword() {
-    ensureInitialized();;
+  public String queryRpcPassword() {
+    ensureInitialized();
     try{
       return rpcPassword.getRpcPassword(getShortUserName());
     } catch (IOException ie) {
