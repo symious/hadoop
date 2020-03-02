@@ -889,7 +889,7 @@ public class TestCopyFiles extends TestCase {
   static final long now = System.currentTimeMillis();
 
   static UserGroupInformation createUGI(String name, boolean issuper) {
-    String username = name + now;
+    String username = name;
     String group = issuper? "supergroup": username;
     return UserGroupInformation.createUserForTesting(username, 
         new String[]{group});

@@ -19,6 +19,7 @@
 package org.apache.hadoop.mapreduce.v2.app.job.impl;
 
 import static org.apache.commons.lang.StringUtils.isEmpty;
+import static org.apache.hadoop.security.sdi.SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -50,6 +51,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataOutputBuffer;
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.JobContext;
 import org.apache.hadoop.mapred.MapReduceChildJVM;
@@ -957,6 +959,17 @@ public abstract class TaskAttemptImpl implements
     // Shell
     environment.put(Environment.SHELL.name(), conf
         .get(MRJobConfig.MAPRED_ADMIN_USER_SHELL, MRJobConfig.DEFAULT_SHELL));
+
+    // Setup SDI Password in environment
+    if (conf instanceof JobConf) {
+      Credentials creds = ((JobConf) conf).getCredentials();
+      if (creds != null) {
+        byte[] pwd = creds.getSecretKey(new Text(SDI_CREDENTIAL_ENV_VAR));
+        if (pwd != null) {
+          environment.put(SDI_CREDENTIAL_ENV_VAR, new String(pwd));
+        }
+      }
+    }
 
     // Add pwd to LD_LIBRARY_PATH, add this before adding anything else
     MRApps.addToEnvironment(environment, Environment.LD_LIBRARY_PATH.name(),
