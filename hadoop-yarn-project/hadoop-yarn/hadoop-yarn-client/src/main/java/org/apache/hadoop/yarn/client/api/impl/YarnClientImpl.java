@@ -257,8 +257,11 @@ public class YarnClientImpl extends YarnClient {
       throw new ApplicationIdNotProvidedException(
           "ApplicationId is not provided in ApplicationSubmissionContext");
     }
-    appContext.getAMContainerSpec().getEnvironment().
-            put("HADOOP_USER_RPCPASSWORD", SdiCredentialsUtil.getSdiUserRpcPassword());
+    if (appContext.getAMContainerSpec() != null) {
+      appContext.getAMContainerSpec().getEnvironment()
+          .put("HADOOP_USER_RPCPASSWORD",
+              SdiCredentialsUtil.getSdiUserRpcPassword());
+    }
     SubmitApplicationRequest request =
         Records.newRecord(SubmitApplicationRequest.class);
     request.setApplicationSubmissionContext(appContext);

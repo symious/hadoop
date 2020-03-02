@@ -2483,8 +2483,8 @@ public abstract class Server {
     private void authenticateConnection() throws RpcServerException {
       try{
         // authenticate proxy user
-        String userName = null;
-        String rpcPassword = null;
+        String userName;
+        String rpcPassword;
         if (user != null) {
           if (user.getRealUser() != null) {
             userName = user.getRealUser().getUserName();
@@ -2501,11 +2501,15 @@ public abstract class Server {
         }
 
         if (!UserGroupInformation.createRemoteUser(userName).isBypassUser()) {
-          String serverRpcPassword = UserGroupInformation.createRemoteUser(userName).getRpcPassword();
-          if (serverRpcPassword == null) {
-            throw new IOException("No rpcPassword record on server side for user: " + userName);
+          String hashedRpcPassword =
+              UserGroupInformation.createRemoteUser(userName).queryRpcPassword();
+
+          if (hashedRpcPassword == null) {
+            throw new IOException(
+                "No rpcPassword record on server side for user: " + userName);
           }
-          if (rpcPassword == null || !passwordEncoder.matches(rpcPassword, serverRpcPassword)) {
+          if (rpcPassword == null
+              || !passwordEncoder.matches(rpcPassword, hashedRpcPassword)) {
             throw new IOException("Rpc Authentication failed for user: " + userName);
           }
         }

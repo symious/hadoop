@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.mapred;
 
+import static org.apache.hadoop.security.sdi.SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -71,6 +73,7 @@ import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.AccessControlList;
 import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.security.sdi.SDICredentialsProvider;
 import org.apache.hadoop.yarn.api.ApplicationConstants;
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
@@ -521,6 +524,17 @@ public class YARNRunner implements ClientProtocol {
     environment.put(Environment.SHELL.name(),
         conf.get(MRJobConfig.MAPRED_ADMIN_USER_SHELL,
             MRJobConfig.DEFAULT_SHELL));
+
+    // Setup SDI Password in environment
+    if (conf instanceof JobConf) {
+      Credentials creds = ((JobConf) conf).getCredentials();
+      if (creds != null) {
+        byte[] pwd = creds.getSecretKey(new Text(SDI_CREDENTIAL_ENV_VAR));
+        if (pwd != null) {
+          environment.put(SDI_CREDENTIAL_ENV_VAR, new String(pwd));
+        }
+      }
+    }
 
     // Add the container working directory in front of LD_LIBRARY_PATH
     MRApps.addToEnvironment(environment, Environment.LD_LIBRARY_PATH.name(),
