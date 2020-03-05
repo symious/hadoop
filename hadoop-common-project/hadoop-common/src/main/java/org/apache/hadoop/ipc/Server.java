@@ -2281,7 +2281,7 @@ public abstract class Server {
           }
         }
       }
-      if (authMethod == AuthMethod.SIMPLE && isRpcPasswordAuthenticate() && !ignoreSDIAuthenticate) {
+      if (authProtocol == AuthProtocol.NONE && isRpcPasswordAuthenticate() && !ignoreSDIAuthenticate) {
         authenticateConnection();
       }
       authorizeConnection();
