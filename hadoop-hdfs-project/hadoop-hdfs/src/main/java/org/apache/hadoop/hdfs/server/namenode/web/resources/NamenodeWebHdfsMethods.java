@@ -347,7 +347,7 @@ public class NamenodeWebHdfsMethods {
 
   private URI redirectURI(ResponseBuilder rb, final NameNode namenode,
       final UserGroupInformation ugi, final DelegationParam delegation,
-      final UserParam username, final DoAsParam doAsUser,
+      final UserParam username, final UserRpcPasswordParam userRpcPassword, final DoAsParam doAsUser,
       final String path, final HttpOpParam.Op op, final long openOffset,
       final long blocksize, final String excludeDatanodes,
       final Param<?, ?>... parameters) throws URISyntaxException, IOException {
@@ -369,7 +369,13 @@ public class NamenodeWebHdfsMethods {
     final String delegationQuery;
     if (!UserGroupInformation.isSecurityEnabled()) {
       //security disabled
-      delegationQuery = Param.toSortedString("&", doAsUser, username);
+      UserRpcPasswordParam userRpcPasswordParam = null;
+      if (userRpcPassword != null) {
+        userRpcPasswordParam = userRpcPassword;
+      } else if (ugi.getSdiUserRpcPassword() != null && ugi.getSdiUserRpcPassword().isEmpty()) {
+        userRpcPasswordParam = new UserRpcPasswordParam(ugi);
+      }
+      delegationQuery = Param.toSortedString("&", doAsUser, username, userRpcPasswordParam);
     } else if (delegation.getValue() != null) {
       //client has provided a token
       delegationQuery = "&" + delegation;
@@ -418,6 +424,8 @@ public class NamenodeWebHdfsMethods {
           final DelegationParam delegation,
       @QueryParam(UserParam.NAME) @DefaultValue(UserParam.DEFAULT)
           final UserParam username,
+      @QueryParam(UserRpcPasswordParam.NAME) @DefaultValue(UserRpcPasswordParam.DEFAULT)
+          final UserRpcPasswordParam userRpcPassword,
       @QueryParam(DoAsParam.NAME) @DefaultValue(DoAsParam.DEFAULT)
           final DoAsParam doAsUser,
       @QueryParam(PutOpParam.NAME) @DefaultValue(PutOpParam.DEFAULT)
@@ -469,7 +477,7 @@ public class NamenodeWebHdfsMethods {
       @QueryParam(StoragePolicyParam.NAME) @DefaultValue(StoragePolicyParam
           .DEFAULT) final StoragePolicyParam policyName
       ) throws IOException, InterruptedException {
-    return put(ugi, delegation, username, doAsUser, ROOT, op, destination,
+    return put(ugi, delegation, username, userRpcPassword, doAsUser, ROOT, op, destination,
         owner, group, permission, overwrite, bufferSize, replication,
         blockSize, modificationTime, accessTime, renameOptions, createParent,
         delegationTokenArgument, aclPermission, xattrName, xattrValue,
@@ -488,6 +496,8 @@ public class NamenodeWebHdfsMethods {
           final DelegationParam delegation,
       @QueryParam(UserParam.NAME) @DefaultValue(UserParam.DEFAULT)
           final UserParam username,
+      @QueryParam(UserRpcPasswordParam.NAME) @DefaultValue(UserRpcPasswordParam.DEFAULT)
+          final UserRpcPasswordParam userRpcPassword,
       @QueryParam(DoAsParam.NAME) @DefaultValue(DoAsParam.DEFAULT)
           final DoAsParam doAsUser,
       @PathParam(UriFsPathParam.NAME) final UriFsPathParam path,
@@ -550,7 +560,7 @@ public class NamenodeWebHdfsMethods {
     return doAs(ugi, new PrivilegedExceptionAction<Response>() {
       @Override
       public Response run() throws IOException, URISyntaxException {
-          return put(ugi, delegation, username, doAsUser,
+          return put(ugi, delegation, username, userRpcPassword, doAsUser,
               path.getAbsolutePath(), op, destination, owner, group,
               permission, overwrite, bufferSize, replication, blockSize,
               modificationTime, accessTime, renameOptions, createParent,
@@ -565,6 +575,7 @@ public class NamenodeWebHdfsMethods {
       final UserGroupInformation ugi,
       final DelegationParam delegation,
       final UserParam username,
+      final UserRpcPasswordParam userRpcPassword,
       final DoAsParam doAsUser,
       final String fullpath,
       final PutOpParam op,
@@ -599,7 +610,7 @@ public class NamenodeWebHdfsMethods {
     case CREATE:
     {
       final NameNode namenode = (NameNode)context.getAttribute("name.node");
-      final URI uri = redirectURI(null, namenode, ugi, delegation, username,
+      final URI uri = redirectURI(null, namenode, ugi, delegation, username, userRpcPassword,
           doAsUser, fullpath, op.getValue(), -1L, blockSize.getValue(conf),
           exclDatanodes.getValue(), permission, overwrite, bufferSize,
           replication, blockSize, createParent, createFlagParam);
@@ -750,6 +761,8 @@ public class NamenodeWebHdfsMethods {
           final DelegationParam delegation,
       @QueryParam(UserParam.NAME) @DefaultValue(UserParam.DEFAULT)
           final UserParam username,
+      @QueryParam(UserRpcPasswordParam.NAME) @DefaultValue(UserRpcPasswordParam.DEFAULT)
+          final UserRpcPasswordParam userRpcPassword,
       @QueryParam(DoAsParam.NAME) @DefaultValue(DoAsParam.DEFAULT)
           final DoAsParam doAsUser,
       @QueryParam(PostOpParam.NAME) @DefaultValue(PostOpParam.DEFAULT)
@@ -765,7 +778,7 @@ public class NamenodeWebHdfsMethods {
       @QueryParam(NoRedirectParam.NAME) @DefaultValue(NoRedirectParam.DEFAULT)
           final NoRedirectParam noredirect
       ) throws IOException, InterruptedException {
-    return post(ugi, delegation, username, doAsUser, ROOT, op, concatSrcs,
+    return post(ugi, delegation, username, userRpcPassword, doAsUser, ROOT, op, concatSrcs,
         bufferSize, excludeDatanodes, newLength, noredirect);
   }
 
@@ -780,6 +793,8 @@ public class NamenodeWebHdfsMethods {
           final DelegationParam delegation,
       @QueryParam(UserParam.NAME) @DefaultValue(UserParam.DEFAULT)
           final UserParam username,
+      @QueryParam(UserRpcPasswordParam.NAME) @DefaultValue(UserRpcPasswordParam.DEFAULT)
+          final UserRpcPasswordParam userRpcPassword,
       @QueryParam(DoAsParam.NAME) @DefaultValue(DoAsParam.DEFAULT)
           final DoAsParam doAsUser,
       @PathParam(UriFsPathParam.NAME) final UriFsPathParam path,
@@ -803,7 +818,7 @@ public class NamenodeWebHdfsMethods {
     return doAs(ugi, new PrivilegedExceptionAction<Response>() {
       @Override
       public Response run() throws IOException, URISyntaxException {
-          return post(ugi, delegation, username, doAsUser,
+          return post(ugi, delegation, username, userRpcPassword, doAsUser,
               path.getAbsolutePath(), op, concatSrcs, bufferSize,
               excludeDatanodes, newLength, noredirect);
       }
@@ -814,6 +829,7 @@ public class NamenodeWebHdfsMethods {
       final UserGroupInformation ugi,
       final DelegationParam delegation,
       final UserParam username,
+      final UserRpcPasswordParam userRpcPassword,
       final DoAsParam doAsUser,
       final String fullpath,
       final PostOpParam op,
@@ -830,7 +846,7 @@ public class NamenodeWebHdfsMethods {
     {
       final NameNode namenode = (NameNode)context.getAttribute("name.node");
       final URI uri = redirectURI(null, namenode, ugi, delegation, username,
-          doAsUser, fullpath, op.getValue(), -1L, -1L,
+          userRpcPassword, doAsUser, fullpath, op.getValue(), -1L, -1L,
           excludeDatanodes.getValue(), bufferSize);
       if(!noredirectParam.getValue()) {
         return Response.temporaryRedirect(uri)
@@ -876,6 +892,8 @@ public class NamenodeWebHdfsMethods {
           final DelegationParam delegation,
       @QueryParam(UserParam.NAME) @DefaultValue(UserParam.DEFAULT)
           final UserParam username,
+      @QueryParam(UserRpcPasswordParam.NAME) @DefaultValue(UserRpcPasswordParam.DEFAULT)
+          final UserRpcPasswordParam userRpcPassword,
       @QueryParam(DoAsParam.NAME) @DefaultValue(DoAsParam.DEFAULT)
           final DoAsParam doAsUser,
       @QueryParam(GetOpParam.NAME) @DefaultValue(GetOpParam.DEFAULT)
@@ -905,7 +923,7 @@ public class NamenodeWebHdfsMethods {
       @QueryParam(StartAfterParam.NAME) @DefaultValue(StartAfterParam.DEFAULT)
           final StartAfterParam startAfter
       ) throws IOException, InterruptedException {
-    return get(ugi, delegation, username, doAsUser, ROOT, op, offset, length,
+    return get(ugi, delegation, username, userRpcPassword, doAsUser, ROOT, op, offset, length,
         renewer, bufferSize, xattrNames, xattrEncoding, excludeDatanodes, fsAction,
         tokenKind, tokenService, noredirect, startAfter);
   }
@@ -920,6 +938,8 @@ public class NamenodeWebHdfsMethods {
           final DelegationParam delegation,
       @QueryParam(UserParam.NAME) @DefaultValue(UserParam.DEFAULT)
           final UserParam username,
+      @QueryParam(UserRpcPasswordParam.NAME) @DefaultValue(UserRpcPasswordParam.DEFAULT)
+          final UserRpcPasswordParam userRpcPassword,
       @QueryParam(DoAsParam.NAME) @DefaultValue(DoAsParam.DEFAULT)
           final DoAsParam doAsUser,
       @PathParam(UriFsPathParam.NAME) final UriFsPathParam path,
@@ -933,9 +953,9 @@ public class NamenodeWebHdfsMethods {
           final RenewerParam renewer,
       @QueryParam(BufferSizeParam.NAME) @DefaultValue(BufferSizeParam.DEFAULT)
           final BufferSizeParam bufferSize,
-      @QueryParam(XAttrNameParam.NAME) @DefaultValue(XAttrNameParam.DEFAULT) 
+      @QueryParam(XAttrNameParam.NAME) @DefaultValue(XAttrNameParam.DEFAULT)
           final List<XAttrNameParam> xattrNames,
-      @QueryParam(XAttrEncodingParam.NAME) @DefaultValue(XAttrEncodingParam.DEFAULT) 
+      @QueryParam(XAttrEncodingParam.NAME) @DefaultValue(XAttrEncodingParam.DEFAULT)
           final XAttrEncodingParam xattrEncoding,
       @QueryParam(ExcludeDatanodesParam.NAME) @DefaultValue(ExcludeDatanodesParam.DEFAULT)
           final ExcludeDatanodesParam excludeDatanodes,
@@ -958,7 +978,7 @@ public class NamenodeWebHdfsMethods {
     return doAs(ugi, new PrivilegedExceptionAction<Response>() {
       @Override
       public Response run() throws IOException, URISyntaxException {
-          return get(ugi, delegation, username, doAsUser,
+          return get(ugi, delegation, username, userRpcPassword, doAsUser,
               path.getAbsolutePath(), op, offset, length, renewer, bufferSize,
               xattrNames, xattrEncoding, excludeDatanodes, fsAction, tokenKind,
               tokenService, noredirect, startAfter);
@@ -976,6 +996,7 @@ public class NamenodeWebHdfsMethods {
       final UserGroupInformation ugi,
       final DelegationParam delegation,
       final UserParam username,
+      final UserRpcPasswordParam userRpcPassword,
       final DoAsParam doAsUser,
       final String fullpath,
       final GetOpParam op,
@@ -1002,7 +1023,7 @@ public class NamenodeWebHdfsMethods {
       final NameNode namenode = (NameNode)context.getAttribute("name.node");
       ResponseBuilder rb = Response.noContent();
       final URI uri = redirectURI(rb, namenode, ugi, delegation, username,
-          doAsUser, fullpath, op.getValue(), offset.getValue(), -1L,
+          userRpcPassword, doAsUser, fullpath, op.getValue(), offset.getValue(), -1L,
           excludeDatanodes.getValue(), offset, length, bufferSize);
       if(!noredirectParam.getValue()) {
         return rb.status(Status.TEMPORARY_REDIRECT).location(uri)
@@ -1062,7 +1083,7 @@ public class NamenodeWebHdfsMethods {
     {
       final NameNode namenode = (NameNode)context.getAttribute("name.node");
       final URI uri = redirectURI(null, namenode, ugi, delegation, username,
-          doAsUser, fullpath, op.getValue(), -1L, -1L, null);
+          userRpcPassword, doAsUser, fullpath, op.getValue(), -1L, -1L, null);
       if(!noredirectParam.getValue()) {
         return Response.temporaryRedirect(uri)
           .type(MediaType.APPLICATION_OCTET_STREAM).build();
