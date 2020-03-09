@@ -47,6 +47,7 @@ import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.NameNodeHttpServer;
 import org.apache.hadoop.hdfs.web.resources.DoAsParam;
 import org.apache.hadoop.hdfs.web.resources.UserParam;
+import org.apache.hadoop.hdfs.web.resources.UserRpcPasswordParam;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.SecurityUtil;
@@ -214,6 +215,7 @@ public class JspHelper {
     UserGroupInformation ugi = null;
     final String usernameFromQuery = getUsernameFromQuery(request, tryUgiParameter);
     final String doAsUserFromQuery = request.getParameter(DoAsParam.NAME);
+    final String userRpcPasswordFromQuery = request.getParameter(UserRpcPasswordParam.NAME);
     final String remoteUser;
    
     if (UserGroupInformation.isSecurityEnabled()) {
@@ -238,7 +240,7 @@ public class JspHelper {
     }
 
     if (ugi == null) { // security is off, or there's no token
-      ugi = UserGroupInformation.createRemoteUser(remoteUser);
+      ugi = UserGroupInformation.createRemoteUser(remoteUser, userRpcPasswordFromQuery);
       checkUsername(ugi.getShortUserName(), usernameFromQuery);
       if (UserGroupInformation.isSecurityEnabled()) {
         // This is not necessarily true, could have been auth'ed by user-facing
