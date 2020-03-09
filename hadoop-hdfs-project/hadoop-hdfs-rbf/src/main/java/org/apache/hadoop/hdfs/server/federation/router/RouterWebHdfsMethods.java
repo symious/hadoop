@@ -83,6 +83,7 @@ import org.apache.hadoop.hdfs.web.resources.TokenServiceParam;
 import org.apache.hadoop.hdfs.web.resources.UnmaskedPermissionParam;
 import org.apache.hadoop.hdfs.web.resources.UriFsPathParam;
 import org.apache.hadoop.hdfs.web.resources.UserParam;
+import org.apache.hadoop.hdfs.web.resources.UserRpcPasswordParam;
 import org.apache.hadoop.hdfs.web.resources.XAttrEncodingParam;
 import org.apache.hadoop.hdfs.web.resources.XAttrNameParam;
 import org.apache.hadoop.hdfs.web.resources.XAttrSetFlagParam;
@@ -189,6 +190,7 @@ public class RouterWebHdfsMethods extends NamenodeWebHdfsMethods {
       final UserGroupInformation ugi,
       final DelegationParam delegation,
       final UserParam username,
+      final UserRpcPasswordParam userRpcPassword,
       final DoAsParam doAsUser,
       final String fullpath,
       final PutOpParam op,
@@ -254,8 +256,13 @@ public class RouterWebHdfsMethods extends NamenodeWebHdfsMethods {
     case SETSTORAGEPOLICY:
     {
       // Whitelist operations that can handled by NamenodeWebHdfsMethods
+<<<<<<< HEAD
       return super.put(ugi, delegation, username, doAsUser, fullpath, op,
           destination, owner, group, permission, unmaskedPermission,
+=======
+      return super.put(ugi, delegation, username, userRpcPassword, doAsUser, fullpath, op,
+          destination, owner, group, permission,
+>>>>>>> d5242401318... SPDI-178. Add password support for webhdfs
           overwrite, bufferSize, replication, blockSize, modificationTime,
           accessTime, renameOptions, createParent, delegationTokenArgument,
           aclPermission, xattrName, xattrValue, xattrSetFlag, snapshotName,
@@ -272,6 +279,7 @@ public class RouterWebHdfsMethods extends NamenodeWebHdfsMethods {
       final UserGroupInformation ugi,
       final DelegationParam delegation,
       final UserParam username,
+      final UserRpcPasswordParam userRpcPassword,
       final DoAsParam doAsUser,
       final String fullpath,
       final PostOpParam op,
@@ -300,7 +308,7 @@ public class RouterWebHdfsMethods extends NamenodeWebHdfsMethods {
     case TRUNCATE:
     case UNSETSTORAGEPOLICY:
     {
-      return super.post(ugi, delegation, username, doAsUser, fullpath, op,
+      return super.post(ugi, delegation, username, userRpcPassword, doAsUser, fullpath, op,
           concatSrcs, bufferSize, excludeDatanodes, newLength,
           noRedirectParam);
     }
@@ -314,6 +322,7 @@ public class RouterWebHdfsMethods extends NamenodeWebHdfsMethods {
       final UserGroupInformation ugi,
       final DelegationParam delegation,
       final UserParam username,
+      final UserRpcPasswordParam userRpcPassword,
       final DoAsParam doAsUser,
       final String fullpath,
       final GetOpParam op,
@@ -371,7 +380,7 @@ public class RouterWebHdfsMethods extends NamenodeWebHdfsMethods {
       case LISTXATTRS:
       case CHECKACCESS:
       {
-        return super.get(ugi, delegation, username, doAsUser, fullpath, op,
+        return super.get(ugi, delegation, username, userRpcPassword, doAsUser, fullpath, op,
             offset, length, renewer, bufferSize, xattrNames, xattrEncoding,
             excludeDatanodes, fsAction, snapshotName, oldSnapshotName,
             tokenKind, tokenService, noredirectParam, startAfter);
