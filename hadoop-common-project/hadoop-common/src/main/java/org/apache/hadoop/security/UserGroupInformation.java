@@ -22,6 +22,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_KERBEROS_MIN_S
 import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_USER_GROUP_METRICS_PERCENTILES_INTERVALS;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_TOKEN_FILES;
 import static org.apache.hadoop.security.UGIExceptionMessages.*;
+import static org.apache.hadoop.security.sdi.SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR;
 import static org.apache.hadoop.util.PlatformName.IBM_JAVA;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -29,7 +30,9 @@ import com.google.common.annotations.VisibleForTesting;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.UndeclaredThrowableException;
+import java.nio.charset.StandardCharsets;
 import java.security.AccessControlContext;
 import java.security.AccessController;
 import java.security.Principal;
@@ -75,6 +78,7 @@ import org.apache.hadoop.metrics2.lib.MutableQuantiles;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
 import org.apache.hadoop.security.authentication.util.KerberosUtil;
+import org.apache.hadoop.security.sdi.SdiCredentialsUtil;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.util.Shell;
@@ -103,6 +107,7 @@ public class UserGroupInformation {
   private static boolean shouldRenewImmediatelyForTests = false;
   static final String HADOOP_USER_NAME = "HADOOP_USER_NAME";
   static final String HADOOP_PROXY_USER = "HADOOP_PROXY_USER";
+  private Text SDI_CREDENTIAL_ENV_VAR_TEXT = new Text(SDI_CREDENTIAL_ENV_VAR);
 
   /**
    * For the purposes of unit tests, we want to test login
@@ -229,6 +234,13 @@ public class UserGroupInformation {
         }
 
         subject.getPrincipals().add(userEntry);
+        String rpcPassword = SdiCredentialsUtil.getSdiUserRpcPassword();
+        if (rpcPassword != null && !rpcPassword.isEmpty()) {
+          Credentials credentials = new Credentials();
+          credentials.addSecretKey(new Text(SDI_CREDENTIAL_ENV_VAR),
+                  rpcPassword.getBytes(StandardCharsets.UTF_8));
+          subject.getPrivateCredentials().add(credentials);
+        }
         return true;
       }
       LOG.error("Can't find user in " + subject);
@@ -396,7 +408,6 @@ public class UserGroupInformation {
   private final Subject subject;
   // All non-static fields must be read-only caches that come from the subject.
   private final User user;
-  private String userRpcPassword;
   private final boolean isKeytab;
   private final boolean isKrbTkt;
   
@@ -938,21 +949,6 @@ public class UserGroupInformation {
   }
 
   /**
-   * set RpcPassword for UGI
-   */
-  private void setUserRpcPassword(String rpcPassword) {
-    this.userRpcPassword = rpcPassword;
-  }
-
-  /**
-   * Get the rpcPassword of UGI
-   * @return rpcPassword
-   */
-  public String getUserRpcPassword() {
-    return userRpcPassword;
-  }
-  
-  /**
    * Is this user logged in from a keytab file?
    * @return true if the credentials are from a keytab file.
    */
@@ -1475,10 +1471,13 @@ public class UserGroupInformation {
     }
     Subject subject = new Subject();
     subject.getPrincipals().add(new User(user));
-    UserGroupInformation result = new UserGroupInformation(subject);
-    if (rpcPassword != null) {
-      result.setUserRpcPassword(rpcPassword);
+    if (rpcPassword != null && !rpcPassword.isEmpty()) {
+      Credentials credentials = new Credentials();
+      credentials.addSecretKey(new Text(SDI_CREDENTIAL_ENV_VAR),
+              rpcPassword.getBytes(StandardCharsets.UTF_8));
+      subject.getPrivateCredentials().add(credentials);
     }
+    UserGroupInformation result = new UserGroupInformation(subject);
     result.setAuthenticationMethod(authMethod);
     return result;
   }
@@ -1750,6 +1749,15 @@ public class UserGroupInformation {
       return creds;
     }
   }
+
+  public String getSdiUserRpcPassword() {
+    Credentials credentials = getCredentials();
+    if (credentials == null || credentials.getAllSecretKeys().size() == 0 ||
+      credentials.getSecretKey(SDI_CREDENTIAL_ENV_VAR_TEXT) == null) {
+      return null;
+    }
+    return new String(credentials.getSecretKey(SDI_CREDENTIAL_ENV_VAR_TEXT));
+  }
   
   /**
    * Add the given Credentials to this user.
@@ -1921,8 +1929,7 @@ public class UserGroupInformation {
     } else if (o == null || getClass() != o.getClass()) {
       return false;
     } else {
-      return subject == ((UserGroupInformation) o).subject &&
-              Objects.equals(userRpcPassword, ((UserGroupInformation) o).userRpcPassword);
+      return subject == ((UserGroupInformation) o).subject;
     }
   }
 
@@ -1931,7 +1938,7 @@ public class UserGroupInformation {
    */
   @Override
   public int hashCode() {
-    return System.identityHashCode(subject) + (userRpcPassword == null ? 0 : userRpcPassword.hashCode());
+    return System.identityHashCode(subject);
   }
 
   /**

@@ -1000,30 +1000,30 @@ public class Client implements AutoCloseable {
       }
     }
 
-    private String retrieveUserRpcPassword(ConnectionId remoteId) {
-      try {
-        UserGroupInformation ticket = remoteId.getTicket();
-        String userRpcPassword = null;
-        if (ticket != null) {
-          userRpcPassword = ticket.getUserRpcPassword();
-        }
-        if (userRpcPassword != null)
-          return userRpcPassword;
-
-        userRpcPassword = conf.get(SDI_CREDENTIAL_CONF_VAR);
-        if (userRpcPassword != null)
-          return userRpcPassword;
-
-        SDICredentials credentials = sdiCredentialsProvider.getCredentials();
-        if (credentials != null)
-          return credentials.getUserRpcPassword();
-
-        return null;
-      } catch (Exception e) {
-        LOG.warn("Unable to retrieve userRpcPassword: " + e.getMessage());
-        return null;
-      }
-    }
+//    private String retrieveUserRpcPassword(ConnectionId remoteId) {
+//      try {
+//        UserGroupInformation ticket = remoteId.getTicket();
+//        String userRpcPassword = null;
+//        if (ticket != null) {
+//          userRpcPassword = ticket.getUserRpcPassword();
+//        }
+//        if (userRpcPassword != null)
+//          return userRpcPassword;
+//
+//        userRpcPassword = conf.get(SDI_CREDENTIAL_CONF_VAR);
+//        if (userRpcPassword != null)
+//          return userRpcPassword;
+//
+//        SDICredentials credentials = sdiCredentialsProvider.getCredentials();
+//        if (credentials != null)
+//          return credentials.getUserRpcPassword();
+//
+//        return null;
+//      } catch (Exception e) {
+//        LOG.warn("Unable to retrieve userRpcPassword: " + e.getMessage());
+//        return null;
+//      }
+//    }
 
   /* Write the connection context header for each connection
      * Out is not synchronized because only the first thread does this.
@@ -1031,14 +1031,13 @@ public class Client implements AutoCloseable {
     private void writeConnectionContext(ConnectionId remoteId,
                                         AuthMethod authMethod)
                                             throws IOException {
-      String userRpcPassword = retrieveUserRpcPassword(remoteId);
-
+      String sdiUserRpcPassword = remoteId.ticket.getSdiUserRpcPassword();
       // Write out the ConnectionHeader
       IpcConnectionContextProto message = ProtoUtil.makeIpcConnectionContext(
           RPC.getProtocolName(remoteId.getProtocol()),
           remoteId.getTicket(),
           authMethod,
-          userRpcPassword);
+          sdiUserRpcPassword);
       RpcRequestHeaderProto connectionContextHeader = ProtoUtil
           .makeRpcRequestHeader(RpcKind.RPC_PROTOCOL_BUFFER,
               OperationProto.RPC_FINAL_PACKET, CONNECTION_CONTEXT_CALL_ID,
