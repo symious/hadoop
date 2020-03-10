@@ -391,6 +391,6 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
       "ignore.sdi.authenticate";
   public static final boolean IGNORE_SDI_AUTHENTICATE_DEFAULT = false;
 
-  public static final String SDI_CREDENTIAL_CONF_VAR = "hadoop.user.rpcPassword";
+  public static final String SDI_CREDENTIAL_CONF_VAR = "hadoop.user.rpcpassword";
 
 }
