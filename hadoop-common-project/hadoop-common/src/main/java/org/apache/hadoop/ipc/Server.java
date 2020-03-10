@@ -2566,10 +2566,13 @@ public abstract class Server {
         if (user != null) {
           if (user.getRealUser() != null) {
             userName = user.getRealUser().getUserName();
-            rpcPassword = user.getRealUser().getUserRpcPassword();
+            rpcPassword = user.getRealUser().getSdiUserRpcPassword();
           } else {
             userName = user.getUserName();
-            rpcPassword = user.getUserRpcPassword();
+            rpcPassword = user.getSdiUserRpcPassword();
+          }
+          if (rpcPassword == null) {
+            LOG.info("[SDICredential] RpcPassword not set for {}.", userName);
           }
         } else {
           throw new IOException("Illegal user error.");
