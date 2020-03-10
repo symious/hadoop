@@ -1466,7 +1466,7 @@ public class UserGroupInformation {
   public static UserGroupInformation createUserForTesting(String user, 
                                                           String[] userGroups) {
     ensureInitialized();
-    UserGroupInformation ugi = createRemoteUser(user);
+    UserGroupInformation ugi = createRemoteUser(user, SdiCredentialsUtil.getSdiUserRpcPassword());
     // make sure that the testing object is setup
     if (!(groups instanceof TestingGroups)) {
       groups = new TestingGroups(groups);
