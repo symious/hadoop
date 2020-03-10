@@ -104,7 +104,7 @@ public class SDICredentialsProviderChain implements SDICredentialsProvider {
       }
     }
     LOG.warn("Unable to load SDI credentials from any provider in the chain: " + exceptionMessages);
-    return null;
+    return new EmptySDICredentials();
   }
 
   @Override
