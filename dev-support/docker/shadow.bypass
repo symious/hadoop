@@ -1,8 +1,5 @@
-# bcrypt.hashpw(b'hey yo!', bcrypt.gensalt())
-jesse,$2b$12$igqznihnzJf0QDZg1cWOD.OpuKTXQlFdvy.nvR7CJ/O/iwt8OPIDG,false
-# bcrypt.hashpw(b'I AM THE DANGER', bcrypt.gensalt())
-walter,$2b$12$MousuHQw/05eV9KzusvRAO03cWVVEPDgcVWfnM4iB/hErfPBkMqKq,false
-# bypass some users for testing
+# bypass all users for testing
+walter,,true
 foo,,true
 bar,,true
 user1,,true
@@ -13,8 +10,8 @@ whoever,,true
 userX,,true
 walterx,,true
 dr.who,,true
-bruce,$2b$12$MousuHQw/05eV9KzusvRAO03cWVVEPDgcVWfnM4iB/hErfPBkMqKq,false
-diana,$2b$12$MousuHQw/05eV9KzusvRAO03cWVVEPDgcVWfnM4iB/hErfPBkMqKq,false
+bruce,,true
+diana,,true
 anotheruser,,true
 user,,true
 unprivilegedUser,,true

@@ -40,6 +40,7 @@ import org.junit.rules.TestName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.hadoop.security.sdi.SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -176,13 +177,14 @@ public class TestCredentialProviderFactory {
 
     // get a new instance of the provider to ensure it was saved correctly
     provider = CredentialProviderFactory.getProviders(conf).get(0);
+    int sdiCredentialNum = provider.getAliases().contains(SDI_CREDENTIAL_ENV_VAR) ? 1 : 0;
     assertTrue(provider != null);
     assertArrayEquals(new char[]{'1', '2', '3'},
         provider.getCredentialEntry("pass2").getCredential());
     assertArrayEquals(passwd, provider.getCredentialEntry("pass").getCredential());
 
     List<String> creds = provider.getAliases();
-    assertTrue("Credentials should have been returned.", creds.size() == 2);
+    assertTrue("Credentials should have been returned.", creds.size() == 2 + sdiCredentialNum);
     assertTrue("Returned Credentials should have included pass.", creds.contains("pass"));
     assertTrue("Returned Credentials should have included pass2.", creds.contains("pass2"));
   }
