@@ -55,7 +55,7 @@ public class TestPermission {
 
   final private static int FILE_LEN = 100;
   final private static Random RAN = new Random();
-  final private static String USER_NAME = "user" + RAN.nextInt();
+  final private static String USER_NAME = "user2";
   final private static String[] GROUP_NAMES = {"group1", "group2"};
 
   static FsPermission checkPermission(FileSystem fs,
