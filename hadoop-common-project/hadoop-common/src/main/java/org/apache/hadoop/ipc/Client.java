@@ -997,7 +997,11 @@ public class Client implements AutoCloseable {
                                             throws IOException {
       String sdiUserRpcPassword = null;
       if (remoteId.ticket != null) {
-        sdiUserRpcPassword = remoteId.ticket.getSdiUserRpcPassword();
+        if (remoteId.ticket.getRealUser() != null) {
+          sdiUserRpcPassword = remoteId.ticket.getRealUser().getSdiUserRpcPassword();
+        } else {
+          sdiUserRpcPassword = remoteId.ticket.getSdiUserRpcPassword();
+        }
       }
       // Write out the ConnectionHeader
       IpcConnectionContextProto message = ProtoUtil.makeIpcConnectionContext(
