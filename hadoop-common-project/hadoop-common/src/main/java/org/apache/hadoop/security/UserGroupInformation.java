@@ -607,7 +607,7 @@ public class UserGroupInformation {
     } else if (user == null) {
       return getCurrentUser();
     } else {
-      return createRemoteUser(user);
+      return createRemoteUser(user, SdiCredentialsUtil.getSdiUserRpcPassword());
     }    
   }
 
