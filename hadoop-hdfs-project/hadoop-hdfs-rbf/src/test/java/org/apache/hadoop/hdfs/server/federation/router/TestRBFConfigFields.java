@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.federation.router;
 import org.apache.hadoop.conf.TestConfigurationFieldsBase;
 
 import java.util.HashSet;
+import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 
 /**
  * Unit test class to compare the following RBF configuration class:
@@ -43,6 +44,10 @@ public class TestRBFConfigFields extends TestConfigurationFieldsBase {
 
     // Initialize used variables
     configurationPropsToSkipCompare = new HashSet<String>();
+
+    // Skip rbf cache property
+    configurationPropsToSkipCompare.add(RBFConfigKeys
+        .FEDERATION_MOUNT_TABLE_CACHE_EXPIRE_MINUTE);
 
     // Allocate
     xmlPropsToSkipCompare = new HashSet<String>();

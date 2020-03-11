@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.tools;
 
+
 import java.util.HashSet;
 
 import org.apache.hadoop.conf.TestConfigurationFieldsBase;
@@ -102,6 +103,10 @@ public class TestHdfsConfigFields extends TestConfigurationFieldsBase {
         .add(DFSConfigKeys.DFS_NAMENODE_STARTUP_KEY);
     configurationPropsToSkipCompare.add(DFSConfigKeys
         .DFS_DATANODE_ENABLE_FILEIO_FAULT_INJECTION_KEY);
+
+    // Skip webhdfs password pattern property
+    configurationPropsToSkipCompare.add(HdfsClientConfigKeys
+        .DFS_WEBHDFS_USER_RPCPASSWORD_PATTERN_KEY);
 
     // Allocate
     xmlPropsToSkipCompare = new HashSet<String>();

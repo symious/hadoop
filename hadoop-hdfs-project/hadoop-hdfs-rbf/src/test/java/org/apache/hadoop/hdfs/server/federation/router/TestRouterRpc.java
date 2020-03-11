@@ -913,7 +913,8 @@ public class TestRouterRpc {
     namenode.getFileContext().setPermission(
         new Path(namenodeDir), new FsPermission("777"));
 
-    UserGroupInformation ugi = UserGroupInformation.createRemoteUser(username);
+    UserGroupInformation ugi = UserGroupInformation.createUserForTesting(
+        username, new String[] {"group"});
     DFSClient client = getRouterContext().getClient(ugi);
     client.create(newRouterFile, true);
 
@@ -925,8 +926,8 @@ public class TestRouterRpc {
   @Test
   public void testProxyGetFileInfoAcessException() throws IOException {
 
-    UserGroupInformation ugi =
-        UserGroupInformation.createRemoteUser("unknownuser");
+    UserGroupInformation ugi = UserGroupInformation.createUserForTesting(
+        "unknownuser", new String[] {"group"});
 
     // List files from the NN and trap the exception
     Exception nnFailure = null;
