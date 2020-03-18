@@ -430,16 +430,10 @@ public class ProtobufRpcEngine implements RpcEngine {
         String portRangeConfig, boolean rpcPasswordAuthenticate)
         throws IOException {
       super(bindAddress, port, null, numHandlers,
-<<<<<<< HEAD
           numReaders, queueSizePerHandler, conf,
-          serverNameFromClass(protocolImpl.getClass()), secretManager,
-          portRangeConfig);
-      this.verbose = verbose;  
-=======
-          numReaders, queueSizePerHandler, conf, classNameBase(protocolImpl
-              .getClass().getName()), secretManager, portRangeConfig, rpcPasswordAuthenticate);
+          serverNameFromClass(protocolImpl.getClass()),
+          secretManager, portRangeConfig, rpcPasswordAuthenticate);
       this.verbose = verbose;
->>>>>>> 3635913a687... SPDE-6799. Add RpcPassword Authentication while doing RPC connection.
       registerProtocolAndImpl(RPC.RpcKind.RPC_PROTOCOL_BUFFER, protocolClass,
           protocolImpl);
     }
