@@ -256,13 +256,8 @@ public class RouterWebHdfsMethods extends NamenodeWebHdfsMethods {
     case SETSTORAGEPOLICY:
     {
       // Whitelist operations that can handled by NamenodeWebHdfsMethods
-<<<<<<< HEAD
-      return super.put(ugi, delegation, username, doAsUser, fullpath, op,
-          destination, owner, group, permission, unmaskedPermission,
-=======
       return super.put(ugi, delegation, username, userRpcPassword, doAsUser, fullpath, op,
-          destination, owner, group, permission,
->>>>>>> d5242401318... SPDI-178. Add password support for webhdfs
+          destination, owner, group, permission, unmaskedPermission,
           overwrite, bufferSize, replication, blockSize, modificationTime,
           accessTime, renameOptions, createParent, delegationTokenArgument,
           aclPermission, xattrName, xattrValue, xattrSetFlag, snapshotName,
