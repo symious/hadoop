@@ -28,6 +28,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,12 +62,15 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 
 public class TestRMNodeLabelsManager extends NodeLabelTestBase {
-  private final Resource EMPTY_RESOURCE = Resource.newInstance(0, 0);
-  private final Resource SMALL_RESOURCE = Resource.newInstance(100, 0);
-  private final Resource LARGE_NODE = Resource.newInstance(1000, 0);
+  private static final Resource EMPTY_RESOURCE = Resource.newInstance(0, 0);
+  private static final Resource SMALL_RESOURCE = Resource.newInstance(100, 0);
+  private static final Resource LARGE_NODE = Resource.newInstance(1000, 0);
+  private static final  Resource ONE = Resource.newInstance(1024, 1);
+  private static final  Resource TWO = Resource.newInstance(2048, 2);
+  private static final  Resource THREE = Resource.newInstance(3072, 3);
+  private static final  Resource FOUR = Resource.newInstance(4096, 4);
   
-  NullRMNodeLabelsManager mgr = null;
-  RMNodeLabelsManager lmgr = null;
+  RMNodeLabelsManager mgr = null;
   boolean checkQueueCall = false;
   @Before
   public void before() {
@@ -228,8 +232,6 @@ public class TestRMNodeLabelsManager extends NodeLabelTestBase {
   
   @Test(timeout=5000)
   public void testGetQueueResource() throws Exception {
-    Resource clusterResource = Resource.newInstance(9999, 1);
-    
     /*
      * Node->Labels:
      *   host1 : red
@@ -264,6 +266,8 @@ public class TestRMNodeLabelsManager extends NodeLabelTestBase {
 
     mgr.reinitializeQueueLabels(queueToLabels);
     
+    Resource clusterResource = Resource.newInstance(400, 0);
+
     // check resource
     Assert.assertEquals(Resources.multiply(SMALL_RESOURCE, 3),
         mgr.getQueueResource("Q1", q1Label, clusterResource));
@@ -309,6 +313,7 @@ public class TestRMNodeLabelsManager extends NodeLabelTestBase {
     mgr.deactivateNode(NodeId.newInstance("host1", 1));
     mgr.deactivateNode(NodeId.newInstance("host3", 1));
     mgr.activateNode(NodeId.newInstance("host3", 1), SMALL_RESOURCE);
+    clusterResource = Resource.newInstance(300, 0);
     
     // check resource
     Assert.assertEquals(Resources.multiply(SMALL_RESOURCE, 2),
@@ -367,6 +372,7 @@ public class TestRMNodeLabelsManager extends NodeLabelTestBase {
     mgr.activateNode(NodeId.newInstance("host3", 2), SMALL_RESOURCE);
     mgr.activateNode(NodeId.newInstance("host3", 3), SMALL_RESOURCE);
     mgr.activateNode(NodeId.newInstance("host4", 2), SMALL_RESOURCE);
+    clusterResource = Resource.newInstance(600, 0);
     
     // check resource
     Assert.assertEquals(Resources.multiply(SMALL_RESOURCE, 3),
@@ -390,6 +396,7 @@ public class TestRMNodeLabelsManager extends NodeLabelTestBase {
     mgr.deactivateNode(NodeId.newInstance("host3", 3));
     mgr.deactivateNode(NodeId.newInstance("host4", 2));
     mgr.deactivateNode(NodeId.newInstance("host4", 1));
+    clusterResource = Resource.newInstance(300, 0);
     
     // check resource
     Assert.assertEquals(Resources.multiply(SMALL_RESOURCE, 1),
@@ -610,7 +617,7 @@ public class TestRMNodeLabelsManager extends NodeLabelTestBase {
 
   @Test(timeout = 60000)
   public void testcheckRemoveFromClusterNodeLabelsOfQueue() throws Exception {
-    lmgr = new RMNodeLabelsManager();
+    RMNodeLabelsManager lmgr = new RMNodeLabelsManager();
     Configuration conf = new Configuration();
     File tempDir = File.createTempFile("nlb", ".tmp");
     tempDir.delete();
@@ -621,34 +628,186 @@ public class TestRMNodeLabelsManager extends NodeLabelTestBase {
     conf.setBoolean(YarnConfiguration.NODE_LABELS_ENABLED, true);
     conf.set(YarnConfiguration.RM_SCHEDULER,
         "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler");
-    Configuration withQueueLabels = getConfigurationWithQueueLabels(conf);
-    MockRM rm = initRM(conf);
+    MockRM rm = initRM(conf, lmgr);
     lmgr.addToCluserNodeLabels(toSet(NodeLabel.newInstance("x", false)));
     lmgr.removeFromClusterNodeLabels(Arrays.asList(new String[] { "x" }));
     lmgr.addToCluserNodeLabelsWithDefaultExclusivity(toSet("x"));
     rm.stop();
-    class TestRMLabelManger extends RMNodeLabelsManager {
+
+    RMNodeLabelsManager testMgr = new RMNodeLabelsManager() {
       @Override
       protected void checkRemoveFromClusterNodeLabelsOfQueue(
           Collection<String> labelsToRemove) throws IOException {
         checkQueueCall = true;
         // Do nothing
       }
-    }
-    lmgr = new TestRMLabelManger();
-    MockRM rm2 = initRM(withQueueLabels);
-    Assert.assertFalse(
-        "checkRemoveFromClusterNodeLabelsOfQueue should not be called"
-            + "on recovery",
+    };
+    Configuration withQueueLabels = getConfigurationWithQueueLabels(conf);
+    MockRM rm2 = initRM(withQueueLabels, testMgr);
+    Assert.assertFalse("checkRemoveFromClusterNodeLabelsOfQueue should not "
+        + "be called on recovery",
         checkQueueCall);
-    lmgr.removeFromClusterNodeLabels(Arrays.asList(new String[] { "x" }));
-    Assert
-        .assertTrue("checkRemoveFromClusterNodeLabelsOfQueue should be called "
-            + "since its not recovery", checkQueueCall);
+    testMgr.removeFromClusterNodeLabels(Arrays.asList(new String[] {"x"}));
+    Assert.assertTrue("checkRemoveFromClusterNodeLabelsOfQueue should "
+        + "be called since its not recovery", checkQueueCall);
     rm2.stop();
   }
 
-  private MockRM initRM(Configuration conf) {
+  @Test
+  public void testAddQueue() throws IOException {
+    initNodesAndQueues();
+
+    mgr.addQueue("queue0", Collections.EMPTY_SET);
+    Assert.assertEquals("Queue with no labels should bind to one host",
+        ONE, mgr.getQueueResource("queue0", null, null));
+
+    mgr.addQueue("queue1", ImmutableSet.of("label1"));
+    Assert.assertEquals("Queue with one label should bind to two hosts",
+        TWO, mgr.getQueueResource("queue1", null, null));
+
+    mgr.addQueue("queue2", ImmutableSet.of("label1", "label2"));
+    Assert.assertEquals("Queue with two labels should bind to three hosts",
+        THREE, mgr.getQueueResource("queue2", null, null));
+
+    mgr.addQueue("queue3", ImmutableSet.of(RMNodeLabelsManager.ANY));
+    Assert.assertEquals("Queue with all labels should bind to all hosts",
+        FOUR, mgr.getQueueResource("queue3", null, null));
+  }
+
+  @Test
+  public void testReinitializeQueueLabels() throws IOException {
+    initNodesAndQueues();
+
+    Map<String, Set<String>> map = new HashMap<>();
+
+    map.put("queue0", Collections.EMPTY_SET);
+    map.put("queue1", ImmutableSet.of("label1"));
+    map.put("queue2", ImmutableSet.of("label1", "label2"));
+    map.put("queue3", ImmutableSet.of(RMNodeLabelsManager.ANY));
+
+    mgr.reinitializeQueueLabels(map);
+
+    Assert.assertEquals("Queue with no labels should bind to one host",
+        ONE, mgr.getQueueResource("queue0", null, null));
+    Assert.assertEquals("Queue with one label should bind to two hosts",
+        TWO, mgr.getQueueResource("queue1", null, null));
+    Assert.assertEquals("Queue with two labels should bind to three hosts",
+        THREE, mgr.getQueueResource("queue2", null, null));
+    Assert.assertEquals("Queue with all labels should bind to all hosts",
+        FOUR, mgr.getQueueResource("queue3", null, null));
+  }
+
+  private void initNodesAndQueues() throws IOException {
+    Map<NodeId, Set<String>> map = new HashMap<>();
+    Set<String> labels = ImmutableSet.of("label1", "label2", "label3");
+    NodeId node1 = NodeId.newInstance("127.0.0.1", 9000);
+    NodeId node2 = NodeId.newInstance("127.0.0.1", 9001);
+    NodeId node3 = NodeId.newInstance("127.0.0.2", 9000);
+    NodeId node4 = NodeId.newInstance("127.0.0.2", 9001);
+
+    map.put(node1, Collections.singleton("label1"));
+    map.put(node2, Collections.singleton("label2"));
+    map.put(node3, Collections.singleton("label3"));
+
+    mgr.addToCluserNodeLabelsWithDefaultExclusivity(labels);
+    mgr.activateNode(node1, ONE);
+    mgr.activateNode(node2, ONE);
+    mgr.activateNode(node3, ONE);
+    mgr.activateNode(node4, ONE);
+    mgr.addLabelsToNode(map);
+
+    Assert.assertEquals("label1 should only have a single host associated "
+        + "with it", ONE, mgr.getResourceByLabel("label1", null));
+    Assert.assertEquals("label2 should only have a single host associated "
+        + "with it", ONE, mgr.getResourceByLabel("label2", null));
+    Assert.assertEquals("label3 should only have a single host associated "
+        + "with it", ONE, mgr.getResourceByLabel("label3", null));
+    Assert.assertEquals("<no label> should only have a single host associated "
+        + "with it",
+        ONE, mgr.getResourceByLabel(RMNodeLabelsManager.NO_LABEL, null));
+  }
+
+  @Test public void testQueue() {
+    RMNodeLabelsManager.Queue q = new RMNodeLabelsManager.Queue();
+
+    Assert.assertEquals("A fresh queue should have no resources",
+        Resources.none(), q.getResource());
+    Assert.assertFalse("A fresh queue should not have the ANY label",
+        q.acceptAny());
+
+    q.addResource(ONE);
+    Assert.assertEquals("Added 1GB,1vcore to 0GB,0vcores",
+        ONE, q.getResource());
+    q.addResource(TWO);
+    Assert.assertEquals("Added 2GB,2vcores to 1GB,1vcore",
+        THREE, q.getResource());
+    q.subtractResource(THREE);
+    Assert.assertEquals("Subtracted 3GB,3vcores from 3GB,3vcore",
+        Resources.none(), q.getResource());
+    q.subtractResource(ONE);
+    Assert.assertEquals("Subtracted 1GB,1vcores from 0GB,0vcore",
+        Resources.none(), q.getResource());
+
+    q.setLabels(ImmutableSet.of(RMNodeLabelsManager.NO_LABEL));
+    Assert.assertTrue("Queue with <no label> didn't report having <no label>",
+        q.hasLabel(RMNodeLabelsManager.NO_LABEL));
+    Assert.assertTrue("Queue with <no label> doesn't accept <no label>",
+        q.acceptLabels(ImmutableSet.of(RMNodeLabelsManager.NO_LABEL)));
+    Assert.assertFalse("Queue with <no label> accepts label1",
+        q.acceptLabels(ImmutableSet.of("label1")));
+    Assert.assertFalse("Queue with <no label> accepts label1 or label2",
+        q.acceptLabels(ImmutableSet.of("label1", "label2")));
+    Assert.assertFalse("Queue with <no label> accepts any", q.acceptAny());
+
+    q.setLabels(ImmutableSet.of("label1"));
+    Assert.assertTrue("Queue with 1 label didn't report having that label",
+        q.hasLabel("label1"));
+    Assert.assertFalse("Queue without <no label> reported having <no label>",
+        q.hasLabel(RMNodeLabelsManager.NO_LABEL));
+    Assert.assertTrue("Queue with label1 doesn't accept label1",
+        q.acceptLabels(ImmutableSet.of("label1")));
+    Assert.assertTrue("Queue with label1 doesn't accept <no label>",
+        q.acceptLabels(ImmutableSet.of(RMNodeLabelsManager.NO_LABEL)));
+    Assert.assertTrue("Queue with label1 doesn't accept label1 or label2",
+        q.acceptLabels(ImmutableSet.of("label1", "label2")));
+    Assert.assertFalse("Queue with label1 accepts any", q.acceptAny());
+
+    q.setLabels(ImmutableSet.of("label1", "label3"));
+    Assert.assertTrue("Queue with label1 and label3 didn't report having "
+        + "label1", q.hasLabel("label1"));
+    Assert.assertTrue("Queue with label1 and label3 didn't report having "
+        + "label3", q.hasLabel("label3"));
+    Assert.assertFalse("Queue without <no label> reported having <no label>",
+        q.hasLabel(RMNodeLabelsManager.NO_LABEL));
+    Assert.assertTrue("Queue with label1 and label3 doesn't accept label1",
+        q.acceptLabels(ImmutableSet.of("label1")));
+    Assert.assertTrue("Queue with label1 and label3 doesn't accept label3",
+        q.acceptLabels(ImmutableSet.of("label3")));
+    Assert.assertTrue("Queue with label1 and label3 doesn't accept <no label>",
+        q.acceptLabels(ImmutableSet.of(RMNodeLabelsManager.NO_LABEL)));
+    Assert.assertTrue("Queue with label1 and label3 doesn't accept label1 "
+        + "or label2", q.acceptLabels(ImmutableSet.of("label1", "label2")));
+    Assert.assertFalse("Queue with label1 and label3 accepts any",
+        q.acceptAny());
+
+    q.setLabels(ImmutableSet.of(RMNodeLabelsManager.ANY));
+    Assert.assertTrue("Queue with <any label> didn't report having "
+        + "<any label>", q.hasLabel(RMNodeLabelsManager.ANY));
+    Assert.assertFalse("Queue without <no label> reported having <no label>",
+        q.hasLabel(RMNodeLabelsManager.NO_LABEL));
+    Assert.assertTrue("Queue with <any label> doesn't accept label1",
+        q.acceptLabels(ImmutableSet.of("label1")));
+    Assert.assertTrue("Queue with <any label> doesn't accept label4",
+        q.acceptLabels(ImmutableSet.of("label4")));
+    Assert.assertTrue("Queue with <any label> doesn't accept <no label>",
+        q.acceptLabels(ImmutableSet.of(RMNodeLabelsManager.NO_LABEL)));
+    Assert.assertTrue("Queue with <any label> doesn't accept label1 "
+        + "or label2", q.acceptLabels(ImmutableSet.of("label1", "label2")));
+    Assert.assertTrue("Queue with <any label> doesn't accept any",
+        q.acceptAny());
+  }
+
+  private MockRM initRM(Configuration conf,final RMNodeLabelsManager lmgr) {
     MockRM rm = new MockRM(conf) {
       @Override
       public RMNodeLabelsManager createNodeLabelManager() {
@@ -708,7 +867,7 @@ public class TestRMNodeLabelsManager extends NodeLabelTestBase {
 
   @Test(timeout = 60000)
   public void testBackwardsCompatableMirror() throws Exception {
-    lmgr = new RMNodeLabelsManager();
+    RMNodeLabelsManager lmgr = new RMNodeLabelsManager();
     Configuration conf = new Configuration();
     File tempDir = File.createTempFile("nlb", ".tmp");
     tempDir.delete();
@@ -739,7 +898,7 @@ public class TestRMNodeLabelsManager extends NodeLabelTestBase {
         "org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler");
     Configuration withQueueLabels = getConfigurationWithQueueLabels(conf);
 
-    MockRM rm = initRM(withQueueLabels);
+    MockRM rm = initRM(withQueueLabels, lmgr);
     Set<String> labelNames = lmgr.getClusterNodeLabelNames();
     Map<String, Set<NodeId>> labeledNodes = lmgr.getLabelsToNodes();
 

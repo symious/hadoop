@@ -38,6 +38,7 @@ import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.QueueUserACLInfo;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceWeights;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ActiveUsersManager;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerAppUtils;
@@ -590,6 +591,28 @@ public class FSLeafQueue extends FSQueue {
   @VisibleForTesting
   boolean isStarved() {
     return isStarvedForMinShare() || isStarvedForFairShare();
+  }
+
+  /**
+   * Test whether this queue should accept this app on the basis of node labels.
+   * A queue with no labels accepts all requests. An app with no labels will
+   * always be accepted by any queue.
+   *
+   * @param app the app to test
+   * @return true if the queue should accept this app based on node labels
+   */
+  boolean acceptAppNodeLabels(RMApp app) {
+    if (!acceptAny) {
+      String appLabel = app.getAppNodeLabel();
+      String amLabel = app.getAmNodeLabel();
+
+      return ((appLabel == null) || appLabel.isEmpty() ||
+          accessibleLabels.contains(appLabel)) &&
+          ((amLabel == null) || amLabel.isEmpty() ||
+          accessibleLabels.contains(amLabel));
+    }
+
+    return true;
   }
 
   @Override

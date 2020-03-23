@@ -67,6 +67,7 @@ import org.apache.hadoop.yarn.security.YarnAuthorizationProvider;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NMContainerStatus;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.RMCriticalThreadUncaughtExceptionHandler;
+import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore.RMState;
 import org.apache.hadoop.yarn.server.resourcemanager.reservation.ReservationConstants;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceWeights;
@@ -95,10 +96,10 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppAttemptR
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppRemovedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.ContainerExpiredSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeAddedSchedulerEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeLabelsUpdateSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeRemovedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeResourceUpdateSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeUpdateSchedulerEvent;
-
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.ReleaseContainerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
@@ -188,6 +189,8 @@ public class FairScheduler extends
 
   @VisibleForTesting
   final MaxRunningAppsEnforcer maxRunningEnforcer;
+
+  private RMNodeLabelsManager labelsManager;
 
   private AllocationFileLoaderService allocsLoader;
   @VisibleForTesting
@@ -429,6 +432,17 @@ public class FairScheduler extends
   }
 
   /**
+   * Convenience method for use by other fair scheduler components to get the
+   * node labels manager.
+   *
+   * @return the node labels manager
+   */
+  @VisibleForTesting
+  public RMNodeLabelsManager getLabelsManager() {
+    return labelsManager;
+  }
+
+  /**
    * Add a new application to the scheduler, with a given id, queue name, and
    * user. This will accept a new app even if the user or queue is above
    * configured limits, but the app will not be marked as runnable.
@@ -569,8 +583,11 @@ public class FairScheduler extends
         appRejectMsg = "Application rejected by queue placement policy";
       } else {
         queue = queueMgr.getLeafQueue(queueName, true);
+
         if (queue == null) {
           appRejectMsg = queueName + " is not a leaf queue";
+        } else if ((rmApp != null) && !queue.acceptAppNodeLabels(rmApp)) {
+          appRejectMsg = "Application rejected based on node labels mismatch";
         }
       }
     } catch (IllegalStateException se) {
@@ -728,6 +745,11 @@ public class FairScheduler extends
           usePortForNodeName);
       nodeTracker.addNode(schedulerNode);
 
+      if (labelsManager != null) {
+        labelsManager.activateNode(node.getNodeID(),
+            schedulerNode.getTotalResource());
+      }
+
       triggerUpdate();
 
       Resource clusterResource = getClusterResource();
@@ -768,6 +790,10 @@ public class FairScheduler extends
         super.completedContainer(reservedContainer, SchedulerUtils
             .createAbnormalContainerStatus(reservedContainer.getContainerId(),
                 SchedulerUtils.LOST_CONTAINER), RMContainerEventType.KILL);
+      }
+
+      if (labelsManager != null) {
+        labelsManager.deactivateNode(rmNode.getNodeID());
       }
 
       nodeTracker.removeNode(nodeId);
@@ -899,12 +925,75 @@ public class FairScheduler extends
       super.nodeUpdate(nm);
 
       FSSchedulerNode fsNode = getFSSchedulerNode(nm.getNodeID());
+
+      if (labelsManager != null) {
+        labelsManager.activateNode(nm.getNodeID(), fsNode.getTotalResource());
+      }
+
       attemptScheduling(fsNode);
 
       long duration = getClock().getTime() - start;
       fsOpDurations.addNodeUpdateDuration(duration);
     } finally {
       writeLock.unlock();
+    }
+  }
+
+  /**
+   * Update the labels on a set of nodes.
+   *
+   * @param update a mapping of node id to label set
+   */
+  private void nodeLabelsUpdate(Map<NodeId, Set<String>> update) {
+    writeLock.lock();
+
+    try {
+      for (Entry<NodeId, Set<String>> entry : update.entrySet()) {
+        NodeId nodeId = entry.getKey();
+        Set<String> labels = entry.getValue();
+        FSSchedulerNode node = nodeTracker.getNode(nodeId);
+
+        if (node == null) {
+          LOG.debug("Received a node labels update event that included a node "
+              + "that couldn't be found by the node tracker: "
+              + nodeId.getHost());
+        } else {
+          updateContainerLabels(node, labels);
+          node.updateLabels(labels);
+        }
+      }
+    } finally {
+      writeLock.unlock();
+    }
+  }
+
+  /**
+   * Update the labels for containers running on the node.
+   *
+   * @param node the target node
+   * @param labels the new labels
+   */
+  private void updateContainerLabels(FSSchedulerNode node, Set<String> labels) {
+    String oldPartition = node.getPartition();
+    String newPartition = RMNodeLabelsManager.NO_LABEL;
+
+    // There can only be one label, even though we're being passed a set.
+    for (String label : labels) {
+      newPartition = label;
+      break;
+    }
+
+    for (RMContainer container : node.getCopiedListOfRunningContainers()) {
+      FSAppAttempt app =
+          getApplicationAttempt(container.getApplicationAttemptId());
+
+      if (app == null) {
+        LOG.debug("While updating node " + node.getNodeName() + ", "
+            + "encountered a container that is unknown to the scheduler: "
+            + container.getApplicationAttemptId());
+      } else {
+        app.nodePartitionUpdated(container, oldPartition, newPartition);
+      }
     }
   }
 
@@ -1118,6 +1207,16 @@ public class FairScheduler extends
       NodeUpdateSchedulerEvent nodeUpdatedEvent = (NodeUpdateSchedulerEvent)event;
       nodeUpdate(nodeUpdatedEvent.getRMNode());
       break;
+    case NODE_LABELS_UPDATE:
+      if (!(event instanceof NodeLabelsUpdateSchedulerEvent)) {
+        throw new RuntimeException("Unexpected event type: " + event);
+      }
+      NodeLabelsUpdateSchedulerEvent nodeLabelsUpdatedEvent =
+          (NodeLabelsUpdateSchedulerEvent)event;
+
+      // This event is triggered by a change in the node labels manager
+      nodeLabelsUpdate(nodeLabelsUpdatedEvent.getUpdatedNodeToLabels());
+      break;
     case APP_ADDED:
       if (!(event instanceof AppAddedSchedulerEvent)) {
         throw new RuntimeException("Unexpected event type: " + event);
@@ -1263,6 +1362,12 @@ public class FairScheduler extends
     // NOT IMPLEMENTED
   }
 
+  /**
+   * Set the {@link RMContext}.
+   *
+   * @param rmContext the {@link RMContext}
+   */
+  @Override
   public void setRMContext(RMContext rmContext) {
     this.rmContext = rmContext;
   }
@@ -1308,6 +1413,8 @@ public class FairScheduler extends
       eventLog.init(this.conf);
 
       allocConf = new AllocationConfiguration(conf);
+      labelsManager = rmContext.getNodeLabelManager();
+
       try {
         queueMgr.initialize(conf);
       } catch (Exception e) {
@@ -1340,6 +1447,8 @@ public class FairScheduler extends
     } catch (Exception e) {
       throw new IOException("Failed to initialize FairScheduler", e);
     }
+
+    queueMgr.updateNodeLabels();
   }
 
   @VisibleForTesting
@@ -1651,19 +1760,28 @@ public class FairScheduler extends
       // maxRunningApps
       if (cur.getNumRunnableApps() == cur.getMaxRunningApps()) {
         throw new YarnException("Moving app attempt " + appAttId + " to queue "
-            + queueName + " would violate queue maxRunningApps constraints on"
-            + " queue " + cur.getQueueName());
+            + queueName + " would violate queue maxRunningApps constraints on "
+            + "queue " + cur.getQueueName());
       }
       
       // maxShare
       if (!Resources.fitsIn(Resources.add(cur.getResourceUsage(), consumption),
           cur.getMaxShare())) {
         throw new YarnException("Moving app attempt " + appAttId + " to queue "
-            + queueName + " would violate queue maxShare constraints on"
-            + " queue " + cur.getQueueName());
+            + queueName + " would violate queue maxShare constraints on "
+            + "queue " + cur.getQueueName());
       }
       
       cur = cur.getParent();
+    }
+
+    // Test that the node labels in the new queue will allow the app
+    RMApp rmApp = rmContext.getRMApps().get(app.getApplicationId());
+
+    if (!targetQueue.acceptAppNodeLabels(rmApp)) {
+      throw new YarnException("Moving app attempt " + appAttId + " to queue "
+          + queueName + " would violate node label constraints on "
+          + "queue " + cur.getQueueName());
     }
   }
   

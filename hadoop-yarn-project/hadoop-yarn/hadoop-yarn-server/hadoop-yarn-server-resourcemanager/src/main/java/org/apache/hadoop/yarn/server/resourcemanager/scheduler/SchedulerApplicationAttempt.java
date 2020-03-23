@@ -1202,8 +1202,7 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
   }
   
   @Private
-  public boolean hasPendingResourceRequest(ResourceCalculator rc,
-      String nodePartition, Resource cluster,
+  public Resource getPendingResourceRequest(String nodePartition,
       SchedulingMode schedulingMode) {
     // We need to consider unconfirmed allocations
     if (schedulingMode == SchedulingMode.IGNORE_PARTITION_EXCLUSIVITY) {
@@ -1216,16 +1215,14 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
     // To avoid too many allocation-proposals rejected for non-default
     // partition allocation
     if (StringUtils.equals(nodePartition, RMNodeLabelsManager.NO_LABEL)) {
+      // We use subtract() instead of subtractFrom() because we need to make
+      // a copy of the original object to avoid modifying it.
       pending = Resources.subtract(pending, Resources
           .createResource(unconfirmedAllocatedMem.get(),
               unconfirmedAllocatedVcores.get()));
     }
 
-    if (Resources.greaterThan(rc, cluster, pending, Resources.none())) {
-      return true;
-    }
-
-    return false;
+    return pending;
   }
 
   /*

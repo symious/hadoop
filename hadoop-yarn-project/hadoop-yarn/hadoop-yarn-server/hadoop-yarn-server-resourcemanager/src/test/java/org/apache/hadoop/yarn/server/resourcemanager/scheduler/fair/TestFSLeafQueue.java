@@ -73,7 +73,7 @@ public class TestFSLeafQueue extends FairSchedulerTestBase {
   }
 
   @Test
-  public void testUpdateDemand() {
+  public void testUpdateDemand() throws AllocationConfigurationException {
     conf.set(FairSchedulerConfiguration.ASSIGN_MULTIPLE, "false");
     resourceManager = new MockRM(conf);
     resourceManager.start();
@@ -142,7 +142,7 @@ public class TestFSLeafQueue extends FairSchedulerTestBase {
   }
 
   @Test
-  public void testConcurrentAccess() {
+  public void testConcurrentAccess() throws AllocationConfigurationException {
     conf.set(FairSchedulerConfiguration.ASSIGN_MULTIPLE, "false");
     resourceManager = new MockRM(conf);
     resourceManager.start();

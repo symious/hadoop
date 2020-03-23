@@ -213,12 +213,22 @@ public abstract class MockAsm extends MockApps {
     }
 
     @Override
-    public String getAmNodeLabelExpression() {
+    public String getAmNodeLabel() {
       throw new UnsupportedOperationException("Not supported yet.");
     }
 
     @Override
-    public String getAppNodeLabelExpression() {
+    public String getAppNodeLabel() {
+      throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    @Override
+    public String getAmNodeLabelExpressionForDisplay() {
+      throw new UnsupportedOperationException("Not supported yet.");
+    }
+
+    @Override
+    public String getAppNodeLabelExpressionForDisplay() {
       throw new UnsupportedOperationException("Not supported yet.");
     }
 

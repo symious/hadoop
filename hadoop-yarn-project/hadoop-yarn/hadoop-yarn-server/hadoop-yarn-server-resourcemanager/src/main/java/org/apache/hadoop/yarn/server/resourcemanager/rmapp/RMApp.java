@@ -278,12 +278,30 @@ public interface RMApp extends EventHandler<RMAppEvent> {
   Map<NodeId, LogAggregationReport> getLogAggregationReportsForApp();
 
   LogAggregationStatus getLogAggregationStatusForAppReport();
-  /**
-   * Return the node label expression of the AM container.
-   */
-  String getAmNodeLabelExpression();
 
-  String getAppNodeLabelExpression();
+  /**
+   * Return the node label of the AM container or null if there is none.
+   * @return the node label of the AM container
+   */
+  String getAmNodeLabel();
+
+  /**
+   * Return the node label of the application or null if there is none.
+   * @return the node label of the application
+   */
+  String getAppNodeLabel();
+
+  /**
+   * Return the node label of the AM container as a string suitable for display.
+   * @return the node label expression of the AM container
+   */
+  String getAmNodeLabelExpressionForDisplay();
+
+  /**
+   * Return the node label of the application as a string suitable for display.
+   * @return the node label expression of the application
+   */
+  String getAppNodeLabelExpressionForDisplay();
 
   CallerContext getCallerContext();
 

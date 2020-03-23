@@ -90,9 +90,9 @@ public class TimelineServiceV1Publisher extends AbstractSystemMetricsPublisher {
     entityInfo.put(ApplicationMetricsConstants.APPLICATION_PRIORITY_INFO,
         app.getApplicationPriority().getPriority());
     entityInfo.put(ApplicationMetricsConstants.AM_NODE_LABEL_EXPRESSION,
-        app.getAmNodeLabelExpression());
+        app.getAmNodeLabelExpressionForDisplay());
     entityInfo.put(ApplicationMetricsConstants.APP_NODE_LABEL_EXPRESSION,
-        app.getAppNodeLabelExpression());
+        app.getAppNodeLabelExpressionForDisplay());
     if (app.getCallerContext() != null) {
       if (app.getCallerContext().getContext() != null) {
         entityInfo.put(ApplicationMetricsConstants.YARN_APP_CALLER_CONTEXT,

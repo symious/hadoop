@@ -45,6 +45,7 @@ import org.apache.hadoop.yarn.security.AccessType;
 import org.apache.hadoop.yarn.security.Permission;
 import org.apache.hadoop.yarn.security.PrivilegedEntity;
 import org.apache.hadoop.yarn.security.PrivilegedEntity.EntityType;
+import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceWeights;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.FifoPolicy;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerUtils;
@@ -244,6 +245,7 @@ public class AllocationFileLoaderService extends AbstractService {
         new HashMap<>();
     Set<String> reservableQueues = new HashSet<>();
     Set<String> nonPreemptableQueues = new HashSet<>();
+    Map<String, Set<String>> accessibleNodeLabels = new HashMap<>();
     int userMaxAppsDefault = Integer.MAX_VALUE;
     int queueMaxAppsDefault = Integer.MAX_VALUE;
     ConfigurableResource queueMaxResourcesDefault =
@@ -388,7 +390,7 @@ public class AllocationFileLoaderService extends AbstractService {
           queueWeights, queuePolicies, minSharePreemptionTimeouts,
           fairSharePreemptionTimeouts, fairSharePreemptionThresholds, queueAcls,
           reservationAcls, configuredQueues, reservableQueues,
-          nonPreemptableQueues);
+          nonPreemptableQueues,accessibleNodeLabels);
     }
 
     // Load placement policy and pass it configured queues
@@ -438,7 +440,7 @@ public class AllocationFileLoaderService extends AbstractService {
           defaultSchedPolicy, minSharePreemptionTimeouts,
           fairSharePreemptionTimeouts, fairSharePreemptionThresholds, queueAcls,
           reservationAcls, newPlacementPolicy, configuredQueues,
-          globalReservationQueueConfig, reservableQueues, nonPreemptableQueues);
+          globalReservationQueueConfig, reservableQueues, nonPreemptableQueues, accessibleNodeLabels);
     
     lastSuccessfulReload = clock.getTime();
     lastReloadAttemptFailed = false;
@@ -465,7 +467,7 @@ public class AllocationFileLoaderService extends AbstractService {
       Map<String, Map<ReservationACL, AccessControlList>> resAcls,
       Map<FSQueueType, Set<String>> configuredQueues,
       Set<String> reservableQueues,
-      Set<String> nonPreemptableQueues)
+      Set<String> nonPreemptableQueues,Map<String, Set<String>> accessibleNodeLabels)
       throws AllocationConfigurationException {
     String queueName = CharMatcher.WHITESPACE.trimFrom(
         element.getAttribute("name"));
@@ -488,6 +490,7 @@ public class AllocationFileLoaderService extends AbstractService {
     Map<AccessType, AccessControlList> acls = new HashMap<>();
     Map<ReservationACL, AccessControlList> racls = new HashMap<>();
     NodeList fields = element.getChildNodes();
+    List<Element> children = new ArrayList<>();
     boolean isLeaf = true;
     boolean isReservable = false;
 
@@ -570,14 +573,34 @@ public class AllocationFileLoaderService extends AbstractService {
         if (!Boolean.parseBoolean(text)) {
           nonPreemptableQueues.add(queueName);
         }
-      } else if ("queue".endsWith(field.getTagName()) || 
+      } else if ("nodeLabels".equals(field.getTagName())) {
+          Text data = (Text) field.getFirstChild();
+
+          if (data != null) {
+              String[] nodeLabel = data.getData().trim().split(",");
+              Set<String> nodeLabelSet = new HashSet<>();
+
+              for (String untrimmedLabel : nodeLabel) {
+                  String label = untrimmedLabel.trim();
+
+                  if (label.equals("-")) {
+                      // "-" is the way to specify "no label" in fair scheduler.
+                      // Capacity scheduler uses " ", which is just asking for
+                      // trouble. The label manager's representation for "no label"
+                      // is "". If we see "-", store it as "".
+                      nodeLabelSet.add("");
+                  } else if (!label.isEmpty()) {
+                      nodeLabelSet.add(label);
+                  }
+              }
+
+              accessibleNodeLabels.put(queueName, nodeLabelSet);
+          }
+      } else if ("queue".endsWith(field.getTagName()) ||
           "pool".equals(field.getTagName())) {
-        loadQueue(queueName, field, minQueueResources, maxQueueResources,
-            maxChildQueueResources, queueMaxApps, userMaxApps, queueMaxAMShares,
-            queueWeights, queuePolicies, minSharePreemptionTimeouts,
-            fairSharePreemptionTimeouts, fairSharePreemptionThresholds,
-            queueAcls, resAcls, configuredQueues, reservableQueues,
-            nonPreemptableQueues);
+        // Instead of parsing the child queue here, put it in a list to parse
+        // later so that we can finish parsing this queue first.
+        children.add(field);
         isLeaf = false;
       }
     }
@@ -610,6 +633,60 @@ public class AllocationFileLoaderService extends AbstractService {
     queueAcls.put(queueName, acls);
     resAcls.put(queueName, racls);
     checkMinAndMaxResource(minQueueResources, maxQueueResources, queueName);
+      // If we have labels and aren't root, validate the labels
+      if (accessibleNodeLabels.containsKey(queueName) && (parentName != null)) {
+          // Check that the node labels are legal. At this point, we may not have
+          // node labels for all queues, because some may just not specify anything.
+          // Later they'll inherit from their parents, but not yet. Because of the
+          // structure of the config file, we are guaranteed that we will have
+          // parsed our parent queue before we parse our queue. That means that if
+          // we have no labels set, we can keep walking up the hierarchy until we
+          // find a node that does have labels or we hit the root.
+          Set<String> parentLabels = accessibleNodeLabels.get(parentName);
+          String next = queueName;
+
+          try {
+              while (parentLabels == null) {
+                  next = next.substring(0, next.lastIndexOf('.'));
+                  parentLabels = accessibleNodeLabels.get(next);
+              }
+          } catch (IndexOutOfBoundsException ex) {
+              // That means we just tried to go past root, so we're done. It's faster
+              // to catch the exception than check the result of lastIndexOf().
+          }
+
+          // If parentLabels is still null, that means there are no labels set
+          // anywhere above us, and so the whole hierarchy will default to "any",
+          // and there's nothing to worry about.
+          if ((parentLabels != null) && !parentLabels.isEmpty() &&
+                  !parentLabels.contains(RMNodeLabelsManager.ANY)) {
+              Set<String> bad = new HashSet<>(accessibleNodeLabels.get(queueName));
+
+              bad.removeAll(parentLabels);
+              // No label is always allowed.
+              bad.remove(RMNodeLabelsManager.NO_LABEL);
+
+              if (!bad.isEmpty()) {
+                  String message = "The fair scheduler configuration file specifies "
+                          + "that " + queueName + " should have the following labels which "
+                          + "are not supported by the parent queue: " + bad + ". Please "
+                          + "remove the labels from " + queueName + " or add them to the "
+                          + "parent queue(s).";
+
+                  throw new AllocationConfigurationException(message);
+              }
+          }
+      }
+
+      // Now that we've finished parsing this queue, parse it's children.
+      for (Element child : children) {
+          loadQueue(queueName, child, minQueueResources, maxQueueResources,
+                  maxChildQueueResources, queueMaxApps, userMaxApps, queueMaxAMShares,
+                  queueWeights, queuePolicies, minSharePreemptionTimeouts,
+                  fairSharePreemptionTimeouts, fairSharePreemptionThresholds,
+                  queueAcls, resAcls, configuredQueues, reservableQueues,
+                  nonPreemptableQueues, accessibleNodeLabels);
+      }
   }
 
   private void checkMinAndMaxResource(Map<String, Resource> minResources,

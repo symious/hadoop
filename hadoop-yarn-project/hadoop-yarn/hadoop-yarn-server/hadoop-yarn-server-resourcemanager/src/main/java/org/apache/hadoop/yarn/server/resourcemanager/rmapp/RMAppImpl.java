@@ -774,8 +774,8 @@ public class RMAppImpl implements RMApp, Recoverable {
           this.getApplicationPriority());
       report.setLogAggregationStatus(logAggregationStatus);
       report.setUnmanagedApp(submissionContext.getUnmanagedAM());
-      report.setAppNodeLabelExpression(getAppNodeLabelExpression());
-      report.setAmNodeLabelExpression(getAmNodeLabelExpression());
+      report.setAppNodeLabelExpression(getAppNodeLabelExpressionForDisplay());
+      report.setAmNodeLabelExpression(getAmNodeLabelExpressionForDisplay());
 
       ApplicationTimeout timeout = ApplicationTimeout
           .newInstance(ApplicationTimeoutType.LIFETIME, UNLIMITED, UNKNOWN);
@@ -1924,29 +1924,50 @@ public class RMAppImpl implements RMApp, Recoverable {
   }
 
   @Override
-  public String getAppNodeLabelExpression() {
-    String appNodeLabelExpression =
-        getApplicationSubmissionContext().getNodeLabelExpression();
-    appNodeLabelExpression = (appNodeLabelExpression == null)
-        ? NodeLabel.NODE_LABEL_EXPRESSION_NOT_SET : appNodeLabelExpression;
-    appNodeLabelExpression = (appNodeLabelExpression.trim().isEmpty())
-        ? NodeLabel.DEFAULT_NODE_LABEL_PARTITION : appNodeLabelExpression;
-    return appNodeLabelExpression;
+  public String getAppNodeLabel() {
+    return getApplicationSubmissionContext().getNodeLabelExpression();
   }
 
   @Override
-  public String getAmNodeLabelExpression() {
+  public String getAmNodeLabel() {
     String amNodeLabelExpression = null;
-    if (!getApplicationSubmissionContext().getUnmanagedAM()) {
+
+    if (!getApplicationSubmissionContext().getUnmanagedAM() &&
+        (getAMResourceRequests() != null) &&
+        !getAMResourceRequests().isEmpty()) {
       amNodeLabelExpression =
-          getAMResourceRequests() != null && !getAMResourceRequests().isEmpty()
-              ? getAMResourceRequests().get(0).getNodeLabelExpression() : null;
-      amNodeLabelExpression = (amNodeLabelExpression == null)
-          ? NodeLabel.NODE_LABEL_EXPRESSION_NOT_SET : amNodeLabelExpression;
-      amNodeLabelExpression = (amNodeLabelExpression.trim().isEmpty())
-          ? NodeLabel.DEFAULT_NODE_LABEL_PARTITION : amNodeLabelExpression;
+          getAMResourceRequests().get(0).getNodeLabelExpression();
     }
+
     return amNodeLabelExpression;
+  }
+
+  @Override
+  public String getAppNodeLabelExpressionForDisplay() {
+    return getLabelForDisplay(getAppNodeLabel());
+  }
+
+  @Override
+  public String getAmNodeLabelExpressionForDisplay() {
+    String amNodeLabelExpression = null;
+
+    if (!getApplicationSubmissionContext().getUnmanagedAM()) {
+      amNodeLabelExpression = getLabelForDisplay(getAmNodeLabel());
+    }
+
+    return amNodeLabelExpression;
+  }
+
+  private String getLabelForDisplay(String label) {
+    String displayLabel = label;
+
+    if (displayLabel == null)  {
+      displayLabel = NodeLabel.NODE_LABEL_EXPRESSION_NOT_SET;
+    } else if (displayLabel.isEmpty()) {
+      displayLabel = NodeLabel.DEFAULT_NODE_LABEL_PARTITION;
+    }
+
+    return displayLabel;
   }
 
   @Override

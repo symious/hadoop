@@ -200,12 +200,6 @@ public class FifoScheduler extends
     }
 
     @Override
-    public String getDefaultNodeLabelExpression() {
-      // TODO add implementation for FIFO scheduler
-      return null;
-    }
-
-    @Override
     public void incPendingResource(String nodeLabel, Resource resourceToInc) {
     }
 

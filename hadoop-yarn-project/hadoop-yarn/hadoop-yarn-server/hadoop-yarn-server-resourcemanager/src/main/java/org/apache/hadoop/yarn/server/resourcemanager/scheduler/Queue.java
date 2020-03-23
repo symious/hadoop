@@ -75,22 +75,16 @@ public interface Queue {
       SchedulerApplicationAttempt schedulerAttempt, RMContainer rmContainer);
   
   /**
-   * Get labels can be accessed of this queue
-   * labels={*}, means this queue can access any label
-   * labels={ }, means this queue cannot access any label except node without label
-   * labels={a, b, c} means this queue can access a or b or c  
-   * @return labels
+   * Get the set of labels that are available from this queue.
+   * <ul>
+   *   <li>labels={*}, means this queue can access any partition</li>
+   *   <li>labels={}, means this queue cannot access any partition except nodes
+   *     without labels</li>
+   *   <li>labels={a, b, c} means this queue can access a or b or c</li>
+   * </ul>
+   * @return the accessible labels
    */
   public Set<String> getAccessibleNodeLabels();
-  
-  /**
-   * Get default label expression of this queue. If label expression of
-   * ApplicationSubmissionContext and label expression of Resource Request not
-   * set, this will be used.
-   * 
-   * @return default label expression
-   */
-  public String getDefaultNodeLabelExpression();
 
   /**
    * When new outstanding resource is asked, calling this will increase pending
