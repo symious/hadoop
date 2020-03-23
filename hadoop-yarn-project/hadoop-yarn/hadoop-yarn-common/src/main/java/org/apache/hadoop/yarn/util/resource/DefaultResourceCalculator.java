@@ -132,4 +132,9 @@ public class DefaultResourceCalculator extends ResourceCalculator {
   public boolean isAnyMajorResourceZero(Resource resource) {
     return resource.getMemorySize() == 0f;
   }
+
+  @Override
+  public boolean isAnyMajorResourceNonZero(Resource resource) {
+    return resource.getMemorySize() != 0f;
+  }
 }

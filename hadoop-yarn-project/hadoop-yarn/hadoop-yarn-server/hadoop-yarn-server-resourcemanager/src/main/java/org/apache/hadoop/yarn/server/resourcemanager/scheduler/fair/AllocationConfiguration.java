@@ -95,6 +95,9 @@ public class AllocationConfiguration extends ReservationSchedulerConfiguration {
   
   private final SchedulingPolicy defaultSchedulingPolicy;
   
+  @VisibleForTesting
+  final Map<String, Set<String>> accessibleNodeLabels;
+
   // Policy for mapping apps to queues
   @VisibleForTesting
   QueuePlacementPolicy placementPolicy;
@@ -127,7 +130,8 @@ public class AllocationConfiguration extends ReservationSchedulerConfiguration {
       Map<FSQueueType, Set<String>> configuredQueues,
       ReservationQueueConfiguration globalReservationQueueConfig,
       Set<String> reservableQueues,
-      Set<String> nonPreemptableQueues) {
+      Set<String> nonPreemptableQueues,
+      Map<String, Set<String>> accessibleNodeLabels) {
     this.minQueueResources = minQueueResources;
     this.maxQueueResources = maxQueueResources;
     this.maxChildQueueResources = maxChildQueueResources;
@@ -151,6 +155,7 @@ public class AllocationConfiguration extends ReservationSchedulerConfiguration {
     this.placementPolicy = placementPolicy;
     this.configuredQueues = configuredQueues;
     this.nonPreemptableQueues = nonPreemptableQueues;
+    this.accessibleNodeLabels = accessibleNodeLabels;
   }
   
   public AllocationConfiguration(Configuration conf) {
@@ -180,6 +185,7 @@ public class AllocationConfiguration extends ReservationSchedulerConfiguration {
     placementPolicy =
         QueuePlacementPolicy.fromConfiguration(conf, configuredQueues);
     nonPreemptableQueues = new HashSet<>();
+    accessibleNodeLabels = new HashMap<>();
   }
   
   /**
@@ -320,6 +326,18 @@ public class AllocationConfiguration extends ReservationSchedulerConfiguration {
     return (policy == null) ? defaultSchedulingPolicy : policy;
   }
   
+  /**
+   * Get the set of node labels accessible from the given queue. The return
+   * value may be null, indicating that no labels were defined for this
+   * queue.
+   *
+   * @param queueName the target queue's name
+   * @return the set of accessible node labels
+   */
+  public Set<String> getAccessibleNodeLabels(String queueName) {
+    return accessibleNodeLabels.get(queueName);
+  }
+
   public SchedulingPolicy getDefaultSchedulingPolicy() {
     return defaultSchedulingPolicy;
   }
@@ -406,6 +424,7 @@ public class AllocationConfiguration extends ReservationSchedulerConfiguration {
     queue.setMaxRunningApps(getQueueMaxApps(name));
     queue.setMaxAMShare(getQueueMaxAMShare(name));
     queue.setMaxChildQueueResource(getMaxChildResources(name));
+    queue.setAccessibleNodeLabels(getAccessibleNodeLabels(name));
 
     // Set queue metrics.
     queue.getMetrics().setMinShare(queue.getMinShare());

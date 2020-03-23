@@ -130,6 +130,11 @@ public class CommonNodeLabelsManager extends AbstractService {
       }
       return c;
     }
+
+    @Override
+    public String toString() {
+      return labels + " : " + nms;
+    }
   }
   
   protected static class Node {
@@ -157,6 +162,11 @@ public class CommonNodeLabelsManager extends AbstractService {
       c.resource = Resources.clone(resource);
       c.running = running;
       return c;
+    }
+
+    @Override
+    public String toString() {
+      return nodeId + " (" + labels + ")" + resource;
     }
   }
   
@@ -561,12 +571,11 @@ public class CommonNodeLabelsManager extends AbstractService {
   }
 
   @SuppressWarnings("unchecked")
-  protected void internalUpdateLabelsOnNodes(
+  private void internalUpdateLabelsOnNodes(
       Map<NodeId, Set<String>> nodeToLabels, NodeLabelUpdateOperation op)
       throws IOException {
     // do update labels from nodes
-    Map<NodeId, Set<String>> newNMToLabels =
-        new HashMap<NodeId, Set<String>>();
+    Map<NodeId, Set<String>> newNMToLabels = new HashMap<>();
     Set<String> oldLabels;
     for (Entry<NodeId, Set<String>> entry : nodeToLabels.entrySet()) {
       NodeId nodeId = entry.getKey();

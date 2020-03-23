@@ -103,7 +103,7 @@ yarn.resourcemanager.node-labels.provider.fetch-interval-ms | When *"yarn.node-l
 
 ###Configuration of Schedulers for node labels
 
-* Capacity Scheduler Configuration
+#### Capacity Scheduler Configuration
 
 Property  | Value
 ----- | ------
@@ -152,6 +152,25 @@ Notes:
 
 * After finishing configuration of CapacityScheduler, execute ```yarn rmadmin -refreshQueues``` to apply changes
 * Go to scheduler page of RM Web UI to check if you have successfully set configuration.
+
+#### Fair Scheduler Configuration
+
+The fair scheduler supports exclusive node labels. If a job requests a label, it
+will only be run on a node that has that label. If a job requests no label, it
+will only be run on a node that has no label. Fair scheduler queues can each
+have several labels and will only offer access to nodes with matching labels.
+Nodes with no label are available from all queues.
+
+To configure node labels for the fair scheduler, add a ```nodeLabels``` element
+to each queue that should have labels. Any queue without labels specified will
+inherit the labels of its parent. If the root queue has no labels specified it
+will default to allowing all labels. See the
+[fair scheduler documentation](FairScheduler.html) for more information about
+the ```nodeLabels``` property and how to set it.
+
+Fair scheduler queues do not support weights per node label. Instead, relative
+weights among node labels can be achieved by creating subqueues with the
+desired weights and more narrow node label assignments.
 
 Specifying node label for application
 -------------------------------------

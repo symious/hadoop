@@ -109,6 +109,8 @@ The allocation file must be in XML format. The format contains five types of ele
 
     * **reservation**: indicates to the `ReservationSystem` that the queue's resources is available for users to reserve. This only applies for leaf queues. A leaf queue is not reservable if this property isn't configured.
 
+    * **nodeLabels**: a set of strings that defines the node labels for the queue. If node labels are enabled, a queue will only schedule containers on nodes with matching labels. A queue can have zero or more labels. A node is allowed to have at most a single label. A node matches a queue if the node's label is a member of the queue's set of labels. A queue's label set must be a strict subset of its parent's label set. If a queue has no labels configured, it will inherit its labels from its nearest ancestor that has labels configured. There are two special values for node labels: "*" and "-". If a queue's label set contains "*", then it will match with any node, regardless of the node's label or lack thereof. If the root queue has no label set configured, the root queue's label defaults to "*". If a queue's label set contains only "-", then the queue will only match nodes that have no label. All queues will match a node that has no label, regardless of the queues' label sets or lack thereof.
+
 * **User elements**: which represent settings governing the behavior of individual users. They can contain a single property: maxRunningApps, a limit on the number of running apps for a particular user.
 
 * **A userMaxAppsDefault element**: which sets the default running app limit for any users whose limit is not otherwise specified.
@@ -164,6 +166,7 @@ The allocation file must be in XML format. The format contains five types of ele
     <queue name="sample_sub_queue">
       <aclSubmitApps>charlie</aclSubmitApps>
       <minResources>5000 mb,0vcores</minResources>
+      <nodeLabels>highmem,gpu</nodeLabels>
     </queue>
     <queue name="sample_reservable_queue">
       <reservation></reservation>

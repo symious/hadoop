@@ -20,9 +20,11 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.util.SystemClock;
 import org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.Resources;
@@ -43,12 +45,22 @@ public class TestQueueManager {
     scheduler = mock(FairScheduler.class);
 
     AllocationConfiguration allocConf = new AllocationConfiguration(conf);
+    RMNodeLabelsManager labelsMgr = new RMNodeLabelsManager();
+
+    labelsMgr.init(conf);
 
     // Set up some queues to test default child max resource inheritance
     allocConf.configuredQueues.get(FSQueueType.PARENT).add("root.test");
     allocConf.configuredQueues.get(FSQueueType.LEAF).add("root.test.childA");
     allocConf.configuredQueues.get(FSQueueType.PARENT).add("root.test.childB");
+    allocConf.accessibleNodeLabels.put("root.test",
+        new HashSet<>(Arrays.asList("label1", "label2")));
+    allocConf.accessibleNodeLabels.put("root.test.childA",
+        new HashSet<>(Arrays.asList("label1")));
+    allocConf.accessibleNodeLabels.put("root.test.childB",
+        new HashSet<>(Arrays.asList(RMNodeLabelsManager.NO_LABEL)));
 
+    when(scheduler.getLabelsManager()).thenReturn(labelsMgr);
     when(scheduler.getAllocationConfiguration()).thenReturn(allocConf);
     when(scheduler.getConf()).thenReturn(conf);
     when(scheduler.getResourceCalculator()).thenReturn(
@@ -247,11 +259,72 @@ public class TestQueueManager {
   }
 
   /**
+   * Test creation of leaf and parent child queues when the parent queue has
+   * child defaults set. In this test we rely on the root.test,
+   * root.test.childA and root.test.childB queues that are created in the
+   * {@link #setUp()} method.
+   */
+  @Test
+  public void testNodeLabels() {
+    AllocationConfiguration allocConf = scheduler.getAllocationConfiguration();
+
+    queueManager.updateAllocationConfiguration(allocConf);
+
+    FSQueue root = queueManager.getParentQueue("root", false);
+    FSQueue test = queueManager.getParentQueue("root.test", false);
+    FSQueue childA = queueManager.getLeafQueue("root.test.childA", false);
+    FSQueue childB = queueManager.getParentQueue("root.test.childB", false);
+
+    assertNotNull("Parent queue root was not created during setup", root);
+    assertNotNull("Parent queue root.test was not created during setup", test);
+    assertNotNull("Leaf queue root.test.childA was not created during setup",
+        childA);
+    assertNotNull("Parent queue root.test.childB was not created during setup",
+        childB);
+    assertEquals("Parent queue root doesn't have the expected node labels",
+        new HashSet<>(Arrays.asList(RMNodeLabelsManager.ANY)),
+        root.accessibleLabels);
+    assertEquals("Parent queue root.test doesn't have the expected node labels",
+        new HashSet<>(Arrays.asList("label1", "label2")),
+        test.accessibleLabels);
+    assertEquals("Leaf queue root.test.childA doesn't have the expected node "
+        + "labels", new HashSet<>(Arrays.asList("label1")),
+        childA.accessibleLabels);
+    assertEquals("Parent queue root.test.childB doesn't have the expected node "
+        + "labels", new HashSet<>(Arrays.asList(RMNodeLabelsManager.NO_LABEL)),
+        childB.accessibleLabels);
+
+    FSQueue childC =
+        queueManager.createQueue("root.test.childC", FSQueueType.LEAF);
+    assertNotNull("Leaf queue root.test.childC was not created",
+        queueManager.getLeafQueue("root.test.childC", false));
+    assertEquals("Leaf queue root.test.childC doesn't have the expected node "
+        + "labels", new HashSet<>(Arrays.asList("label1", "label2")),
+        childC.accessibleLabels);
+
+    FSQueue childD =
+        queueManager.createQueue("root.test.childB.childD", FSQueueType.LEAF);
+    assertNotNull("Leaf queue root.test.childB.childD was not created",
+        queueManager.getLeafQueue("root.test.childC", false));
+    assertEquals("Leaf queue root.test.childB.childD doesn't have the expected "
+        + "node labels",
+        new HashSet<>(Arrays.asList(RMNodeLabelsManager.NO_LABEL)),
+        childD.accessibleLabels);
+
+    FSQueue childE =
+        queueManager.createQueue("root.childE", FSQueueType.LEAF);
+    assertNotNull("Leaf queue root.childE was not created",
+        queueManager.getLeafQueue("root.childE", false));
+    assertEquals("Leaf queue root.childE doesn't have the expected node labels",
+        new HashSet<>(Arrays.asList(RMNodeLabelsManager.ANY)),
+        childE.accessibleLabels);
+  }
+
+  /**
    * Test creation of a leaf queue with no resource limits.
    */
   @Test
   public void testCreateLeafQueueWithDefaults() {
-    AllocationConfiguration allocConf = scheduler.getAllocationConfiguration();
     FSQueue q1 = queueManager.createQueue("root.queue1", FSQueueType.LEAF);
 
     assertNotNull("Leaf queue root.queue1 was not created",

@@ -87,7 +87,7 @@ public class NullRMNodeLabelsManager extends RMNodeLabelsManager {
   
   @Override
   protected void serviceInit(Configuration conf) throws Exception {
-    // always enable node labels while using MemoryRMNodeLabelsManager
+    // always enable node labels while using NullRMNodeLabelsManager
     conf.setBoolean(YarnConfiguration.NODE_LABELS_ENABLED, true);
     super.serviceInit(conf);
   }

@@ -291,7 +291,7 @@ public class FifoIntraQueuePreemptionPlugin
       // Once unallocated resource is 0, we can stop assigning ideal per app.
       if (Resources.lessThanOrEqual(rc, clusterResource,
           queueReassignableResource, Resources.none())
-          || Resources.isAnyMajorResourceZero(rc, queueReassignableResource)) {
+          || rc.isAnyMajorResourceZero(queueReassignableResource)) {
         continue;
       }
 

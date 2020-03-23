@@ -158,7 +158,7 @@ public class CapacitySchedulerPreemptionUtils {
             Resources.none())
         && Resources.fitsIn(rc, clusterResource,
             rmContainer.getAllocatedResource(), totalPreemptionAllowed)
-        && !Resources.isAnyMajorResourceZero(rc, toObtainByPartition)) {
+        && !rc.isAnyMajorResourceZero(toObtainByPartition)) {
       Resources.subtractFrom(toObtainByPartition,
           rmContainer.getAllocatedResource());
       Resources.subtractFrom(totalPreemptionAllowed,

@@ -553,4 +553,5 @@ public class Resources {
       Resource resource) {
     return rc.isAnyMajorResourceZero(resource);
   }
+
 }

@@ -317,6 +317,8 @@ public class TestClientRMService {
       RecordFactory recordFactory = RecordFactoryProvider.getRecordFactory(null);
       GetApplicationReportRequest request = recordFactory
           .newRecordInstance(GetApplicationReportRequest.class);
+
+      // If application has app and am label as null
       request.setApplicationId(appId1);
       GetApplicationReportResponse response = 
           rmService.getApplicationReport(request);
@@ -325,10 +327,14 @@ public class TestClientRMService {
           report.getApplicationResourceUsageReport();
       Assert.assertEquals(10, usageReport.getMemorySeconds());
       Assert.assertEquals(3, usageReport.getVcoreSeconds());
-      Assert.assertEquals("<Not set>", report.getAmNodeLabelExpression());
-      Assert.assertEquals("<Not set>", report.getAppNodeLabelExpression());
+      Assert.assertEquals("Report contained an AM node label expression when "
+          + "none was expected", NodeLabel.NODE_LABEL_EXPRESSION_NOT_SET,
+          report.getAmNodeLabelExpression());
+      Assert.assertEquals("Report contained an app node label expression when "
+          + "none was expected", NodeLabel.NODE_LABEL_EXPRESSION_NOT_SET,
+          report.getAppNodeLabelExpression());
 
-      // if application has am node label set to blank
+      // if application has app label as null and am node label set to blank
       ApplicationId appId2 = getApplicationId(2);
       when(mockAclsManager.checkAccess(UserGroupInformation.getCurrentUser(),
           ApplicationAccessType.VIEW_APP, null, appId2)).thenReturn(true);
@@ -336,12 +342,14 @@ public class TestClientRMService {
       response = rmService.getApplicationReport(request);
       report = response.getApplicationReport();
 
-      Assert.assertEquals(NodeLabel.DEFAULT_NODE_LABEL_PARTITION,
+      Assert.assertEquals("Report contained an AM node label expression when "
+          + "none was expected", NodeLabel.DEFAULT_NODE_LABEL_PARTITION,
           report.getAmNodeLabelExpression());
-      Assert.assertEquals(NodeLabel.NODE_LABEL_EXPRESSION_NOT_SET,
+      Assert.assertEquals("Report contained an app node label expression when "
+          + "none was expected", NodeLabel.NODE_LABEL_EXPRESSION_NOT_SET,
           report.getAppNodeLabelExpression());
 
-      // if application has am node label set to blank
+      // if application has app and am node label set to high-mem
       ApplicationId appId3 = getApplicationId(3);
       when(mockAclsManager.checkAccess(UserGroupInformation.getCurrentUser(),
           ApplicationAccessType.VIEW_APP, null, appId3)).thenReturn(true);
@@ -1233,7 +1241,7 @@ public class TestClientRMService {
         yarnScheduler);
     when(rmContext.getRMApps()).thenReturn(apps);
     when(yarnScheduler.getAppsInQueue(eq("testqueue"))).thenReturn(
-        getSchedulerApps(apps));
+        getSchedulerApps());
      ResourceScheduler rs = mock(ResourceScheduler.class);
      when(rmContext.getScheduler()).thenReturn(rs);
   }
@@ -1254,10 +1262,9 @@ public class TestClientRMService {
         config, "testqueue", 40, 5,"high-mem","high-mem"));
     return apps;
   }
-  
-  private List<ApplicationAttemptId> getSchedulerApps(
-      Map<ApplicationId, RMApp> apps) {
-    List<ApplicationAttemptId> schedApps = new ArrayList<ApplicationAttemptId>();
+
+  private List<ApplicationAttemptId> getSchedulerApps() {
+    List<ApplicationAttemptId> schedApps = new ArrayList<>();
     // Return app IDs for the apps in testqueue (as defined in getRMApps)
     schedApps.add(ApplicationAttemptId.newInstance(getApplicationId(1), 0));
     schedApps.add(ApplicationAttemptId.newInstance(getApplicationId(3), 0));
