@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
@@ -30,6 +31,7 @@ import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
+import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.QueueInfo;
@@ -42,6 +44,7 @@ import org.apache.hadoop.yarn.security.AccessRequest;
 import org.apache.hadoop.yarn.security.PrivilegedEntity;
 import org.apache.hadoop.yarn.security.PrivilegedEntity.EntityType;
 import org.apache.hadoop.yarn.security.YarnAuthorizationProvider;
+import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceWeights;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.Queue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerUtils;
@@ -77,6 +80,9 @@ public abstract class FSQueue implements Queue, Schedulable {
   protected int maxRunningApps;
   private ConfigurableResource maxChildQueueResource;
 
+  protected Set<String> accessibleLabels;
+  protected boolean acceptAny = false;
+
   // maxAMShare is a value between 0 and 1.
   protected float maxAMShare;
 
@@ -111,6 +117,7 @@ public abstract class FSQueue implements Queue, Schedulable {
     AllocationConfiguration allocConf = scheduler.getAllocationConfiguration();
     allocConf.initFSQueue(this);
     updatePreemptionVariables();
+    updateNodeLabels();
 
     if (recursive) {
       for (FSQueue child : getChildQueues()) {
@@ -119,6 +126,7 @@ public abstract class FSQueue implements Queue, Schedulable {
     }
   }
 
+  @Override
   public String getName() {
     return name;
   }
@@ -136,7 +144,7 @@ public abstract class FSQueue implements Queue, Schedulable {
     return parent;
   }
 
-  public void setPolicy(SchedulingPolicy policy) {
+  public final void setPolicy(SchedulingPolicy policy) {
     policy.initialize(scheduler.getContext());
     this.policy = policy;
   }
@@ -281,30 +289,55 @@ public abstract class FSQueue implements Queue, Schedulable {
     return metrics;
   }
 
-  /** Get the fair share assigned to this Schedulable. */
+  /**
+   * Get the fair share assigned to this Schedulable.
+   *
+   * @return the fair share
+   */
+  @Override
   public Resource getFairShare() {
     return fairShare;
   }
 
   @Override
   public void setFairShare(Resource fairShare) {
-    this.fairShare = fairShare;
-    metrics.setFairShare(fairShare);
+    Resource partitionMax = getPartitionResources();
+
+    this.fairShare = Resources.componentwiseMin(fairShare, partitionMax);
+    metrics.setFairShare(this.fairShare);
+
     if (LOG.isDebugEnabled()) {
-      LOG.debug("The updated fairShare for " + getName() + " is " + fairShare);
+      LOG.debug("The updated fairShare for " + name + " is " + this.fairShare);
     }
   }
 
-  /** Get the steady fair share assigned to this Schedulable. */
+  private Resource getPartitionResources() {
+    // Even though the last parameter to the getQueueResource() method is
+    // ignored, if we don't pass in the actual cluster resource, the
+    // TestFairSchedulerPlanFollower tests will fail. It has to do with the
+    // way the test mocks the node label manager.
+    return scheduler.getLabelsManager().getQueueResource(name, null,
+        scheduler.getClusterResource());
+  }
+
+  /**
+   * Get the steady fair share assigned to this Schedulable.
+   *
+   * @return the steady fair share
+   */
   public Resource getSteadyFairShare() {
     return steadyFairShare;
   }
 
   void setSteadyFairShare(Resource steadyFairShare) {
-    this.steadyFairShare = steadyFairShare;
-    metrics.setSteadyFairShare(steadyFairShare);
+    Resource partitionMax = getPartitionResources();
+
+    this.steadyFairShare =
+        Resources.componentwiseMin(steadyFairShare, partitionMax);
+    metrics.setSteadyFairShare(this.steadyFairShare);
   }
 
+  @Override
   public boolean hasAccess(QueueACL acl, UserGroupInformation user) {
     return authorizer.checkPermission(
         new AccessRequest(queueEntity, user,
@@ -397,6 +430,28 @@ public abstract class FSQueue implements Queue, Schedulable {
   }
 
   /**
+   * Update node label for this queue.
+   */
+  public void updateNodeLabels() {
+    accessibleLabels =
+        scheduler.getAllocationConfiguration().getAccessibleNodeLabels(name);
+
+    if (parent != null) {
+      if (((accessibleLabels == null) || accessibleLabels.isEmpty())) {
+        // If no labels were defined, inherit from our parent. For all queues
+        // but root, the parent is guaranteed to have labels.
+        accessibleLabels = parent.getAccessibleNodeLabels();
+      }
+    } else if ((accessibleLabels == null) || accessibleLabels.isEmpty()) {
+      // If we have no parent we're root. If we also have no labels, default
+      // to ANY.
+      accessibleLabels = Collections.singleton(RMNodeLabelsManager.ANY);
+    }
+
+    acceptAny = accessibleLabels.contains(RMNodeLabelsManager.ANY);
+  }
+
+  /**
    * Gets the children of this queue, if any.
    */
   public abstract List<FSQueue> getChildQueues();
@@ -425,6 +480,17 @@ public abstract class FSQueue implements Queue, Schedulable {
         LOG.debug("Assigning container failed on node '" + node.getNodeName()
             + " because it has reserved containers.");
       }
+
+      return false;
+    } else if (!nodeLabelCheck(node.getNodeID())) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Assigning container failed on node '" + node.getNodeName()
+            + " because the node labels don't agree: " + accessibleLabels
+            + " on the queue v/s "
+            + scheduler.getLabelsManager().getLabelsOnNode(node.getNodeID())
+            + " on the node");
+      }
+
       return false;
     } else if (!Resources.fitsIn(getResourceUsage(), getMaxShare())) {
       if (LOG.isDebugEnabled()) {
@@ -432,10 +498,39 @@ public abstract class FSQueue implements Queue, Schedulable {
             + " because queue resource usage is larger than MaxShare: "
             + dumpState());
       }
+
       return false;
-    } else {
-      return true;
     }
+
+    return true;
+  }
+
+  /**
+   * Check if the queue's labels allow it to assign containers on this node.
+   *
+   * @param nodeId the ID of the node to check
+   * @return true if the queue is allowed to assign containers on this node
+   */
+  protected boolean nodeLabelCheck(NodeId nodeId) {
+    // A queue with no label will accept any node
+    if (!acceptAny) {
+      Set<String> labelsOnNode =
+          scheduler.getLabelsManager().getLabelsOnNode(nodeId);
+
+      if ((labelsOnNode == null) || labelsOnNode.isEmpty()) {
+        return true;
+      } else {
+        for (String queueLabel : accessibleLabels) {
+          if (labelsOnNode.contains(queueLabel)) {
+            return true;
+          }
+        }
+
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /**
@@ -454,16 +549,18 @@ public abstract class FSQueue implements Queue, Schedulable {
   
   @Override
   public Set<String> getAccessibleNodeLabels() {
-    // TODO, add implementation for FS
-    return null;
+    return accessibleLabels;
   }
-  
-  @Override
-  public String getDefaultNodeLabelExpression() {
-    // TODO, add implementation for FS
-    return null;
+
+  /**
+   * Set the queue's node labels.
+   *
+   * @param newLabels the queue's node labels
+   */
+  void setAccessibleNodeLabels(Set<String> newLabels) {
+    accessibleLabels = newLabels;
   }
-  
+
   @Override
   public void incPendingResource(String nodeLabel, Resource resourceToInc) {
   }

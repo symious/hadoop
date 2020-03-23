@@ -18,7 +18,15 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity;
 
-import com.google.common.collect.Sets;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.Set;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -55,8 +63,6 @@ import org.apache.hadoop.yarn.server.scheduler.SchedulerRequestKey;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.Resources;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import java.io.IOException;
 import java.util.Map;
@@ -100,33 +106,28 @@ public class TestUtils {
         new ContainerAllocationExpirer(nullDispatcher);
 
     Configuration conf = new Configuration();
-    RMApplicationHistoryWriter writer =  mock(RMApplicationHistoryWriter.class);
     RMContextImpl rmContext =
         new RMContextImpl(nullDispatcher, cae, null, null, null,
           new AMRMTokenSecretManager(conf, null),
           new RMContainerTokenSecretManager(conf),
           new NMTokenSecretManagerInRM(conf),
           new ClientToAMTokenSecretManagerInRM());
-    RMNodeLabelsManager nlm = mock(RMNodeLabelsManager.class);
-    when(
-        nlm.getQueueResource(any(String.class), any(Set.class),
-            any(Resource.class))).thenAnswer(new Answer<Resource>() {
+    // This was originally a mock, but calling reinitializeQueues() on the mock
+    // was a no-op for some reason. Instead it's now an anonymous inner class.
+    RMNodeLabelsManager nlm = new RMNodeLabelsManager() {
       @Override
-      public Resource answer(InvocationOnMock invocation) throws Throwable {
-        Object[] args = invocation.getArguments();
-        return (Resource) args[2];
+      public Resource getResourceByLabel(String label,
+          Resource clusterResource) {
+        return clusterResource;
       }
-    });
-    
-    when(nlm.getResourceByLabel(any(String.class), any(Resource.class)))
-        .thenAnswer(new Answer<Resource>() {
-          @Override public Resource answer(InvocationOnMock invocation)
-              throws Throwable {
-            Object[] args = invocation.getArguments();
-            return (Resource) args[1];
-          }
-        });
 
+      @Override
+      public Resource getQueueResource(String queueName,
+          Set<String> queueLabels, Resource clusterResource) {
+        return clusterResource;
+      }
+    };
+    nlm.init(conf);
     rmContext.setNodeLabelManager(nlm);
     rmContext.setSystemMetricsPublisher(mock(SystemMetricsPublisher.class));
     rmContext.setRMApplicationHistoryWriter(mock(RMApplicationHistoryWriter.class));

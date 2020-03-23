@@ -104,7 +104,7 @@ public class TestContainerAllocation {
 
     // wait..
     int waitCount = 20;
-    int size = rm.getRMContext().getRMNodes().size();
+    int size;
     while ((size = rm.getRMContext().getRMNodes().size()) != 2
         && waitCount-- > 0) {
       LOG.info("Waiting for node managers to register : " + size);

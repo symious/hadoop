@@ -17,6 +17,27 @@
 */
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair;
 
+import static org.junit.Assert.*;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystems;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
@@ -31,6 +52,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.Dom
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.FairSharePolicy;
 import org.apache.hadoop.yarn.util.ControlledClock;
 import org.apache.hadoop.yarn.util.resource.Resources;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.File;
@@ -53,11 +76,42 @@ import static org.junit.Assert.fail;
 public class TestAllocationFileLoaderService {
   
   final static String TEST_DIR = new File(System.getProperty("test.build.data",
-      "/tmp")).getAbsolutePath();
+      "/tmp"), "alloctest").getAbsolutePath();
 
   final static String ALLOC_FILE = new File(TEST_DIR,
       "test-queues").getAbsolutePath();
-  private static final String TEST_FAIRSCHED_XML = "test-fair-scheduler.xml";
+  
+  private static final Set<String> ANY = Collections.singleton("*");
+
+  @BeforeClass
+  public static void setup() throws IOException {
+    new File(TEST_DIR).mkdirs();
+  }
+
+  @AfterClass
+  public static void cleanup() throws IOException {
+    // Remove the tmp dir
+    Files.walkFileTree(FileSystems.getDefault().getPath(TEST_DIR),
+        new SimpleFileVisitor<Path>() {
+          @Override
+          public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
+              throws IOException {
+            Files.delete(file);
+            return FileVisitResult.CONTINUE;
+          }
+
+          @Override
+          public FileVisitResult postVisitDirectory(Path dir, IOException exc)
+              throws IOException {
+            if (exc == null) {
+              Files.delete(dir);
+              return FileVisitResult.CONTINUE;
+            } else {
+              throw exc;
+            }
+          }
+        });
+  }
 
   @Test
   public void testGetAllocationFileFromFileSystem()
@@ -154,6 +208,10 @@ public class TestAllocationFileLoaderService {
         .contains("root.queueA"));
     assertTrue(allocConf.getConfiguredQueues().get(FSQueueType.LEAF)
         .contains("root.queueB"));
+    assertNull("root.queueA has node labels even though none were assigned",
+        allocConf.getAccessibleNodeLabels("root.queueA"));
+    assertNull("root.queueB has node labels even though none were assigned",
+        allocConf.getAccessibleNodeLabels("root.queueB"));
     
     confHolder.allocConf = null;
     
@@ -163,6 +221,7 @@ public class TestAllocationFileLoaderService {
     out.println("<allocations>");
     out.println("  <queue name=\"queueB\">");
     out.println("    <maxRunningApps>3</maxRunningApps>");
+    out.println("    <nodeLabels>label1</nodeLabels>");
     out.println("  </queue>");
     out.println("  <queuePlacementPolicy>");
     out.println("    <rule name='specified' />");
@@ -198,6 +257,9 @@ public class TestAllocationFileLoaderService {
         .size());
     assertTrue(allocConf.getConfiguredQueues().get(FSQueueType.LEAF)
         .contains("root.queueB"));
+    assertEquals("root.queueB doesn't have the assigned label",
+        Collections.singleton("label1"),
+        allocConf.getAccessibleNodeLabels("root.queueB"));
   }
   
   @Test
@@ -220,25 +282,30 @@ public class TestAllocationFileLoaderService {
     out.println("<maxResources>5120mb,110vcores</maxResources>");
     out.println("<aclAdministerApps>alice,bob admins</aclAdministerApps>");
     out.println("<schedulingPolicy>fair</schedulingPolicy>");
+    out.println("<nodeLabels></nodeLabels>");
     out.println("</queue>");
     // Give queue C no minimum
     out.println("<queue name=\"queueC\">");
     out.println("<minResources>5120mb,0vcores</minResources>");
     out.println("<aclSubmitApps>alice,bob admins</aclSubmitApps>");
+    out.println("<nodeLabels>-</nodeLabels>");
     out.println("</queue>");
     // Give queue D a limit of 3 running apps and 0.4f maxAMShare
     out.println("<queue name=\"queueD\">");
     out.println("<maxRunningApps>3</maxRunningApps>");
     out.println("<maxAMShare>0.4</maxAMShare>");
+    out.println("<nodeLabels> </nodeLabels>");
     out.println("</queue>");
     // Give queue E a preemption timeout of one minute
     out.println("<queue name=\"queueE\">");
     out.println("<minSharePreemptionTimeout>60</minSharePreemptionTimeout>");
+    out.println("<nodeLabels>label1</nodeLabels>");
     out.println("</queue>");
     // Make queue F a parent queue without configured leaf queues using the
     // 'type' attribute
     out.println("<queue name=\"queueF\" type=\"parent\" >");
     out.println("<maxChildResources>2048mb,64vcores</maxChildResources>");
+    out.println("<nodeLabels>*</nodeLabels>");
     out.println("</queue>");
     // Create hierarchical queues G,H, with different min/fair share preemption
     // timeouts and preemption thresholds. Also add a child default to make sure
@@ -248,10 +315,12 @@ public class TestAllocationFileLoaderService {
     out.println("<fairSharePreemptionTimeout>120</fairSharePreemptionTimeout>");
     out.println("<minSharePreemptionTimeout>50</minSharePreemptionTimeout>");
     out.println("<fairSharePreemptionThreshold>0.6</fairSharePreemptionThreshold>");
+    out.println("<nodeLabels>label1,label2</nodeLabels>");
     out.println("   <queue name=\"queueH\">");
     out.println("   <fairSharePreemptionTimeout>180</fairSharePreemptionTimeout>");
     out.println("   <minSharePreemptionTimeout>40</minSharePreemptionTimeout>");
     out.println("   <fairSharePreemptionThreshold>0.7</fairSharePreemptionThreshold>");
+    out.println("   <nodeLabels>label2</nodeLabels>");
     out.println("   </queue>");
     out.println("</queue>");
     // Set default limit of apps per queue to 15
@@ -352,12 +421,35 @@ public class TestAllocationFileLoaderService {
     assertEquals(10, queueConf.getUserMaxApps("user1"));
     assertEquals(5, queueConf.getUserMaxApps("user2"));
 
-    assertEquals(.5f, queueConf.getQueueMaxAMShare("root." + YarnConfiguration.DEFAULT_QUEUE_NAME), 0.01);
+    assertEquals(.5f, queueConf.getQueueMaxAMShare("root."
+        + YarnConfiguration.DEFAULT_QUEUE_NAME), 0.01);
     assertEquals(.5f, queueConf.getQueueMaxAMShare("root.queueA"), 0.01);
     assertEquals(.5f, queueConf.getQueueMaxAMShare("root.queueB"), 0.01);
     assertEquals(.5f, queueConf.getQueueMaxAMShare("root.queueC"), 0.01);
     assertEquals(.4f, queueConf.getQueueMaxAMShare("root.queueD"), 0.01);
     assertEquals(.5f, queueConf.getQueueMaxAMShare("root.queueE"), 0.01);
+
+    assertNull("root.queueA has node labels even though none were assigned",
+        queueConf.getAccessibleNodeLabels("root.queueA"));
+    assertNull("root.queueB has node labels even though none were assigned",
+        queueConf.getAccessibleNodeLabels("root.queueB"));
+    assertEquals("root.queueC doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("")),
+        queueConf.getAccessibleNodeLabels("root.queueC"));
+    assertEquals("root.queueD doesn't have the expected labels",
+        new HashSet<>(), queueConf.getAccessibleNodeLabels("root.queueD"));
+    assertEquals("root.queueE doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("label1")),
+        queueConf.getAccessibleNodeLabels("root.queueE"));
+    assertEquals("root.queueF doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("*")),
+        queueConf.getAccessibleNodeLabels("root.queueF"));
+    assertEquals("root.queueG doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("label1", "label2")),
+        queueConf.getAccessibleNodeLabels("root.queueG"));
+    assertEquals("root.queueH doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("label2")),
+        queueConf.getAccessibleNodeLabels("root.queueG.queueH"));
 
     // Root should get * ACL
     assertEquals("*", queueConf.getQueueAcl("root",
@@ -443,7 +535,7 @@ public class TestAllocationFileLoaderService {
     assertEquals(DominantResourceFairnessPolicy.NAME,
         queueConf.getSchedulingPolicy("root.newqueue").getName());
   }
-  
+
   @Test
   public void testBackwardsCompatibleAllocationFileParsing() throws Exception {
     Configuration conf = new Configuration();
@@ -886,6 +978,338 @@ public class TestAllocationFileLoaderService {
     ReloadListener confHolder = new ReloadListener();
     allocLoader.setReloadListener(confHolder);
     allocLoader.reloadAllocations();
+  }
+
+  @Test //(timeout = 5000)
+  public void testNodeLabelConfiguration() throws Exception {
+    Configuration conf = new Configuration();
+    conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <queue name=\"queueA\">");
+      out.println("    <nodeLabels>*</nodeLabels>");
+      out.println("  </queue>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    AllocationFileLoaderService allocLoader = new AllocationFileLoaderService();
+    ReloadListener confHolder = new ReloadListener();
+    allocLoader.init(conf);
+    allocLoader.setReloadListener(confHolder);
+    allocLoader.reloadAllocations();
+
+    assertNull("root has node labels even though none were assigned",
+        confHolder.allocConf.getAccessibleNodeLabels("root"));
+    assertEquals("root.queueA doesn't have the expected labels", ANY,
+        confHolder.allocConf.getAccessibleNodeLabels("root.queueA"));
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <nodeLabels> label1 , label2 </nodeLabels>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    allocLoader.reloadAllocations();
+
+    assertEquals("root doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("label1", "label2")),
+        confHolder.allocConf.getAccessibleNodeLabels("root"));
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <nodeLabels> label1 </nodeLabels>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    allocLoader.reloadAllocations();
+
+    assertEquals("root doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("label1")),
+        confHolder.allocConf.getAccessibleNodeLabels("root"));
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <queue name=\"queueA\">");
+      out.println("    <nodeLabels>-</nodeLabels>");
+      out.println("  </queue>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    allocLoader.reloadAllocations();
+
+    assertNull("root has node labels even though none were assigned",
+        confHolder.allocConf.getAccessibleNodeLabels("root"));
+    assertEquals("root.queueA doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("")),
+        confHolder.allocConf.getAccessibleNodeLabels("root.queueA"));
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <queue name=\"queueA\">");
+      out.println("    <nodeLabels>label1</nodeLabels>");
+      out.println("  </queue>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    allocLoader.reloadAllocations();
+
+    assertNull("root has node labels even though none were assigned",
+        confHolder.allocConf.getAccessibleNodeLabels("root"));
+    assertEquals("root.queueA doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("label1")),
+        confHolder.allocConf.getAccessibleNodeLabels("root.queueA"));
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <queue name=\"queueA\">");
+      out.println("    <nodeLabels>-</nodeLabels>");
+      out.println("  </queue>");
+      out.println("  <nodeLabels>*</nodeLabels>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    allocLoader.reloadAllocations();
+
+    assertEquals("root doesn't have the expected labels", ANY,
+        confHolder.allocConf.getAccessibleNodeLabels("root"));
+    assertEquals("root.queueA doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("")),
+        confHolder.allocConf.getAccessibleNodeLabels("root.queueA"));
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <queue name=\"queueA\">");
+      out.println("    <nodeLabels>-</nodeLabels>");
+      out.println("  </queue>");
+      out.println("  <nodeLabels>label1</nodeLabels>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    allocLoader.reloadAllocations();
+
+    assertEquals("root doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("label1")),
+        confHolder.allocConf.getAccessibleNodeLabels("root"));
+    assertEquals("root.queueA doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("")),
+        confHolder.allocConf.getAccessibleNodeLabels("root.queueA"));
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <nodeLabels>label1</nodeLabels>");
+      out.println("  <queue name=\"queueA\">");
+      out.println("    <nodeLabels>label1</nodeLabels>");
+      out.println("  </queue>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    allocLoader.reloadAllocations();
+
+    assertEquals("root doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("label1")),
+        confHolder.allocConf.getAccessibleNodeLabels("root"));
+    assertEquals("root.queueA doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("label1")),
+        confHolder.allocConf.getAccessibleNodeLabels("root.queueA"));
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <queue name=\"queueA\">");
+      out.println("    <nodeLabels>label1,label2</nodeLabels>");
+      out.println("    <queue name=\"queueB\">");
+      out.println("      <nodeLabels>label1</nodeLabels>");
+      out.println("    </queue>");
+      out.println("  </queue>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    allocLoader.reloadAllocations();
+
+    assertNull("root has node labels even though none were assigned",
+        confHolder.allocConf.getAccessibleNodeLabels("root"));
+    assertEquals("root.queueA doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("label1", "label2")),
+        confHolder.allocConf.getAccessibleNodeLabels("root.queueA"));
+    assertEquals("root.queueA.queueB doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("label1")),
+        confHolder.allocConf.getAccessibleNodeLabels("root.queueA.queueB"));
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <queue name=\"queueA\">");
+      out.println("    <queue name=\"queueB\">");
+      out.println("      <nodeLabels>label1</nodeLabels>");
+      out.println("    </queue>");
+      out.println("    <nodeLabels>label1,label2</nodeLabels>");
+      out.println("  </queue>");
+      out.println("  <nodeLabels>*</nodeLabels>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    allocLoader.reloadAllocations();
+
+    assertEquals("root doesn't have the expected labels", ANY,
+        confHolder.allocConf.getAccessibleNodeLabels("root"));
+    assertEquals("root.queueA doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("label1", "label2")),
+        confHolder.allocConf.getAccessibleNodeLabels("root.queueA"));
+    assertEquals("root.queueA.queueB doesn't have the expected labels",
+        new HashSet<>(Arrays.asList("label1")),
+        confHolder.allocConf.getAccessibleNodeLabels("root.queueA.queueB"));
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <nodeLabels>label2</nodeLabels>");
+      out.println("  <queue name=\"queueA\">");
+      out.println("    <nodeLabels>label1</nodeLabels>");
+      out.println("  </queue>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    try {
+      allocLoader.reloadAllocations();
+      fail("Expected an exception when the child queue has a label not present "
+          + "on the parent");
+    } catch (AllocationConfigurationException ex) {
+    }
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <queue name=\"queueA\">");
+      out.println("    <nodeLabels>label1</nodeLabels>");
+      out.println("  </queue>");
+      out.println("  <nodeLabels>-</nodeLabels>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    try {
+      allocLoader.reloadAllocations();
+      fail("Expected an exception when the child queue has a label not present "
+          + "on the parent");
+    } catch (AllocationConfigurationException ex) {
+    }
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <nodeLabels>label2</nodeLabels>");
+      out.println("  <queue name=\"queueA\">");
+      out.println("    <queue name=\"queueB\">");
+      out.println("      <nodeLabels>label1</nodeLabels>");
+      out.println("    </queue>");
+      out.println("  </queue>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    try {
+      allocLoader.reloadAllocations();
+      fail("Expected an exception when the child queue has a label not present "
+          + "on the parent");
+    } catch (AllocationConfigurationException ex) {
+    }
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <queue name=\"queueA\">");
+      out.println("    <queue name=\"queueB\">");
+      out.println("      <nodeLabels>label1</nodeLabels>");
+      out.println("    </queue>");
+      out.println("  </queue>");
+      out.println("  <nodeLabels>-</nodeLabels>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    try {
+      allocLoader.reloadAllocations();
+      fail("Expected an exception when the child queue has a label not present "
+          + "on the parent");
+    } catch (AllocationConfigurationException ex) {
+    }
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <queue name=\"queueA\">");
+      out.println("    <nodeLabels>label2</nodeLabels>");
+      out.println("    <queue name=\"queueB\">");
+      out.println("      <nodeLabels>label1</nodeLabels>");
+      out.println("    </queue>");
+      out.println("  </queue>");
+      out.println("  <nodeLabels>*</nodeLabels>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    try {
+      allocLoader.reloadAllocations();
+      fail("Expected an exception when the child queue has a label not present "
+          + "on the parent");
+    } catch (AllocationConfigurationException ex) {
+    }
+
+    try (PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE))) {
+      out.println("<?xml version=\"1.0\"?>");
+      out.println("<allocations>");
+      out.println("<queue name=\"root\">");
+      out.println("  <queue name=\"queueA\">");
+      out.println("    <queue name=\"queueB\">");
+      out.println("      <nodeLabels>label1</nodeLabels>");
+      out.println("    </queue>");
+      out.println("    <nodeLabels>label2</nodeLabels>");
+      out.println("  </queue>");
+      out.println("</queue>");
+      out.println("</allocations>");
+    }
+
+    try {
+      allocLoader.reloadAllocations();
+      fail("Expected an exception when the child queue has a label not present "
+          + "on the parent");
+    } catch (AllocationConfigurationException ex) {
+    }
   }
 
   private class ReloadListener implements AllocationFileLoaderService.Listener {

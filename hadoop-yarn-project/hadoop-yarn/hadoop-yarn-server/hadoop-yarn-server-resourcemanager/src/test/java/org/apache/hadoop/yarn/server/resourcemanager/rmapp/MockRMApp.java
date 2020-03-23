@@ -300,12 +300,22 @@ public class MockRMApp implements RMApp {
   }
 
   @Override
-  public String getAmNodeLabelExpression() {
+  public String getAmNodeLabel() {
     return null;
   }
 
   @Override
-  public String getAppNodeLabelExpression() {
+  public String getAppNodeLabel() {
+    return null;
+  }
+
+  @Override
+  public String getAmNodeLabelExpressionForDisplay() {
+    return null;
+  }
+
+  @Override
+  public String getAppNodeLabelExpressionForDisplay() {
     return null;
   }
 

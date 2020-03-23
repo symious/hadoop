@@ -108,7 +108,7 @@ public class TestSystemMetricsPublisher {
     }
   }
 
-  @Test(timeout = 10000)
+  @Test//(timeout = 10000)
   public void testPublishApplicationMetrics() throws Exception {
     long stateUpdateTimeStamp = System.currentTimeMillis();
     for (int i = 1; i <= 2; ++i) {
@@ -180,8 +180,9 @@ public class TestSystemMetricsPublisher {
                 ApplicationMetricsConstants.APPLICATION_PRIORITY_INFO));
       }
 
-      Assert.assertEquals(app.getAmNodeLabelExpression(), entity.getOtherInfo()
-          .get(ApplicationMetricsConstants.AM_NODE_LABEL_EXPRESSION));
+      Assert.assertEquals(app.getAmNodeLabelExpressionForDisplay(),
+          entity.getOtherInfo()
+              .get(ApplicationMetricsConstants.AM_NODE_LABEL_EXPRESSION));
 
       Assert.assertEquals(
           app.getApplicationSubmissionContext().getNodeLabelExpression(),
@@ -531,12 +532,13 @@ public class TestSystemMetricsPublisher {
         .thenReturn(Collections.singletonList("java -Xmx1024m"));
     when(asc.getAMContainerSpec()).thenReturn(containerLaunchContext);
     when(app.getApplicationSubmissionContext()).thenReturn(asc);
-    when(app.getAppNodeLabelExpression()).thenCallRealMethod();
+    when(app.getAppNodeLabelExpressionForDisplay()).thenCallRealMethod();
+    when(app.getAppNodeLabel()).thenCallRealMethod();
     ResourceRequest amReq = mock(ResourceRequest.class);
     when(amReq.getNodeLabelExpression()).thenReturn("high-mem");
     when(app.getAMResourceRequests())
         .thenReturn(Collections.singletonList(amReq));
-    when(app.getAmNodeLabelExpression()).thenCallRealMethod();
+    when(app.getAmNodeLabelExpressionForDisplay()).thenCallRealMethod();
     when(app.getApplicationPriority()).thenReturn(Priority.newInstance(10));
     when(app.getCallerContext())
         .thenReturn(new CallerContext.Builder("context").build());

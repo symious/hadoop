@@ -25,6 +25,7 @@ import org.junit.Test;
 
 import java.util.HashSet;
 import java.util.Set;
+import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
@@ -41,13 +42,17 @@ public class TestFSParentQueue {
     conf = new FairSchedulerConfiguration();
     FairScheduler scheduler = mock(FairScheduler.class);
     AllocationConfiguration allocConf = new AllocationConfiguration(conf);
+    RMNodeLabelsManager labelsMgr = new RMNodeLabelsManager();
+
+    labelsMgr.init(conf);
     when(scheduler.getAllocationConfiguration()).thenReturn(allocConf);
+    when(scheduler.getLabelsManager()).thenReturn(labelsMgr);
     when(scheduler.getConf()).thenReturn(conf);
     when(scheduler.getResourceCalculator()).thenReturn(
         new DefaultResourceCalculator());
     SystemClock clock = SystemClock.getInstance();
     when(scheduler.getClock()).thenReturn(clock);
-    notEmptyQueues = new HashSet<FSQueue>();
+    notEmptyQueues = new HashSet<>();
     queueManager = new QueueManager(scheduler) {
       @Override
       public boolean isEmpty(FSQueue queue) {

@@ -229,11 +229,24 @@ public abstract class ResourceCalculator {
       Resource smaller, Resource bigger);
 
   /**
-   * Check if resource has any major resource types (which are all NodeManagers
-   * included) a zero value.
+   * Return whether the resource has any major resource type values that are
+   * non-zero. "Major" is determined by the {@link ResourceCalculator}
+   * instance, e.g. {@link DefaultResourceCalculator} only considers memory
+   * to be major.
    *
-   * @param resource resource
-   * @return returns true if any resource is zero.
+   * @param resource the resource to test
+   * @return returns whether any resource type is zero.
    */
   public abstract boolean isAnyMajorResourceZero(Resource resource);
+
+  /**
+   * Return whether the resource has any major resource type values that are
+   * non-zero. "Major" is determined by the {@link ResourceCalculator}
+   * instance, e.g. {@link DefaultResourceCalculator} only considers memory
+   * to be major.
+   *
+   * @param resource the resource to test
+   * @return returns whether any resource is non-zero
+   */
+  public abstract boolean isAnyMajorResourceNonZero(Resource resource);
 }

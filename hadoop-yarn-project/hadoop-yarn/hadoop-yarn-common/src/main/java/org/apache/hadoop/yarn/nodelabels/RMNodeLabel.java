@@ -135,4 +135,9 @@ public class RMNodeLabel implements Comparable<RMNodeLabel> {
     return (int) ((((long) labelName.hashCode() << 8)
         + (resource.hashCode() << 4) + numActiveNMs) % prime);
   }
+
+  @Override
+  public String toString() {
+    return labelName + " " + resource;
+  }
 }

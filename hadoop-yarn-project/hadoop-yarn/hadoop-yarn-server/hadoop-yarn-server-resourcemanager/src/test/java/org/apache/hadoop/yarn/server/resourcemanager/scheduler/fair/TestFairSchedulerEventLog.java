@@ -27,7 +27,9 @@ import org.junit.Assert;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.AsyncDispatcher;
+import org.apache.hadoop.yarn.server.resourcemanager.RMContextImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
+import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler;
 import org.junit.After;
 import org.junit.Before;
@@ -41,6 +43,13 @@ public class TestFairSchedulerEventLog {
   @Before
   public void setUp() throws IOException {
     scheduler = new FairScheduler();
+
+    RMContextImpl context = new RMContextImpl();
+    RMNodeLabelsManager labelsMgr = new RMNodeLabelsManager();
+
+    labelsMgr.init(new Configuration());
+    context.setNodeLabelManager(labelsMgr);
+    scheduler.setRMContext(context);
     
     Configuration conf = new YarnConfiguration();
     conf.setClass(YarnConfiguration.RM_SCHEDULER, FairScheduler.class,

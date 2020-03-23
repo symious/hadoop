@@ -205,7 +205,7 @@ public class FSParentQueue extends FSQueue {
     try {
       for (FSQueue child : childQueues) {
         assigned = child.assignContainer(node);
-        if (!Resources.equals(assigned, Resources.none())) {
+        if (!Resources.isNone(assigned)) {
           break;
         }
       }

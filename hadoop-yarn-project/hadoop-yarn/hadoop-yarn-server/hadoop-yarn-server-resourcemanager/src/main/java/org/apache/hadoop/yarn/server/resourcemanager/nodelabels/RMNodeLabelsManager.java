@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.nodelabels;
 
+import com.google.common.annotations.VisibleForTesting;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -31,6 +32,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import com.sun.org.apache.xpath.internal.operations.Bool;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.yarn.api.records.NodeId;
@@ -47,18 +49,105 @@ import com.google.common.collect.ImmutableSet;
 
 public class RMNodeLabelsManager extends CommonNodeLabelsManager {
   protected static class Queue {
-    protected Set<String> accessibleNodeLabels;
-    protected Resource resource;
+    private final Set<String> accessibleNodeLabels;
+    private final Resource resource;
+    private boolean any;
 
     protected Queue() {
       accessibleNodeLabels =
           Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>());
-      resource = Resource.newInstance(0, 0);
+      resource = Resources.clone(Resources.none());
+      any = false;
+    }
+
+    @Override
+    public String toString() {
+      return accessibleNodeLabels + " : " + resource;
+    }
+
+    /**
+     * Return whether this queue would accept a host with the given label.
+     * The {@code labels} parameter is a {@link Set} for historical reasons.
+     * In practice the set size will always be less than 2.
+     *
+     * @param labels the host label as a set
+     * @return whether the queue accepts the host
+     */
+    public boolean acceptLabels(Set<String> labels) {
+      // node without any labels can be accessed by any queue
+      return any || (labels == null) || labels.isEmpty() ||
+          ((labels.size() == 1) && labels.contains(NO_LABEL)) ||
+          !Collections.disjoint(accessibleNodeLabels, labels);
+    }
+
+    /**
+     * Return whether this queue will accept all host labels.
+     *
+     * @return whether this queue will accept all host labels
+     */
+    @VisibleForTesting
+    boolean acceptAny() {
+      return any;
+    }
+
+    /**
+     * Return whether this queue explicitly has the given label. If the queue
+     * has only the {@link RMNodeLabelsManager#ANY} label, this method will
+     * return true only when the {@code label} parameter is
+     * {@link RMNodeLabelsManager#ANY}. If the {@code label} parameter is
+     * {@link RMNodeLabelsManager#NO_LABEL}, then this method will only return
+     * true if the queue has {@link RMNodeLabelsManager#NO_LABEL} in its set
+     * of labels.
+     *
+     * @param label the label to test
+     * @return whether the queue has the label
+     */
+    public boolean hasLabel(String label) {
+      return accessibleNodeLabels.contains(label);
+    }
+
+    /**
+     * Set the labels for this queue.
+     *
+     * @param labels the labels to set
+     */
+    public void setLabels(Set<String> labels) {
+      accessibleNodeLabels.clear();
+      accessibleNodeLabels.addAll(labels);
+      any = hasLabel(ANY);
+    }
+
+    /**
+     * Add the given resource to this queue's resource total.
+     *
+     * @param add the resource to add
+     */
+    public void addResource(Resource add) {
+      Resources.addTo(resource, add);
+    }
+
+    /**
+     * Subtract the given resource from this queue's resource total. The total
+     * resource cannot be less than 0 for any resource type.
+     *
+     * @param subtract the resource to subtract
+     */
+    public void subtractResource(Resource subtract) {
+      Resources.subtractFromNonNegative(resource, subtract);
+    }
+
+    /**
+     * Return the total resources for this queue.
+     *
+     * @return the total resources for this queue
+     */
+    public Resource getResource() {
+      return resource;
     }
   }
 
-  ConcurrentMap<String, Queue> queueCollections =
-      new ConcurrentHashMap<String, Queue>();
+  private final ConcurrentMap<String, Queue> queueCollections =
+      new ConcurrentHashMap<>();
   private YarnAuthorizationProvider authorizer;
   private RMContext rmContext = null;
   
@@ -99,8 +188,8 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
       // check if any queue contains this label
       for (Entry<String, Queue> entry : queueCollections.entrySet()) {
         String queueName = entry.getKey();
-        Set<String> queueLabels = entry.getValue().accessibleNodeLabels;
-        if (queueLabels.contains(label)) {
+
+        if (entry.getValue().hasLabel(label)) {
           throw new IOException("Cannot remove label=" + label
               + ", because queue=" + queueName + " is using this label. "
               + "Please remove label on queue before remove the label");
@@ -320,23 +409,31 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
       this.queueCollections.clear();
 
       for (Entry<String, Set<String>> entry : queueToLabels.entrySet()) {
-        String queue = entry.getKey();
-        Queue q = new Queue();
-        this.queueCollections.put(queue, q);
+        addQueue(entry.getKey(), entry.getValue());
+      }
+    } finally {
+      writeLock.unlock();
+    }
+  }
 
-        Set<String> labels = entry.getValue();
-        if (labels.contains(ANY)) {
-          continue;
-        }
+  public void addQueue(String queue, Set<String> labels) {
+    Queue q = new Queue();
+    writeLock.lock();
 
-        q.accessibleNodeLabels.addAll(labels);
-        for (Host host : nodeCollections.values()) {
-          for (Entry<NodeId, Node> nentry : host.nms.entrySet()) {
-            NodeId nodeId = nentry.getKey();
-            Node nm = nentry.getValue();
-            if (nm.running && isNodeUsableByQueue(getLabelsByNode(nodeId), q)) {
-              Resources.addTo(q.resource, nm.resource);
-            }
+    try {
+      queueCollections.put(queue, q);
+
+      if ((labels != null) && !labels.isEmpty()) {
+        q.setLabels(labels);
+      }
+
+      for (Host host : nodeCollections.values()) {
+        for (Entry<NodeId, Node> nentry : host.nms.entrySet()) {
+          NodeId nodeId = nentry.getKey();
+          Node nm = nentry.getValue();
+
+          if (nm.running && q.acceptLabels(getLabelsByNode(nodeId))) {
+            q.addResource(nm.resource);
           }
         }
       }
@@ -344,19 +441,29 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
       writeLock.unlock();
     }
   }
-  
+
+  /**
+   * Return the total resources available to this queue according to its node
+   * labels. If the queue cannot be found, no resources will be returned.
+   *
+   * @param queueName the name of the queue whose accessible resources will be
+   * returned
+   * @param queueLabels IGNORED
+   * @param clusterResource IGNORED
+   * @return the accessible resources for the queue
+   */
   public Resource getQueueResource(String queueName, Set<String> queueLabels,
       Resource clusterResource) {
     try {
       readLock.lock();
-      if (queueLabels.contains(ANY)) {
-        return clusterResource;
-      }
+
       Queue q = queueCollections.get(queueName);
-      if (null == q) {
+
+      if (q == null) {
         return Resources.none();
+      } else {
+        return q.getResource();
       }
-      return q.resource;
     } finally {
       readLock.unlock();
     }
@@ -440,8 +547,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
     }
     
     // Map used to notify RM
-    Map<NodeId, Set<String>> newNodeToLabelsMap =
-        new HashMap<NodeId, Set<String>>();
+    Map<NodeId, Set<String>> newNodeToLabelsMap = new HashMap<>();
 
     // traverse all nms
     for (NodeId nodeId : allNMs) {
@@ -456,7 +562,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
 
           // update queues, all queue can access this node
           for (Queue q : queueCollections.values()) {
-            Resources.subtractFrom(q.resource, oldNM.resource);
+            q.subtractResource(oldNM.resource);
           }
         } else {
           // update labels
@@ -470,8 +576,8 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
 
           // update queues, only queue can access this node will be subtract
           for (Queue q : queueCollections.values()) {
-            if (isNodeUsableByQueue(oldLabels, q)) {
-              Resources.subtractFrom(q.resource, oldNM.resource);
+            if (q.acceptLabels(oldLabels)) {
+              q.subtractResource(oldNM.resource);
             }
           }
         }
@@ -483,7 +589,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
         
         newNodeToLabelsMap.put(nodeId, ImmutableSet.copyOf(newLabels));
         
-        // no label in the past
+        // no label now
         if (newLabels.isEmpty()) {
           // update labels
           RMNodeLabel label = labelCollections.get(NO_LABEL);
@@ -491,7 +597,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
 
           // update queues, all queue can access this node
           for (Queue q : queueCollections.values()) {
-            Resources.addTo(q.resource, newNM.resource);
+            q.addResource(newNM.resource);
           }
         } else {
           // update labels
@@ -502,8 +608,8 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
 
           // update queues, only queue can access this node will be subtract
           for (Queue q : queueCollections.values()) {
-            if (isNodeUsableByQueue(newLabels, q)) {
-              Resources.addTo(q.resource, newNM.resource);
+            if (q.acceptLabels(newLabels)) {
+              q.addResource(newNM.resource);
             }
           }
         }
@@ -516,7 +622,17 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
           new NodeLabelsUpdateSchedulerEvent(newNodeToLabelsMap));
     }
   }
-  
+
+  /**
+   * Get the total amount of resources available from active node managers that
+   * have the given label. The resources for node managers without a label is
+   * not included in this total unless the label is
+   * {@link CommonNodeLabelsManager.NO_LABEL}.
+   *
+   * @param label the label for which to return resources
+   * @param clusterResource IGNORED
+   * @return the total resources associated with the label
+   */
   public Resource getResourceByLabel(String label, Resource clusterResource) {
     label = normalizeLabel(label);
     if (label.equals(NO_LABEL)) {
@@ -532,22 +648,6 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
     } finally {
       readLock.unlock();
     }
-  }
-
-  private boolean isNodeUsableByQueue(Set<String> nodeLabels, Queue q) {
-    // node without any labels can be accessed by any queue
-    if (nodeLabels == null || nodeLabels.isEmpty()
-        || (nodeLabels.size() == 1 && nodeLabels.contains(NO_LABEL))) {
-      return true;
-    }
-
-    for (String label : nodeLabels) {
-      if (q.accessibleNodeLabels.contains(label)) {
-        return true;
-      }
-    }
-
-    return false;
   }
 
   private Map<String, Host> cloneNodeMap() {
@@ -586,5 +686,30 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
     } finally {
       readLock.unlock();
     }
+  }
+
+  @Override
+  public String toString() {
+    StringBuilder out = new StringBuilder();
+
+    out.append("LABELS:\n");
+    for (Entry<String, RMNodeLabel> e : labelCollections.entrySet()) {
+      out.append("\t").append(e.getKey()).append(": ");
+      out.append(e.getValue().toString()).append("\n");
+    }
+
+    out.append("QUEUES:\n");
+    for (Entry<String, Queue> e : queueCollections.entrySet()) {
+      out.append("\t").append(e.getKey()).append(": ");
+      out.append(e.getValue().toString()).append("\n");
+    }
+
+    out.append("NODES:\n");
+    for (Entry<String, Host> e : nodeCollections.entrySet()) {
+      out.append("\t").append(e.getKey()).append(": ");
+      out.append(e.getValue().toString()).append("\n");
+    }
+
+    return out.toString();
   }
 }

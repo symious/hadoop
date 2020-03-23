@@ -19,6 +19,7 @@
 package org.apache.hadoop.yarn.server.resourcemanager.webapp.dao;
 
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.AllocationConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler;
@@ -40,7 +41,10 @@ public class TestFairSchedulerQueueInfo {
   public void testEmptyChildQueues() throws Exception {
     FairSchedulerConfiguration conf = new FairSchedulerConfiguration();
     FairScheduler scheduler = mock(FairScheduler.class);
+    RMNodeLabelsManager nlm = new RMNodeLabelsManager();
     AllocationConfiguration allocConf = new AllocationConfiguration(conf);
+    nlm.init(conf);
+    when(scheduler.getLabelsManager()).thenReturn(nlm);
     when(scheduler.getAllocationConfiguration()).thenReturn(allocConf);
     when(scheduler.getConf()).thenReturn(conf);
     when(scheduler.getClusterResource()).thenReturn(Resource.newInstance(1, 1));

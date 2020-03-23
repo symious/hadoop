@@ -34,6 +34,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.policies.FifoPolicy;
 import org.xml.sax.SAXException;
@@ -85,6 +86,20 @@ public class QueueManager {
   }
 
   /**
+   * After the allocation configuration has been loaded,
+   * register the queues with the node labels manager.
+   */
+  void updateNodeLabels() {
+    Map<String, Set<String>> labelsMap = new HashMap<>();
+
+    for (FSQueue queue : queues.values()) {
+      labelsMap.put(queue.getName(), queue.getAccessibleNodeLabels());
+    }
+
+    scheduler.getLabelsManager().reinitializeQueueLabels(labelsMap);
+  }
+
+  /**
    * Get a leaf queue by name, creating it if the create param is true and is necessary.
    * If the queue is not or can not be a leaf queue, i.e. it already exists as a
    * parent queue, or one of the parents in its name is already a leaf queue,
@@ -94,6 +109,9 @@ public class QueueManager {
    * named "queue1" could be referred to  as just "queue1", and a queue named
    * "queue2" underneath a parent named "parent1" that is underneath the root 
    * could be referred to as just "parent1.queue2".
+   * @param name the queue name
+   * @param create whether to create the queue if it doesn't exist
+   * @return the queue
    */
   public FSLeafQueue getLeafQueue(String name, boolean create) {
     return getLeafQueue(name, create, true);
@@ -136,6 +154,9 @@ public class QueueManager {
    * named "queue1" could be referred to  as just "queue1", and a queue named
    * "queue2" underneath a parent named "parent1" that is underneath the root 
    * could be referred to as just "parent1.queue2".
+   * @param name the queue name
+   * @param create whether to create the queue if it doesn't exist
+   * @return the queue
    */
   public FSParentQueue getParentQueue(String name, boolean create) {
     return getParentQueue(name, create, true);
@@ -276,10 +297,14 @@ public class QueueManager {
       String queueName = i.next();
 
       // Check if child policy is allowed
-      SchedulingPolicy childPolicy = scheduler.getAllocationConfiguration().
-          getSchedulingPolicy(queueName);
+      SchedulingPolicy childPolicy = queueConf.getSchedulingPolicy(queueName);
+
       if (!parent.getPolicy().isChildPolicyAllowed(childPolicy)) {
-        LOG.error("Can't create queue '" + queueName + "'.");
+        LOG.error("Can't create queue '" + queueName + "' because the "
+            + "configured policy (" + childPolicy.getName() + ") is not "
+            + "allowed by the parent queue's policy ("
+            + parent.getPolicy().getName() + ").");
+
         return null;
       }
 
@@ -301,6 +326,8 @@ public class QueueManager {
       parent.addChildQueue(queue);
       setChildResourceLimits(parent, queue, queueConf);
       queues.put(queue.getName(), queue);
+      scheduler.getLabelsManager().addQueue(queueName,
+          queueConf.getAccessibleNodeLabels(queueName));
 
       // If we just created a leaf node, the newParent is null, but that's OK
       // because we only create a leaf node in the very last iteration.
@@ -523,6 +550,8 @@ public class QueueManager {
     rootQueue.reinit(true);
     // Update steady fair shares for all queues
     rootQueue.recomputeSteadyShares();
+
+    updateNodeLabels();
   }
 
   /**

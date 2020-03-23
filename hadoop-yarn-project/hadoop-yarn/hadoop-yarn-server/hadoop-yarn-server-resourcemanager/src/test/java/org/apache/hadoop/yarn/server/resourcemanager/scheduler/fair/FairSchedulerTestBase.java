@@ -95,6 +95,7 @@ public class FairSchedulerTestBase {
     conf.setBoolean(FairSchedulerConfiguration.ASSIGN_MULTIPLE, false);
     conf.setLong(FairSchedulerConfiguration.UPDATE_INTERVAL_MS, 10);
     conf.setFloat(FairSchedulerConfiguration.PREEMPTION_THRESHOLD, 0f);
+    conf.setBoolean(YarnConfiguration.NODE_LABELS_ENABLED, true);
 
     conf.setFloat(
         FairSchedulerConfiguration
@@ -118,7 +119,15 @@ public class FairSchedulerTestBase {
   protected ResourceRequest createResourceRequest(
       int memory, int vcores, String host, int priority, int numContainers,
       boolean relaxLocality) {
-    ResourceRequest request = recordFactory.newRecordInstance(ResourceRequest.class);
+    return createResourceRequest(memory, vcores, host, priority, numContainers,
+        relaxLocality, RMNodeLabelsManager.NO_LABEL);
+  }
+
+  protected ResourceRequest createResourceRequest(
+      int memory, int vcores, String host, int priority, int numContainers,
+      boolean relaxLocality, String label) {
+    ResourceRequest request =
+        recordFactory.newRecordInstance(ResourceRequest.class);
     request.setCapability(BuilderUtils.newResource(memory, vcores));
     request.setResourceName(host);
     request.setNumContainers(numContainers);
@@ -126,7 +135,8 @@ public class FairSchedulerTestBase {
     prio.setPriority(priority);
     request.setPriority(prio);
     request.setRelaxLocality(relaxLocality);
-    request.setNodeLabelExpression(RMNodeLabelsManager.NO_LABEL);
+    request.setNodeLabelExpression(label);
+
     return request;
   }
 
@@ -163,6 +173,13 @@ public class FairSchedulerTestBase {
   protected ApplicationAttemptId createSchedulingRequest(
       int memory, int vcores, String queueId, String userId, int numContainers,
       int priority) {
+    return createSchedulingRequest(memory, vcores, queueId, userId,
+        numContainers, priority, RMNodeLabelsManager.NO_LABEL);
+  }
+
+  protected ApplicationAttemptId createSchedulingRequest(
+      int memory, int vcores, String queueId, String userId, int numContainers,
+      int priority, String label) {
     ApplicationAttemptId id = createAppAttemptId(this.APP_ID++, this.ATTEMPT_ID++);
     scheduler.addApplication(id.getApplicationId(), queueId, userId, false);
     // This conditional is for testAclSubmitApplication where app is rejected
@@ -170,9 +187,9 @@ public class FairSchedulerTestBase {
     if (scheduler.getSchedulerApplications().containsKey(id.getApplicationId())) {
       scheduler.addApplicationAttempt(id, false, false);
     }
-    List<ResourceRequest> ask = new ArrayList<ResourceRequest>();
+    List<ResourceRequest> ask = new ArrayList<>();
     ResourceRequest request = createResourceRequest(memory, vcores, ResourceRequest.ANY,
-        priority, numContainers, true);
+        priority, numContainers, true, label);
     ask.add(request);
 
     RMApp rmApp = mock(RMApp.class);
@@ -188,8 +205,8 @@ public class FairSchedulerTestBase {
     resourceManager.getRMContext().getRMApps()
         .put(id.getApplicationId(), rmApp);
 
-    scheduler.allocate(id, ask, new ArrayList<ContainerId>(),
-        null, null, NULL_UPDATE_REQUESTS);
+    scheduler.allocate(id, ask, new ArrayList(), null, null,
+        NULL_UPDATE_REQUESTS);
     scheduler.update();
     return id;
   }

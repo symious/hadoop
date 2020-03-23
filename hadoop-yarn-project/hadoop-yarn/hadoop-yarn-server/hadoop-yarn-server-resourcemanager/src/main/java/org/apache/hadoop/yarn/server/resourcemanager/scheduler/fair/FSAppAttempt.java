@@ -43,6 +43,7 @@ import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger.AuditConstants;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
+import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceWeights;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerEvent;
@@ -56,6 +57,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueMetrics;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplicationAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerUtils;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.SchedulingMode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.PendingAsk;
 import org.apache.hadoop.yarn.server.scheduler.SchedulerRequestKey;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
@@ -229,6 +231,8 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
   /**
    * Headroom depends on resources in the cluster, current usage of the
    * queue, queue's fair-share and queue's max-resources.
+   *
+   * @return the headroom as a {@link Resource} instance
    */
   @Override
   public Resource getHeadroom() {
@@ -237,9 +241,12 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
 
     Resource queueFairShare = fsQueue.getFairShare();
     Resource queueUsage = fsQueue.getResourceUsage();
-    Resource clusterResource = this.scheduler.getClusterResource();
-    Resource clusterUsage = this.scheduler.getRootQueueMetrics()
-        .getAllocatedResources();
+    // We don't have a way to track the resources used per partition, so just
+    // do the math with the cluster resources. The fair share is already capped
+    // at the partition max, so we should be fine.
+    Resource clusterResource = scheduler.getClusterResource();
+    Resource clusterUsage =
+        scheduler.getRootQueueMetrics().getAllocatedResources();
 
     Resource clusterAvailableResources =
         Resources.subtract(clusterResource, clusterUsage);
@@ -1349,21 +1356,69 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     demand = tmpDemand;
   }
 
+  public void nodePartitionUpdated(RMContainer rmContainer, String oldPartition,
+      String newPartition) {
+    Resource containerResource = rmContainer.getAllocatedResource();
+    this.attemptResourceUsage.decUsed(oldPartition, containerResource);
+    this.attemptResourceUsage.incUsed(newPartition, containerResource);
+
+    // Update new partition name if container is AM and also update AM resource
+    if (rmContainer.isAMContainer()) {
+      this.attemptResourceUsage.decAMUsed(oldPartition, containerResource);
+      this.attemptResourceUsage.incAMUsed(newPartition, containerResource);
+    }
+  }
+
   @Override
   public Resource assignContainer(FSSchedulerNode node) {
-    if (isOverAMShareLimit()) {
-      PendingAsk amAsk = appSchedulingInfo.getNextPendingAsk();
-      updateAMDiagnosticMsg(amAsk.getPerAllocationResource(),
-          " exceeds maximum AM resource allowed).");
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("AM resource request: " + amAsk.getPerAllocationResource()
-            + " exceeds maximum AM resource allowed, "
-            + getQueue().dumpState());
-      }
+    Resource res;
 
-      return Resources.none();
+    if (isOverAMShareLimit()) {
+      logOverAMShareLimit();
+      res = Resources.none();
+    } else if (!nodeLabelsMatchContainerLabel(node.getNodeID())) {
+      res = Resources.none();
+    } else {
+      res = assignContainer(node, false);
     }
-    return assignContainer(node, false);
+
+    return res;
+  }
+
+  private void logOverAMShareLimit() {
+    PendingAsk amAsk = appSchedulingInfo.getNextPendingAsk();
+    updateAMDiagnosticMsg(amAsk.getPerAllocationResource(),
+        " exceeds maximum AM resource allowed).");
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("AM resource request: " + amAsk.getPerAllocationResource()
+          + " exceeds maximum AM resource allowed, "
+          + getQueue().dumpState());
+    }
+  }
+
+  private boolean nodeLabelsMatchContainerLabel(NodeId nodeId) {
+    Set<String> labelsOnNode =
+        scheduler.getLabelsManager().getLabelsOnNode(nodeId);
+
+    // Dig through the pending apps to see if anyone wants this node.
+    // If we get anything back, go with it, because we support zero-memory
+    // and zero-CPU requests.
+    if ((labelsOnNode != null) && !labelsOnNode.isEmpty()) {
+      for (String label : labelsOnNode) {
+        Resource pending = getPendingResourceRequest(label,
+                SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY);
+
+        if (!Resources.isNone(pending)) {
+          return true;
+        }
+      }
+      return false;
+    } else{
+      Resource pending = getPendingResourceRequest(RMNodeLabelsManager.NO_LABEL,
+              SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY);
+
+      return !Resources.isNone(pending);
+    }
   }
 
   /**

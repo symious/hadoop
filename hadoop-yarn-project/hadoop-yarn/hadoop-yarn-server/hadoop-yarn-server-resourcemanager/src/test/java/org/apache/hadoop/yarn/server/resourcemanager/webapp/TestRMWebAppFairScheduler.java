@@ -23,6 +23,7 @@ import com.google.inject.Binder;
 import com.google.inject.Injector;
 import com.google.inject.Module;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -32,6 +33,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.ClientRMService;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContextImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
+import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.NullRMNodeLabelsManager;
+import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.MockRMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppMetrics;
@@ -162,6 +165,11 @@ public class TestRMWebAppFairScheduler {
         return mock(AbstractYarnScheduler.class);
       }
     };
+
+    RMNodeLabelsManager nlm = new NullRMNodeLabelsManager();
+
+    nlm.init(new Configuration());
+    rmContext.setNodeLabelManager(nlm);
     return rmContext;
   }
 
@@ -179,10 +187,15 @@ public class TestRMWebAppFairScheduler {
   private static FairScheduler mockFairScheduler() throws IOException {
     FairScheduler fs = new FairScheduler();
     FairSchedulerConfiguration conf = new FairSchedulerConfiguration();
-    fs.setRMContext(new RMContextImpl(null, null, null, null, null,
+    RMContext rmContext = new RMContextImpl(null, null, null, null, null,
         null, new RMContainerTokenSecretManager(conf),
         new NMTokenSecretManagerInRM(conf),
-        new ClientToAMTokenSecretManagerInRM(), null));
+        new ClientToAMTokenSecretManagerInRM(), null);
+    RMNodeLabelsManager nlm = new RMNodeLabelsManager();
+
+    nlm.init(conf);
+    rmContext.setNodeLabelManager(nlm);
+    fs.setRMContext(rmContext);
     fs.init(conf);
     return fs;
   }

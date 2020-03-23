@@ -22,10 +22,8 @@ import com.google.common.collect.ImmutableMap;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNode;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode;
 
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.Map;
 
 /**

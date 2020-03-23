@@ -31,6 +31,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.util.ControlledClock;
 import org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator;
 import org.junit.Before;
@@ -48,16 +49,22 @@ public class TestMaxRunningAppsEnforcer {
   @Before
   public void setup() throws Exception {
     Configuration conf = new Configuration();
+    AllocationConfiguration allocConf = new AllocationConfiguration(
+        conf);
+    RMNodeLabelsManager lablesMgr = new RMNodeLabelsManager();
+
     clock = new ControlledClock();
     scheduler = mock(FairScheduler.class);
     when(scheduler.getConf()).thenReturn(
         new FairSchedulerConfiguration(conf));
     when(scheduler.getClock()).thenReturn(clock);
-    AllocationConfiguration allocConf = new AllocationConfiguration(
-        conf);
+    when(scheduler.getLabelsManager()).thenReturn(lablesMgr);
     when(scheduler.getAllocationConfiguration()).thenReturn(allocConf);
+
     when(scheduler.getResourceCalculator()).thenReturn(
         new DefaultResourceCalculator());
+
+    lablesMgr.init(conf);
 
     queueManager = new QueueManager(scheduler);
     queueManager.initialize(conf);

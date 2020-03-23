@@ -36,7 +36,7 @@ public abstract class NodeLabel implements Comparable<NodeLabel> {
   public static final String DEFAULT_NODE_LABEL_PARTITION = "<DEFAULT_PARTITION>";
 
   /**
-   * Node Label expression not set .
+   * Node Label expression used for display when no node label is set.
    */
   @Private
   @Unstable
