@@ -925,13 +925,12 @@ public class FairScheduler extends
       super.nodeUpdate(nm);
 
       FSSchedulerNode fsNode = getFSSchedulerNode(nm.getNodeID());
-
-      if (labelsManager != null) {
-        labelsManager.activateNode(nm.getNodeID(), fsNode.getTotalResource());
+      if (fsNode != null) {
+        if (labelsManager != null) {
+          labelsManager.activateNode(nm.getNodeID(), fsNode.getTotalResource());
+        }
+        attemptScheduling(fsNode);
       }
-
-      attemptScheduling(fsNode);
-
       long duration = getClock().getTime() - start;
       fsOpDurations.addNodeUpdateDuration(duration);
     } finally {
