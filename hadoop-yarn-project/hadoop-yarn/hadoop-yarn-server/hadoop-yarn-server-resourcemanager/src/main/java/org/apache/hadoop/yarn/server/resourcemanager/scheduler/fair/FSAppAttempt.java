@@ -40,11 +40,13 @@ import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger.AuditConstants;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.ResourceWeights;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerEventType;
@@ -58,6 +60,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplicat
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.SchedulingMode;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.allocator.ContainerAllocator;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.PendingAsk;
 import org.apache.hadoop.yarn.server.scheduler.SchedulerRequestKey;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
@@ -116,7 +119,8 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
 
   public FSAppAttempt(FairScheduler scheduler,
       ApplicationAttemptId applicationAttemptId, String user, FSLeafQueue queue,
-      ActiveUsersManager activeUsersManager, RMContext rmContext) {
+      ActiveUsersManager activeUsersManager, RMContext rmContext,
+      boolean isAttemptRecovering) {
     super(applicationAttemptId, user, queue, activeUsersManager, rmContext);
 
     this.scheduler = scheduler;
@@ -124,6 +128,37 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     this.lastTimeAtFairShare = this.startTime;
     this.appPriority = Priority.newInstance(1);
     this.resourceWeights = new ResourceWeights();
+
+    RMApp rmApp = rmContext.getRMApps().get(getApplicationId());
+
+    Resource amResource;
+    String partition;
+
+    if (rmApp == null || rmApp.getAMResourceRequests() == null
+            || rmApp.getAMResourceRequests().isEmpty()) {
+      // the rmApp may be undefined (the resource manager checks for this too)
+      // and unmanaged applications do not provide an amResource request
+      // in these cases, provide a default using the scheduler
+      amResource = rmContext.getScheduler().getMinimumResourceCapability();
+      partition = CommonNodeLabelsManager.NO_LABEL;
+    } else {
+      amResource = rmApp.getAMResourceRequests().get(0).getCapability();
+      partition =
+              (rmApp.getAMResourceRequests().get(0)
+                      .getNodeLabelExpression() == null)
+                      ? CommonNodeLabelsManager.NO_LABEL
+                      : rmApp.getAMResourceRequests().get(0).getNodeLabelExpression();
+    }
+    setAppAMNodePartitionName(partition);
+    setAMResource(partition,amResource);
+    setAMResource(amResource);
+    setAttemptRecovering(isAttemptRecovering);
+  }
+
+  public FSAppAttempt(FairScheduler scheduler,
+      ApplicationAttemptId applicationAttemptId, String user, FSLeafQueue queue,
+      ActiveUsersManager activeUsersManager, RMContext rmContext) {
+    this(scheduler, applicationAttemptId, user, queue, activeUsersManager, rmContext, Boolean.FALSE);
   }
 
   ResourceWeights getResourceWeights() {
@@ -1358,13 +1393,16 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
   public void nodePartitionUpdated(RMContainer rmContainer, String oldPartition,
       String newPartition) {
     Resource containerResource = rmContainer.getAllocatedResource();
-    this.attemptResourceUsage.decUsed(oldPartition, containerResource);
-    this.attemptResourceUsage.incUsed(newPartition, containerResource);
+    Resource containerResourceTmp = Resource.newInstance(
+        containerResource.getMemorySize(), containerResource.getVirtualCores());
+
+    this.attemptResourceUsage.decUsed(oldPartition, containerResourceTmp);
+    this.attemptResourceUsage.incUsed(newPartition, containerResourceTmp);
 
     // Update new partition name if container is AM and also update AM resource
     if (rmContainer.isAMContainer()) {
-      this.attemptResourceUsage.decAMUsed(oldPartition, containerResource);
-      this.attemptResourceUsage.incAMUsed(newPartition, containerResource);
+      this.attemptResourceUsage.decAMUsed(oldPartition, containerResourceTmp);
+      this.attemptResourceUsage.incAMUsed(newPartition, containerResourceTmp);
     }
   }
 
