@@ -532,7 +532,7 @@ public class FairScheduler extends
       FSLeafQueue queue = (FSLeafQueue) application.getQueue();
 
       FSAppAttempt attempt = new FSAppAttempt(this, applicationAttemptId, user,
-          queue, new ActiveUsersManager(getRootQueueMetrics()), rmContext);
+          queue, new ActiveUsersManager(getRootQueueMetrics()), rmContext, isAttemptRecovering);
       if (transferStateFromPreviousAttempt) {
         attempt.transferStateFromPreviousAttempt(
             application.getCurrentAppAttempt());
@@ -562,6 +562,7 @@ public class FairScheduler extends
             new RMAppAttemptEvent(applicationAttemptId,
                 RMAppAttemptEventType.ATTEMPT_ADDED));
       }
+
     } finally {
       writeLock.unlock();
     }
