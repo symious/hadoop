@@ -119,8 +119,7 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
 
   public FSAppAttempt(FairScheduler scheduler,
       ApplicationAttemptId applicationAttemptId, String user, FSLeafQueue queue,
-      ActiveUsersManager activeUsersManager, RMContext rmContext,
-      boolean isAttemptRecovering) {
+      ActiveUsersManager activeUsersManager, RMContext rmContext) {
     super(applicationAttemptId, user, queue, activeUsersManager, rmContext);
 
     this.scheduler = scheduler;
@@ -129,36 +128,6 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     this.appPriority = Priority.newInstance(1);
     this.resourceWeights = new ResourceWeights();
 
-    RMApp rmApp = rmContext.getRMApps().get(getApplicationId());
-
-    Resource amResource;
-    String partition;
-
-    if (rmApp == null || rmApp.getAMResourceRequests() == null
-            || rmApp.getAMResourceRequests().isEmpty()) {
-      // the rmApp may be undefined (the resource manager checks for this too)
-      // and unmanaged applications do not provide an amResource request
-      // in these cases, provide a default using the scheduler
-      amResource = rmContext.getScheduler().getMinimumResourceCapability();
-      partition = CommonNodeLabelsManager.NO_LABEL;
-    } else {
-      amResource = rmApp.getAMResourceRequests().get(0).getCapability();
-      partition =
-              (rmApp.getAMResourceRequests().get(0)
-                      .getNodeLabelExpression() == null)
-                      ? CommonNodeLabelsManager.NO_LABEL
-                      : rmApp.getAMResourceRequests().get(0).getNodeLabelExpression();
-    }
-    setAppAMNodePartitionName(partition);
-    setAMResource(partition,amResource);
-    setAMResource(amResource);
-    setAttemptRecovering(isAttemptRecovering);
-  }
-
-  public FSAppAttempt(FairScheduler scheduler,
-      ApplicationAttemptId applicationAttemptId, String user, FSLeafQueue queue,
-      ActiveUsersManager activeUsersManager, RMContext rmContext) {
-    this(scheduler, applicationAttemptId, user, queue, activeUsersManager, rmContext, Boolean.FALSE);
   }
 
   ResourceWeights getResourceWeights() {
