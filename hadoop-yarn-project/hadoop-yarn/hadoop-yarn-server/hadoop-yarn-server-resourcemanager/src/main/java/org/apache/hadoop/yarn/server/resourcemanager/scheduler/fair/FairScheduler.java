@@ -532,7 +532,7 @@ public class FairScheduler extends
       FSLeafQueue queue = (FSLeafQueue) application.getQueue();
 
       FSAppAttempt attempt = new FSAppAttempt(this, applicationAttemptId, user,
-          queue, new ActiveUsersManager(getRootQueueMetrics()), rmContext, isAttemptRecovering);
+          queue, new ActiveUsersManager(getRootQueueMetrics()), rmContext);
       if (transferStateFromPreviousAttempt) {
         attempt.transferStateFromPreviousAttempt(
             application.getCurrentAppAttempt());
