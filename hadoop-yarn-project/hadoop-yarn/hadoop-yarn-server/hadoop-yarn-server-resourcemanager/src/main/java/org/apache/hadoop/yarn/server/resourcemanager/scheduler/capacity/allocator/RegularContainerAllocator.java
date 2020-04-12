@@ -873,12 +873,9 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
     FiCaSchedulerNode node = PlacementSetUtils.getSingleNode(ps);
 
     if (reservedContainer == null) {
-      Resource pending =
-          application.getPendingResourceRequest(ps.getPartition(),
-              schedulingMode);
-
       // Check if application needs more resource, skip if it doesn't need more.
-      if (!rc.isAnyMajorResourceNonZero(pending)) {
+      if (!application.hasPendingResourceRequest(rc,
+          ps.getPartition(), clusterResource, schedulingMode)) {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Skip app_attempt=" + application.getApplicationAttemptId()
               + ", because it doesn't need more resource, schedulingMode="
