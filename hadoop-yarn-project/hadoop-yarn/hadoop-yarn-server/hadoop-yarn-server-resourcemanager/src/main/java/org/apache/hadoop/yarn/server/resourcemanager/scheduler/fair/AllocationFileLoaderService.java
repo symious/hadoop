@@ -460,7 +460,8 @@ public class AllocationFileLoaderService extends AbstractService {
           defaultSchedPolicy, minSharePreemptionTimeouts,
           fairSharePreemptionTimeouts, fairSharePreemptionThresholds, queueAcls,
           reservationAcls, newPlacementPolicy, configuredQueues,
-          globalReservationQueueConfig, reservableQueues, nonPreemptableQueues, accessibleNodeLabels);
+          globalReservationQueueConfig, reservableQueues, nonPreemptableQueues,
+          accessibleNodeLabels);
     
     lastSuccessfulReload = clock.getTime();
     lastReloadAttemptFailed = false;
@@ -487,7 +488,8 @@ public class AllocationFileLoaderService extends AbstractService {
       Map<String, Map<ReservationACL, AccessControlList>> resAcls,
       Map<FSQueueType, Set<String>> configuredQueues,
       Set<String> reservableQueues,
-      Set<String> nonPreemptableQueues,Map<String, Set<String>> accessibleNodeLabels)
+      Set<String> nonPreemptableQueues,
+      Map<String, Set<String>> accessibleNodeLabels)
       throws AllocationConfigurationException {
     String queueName = CharMatcher.WHITESPACE.trimFrom(
         element.getAttribute("name"));

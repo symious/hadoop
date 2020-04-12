@@ -27,12 +27,16 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.NodeLabel;
+import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.AsyncDispatcher;
 import org.apache.hadoop.yarn.server.resourcemanager.MockNodes;
@@ -54,8 +58,15 @@ import org.junit.Test;
 
 @SuppressWarnings("unchecked")
 public class TestFSNodeLabel extends FairSchedulerTestBase {
+
+  private static final Log LOG = LogFactory.getLog(TestFSNodeLabel.class);
+
   private final static String ALLOC_FILE =
       new File(TEST_DIR, "test-queues").getAbsolutePath();
+
+  private RMNode node1;
+  private RMNode node2;
+  private RMNode node3;
 
   @Before
   public void setUp() throws IOException {
@@ -75,6 +86,65 @@ public class TestFSNodeLabel extends FairSchedulerTestBase {
     context.getContainerTokenSecretManager().rollMasterKey();
 
     scheduler.setRMContext(context);
+    conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
+
+    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
+    out.println("<?xml version=\"1.0\"?>");
+    out.println("<allocations>");
+    out.println("<queue name=\"root\">");
+    out.println("<queue name=\"queueA\">");
+    out.println("<nodeLabels>-</nodeLabels>");  // non-label nodes only
+    out.println("<minResources>1024mb,0vcores</minResources>");
+    out.println("</queue>");
+    out.println("<queue name=\"queueB\">");
+    out.println("<minResources>1024mb,0vcores</minResources>");
+    out.println("<nodeLabels>label2</nodeLabels>");
+    out.println("</queue>");
+    out.println("<queue name=\"queueC\">");
+    out.println("<nodeLabels>label3,label4</nodeLabels>");
+    out.println("</queue>");
+    out.println("</queue>");
+    out.println("</allocations>");
+    out.close();
+
+    scheduler.init(conf);
+    scheduler.start();
+    scheduler.reinitialize(conf, resourceManager.getRMContext());
+
+    // Create 3 nodes
+    node1 = MockNodes.newNodeInfo(1, Resources.createResource(4 * 1024, 4),
+        1, "127.0.0.1");
+    NodeAddedSchedulerEvent nodeEvent1 = new NodeAddedSchedulerEvent(node1);
+    scheduler.handle(nodeEvent1);
+    node2 = MockNodes.newNodeInfo(1, Resources.createResource(4 * 1024, 4),
+        1, "127.0.0.2");
+    NodeAddedSchedulerEvent nodeEvent2 = new NodeAddedSchedulerEvent(node2);
+    scheduler.handle(nodeEvent2);
+    node3 = MockNodes.newNodeInfo(1, Resources.createResource(4 * 1024, 4),
+        1, "127.0.0.3");
+    NodeAddedSchedulerEvent nodeEvent3 = new NodeAddedSchedulerEvent(node3);
+    scheduler.handle(nodeEvent3);
+    // add node label
+    Set<NodeLabel> clusterLabel = new HashSet<>();
+    clusterLabel.add(NodeLabel.newInstance("label1"));
+    clusterLabel.add(NodeLabel.newInstance("label2"));
+    clusterLabel.add(NodeLabel.newInstance("label3"));
+    scheduler.getLabelsManager().addToCluserNodeLabels(clusterLabel);
+
+    // node1 -> ""
+    // node2 -> "label2"
+    // node3 -> "label3"
+    Map<NodeId, Set<String>> nodeLabelMap = new HashMap<>();
+    Set<String> nodeLabel1 = new HashSet<>();
+    nodeLabel1.add(RMNodeLabelsManager.NO_LABEL);
+    Set<String> nodeLabel2 = new HashSet<>();
+    nodeLabel2.add("label2");
+    Set<String> nodeLabel3 = new HashSet<>();
+    nodeLabel3.add("label3");
+    nodeLabelMap.put(node1.getNodeID(), nodeLabel1);
+    nodeLabelMap.put(node2.getNodeID(), nodeLabel2);
+    nodeLabelMap.put(node3.getNodeID(), nodeLabel3);
+    scheduler.getLabelsManager().addLabelsToNode(nodeLabelMap);
   }
 
   @After
@@ -93,66 +163,6 @@ public class TestFSNodeLabel extends FairSchedulerTestBase {
 
   @Test
   public void testAssignmentWithNodeLabel() throws Exception {
-    conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
-
-    PrintWriter out = new PrintWriter(new FileWriter(ALLOC_FILE));
-    out.println("<?xml version=\"1.0\"?>");
-    out.println("<allocations>");
-    out.println("<queue name=\"root\">");
-    out.println("<queue name=\"queueA\">");
-    out.println("<minResources>1024mb,0vcores</minResources>");
-    out.println("</queue>");
-    out.println("<queue name=\"queueB\">");
-    out.println("<minResources>1024mb,0vcores</minResources>");
-    out.println("<accessibleNodeLabel>label2</accessibleNodeLabel>");
-    out.println("</queue>");
-    out.println("<queue name=\"queueC\">");
-    out.println("<accessibleNodeLabel>label3,label4</accessibleNodeLabel>");
-    out.println("</queue>");
-    out.println("</queue>");
-    out.println("</allocations>");
-    out.close();
-
-    scheduler.init(conf);
-    scheduler.start();
-    scheduler.reinitialize(conf, resourceManager.getRMContext());
-
-    // Create 3 nodes
-    RMNode node1 =
-        MockNodes.newNodeInfo(1, Resources.createResource(4 * 1024, 4), 1,
-            "127.0.0.1");
-    NodeAddedSchedulerEvent nodeEvent1 = new NodeAddedSchedulerEvent(node1);
-    scheduler.handle(nodeEvent1);
-    RMNode node2 =
-        MockNodes.newNodeInfo(1, Resources.createResource(4 * 1024, 4), 1,
-            "127.0.0.2");
-    NodeAddedSchedulerEvent nodeEvent2 = new NodeAddedSchedulerEvent(node2);
-    scheduler.handle(nodeEvent2);
-    RMNode node3 =
-        MockNodes.newNodeInfo(1, Resources.createResource(4 * 1024, 4), 1,
-            "127.0.0.3");
-    NodeAddedSchedulerEvent nodeEvent3 = new NodeAddedSchedulerEvent(node3);
-    scheduler.handle(nodeEvent3);
-    // add node label
-    Set<NodeLabel> clusterLabel = new HashSet<>();
-    clusterLabel.add(NodeLabel.newInstance("label1"));
-    clusterLabel.add(NodeLabel.newInstance("label2"));
-    clusterLabel.add(NodeLabel.newInstance("label3"));
-    scheduler.getLabelsManager().addToCluserNodeLabels(clusterLabel);
-    Map<NodeId, Set<String>> nodeLabelMap = new HashMap<>();
-    // node1: label1
-    // node2: label2, label3
-    // node3:
-    Set<String> nodeLabel1 = new HashSet<>();
-    nodeLabel1.add(RMNodeLabelsManager.NO_LABEL);
-    Set<String> nodeLabel2 = new HashSet<>();
-    nodeLabel2.add("label2");
-    Set<String> nodeLabel3 = new HashSet<>();
-    nodeLabel3.add("label3");
-    nodeLabelMap.put(node1.getNodeID(), nodeLabel1);
-    nodeLabelMap.put(node2.getNodeID(), nodeLabel2);
-    nodeLabelMap.put(node3.getNodeID(), nodeLabel3);
-    scheduler.getLabelsManager().addLabelsToNode(nodeLabelMap);
 
     //case1 : app submitted into queue without node label could allocated
     // on each node
@@ -167,9 +177,13 @@ public class TestFSNodeLabel extends FairSchedulerTestBase {
     scheduler.handle(nodeUpdate12);
     scheduler.handle(nodeUpdate13);
 
-    // app2 will allocated on node1
-    for (RMContainer container :
-        scheduler.getSchedulerApp(appAttId1).getLiveContainers()) {
+    // app1 will allocated on node1
+    FSAppAttempt fsAppAttempt = scheduler.getSchedulerApp(appAttId1);
+
+    // only assigned one container
+    assertEquals(1, fsAppAttempt.getLiveContainers().size());
+
+    for (RMContainer container : fsAppAttempt.getLiveContainers()) {
       assertTrue("Request with no label did not run on a host with no label",
           container.getAllocatedNode().equals(node1.getNodeID()));
     }
@@ -181,8 +195,7 @@ public class TestFSNodeLabel extends FairSchedulerTestBase {
     scheduler.handle(appRemovedEvent1);
     scheduler.update();
 
-    //case2 : app submitted into queueB could only be allocated on node1
-    // now super app finished
+    //case2 : app submitted into queueB could only be allocated on node2
     ApplicationAttemptId appAttId2 = createSchedulingRequest(1024, 1,
         "root.queueB", "user1", 3, 3, "label2");
     NodeUpdateSchedulerEvent nodeUpdate21 = new NodeUpdateSchedulerEvent(node1);
@@ -209,7 +222,6 @@ public class TestFSNodeLabel extends FairSchedulerTestBase {
     scheduler.update();
 
     //case3 : app submitted into queueC could be allocated on node3
-    // now super app finished
     ApplicationAttemptId appAttId3 = createSchedulingRequest(1024, 1,
         "root.queueC", "user1", 3, 3, "label3");
     NodeUpdateSchedulerEvent nodeUpdate31 = new NodeUpdateSchedulerEvent(node1);
@@ -221,7 +233,7 @@ public class TestFSNodeLabel extends FairSchedulerTestBase {
     scheduler.handle(nodeUpdate32);
     scheduler.handle(nodeUpdate33);
 
-    // app3 will allocated on node2
+    // app3 will allocated on node3
     for (RMContainer container :
         scheduler.getSchedulerApp(appAttId3).getLiveContainers()) {
       assertTrue("Request for label3 did not run on a host with label3",
@@ -232,6 +244,99 @@ public class TestFSNodeLabel extends FairSchedulerTestBase {
         appAttId3, RMAppAttemptState.FINISHED, false);
 
     scheduler.handle(appRemovedEvent3);
+    scheduler.update();
+  }
+
+  @Test
+  public void testAssignmentWithSpecifyLabel() throws Exception {
+
+    // app submitted into queueB could only be allocated on node2
+    ApplicationAttemptId appAttId2 = createSchedulingRequest(1024, 1,
+        "root.queueB", "user1", 3, 3, "label2");
+    NodeUpdateSchedulerEvent nodeUpdate1 = new NodeUpdateSchedulerEvent(node1);
+    NodeUpdateSchedulerEvent nodeUpdate2 = new NodeUpdateSchedulerEvent(node2);
+    NodeUpdateSchedulerEvent nodeUpdate3 = new NodeUpdateSchedulerEvent(node3);
+
+    scheduler.update();
+    scheduler.handle(nodeUpdate1);
+    scheduler.handle(nodeUpdate2);
+    scheduler.handle(nodeUpdate3);
+
+    // app2 will allocated on node2
+    assertEquals("The application did not receive the expected resource allocation",
+        Resource.newInstance(1024, 1),
+        scheduler.getQueueManager().getQueue("root.queueB").getResourceUsage());
+
+    for (RMContainer container :
+        scheduler.getSchedulerApp(appAttId2).getLiveContainers()) {
+      assertEquals("Request for label2 did not run on a host with label2",
+          container.getAllocatedNode(), node2.getNodeID());
+    }
+
+    AppAttemptRemovedSchedulerEvent appRemovedEvent2 =
+        new AppAttemptRemovedSchedulerEvent(
+            appAttId2, RMAppAttemptState.FINISHED, false);
+
+    scheduler.handle(appRemovedEvent2);
+    scheduler.update();
+  }
+
+  @Test
+  public void testAssignmentWithoutSpecifyLabel() throws Exception {
+    //app submitted into queueB could only be allocated on node2
+    ApplicationAttemptId appAttId = createSchedulingRequest(1024, 1,
+        "root.queueB", "user1", 3, 3, null);
+    NodeUpdateSchedulerEvent nodeUpdate1 = new NodeUpdateSchedulerEvent(node1);
+    NodeUpdateSchedulerEvent nodeUpdate2 = new NodeUpdateSchedulerEvent(node2);
+    NodeUpdateSchedulerEvent nodeUpdate3 = new NodeUpdateSchedulerEvent(node3);
+
+    scheduler.update();
+    scheduler.handle(nodeUpdate1);
+
+    // Shouldn't assign to node1
+    FSAppAttempt appAttempt = scheduler.getSchedulerApp(appAttId);
+    assertEquals(0, appAttempt.getLiveContainers().size());
+
+    scheduler.handle(nodeUpdate2);
+    scheduler.handle(nodeUpdate3);
+
+    // app will allocated on node2
+    assertEquals(1, appAttempt.getLiveContainers().size());
+    assertEquals("The application did not receive the expected resource allocation",
+        Resource.newInstance(1024, 1),
+        scheduler.getQueueManager().getQueue("root.queueB").getResourceUsage());
+
+    // send NODE_UPDATE again to schedule one more time
+    scheduler.handle(nodeUpdate2);
+    assertEquals(2, appAttempt.getLiveContainers().size());
+    assertEquals("The application did not receive the expected resource allocation",
+        Resource.newInstance(2048, 2),
+        scheduler.getQueueManager().getQueue("root.queueB").getResourceUsage());
+
+    // send NODE_UPDATE again to schedule one more time
+    scheduler.handle(nodeUpdate1);
+    scheduler.handle(nodeUpdate2);
+    scheduler.handle(nodeUpdate3);
+    assertEquals(3, appAttempt.getLiveContainers().size());
+    assertEquals("The application did not receive the expected resource allocation",
+        Resource.newInstance(3072, 3),
+        scheduler.getQueueManager().getQueue("root.queueB").getResourceUsage());
+
+    // nothing need to schedule
+    scheduler.handle(nodeUpdate1);
+    scheduler.handle(nodeUpdate2);
+    assertEquals(3, appAttempt.getLiveContainers().size());
+
+    for (RMContainer container : appAttempt.getLiveContainers()) {
+      assertEquals("Request for label2 did not run on a host with label2",
+          container.getAllocatedNode(), node2.getNodeID());
+    }
+
+    AppAttemptRemovedSchedulerEvent appRemovedEvent2 =
+        new AppAttemptRemovedSchedulerEvent(
+            appAttId, RMAppAttemptState.FINISHED, false);
+
+    scheduler.handle(appRemovedEvent2);
     scheduler.update();
   }
 }
