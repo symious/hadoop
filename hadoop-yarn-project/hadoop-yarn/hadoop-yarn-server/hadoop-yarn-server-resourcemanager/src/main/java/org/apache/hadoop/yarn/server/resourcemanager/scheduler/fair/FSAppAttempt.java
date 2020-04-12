@@ -1411,8 +1411,12 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
     // and zero-CPU requests.
     if ((labelsOnNode != null) && !labelsOnNode.isEmpty()) {
       for (String label : labelsOnNode) {
+        // We want to support request without specify labels, so should
+        // weaken the label constraints at resource level
+        // TODO: there should be other parts could be modified to weaken this
+        //  constraints, but let's do it first
         Resource pending = getPendingResourceRequest(label,
-                SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY);
+            SchedulingMode.IGNORE_PARTITION_EXCLUSIVITY);
 
         if (!Resources.isNone(pending)) {
           return true;

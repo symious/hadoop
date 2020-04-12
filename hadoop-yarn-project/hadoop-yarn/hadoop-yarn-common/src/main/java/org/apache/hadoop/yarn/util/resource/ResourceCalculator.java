@@ -239,14 +239,4 @@ public abstract class ResourceCalculator {
    */
   public abstract boolean isAnyMajorResourceZero(Resource resource);
 
-  /**
-   * Return whether the resource has any major resource type values that are
-   * non-zero. "Major" is determined by the {@link ResourceCalculator}
-   * instance, e.g. {@link DefaultResourceCalculator} only considers memory
-   * to be major.
-   *
-   * @param resource the resource to test
-   * @return returns whether any resource is non-zero
-   */
-  public abstract boolean isAnyMajorResourceNonZero(Resource resource);
 }

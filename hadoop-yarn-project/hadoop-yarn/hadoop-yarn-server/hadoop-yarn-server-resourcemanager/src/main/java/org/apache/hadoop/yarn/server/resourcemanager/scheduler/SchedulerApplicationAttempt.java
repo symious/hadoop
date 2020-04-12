@@ -1200,9 +1200,10 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
   public Set<String> getBlacklistedNodes() {
     return this.appSchedulingInfo.getBlackListCopy();
   }
-  
+
   @Private
-  public Resource getPendingResourceRequest(String nodePartition,
+  public boolean hasPendingResourceRequest(ResourceCalculator rc,
+      String nodePartition, Resource cluster,
       SchedulingMode schedulingMode) {
     // We need to consider unconfirmed allocations
     if (schedulingMode == SchedulingMode.IGNORE_PARTITION_EXCLUSIVITY) {
@@ -1210,6 +1211,41 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
     }
 
     Resource pending = attemptResourceUsage.getPending(nodePartition);
+
+    // TODO, need consider node partition here
+    // To avoid too many allocation-proposals rejected for non-default
+    // partition allocation
+    if (StringUtils.equals(nodePartition, RMNodeLabelsManager.NO_LABEL)) {
+      pending = Resources.subtract(pending, Resources
+          .createResource(unconfirmedAllocatedMem.get(),
+              unconfirmedAllocatedVcores.get()));
+    }
+
+    if (Resources.greaterThan(rc, cluster, pending, Resources.none())) {
+      return true;
+    }
+
+    return false;
+  }
+
+  @Private
+  public Resource getPendingResourceRequest(String nodePartition,
+      SchedulingMode schedulingMode) {
+    /*
+    // We need to consider unconfirmed allocations
+    if (schedulingMode == SchedulingMode.IGNORE_PARTITION_EXCLUSIVITY) {
+      nodePartition = RMNodeLabelsManager.NO_LABEL;
+    }
+     */
+
+    Resource pending = attemptResourceUsage.getPending(nodePartition);
+
+    // TODO: may need re-think it
+    if (Resources.isNone(pending) &&
+        schedulingMode == SchedulingMode.IGNORE_PARTITION_EXCLUSIVITY) {
+      nodePartition = RMNodeLabelsManager.NO_LABEL;
+      pending = attemptResourceUsage.getPending(nodePartition);
+    }
 
     // TODO, need consider node partition here
     // To avoid too many allocation-proposals rejected for non-default
