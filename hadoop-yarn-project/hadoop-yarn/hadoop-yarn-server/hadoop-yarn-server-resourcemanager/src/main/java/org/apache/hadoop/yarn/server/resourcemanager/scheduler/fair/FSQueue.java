@@ -517,17 +517,18 @@ public abstract class FSQueue implements Queue, Schedulable {
       Set<String> labelsOnNode =
           scheduler.getLabelsManager().getLabelsOnNode(nodeId);
 
-      if ((labelsOnNode == null) || labelsOnNode.isEmpty()) {
-        return true;
-      } else {
-        for (String queueLabel : accessibleLabels) {
-          if (labelsOnNode.contains(queueLabel)) {
-            return true;
-          }
-        }
-
-        return false;
+      if ((labelsOnNode == null || labelsOnNode.isEmpty())) {
+        return accessibleLabels == null || accessibleLabels.isEmpty()
+            || (accessibleLabels.size() == 1 && accessibleLabels.contains(""));
       }
+
+      for (String queueLabel : accessibleLabels) {
+        if (labelsOnNode.contains(queueLabel)) {
+          return true;
+        }
+      }
+
+      return false;
     }
 
     return true;
