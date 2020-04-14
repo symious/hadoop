@@ -19,6 +19,9 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer;
 
 import static org.apache.hadoop.fs.CreateFlag.CREATE;
 import static org.apache.hadoop.fs.CreateFlag.OVERWRITE;
+
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.security.sdi.SDICredentialsProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -493,7 +496,11 @@ public class ResourceLocalizationService extends CompositeService
     }
     String userRpcPassword = null;
     if (c.getLaunchContext() != null && c.getLaunchContext().getEnvironment() != null) {
-      userRpcPassword = c.getLaunchContext().getEnvironment().get("HADOOP_USER_RPCPASSWORD");
+      userRpcPassword = c.getLaunchContext().getEnvironment().get(SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR);
+    }
+    if ((userRpcPassword == null || userRpcPassword.isEmpty()) &&
+        c.getCredentials().getSecretKey(SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR_TEXT) != null) {
+      userRpcPassword = new String(c.getCredentials().getSecretKey(SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR_TEXT));
     }
     // create a loading cache for the file statuses
     LoadingCache<Path,Future<FileStatus>> statCache =
