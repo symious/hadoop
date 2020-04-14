@@ -1,5 +1,6 @@
 package org.apache.hadoop.security.sdi;
 
+import org.apache.hadoop.io.Text;
 import org.apache.hadoop.security.AccessControlException;
 
 /**
@@ -11,6 +12,8 @@ import org.apache.hadoop.security.AccessControlException;
 public interface SDICredentialsProvider {
 
   String SDI_CREDENTIAL_ENV_VAR = "HADOOP_USER_RPCPASSWORD";
+
+  Text SDI_CREDENTIAL_ENV_VAR_TEXT = new Text(SDI_CREDENTIAL_ENV_VAR);
 
   /**
    * Returns SDICredentials which the caller can use to authorize an SDI request.
