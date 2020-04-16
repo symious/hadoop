@@ -303,18 +303,9 @@ public class TestRPC extends TestRpcBase {
         int numHandlers, int numReaders, int queueSizePerHandler,
         boolean verbose, Configuration conf,
         SecretManager<? extends TokenIdentifier> secretManager,
-        String portRangeConfig, AlignmentContext alignmentContext)
+        String portRangeConfig, AlignmentContext alignmentContext,
+        boolean rpcPasswordAuthenticate)
         throws IOException {
-      return null;
-    }
-
-    @Override
-    public org.apache.hadoop.ipc.RPC.Server getServer(
-            Class<?> protocol, Object instance, String bindAddress, int port,
-            int numHandlers, int numReaders, int queueSizePerHandler,
-            boolean verbose, Configuration conf,
-            SecretManager<? extends TokenIdentifier> secretManager,
-            String portRangeConfig, boolean rpcPasswordAuthenticate) throws IOException {
       return null;
     }
 
