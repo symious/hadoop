@@ -3994,4 +3994,19 @@
     <name>yarn.node-attribute.fs-store.impl.class</name>
     <value>org.apache.hadoop.yarn.server.resourcemanager.nodelabels.FileSystemNodeAttributeStore</value>
   </property>
+
+  <property>
+    <description>Max number of application tags set by user in ApplicationSubmissionContext
+      while submitting application</description>
+    <name>yarn.resourcemanager.application.max-tags</name>
+    <value>10</value>
+  </property>
+
+  <property>
+    <description>Max length of each application tag set by user in ApplicationSubmissionContext
+      while submitting application.</description>
+    <name>yarn.resourcemanager.application.max-tag.length</name>
+    <value>100</value>
+  </property>
+
 </configuration>
