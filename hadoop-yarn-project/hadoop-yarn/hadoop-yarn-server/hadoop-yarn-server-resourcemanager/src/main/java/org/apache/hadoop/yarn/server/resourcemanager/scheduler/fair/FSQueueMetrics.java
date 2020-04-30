@@ -191,6 +191,38 @@ public class FSQueueMetrics extends QueueMetrics {
     return forQueue(ms, queueName, parent, enableUserMetrics, conf);
   }
 
+
+  @Override
+  public void allocateResources(String partition, String user,
+      int containers, Resource res, boolean decrPending) {
+    allocateResourcesUpdate(partition, user, containers, res, decrPending);
+  }
+
+  @Override
+  public void allocateResources(String partition, String user, Resource res) {
+    allocateResourcesUpdate(partition, user, res);
+  }
+
+  @Override
+  public void releaseResources(String partition,
+      String user, int containers, Resource res) {
+    releaseResourcesUpdate(partition, user, containers, res);
+  }
+
+  @Override
+  public void incrPendingResources(String partition, String user,
+      int containers, Resource res) {
+    incrPendingResourcesUpdate(partition, user, containers, res);
+  }
+
+  @Override
+  public void decrPendingResources(String partition, String user,
+      int containers, Resource res) {
+    decrPendingResourcesUpdate(partition, user, containers, res);
+  }
+
+
+
   /**
    * Get the FS queue metric for the given queue. Create one and register it to
    * metrics system if there isn't one for the queue.
