@@ -22,6 +22,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.lang.builder.HashCodeBuilder;
@@ -63,7 +64,8 @@ public class ConnectionPoolId implements Comparable<ConnectionPoolId> {
   public int hashCode() {
     int hash = new HashCodeBuilder(17, 31)
         .append(this.nnId)
-        .append(this.ugi.hashCode())
+        .append(this.ugi.toString())
+        .append(this.ugi.getSdiUserRpcPassword())
         .append(this.getTokenIds())
         .append(this.protocol)
         .toHashCode();
@@ -77,7 +79,10 @@ public class ConnectionPoolId implements Comparable<ConnectionPoolId> {
       if (!this.nnId.equals(other.nnId)) {
         return false;
       }
-      if (!this.ugi.equals(other.ugi)) {
+      if (!this.ugi.toString().equals(other.ugi.toString())) {
+        return false;
+      }
+      if (!Objects.equals(this.ugi.getSdiUserRpcPassword(), other.ugi.getSdiUserRpcPassword())) {
         return false;
       }
       String thisTokens = this.getTokenIds().toString();
