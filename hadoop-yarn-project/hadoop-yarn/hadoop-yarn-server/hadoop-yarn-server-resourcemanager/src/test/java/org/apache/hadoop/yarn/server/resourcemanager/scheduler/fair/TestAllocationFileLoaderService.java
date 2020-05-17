@@ -41,7 +41,6 @@ import java.util.Set;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.UnsupportedFileSystemException;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.yarn.api.records.QueueACL;
@@ -74,7 +73,9 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class TestAllocationFileLoaderService {
-  
+
+  final static String TEST_FAIRSCHED_XML = "test-fair-scheduler.xml";
+
   final static String TEST_DIR = new File(System.getProperty("test.build.data",
       "/tmp"), "alloctest").getAbsolutePath();
 
@@ -82,6 +83,7 @@ public class TestAllocationFileLoaderService {
       "test-queues").getAbsolutePath();
   
   private static final Set<String> ANY = Collections.singleton("*");
+  private static final String SEPARATOR = org.apache.hadoop.fs.Path.SEPARATOR;
 
   @BeforeClass
   public static void setup() throws IOException {
@@ -118,22 +120,22 @@ public class TestAllocationFileLoaderService {
       throws IOException, URISyntaxException {
     Configuration conf = new YarnConfiguration();
     File baseDir =
-        new File(TEST_DIR + Path.SEPARATOR + "getAllocHDFS").getAbsoluteFile();
+        new File(TEST_DIR + SEPARATOR + "getAllocHDFS").getAbsoluteFile();
     FileUtil.fullyDelete(baseDir);
     conf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, baseDir.getAbsolutePath());
     MiniDFSCluster.Builder builder = new MiniDFSCluster.Builder(conf);
     MiniDFSCluster hdfsCluster = builder.build();
     String fsAllocPath = "hdfs://localhost:" + hdfsCluster.getNameNodePort()
-        + Path.SEPARATOR + TEST_FAIRSCHED_XML;
+        + SEPARATOR + TEST_FAIRSCHED_XML;
 
     URL fschedURL = Thread.currentThread().getContextClassLoader()
         .getResource(TEST_FAIRSCHED_XML);
     FileSystem fs = FileSystem.get(conf);
-    fs.copyFromLocalFile(new Path(fschedURL.toURI()), new Path(fsAllocPath));
+    fs.copyFromLocalFile(new org.apache.hadoop.fs.Path(fschedURL.toURI()), new org.apache.hadoop.fs.Path(fsAllocPath));
     conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, fsAllocPath);
 
     AllocationFileLoaderService allocLoader = new AllocationFileLoaderService();
-    Path allocationFile = allocLoader.getAllocationFile(conf);
+    org.apache.hadoop.fs.Path allocationFile = allocLoader.getAllocationFile(conf);
     assertEquals(fsAllocPath, allocationFile.toString());
     assertTrue(fs.exists(allocationFile));
 
@@ -159,7 +161,7 @@ public class TestAllocationFileLoaderService {
           TEST_FAIRSCHED_XML);
       AllocationFileLoaderService allocLoader =
           new AllocationFileLoaderService();
-      Path allocationFile = allocLoader.getAllocationFile(conf);
+      org.apache.hadoop.fs.Path allocationFile = allocLoader.getAllocationFile(conf);
       assertEquals(TEST_FAIRSCHED_XML, allocationFile.getName());
       assertTrue(fs.exists(allocationFile));
     } catch (IOException e) {
