@@ -17,12 +17,17 @@
  */
 package org.apache.hadoop.hdfs.server.federation;
 
+import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.EXPIRED;
+import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.OBSERVER;
+import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.UNAVAILABLE;
+
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +46,7 @@ import org.apache.hadoop.hdfs.server.federation.resolver.PathLocation;
 import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
 import org.apache.hadoop.hdfs.server.federation.router.Router;
 import org.apache.hadoop.hdfs.server.federation.store.StateStoreService;
+import org.apache.hadoop.hdfs.server.federation.store.records.MembershipState;
 import org.apache.hadoop.util.Time;
 
 /**
@@ -125,12 +131,23 @@ public class MockResolver
 
   @Override
   public List<? extends FederationNamenodeContext>
-      getNamenodesForNameserviceId(String nameserviceId) {
+      getNamenodesForNameserviceId(String nameserviceId, boolean observerRead) {
     // Return a copy of the list because it is updated periodically
     List<? extends FederationNamenodeContext> namenodes =
         this.resolver.get(nameserviceId);
     if (namenodes == null) {
       namenodes = new ArrayList<>();
+    }
+    if(!observerRead){
+      List<MockNamenodeContext> nnWithoutObserver = new ArrayList<>();
+      Iterator<? extends FederationNamenodeContext> iterator = namenodes.iterator();
+      while (iterator.hasNext()) {
+        FederationNamenodeContext membership = iterator.next();
+        if (membership.getState() != OBSERVER) {
+          nnWithoutObserver.add((MockNamenodeContext) membership);
+        }
+      }
+      namenodes = nnWithoutObserver;
     }
     return Collections.unmodifiableList(new ArrayList<>(namenodes));
   }

@@ -24,6 +24,7 @@ import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
  * NN priority for RPC calls.
  */
 public enum FederationNamenodeServiceState {
+  OBSERVER, // HAServiceState.OBSERVER.
   ACTIVE, // HAServiceState.ACTIVE or operational.
   STANDBY, // HAServiceState.STANDBY.
   UNAVAILABLE, // When the namenode cannot be reached.
@@ -34,10 +35,9 @@ public enum FederationNamenodeServiceState {
     switch(state) {
     case ACTIVE:
       return FederationNamenodeServiceState.ACTIVE;
-    case STANDBY:
-    // TODO: we should probably have a separate state OBSERVER for RBF and
-    // treat it differently.
     case OBSERVER:
+      return FederationNamenodeServiceState.OBSERVER;
+    case STANDBY:
       return FederationNamenodeServiceState.STANDBY;
     case INITIALIZING:
       return FederationNamenodeServiceState.UNAVAILABLE;

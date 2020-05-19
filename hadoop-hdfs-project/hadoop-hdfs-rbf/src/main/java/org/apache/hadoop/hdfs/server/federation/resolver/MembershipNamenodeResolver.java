@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.federation.resolver;
 
 import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.ACTIVE;
 import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.EXPIRED;
+import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.OBSERVER;
 import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.UNAVAILABLE;
 
 import java.io.IOException;
@@ -169,7 +170,7 @@ public class MembershipNamenodeResolver
 
   @Override
   public List<? extends FederationNamenodeContext> getNamenodesForNameserviceId(
-      final String nsId) throws IOException {
+      final String nsId, boolean observerRead) throws IOException {
 
     List<? extends FederationNamenodeContext> ret = cacheNS.get(nsId);
     if (ret != null) {
@@ -183,7 +184,7 @@ public class MembershipNamenodeResolver
       partial.setNameserviceId(nsId);
       GetNamenodeRegistrationsRequest request =
           GetNamenodeRegistrationsRequest.newInstance(partial);
-      result = getRecentRegistrationForQuery(request, true, false);
+      result = getRecentRegistrationForQuery(request, true, false, observerRead);
     } catch (StateStoreUnavailableException e) {
       LOG.error("Cannot get active NN for {}, State Store unavailable", nsId);
       return null;
@@ -229,7 +230,7 @@ public class MembershipNamenodeResolver
             GetNamenodeRegistrationsRequest.newInstance(partial);
 
         final List<MembershipState> result =
-            getRecentRegistrationForQuery(request, true, false);
+            getRecentRegistrationForQuery(request, true, false, false);
         if (result == null || result.isEmpty()) {
           LOG.error("Cannot locate eligible NNs for {}", bpId);
         } else {
@@ -329,13 +330,14 @@ public class MembershipNamenodeResolver
    * @param request The select query for NN registrations.
    * @param addUnavailable include UNAVAILABLE registrations.
    * @param addExpired include EXPIRED registrations.
+   * @param observerRead if true give first priority to OBSERVER
    * @return List of memberships or null if no registrations that
    *         both match the query AND the selected states.
    * @throws IOException
    */
   private List<MembershipState> getRecentRegistrationForQuery(
       GetNamenodeRegistrationsRequest request, boolean addUnavailable,
-      boolean addExpired) throws IOException {
+      boolean addExpired, boolean observerRead) throws IOException {
 
     // Retrieve a list of all registrations that match this query.
     // This may include all NN records for a namespace/blockpool, including
@@ -352,6 +354,8 @@ public class MembershipNamenodeResolver
         if (membership.getState() == EXPIRED && !addExpired) {
           iterator.remove();
         } else if (membership.getState() == UNAVAILABLE && !addUnavailable) {
+          iterator.remove();
+        } else if (membership.getState() == OBSERVER && !observerRead) {
           iterator.remove();
         }
       }

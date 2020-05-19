@@ -439,7 +439,11 @@ public class MiniDFSCluster implements AutoCloseable {
       this.nnTopology = topology;
       return this;
     }
-    
+
+    public Boolean hasNNTopology() {
+      return this.nnTopology != null;
+    }
+
     /**
      * Default: null
      * 

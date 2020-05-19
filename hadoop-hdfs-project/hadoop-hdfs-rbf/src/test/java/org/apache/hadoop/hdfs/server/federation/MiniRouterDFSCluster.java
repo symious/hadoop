@@ -26,6 +26,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RPC_BIND_HOST_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_BIND_HOST_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_STATE_CONTEXT_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMESERVICES;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMESERVICE_ID;
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.NAMENODES;
@@ -68,6 +69,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.UnsupportedFileSystemException;
 import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.hdfs.DFSClient;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
@@ -75,6 +77,7 @@ import org.apache.hadoop.hdfs.MiniDFSCluster.NameNodeInfo;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology.NNConf;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology.NSConf;
+import org.apache.hadoop.hdfs.qjournal.MiniQJMHACluster;
 import org.apache.hadoop.hdfs.server.federation.resolver.ActiveNamenodeResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamespaceInfo;
@@ -84,6 +87,7 @@ import org.apache.hadoop.hdfs.server.federation.router.Router;
 import org.apache.hadoop.hdfs.server.federation.router.RouterClient;
 import org.apache.hadoop.hdfs.server.namenode.FSImage;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
+import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -118,6 +122,7 @@ public class MiniRouterDFSCluster {
 
   /** Mini cluster. */
   private MiniDFSCluster cluster;
+  private MiniQJMHACluster qjmhaCluster;
 
   protected static final long DEFAULT_HEARTBEAT_INTERVAL_MS =
       TimeUnit.SECONDS.toMillis(5);
@@ -675,10 +680,18 @@ public class MiniRouterDFSCluster {
   }
 
   public void startCluster() {
-    startCluster(null);
+    startCluster(null, false);
   }
 
   public void startCluster(Configuration overrideConf) {
+    startCluster(overrideConf, false);
+  }
+
+  public void startCluster(Boolean enableObserver) {
+    startCluster(null, enableObserver);
+  }
+
+  public void startCluster(Configuration overrideConf, Boolean enableObserver) {
     try {
       MiniDFSNNTopology topology = new MiniDFSNNTopology();
       for (String ns : nameservices) {
@@ -719,11 +732,30 @@ public class MiniRouterDFSCluster {
         nnConf.addResource(overrideConf);
       }
 
-      cluster = new MiniDFSCluster.Builder(nnConf)
-          .numDataNodes(numDNs)
-          .nnTopology(topology)
-          .dataNodeConfOverlays(dnConfs)
-          .build();
+      if (enableObserver) {
+        // disable block scanner
+        nnConf.setInt(DFSConfigKeys.DFS_DATANODE_SCAN_PERIOD_HOURS_KEY, -1);
+
+        nnConf.setBoolean(DFS_NAMENODE_STATE_CONTEXT_ENABLED_KEY, true);
+
+        MiniQJMHACluster.Builder qjmBuilder =
+            new MiniQJMHACluster.Builder(nnConf)
+                .setNumNameNodes(this.namenodes.size());
+
+        qjmBuilder.getDfsBuilder()
+            .numDataNodes(numDNs)
+            .nnTopology(topology)
+            .dataNodeConfOverlays(dnConfs);
+
+        qjmhaCluster = qjmBuilder.build();
+        cluster = qjmhaCluster.getDfsCluster();
+      } else {
+        cluster = new MiniDFSCluster.Builder(nnConf)
+            .numDataNodes(numDNs)
+            .nnTopology(topology)
+            .dataNodeConfOverlays(dnConfs)
+            .build();
+      }
       cluster.waitActive();
 
       // Store NN pointers
@@ -922,8 +954,8 @@ public class MiniRouterDFSCluster {
       NameNodeInfo[] nns = cluster.getNameNodeInfos();
       for (int i = 0; i < total; i++) {
         NameNodeInfo nn = nns[i];
-        if (nn.getNameserviceId().equals(nsId) &&
-            nn.getNamenodeId().equals(nnId)) {
+        if (nn.nameNode.getConf().get(DFS_NAMESERVICE_ID).equals(nsId) &&
+            nn.nameNode.getConf().get(DFS_HA_NAMENODE_ID_KEY).equals(nnId)) {
           cluster.transitionToActive(i);
         }
       }
@@ -943,13 +975,48 @@ public class MiniRouterDFSCluster {
       NameNodeInfo[] nns = cluster.getNameNodeInfos();
       for (int i = 0; i < total; i++) {
         NameNodeInfo nn = nns[i];
-        if (nn.getNameserviceId().equals(nsId) &&
-            nn.getNamenodeId().equals(nnId)) {
+        if (nn.nameNode.getConf().get(DFS_NAMESERVICE_ID).equals(nsId) &&
+            nn.nameNode.getConf().get(DFS_HA_NAMENODE_ID_KEY).equals(nnId)) {
           cluster.transitionToStandby(i);
         }
       }
     } catch (Throwable e) {
       LOG.error("Cannot transition to standby", e);
+    }
+  }
+
+  /**
+   * Switch a namenode in a nameservice to be the observer.
+   * @param nsId Nameservice identifier.
+   * @param nnId Namenode identifier.
+   */
+  public void switchToObserver(String nsId, String nnId) {
+    try {
+      int total = cluster.getNumNameNodes();
+      NameNodeInfo[] nns = cluster.getNameNodeInfos();
+      for (int i = 0; i < total; i++) {
+        NameNodeInfo nn = nns[i];
+        if (nn.nameNode.getConf().get(DFS_NAMESERVICE_ID).equals(nsId) &&
+            nn.nameNode.getConf().get(DFS_HA_NAMENODE_ID_KEY).equals(nnId)) {
+          cluster.transitionToObserver(i);
+        }
+      }
+    } catch (Throwable e) {
+      LOG.error("Cannot transition to active", e);
+    }
+  }
+
+  /**
+   * Stop the federated HDFS cluster with Observer enabled.
+   */
+  public void shutdownWithObserver() throws IOException {
+    if (qjmhaCluster != null) {
+      qjmhaCluster.shutdown();
+    }
+    if (routers != null) {
+      for (RouterContext context : routers) {
+        stopRouter(context);
+      }
     }
   }
 

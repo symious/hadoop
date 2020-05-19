@@ -71,14 +71,14 @@ public class TestConnectionManager {
     Map<ConnectionPoolId, ConnectionPool> poolMap = connManager.getPools();
 
     ConnectionPool pool1 = new ConnectionPool(
-        conf, TEST_NN_ADDRESS, TEST_USER1, 0, 10, ClientProtocol.class);
+        conf, TEST_NN_ADDRESS, TEST_USER1, 0, 10, ClientProtocol.class, null);
     addConnectionsToPool(pool1, 9, 4);
     poolMap.put(
         new ConnectionPoolId(TEST_USER1, TEST_NN_ADDRESS, ClientProtocol.class),
         pool1);
 
     ConnectionPool pool2 = new ConnectionPool(
-        conf, TEST_NN_ADDRESS, TEST_USER2, 0, 10, ClientProtocol.class);
+        conf, TEST_NN_ADDRESS, TEST_USER2, 0, 10, ClientProtocol.class, null);
     addConnectionsToPool(pool2, 10, 10);
     poolMap.put(
         new ConnectionPoolId(TEST_USER2, TEST_NN_ADDRESS, ClientProtocol.class),
@@ -101,7 +101,7 @@ public class TestConnectionManager {
 
     // Make sure the number of connections doesn't go below minSize
     ConnectionPool pool3 = new ConnectionPool(
-        conf, TEST_NN_ADDRESS, TEST_USER3, 2, 10, ClientProtocol.class);
+        conf, TEST_NN_ADDRESS, TEST_USER3, 2, 10, ClientProtocol.class, null);
     addConnectionsToPool(pool3, 8, 0);
     poolMap.put(
         new ConnectionPoolId(TEST_USER3, TEST_NN_ADDRESS, ClientProtocol.class),
@@ -128,7 +128,7 @@ public class TestConnectionManager {
     int activeConns = 5;
 
     ConnectionPool pool = new ConnectionPool(
-        conf, TEST_NN_ADDRESS, TEST_USER1, 0, 10, ClientProtocol.class);
+        conf, TEST_NN_ADDRESS, TEST_USER1, 0, 10, ClientProtocol.class, null);
     addConnectionsToPool(pool, totalConns, activeConns);
     poolMap.put(
         new ConnectionPoolId(TEST_USER1, TEST_NN_ADDRESS, ClientProtocol.class),
@@ -153,7 +153,7 @@ public class TestConnectionManager {
   @Test
   public void testValidClientIndex() throws Exception {
     ConnectionPool pool = new ConnectionPool(
-        conf, TEST_NN_ADDRESS, TEST_USER1, 2, 2, ClientProtocol.class);
+        conf, TEST_NN_ADDRESS, TEST_USER1, 2, 2, ClientProtocol.class, null);
     for(int i = -3; i <= 3; i++) {
       pool.getClientIndex().set(i);
       ConnectionContext conn = pool.getConnection();
@@ -169,7 +169,7 @@ public class TestConnectionManager {
     int activeConns = 5;
 
     ConnectionPool pool = new ConnectionPool(
-        conf, TEST_NN_ADDRESS, TEST_USER1, 0, 10, NamenodeProtocol.class);
+        conf, TEST_NN_ADDRESS, TEST_USER1, 0, 10, NamenodeProtocol.class, null);
     addConnectionsToPool(pool, totalConns, activeConns);
     poolMap.put(
         new ConnectionPoolId(

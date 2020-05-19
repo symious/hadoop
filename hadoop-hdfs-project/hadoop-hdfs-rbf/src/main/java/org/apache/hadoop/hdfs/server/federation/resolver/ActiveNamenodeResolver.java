@@ -58,17 +58,19 @@ public interface ActiveNamenodeResolver {
    * for a single nameservice ID.
    * Returns an empty list if none are found. Returns entries in preference of:
    * <ul>
+   * <li>The most recent OBSERVER NN
    * <li>The most recent ACTIVE NN
    * <li>The most recent STANDBY NN
    * <li>The most recent UNAVAILABLE NN
    * </ul>
    *
    * @param nameserviceId Nameservice identifier.
+   * @param observerRead if true give first priority to OBSERVER
    * @return Prioritized list of namenode contexts.
    * @throws IOException If the state store cannot be accessed.
    */
-  List<? extends FederationNamenodeContext>
-      getNamenodesForNameserviceId(String nameserviceId) throws IOException;
+  List<? extends FederationNamenodeContext> getNamenodesForNameserviceId(
+      String nameserviceId, boolean observerRead) throws IOException;
 
   /**
    * Returns a prioritized list of the most recent cached registration entries

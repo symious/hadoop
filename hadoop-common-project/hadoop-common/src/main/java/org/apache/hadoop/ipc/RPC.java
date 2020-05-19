@@ -496,7 +496,31 @@ public class RPC {
     return getProtocolProxy(protocol, clientVersion, addr, ticket, conf,
         factory, getRpcTimeout(conf), null);
   }
-  
+
+  /**
+   * Get a protocol proxy that contains a proxy connection to a remote server
+   * and a set of methods that are supported by the server
+   *
+   * @param protocol protocol class
+   * @param clientVersion client version
+   * @param connId client connection identifier
+   * @param conf configuration
+   * @param factory socket factory
+   * @param alignmentContext TODO
+   * @return the protocol proxy
+   * @throws IOException if the far end through a RemoteException
+   */
+  public static <T> ProtocolProxy<T> getProtocolProxy(Class<T> protocol,
+      long clientVersion, ConnectionId connId, Configuration conf,
+      SocketFactory factory, AlignmentContext alignmentContext
+  ) throws IOException {
+    if (UserGroupInformation.isSecurityEnabled()) {
+      SaslRpcServer.init(conf);
+    }
+    return getProtocolEngine(protocol, conf).getProxy(protocol, clientVersion,
+        connId, conf, factory, alignmentContext);
+  }
+
   /**
    * Construct a client-side proxy that implements the named protocol,
    * talking to a server at the named address.
@@ -641,7 +665,7 @@ public class RPC {
          SaslRpcServer.init(conf);
       }
       return getProtocolEngine(protocol, conf).getProxy(protocol, clientVersion,
-              connId, conf, factory);
+              connId, conf, factory, null);
    }
 
    /**

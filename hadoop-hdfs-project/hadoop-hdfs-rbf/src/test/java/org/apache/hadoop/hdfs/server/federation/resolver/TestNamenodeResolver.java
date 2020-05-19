@@ -128,7 +128,7 @@ public class TestNamenodeResolver {
       int resultsCount, FederationNamenodeServiceState state)
           throws IOException {
     List<? extends FederationNamenodeContext> namenodes =
-        namenodeResolver.getNamenodesForNameserviceId(nsId);
+        namenodeResolver.getNamenodesForNameserviceId(nsId, false);
     if (resultsCount == 0) {
       assertNull(namenodes);
     } else {

@@ -121,9 +121,9 @@ public class TestRouterNamenodeMonitoring {
 
     resolver.loadCache(true);
     List<? extends FederationNamenodeContext> namespaceInfo0 =
-        resolver.getNamenodesForNameserviceId(ns0);
+        resolver.getNamenodesForNameserviceId(ns0, false);
     List<? extends FederationNamenodeContext> namespaceInfo1 =
-        resolver.getNamenodesForNameserviceId(ns1);
+        resolver.getNamenodesForNameserviceId(ns1, false);
 
     // The modified date won't be updated in ns0.nn0 since it isn't
     // monitored by the Router.

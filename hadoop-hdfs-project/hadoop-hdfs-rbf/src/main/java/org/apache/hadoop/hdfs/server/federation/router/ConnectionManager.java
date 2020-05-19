@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.federation.router;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -33,7 +34,10 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.ClientGSIContext;
+import org.apache.hadoop.ipc.AlignmentContext;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Time;
 import org.mortbay.util.ajax.JSON;
@@ -75,6 +79,8 @@ public class ConnectionManager {
 
   /** Queue for creating new connections. */
   private final BlockingQueue<ConnectionPool> creatorQueue;
+
+  private Map<String, AlignmentContext> alignmentContexts;
   /** Max size of queue for creating new connections. */
   private final int creatorQueueMaxSize;
 
@@ -122,6 +128,12 @@ public class ConnectionManager {
     this.connectionCleanupPeriodMs = this.conf.getLong(
         RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_CLEAN_MS,
         RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_CLEAN_MS_DEFAULT);
+    if(conf.getBoolean(
+        RBFConfigKeys.DFS_ROUTER_OBSERVER_READ_ENABLE,
+        RBFConfigKeys.DFS_ROUTER_OBSERVER_READ_ENABLE_DEFAULT)){
+      //Initialize observer context
+     alignmentContexts = new HashMap<>();
+    }
     LOG.info("Cleaning connections every {} seconds",
         TimeUnit.MILLISECONDS.toSeconds(this.connectionCleanupPeriodMs));
   }
@@ -171,11 +183,12 @@ public class ConnectionManager {
    * @param ugi User group information.
    * @param nnAddress Namenode address for the connection.
    * @param protocol Protocol for the connection.
+   * @param nsId TODO
    * @return Proxy client to connect to nnId as UGI.
    * @throws IOException If the connection cannot be obtained.
    */
   public ConnectionContext getConnection(UserGroupInformation ugi,
-      String nnAddress, Class<?> protocol) throws IOException {
+      String nnAddress, Class<?> protocol, String nsId) throws IOException {
 
     // Check if the manager is shutdown
     if (!this.running) {
@@ -202,8 +215,16 @@ public class ConnectionManager {
       try {
         pool = this.pools.get(connectionId);
         if (pool == null) {
+          if (alignmentContexts != null && !alignmentContexts.containsKey(nsId)) {
+            synchronized (alignmentContexts) {
+              if (!alignmentContexts.containsKey(nsId)) {
+                alignmentContexts.put(nsId, new ClientGSIContext());
+              }
+            }
+          }
           pool = new ConnectionPool(
-              this.conf, nnAddress, ugi, this.minSize, this.maxSize, protocol);
+              this.conf, nnAddress, ugi, this.minSize, this.maxSize,
+              protocol, alignmentContexts.get(nsId));
           this.pools.put(connectionId, pool);
         }
       } finally {

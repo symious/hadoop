@@ -46,8 +46,9 @@ public interface RpcEngine {
 
   /** Construct a client-side proxy object using a ConnectionId. */
   <T> ProtocolProxy<T> getProxy(Class<T> protocol, long clientVersion,
-      Client.ConnectionId connId, Configuration conf, SocketFactory factory)
-          throws IOException;
+      Client.ConnectionId connId, Configuration conf, SocketFactory factory,
+      AlignmentContext alignmentContext)
+      throws IOException;
 
   /** Construct a client-side proxy object. */
   <T> ProtocolProxy<T> getProxy(Class<T> protocol,

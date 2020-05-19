@@ -450,7 +450,7 @@ public class RouterWebHdfsMethods extends NamenodeWebHdfsMethods {
     String dest = createLoc.getDest();
     ActiveNamenodeResolver nnResolver = router.getNamenodeResolver();
     List<? extends FederationNamenodeContext> namenodes =
-        nnResolver.getNamenodesForNameserviceId(nsId);
+        nnResolver.getNamenodesForNameserviceId(nsId, false);
 
     // Go over the namenodes responsible for that namespace
     for (FederationNamenodeContext namenode : namenodes) {

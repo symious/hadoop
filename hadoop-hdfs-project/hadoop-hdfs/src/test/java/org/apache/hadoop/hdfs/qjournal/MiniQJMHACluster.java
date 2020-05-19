@@ -116,14 +116,18 @@ public class MiniQJMHACluster {
         journalCluster.waitActive();
         URI journalURI = journalCluster.getQuorumJournalURI(NAMESERVICE);
 
-        // start cluster with specified NameNodes
-        MiniDFSNNTopology topology = createDefaultTopology(builder.numNNs, basePort);
+        if (!builder.dfsBuilder.hasNNTopology()) {
+          // start cluster with specified NameNodes
+          MiniDFSNNTopology topology =
+              createDefaultTopology(builder.numNNs, basePort);
+          builder.dfsBuilder.nnTopology(topology);
+        }
 
         initHAConf(journalURI, builder, builder.numNNs, basePort);
 
         // First start up the NNs just to format the namespace. The MinIDFSCluster
         // has no way to just format the NameNodes without also starting them.
-        cluster = builder.dfsBuilder.nnTopology(topology)
+        cluster = builder.dfsBuilder
             .manageNameDfsSharedDirs(false).build();
         cluster.waitActive();
         cluster.shutdownNameNodes();

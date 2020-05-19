@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.net.SocketFactory;
 
 import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
@@ -45,6 +46,7 @@ import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.io.retry.RetryUtils;
+import org.apache.hadoop.ipc.AlignmentContext;
 import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.ipc.FederationConnectionId;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
@@ -99,10 +101,12 @@ public class ConnectionPool {
   /** The last time a connection was active. */
   private volatile long lastActiveTime = 0;
 
+  private final AlignmentContext alignmentContext;
+
 
   protected ConnectionPool(Configuration config, String address,
       UserGroupInformation user, int minPoolSize, int maxPoolSize,
-      Class<?> proto) throws IOException {
+      Class<?> proto, AlignmentContext alignmentContext) throws IOException {
 
     this.conf = config;
 
@@ -117,6 +121,7 @@ public class ConnectionPool {
     this.minSize = minPoolSize;
     this.maxSize = maxPoolSize;
 
+    this.alignmentContext = alignmentContext;
     // Add minimum connections to the pool
     for (int i=0; i<this.minSize; i++) {
       ConnectionContext newConnection = newConnection();
@@ -318,7 +323,8 @@ public class ConnectionPool {
    */
   public ConnectionContext newConnection() throws IOException {
     return newConnection(
-        this.conf, this.namenodeAddress, this.ugi, this.protocol, getNextIndex());
+        this.conf, this.namenodeAddress, this.ugi, this.protocol,
+        getNextIndex(), alignmentContext);
   }
 
   /**
@@ -331,12 +337,14 @@ public class ConnectionPool {
    * @param nnAddress Address of server supporting the ClientProtocol.
    * @param ugi User context.
    * @param proto Interface of the protocol.
+   * @param alignmentContext TODO
    * @return proto for the target ClientProtocol that contains the user's
    *         security context.
    * @throws IOException If it cannot be created.
    */
   protected static ConnectionContext newConnection(Configuration conf,
-      String nnAddress, UserGroupInformation ugi, Class<?> proto, int index)
+      String nnAddress, UserGroupInformation ugi, Class<?> proto, int index,
+      AlignmentContext alignmentContext)
           throws IOException {
     LOG.debug("Trying to add new Connection in index: " + index + ".");
     ConnectionContext ret;
@@ -344,9 +352,10 @@ public class ConnectionPool {
       if (conf.getBoolean(
           RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE,
               DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE_DEFAULT)) {
-        ret = newClientConnectionMulti(conf, nnAddress, ugi, index);
+        ret = newClientConnectionMulti(conf, nnAddress, ugi, index,
+            alignmentContext);
       } else {
-        ret = newClientConnection(conf, nnAddress, ugi);
+        ret = newClientConnection(conf, nnAddress, ugi, alignmentContext);
       }
     } else if (proto == NamenodeProtocol.class) {
       if (conf.getBoolean(
@@ -382,7 +391,8 @@ public class ConnectionPool {
    * @throws IOException If it cannot be created.
    */
   private static ConnectionContext newClientConnection(
-      Configuration conf, String nnAddress, UserGroupInformation ugi)
+      Configuration conf, String nnAddress, UserGroupInformation ugi,
+      AlignmentContext alignmentContext)
           throws IOException {
     RPC.setProtocolEngine(
         conf, ClientNamenodeProtocolPB.class, ProtobufRpcEngine.class);
@@ -402,8 +412,9 @@ public class ConnectionPool {
     InetSocketAddress socket = NetUtils.createSocketAddr(nnAddress);
     final long version = RPC.getProtocolVersion(ClientNamenodeProtocolPB.class);
     ClientNamenodeProtocolPB proxy = RPC.getProtocolProxy(
-        ClientNamenodeProtocolPB.class, version, socket, ugi, conf,
-        factory, RPC.getRpcTimeout(conf), defaultPolicy, null).getProxy();
+        ClientNamenodeProtocolPB.class, version, socket, ugi, conf, factory,
+        RPC.getRpcTimeout(conf), defaultPolicy, null, alignmentContext)
+        .getProxy();
     ClientProtocol client = new ClientNamenodeProtocolTranslatorPB(proxy);
     Text dtService = SecurityUtil.buildTokenService(socket);
 
@@ -417,7 +428,8 @@ public class ConnectionPool {
    * Version newClientConnection of which allows using multiple connections.
    */
   private static ConnectionContext newClientConnectionMulti(
-      Configuration conf, String nnAddress, UserGroupInformation ugi, int index)
+      Configuration conf, String nnAddress, UserGroupInformation ugi, int index,
+      AlignmentContext alignmentContext)
           throws IOException {
     RPC.setProtocolEngine(
         conf, ClientNamenodeProtocolPB.class, ProtobufRpcEngine.class);
@@ -437,11 +449,11 @@ public class ConnectionPool {
     InetSocketAddress socket = NetUtils.createSocketAddr(nnAddress);
     final long version = RPC.getProtocolVersion(ClientNamenodeProtocolPB.class);
     FederationConnectionId connectionId = new FederationConnectionId(
-            socket, ClientNamenodeProtocolPB.class, ugi, RPC.getRpcTimeout(conf), defaultPolicy,
-            conf, index);
+        socket, ClientNamenodeProtocolPB.class, ugi, RPC.getRpcTimeout(conf),
+        defaultPolicy, conf, index);
     ClientNamenodeProtocolPB proxy = RPC.getProtocolProxy(
         ClientNamenodeProtocolPB.class, version, connectionId, conf,
-        factory).getProxy();
+        factory, alignmentContext).getProxy();
     ClientProtocol client = new ClientNamenodeProtocolTranslatorPB(proxy);
     Text dtService = SecurityUtil.buildTokenService(socket);
 
