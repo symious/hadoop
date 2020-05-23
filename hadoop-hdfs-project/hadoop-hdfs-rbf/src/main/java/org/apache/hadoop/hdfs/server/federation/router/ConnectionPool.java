@@ -190,20 +190,10 @@ public class ConnectionPool {
 
   // Get the nextIndex following round-robin
   protected int getNextIndex() throws IOException {
-    ConnectionContext conn = null;
-    List<ConnectionContext> tmpConnections = this.connections;
-    int size = tmpConnections.size();
-    int threadIndex = this.clientIndex.getAndIncrement() & 0x7FFFFFFF;
-    for (int i=0; i<size; i++) {
-      int index = (threadIndex + i) % size;
-      conn = tmpConnections.get(index);
-      if (conn == null) {
-        return i;
-      }
-    }
-    // If all connections in pool are initialized, then we create a new one.
-    if(size < this.getMaxSize()){
-      return size;
+    int nextIndex = this.connections.size();
+    // Start count on 0
+    if (nextIndex < this.getMaxSize()) {
+      return nextIndex;
     }
     throw new IOException("Can not find available index in connectionPool: " + this.toString());
   }
