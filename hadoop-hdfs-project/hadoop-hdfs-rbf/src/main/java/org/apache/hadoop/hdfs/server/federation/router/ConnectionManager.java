@@ -224,7 +224,7 @@ public class ConnectionManager {
           }
           pool = new ConnectionPool(
               this.conf, nnAddress, ugi, this.minSize, this.maxSize,
-              protocol, alignmentContexts.get(nsId));
+              protocol, alignmentContexts != null ? alignmentContexts.get(nsId) : null);
           this.pools.put(connectionId, pool);
         }
       } finally {
