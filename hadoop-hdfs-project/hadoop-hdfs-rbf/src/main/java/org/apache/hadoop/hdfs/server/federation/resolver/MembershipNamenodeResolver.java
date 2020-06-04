@@ -172,7 +172,8 @@ public class MembershipNamenodeResolver
   public List<? extends FederationNamenodeContext> getNamenodesForNameserviceId(
       final String nsId, boolean observerRead) throws IOException {
 
-    List<? extends FederationNamenodeContext> ret = cacheNS.get(nsId);
+    String cacheKey = nsId + (observerRead ? ".obs" : "");
+    List<? extends FederationNamenodeContext> ret = cacheNS.get(cacheKey);
     if (ret != null) {
       return ret;
     }
@@ -213,7 +214,7 @@ public class MembershipNamenodeResolver
 
     // Cache the response
     ret = Collections.unmodifiableList(result);
-    cacheNS.put(nsId, result);
+    cacheNS.put(cacheKey, result);
     return ret;
   }
 
