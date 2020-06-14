@@ -204,6 +204,7 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
   public SchedulerApplicationAttempt(ApplicationAttemptId applicationAttemptId, 
       String user, Queue queue, AbstractUsersManager abstractUsersManager,
       RMContext rmContext) {
+    LOG.info("*** In the constructor of SchedulerApplicationAttempt");
     Preconditions.checkNotNull(rmContext, "RMContext should not be null");
     this.rmContext = rmContext;
     this.appSchedulingInfo = 
@@ -227,6 +228,7 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
             appSubmissionContext.getLogAggregationContext();
         this.nodeLabelExpression =
             appSubmissionContext.getNodeLabelExpression();
+        LOG.info("*** Contents of appSchedulingInfo: " + appSchedulingInfo);
       }
     }
 

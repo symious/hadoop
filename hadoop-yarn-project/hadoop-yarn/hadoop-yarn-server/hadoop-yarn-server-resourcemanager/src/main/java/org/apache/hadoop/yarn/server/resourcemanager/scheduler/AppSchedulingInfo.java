@@ -254,6 +254,7 @@ public class AppSchedulingInfo {
       // Activate application. Metrics activation is done here.
       if (lastRequestContainers <= 0) {
         schedulerKeys.add(schedulerKey);
+        LOG.info("*** Adding scheduler key: " + schedulerKey);
         abstractUsersManager.activateApplication(user, applicationId);
       }
     }
@@ -369,12 +370,15 @@ public class AppSchedulingInfo {
   public PendingAsk getNextPendingAsk() {
     try {
       readLock.lock();
-      SchedulerRequestKey firstRequestKey = schedulerKeys.first();
-      return getPendingAsk(firstRequestKey, ResourceRequest.ANY);
+      if (!schedulerKeys.isEmpty()) {
+        SchedulerRequestKey firstRequestKey = schedulerKeys.first();
+        return getPendingAsk(firstRequestKey, ResourceRequest.ANY);
+      } else {
+        return null;
+      }
     } finally {
       readLock.unlock();
     }
-
   }
 
   /**
