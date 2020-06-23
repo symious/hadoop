@@ -390,6 +390,11 @@ public class RouterRpcClient {
         }
         if (this.rpcMonitor != null) {
           this.rpcMonitor.proxyOpComplete(true);
+          if (namenode.getState() == FederationNamenodeServiceState.OBSERVER) {
+            this.rpcMonitor.proxyOpObserverCommunicate();
+          } else {
+            this.rpcMonitor.proxyOpActiveCommunicate();
+          }
         }
         return ret;
       } catch (IOException ioe) {
@@ -407,6 +412,11 @@ public class RouterRpcClient {
         } else if (ioe instanceof RemoteException) {
           if (this.rpcMonitor != null) {
             this.rpcMonitor.proxyOpComplete(true);
+            if (namenode.getState() == FederationNamenodeServiceState.OBSERVER){
+              this.rpcMonitor.proxyOpObserverCommunicate();
+            } else {
+              this.rpcMonitor.proxyOpActiveCommunicate();
+            }
           }
           // RemoteException returned by NN
           throw (RemoteException) ioe;

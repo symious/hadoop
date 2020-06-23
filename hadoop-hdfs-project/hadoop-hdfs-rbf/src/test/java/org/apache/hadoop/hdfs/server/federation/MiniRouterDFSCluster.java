@@ -82,6 +82,7 @@ import org.apache.hadoop.hdfs.server.federation.resolver.ActiveNamenodeResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamespaceInfo;
 import org.apache.hadoop.hdfs.server.federation.resolver.FileSubclusterResolver;
+import org.apache.hadoop.hdfs.server.federation.resolver.MembershipNamenodeResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.NamenodeStatusReport;
 import org.apache.hadoop.hdfs.server.federation.router.Router;
 import org.apache.hadoop.hdfs.server.federation.router.RouterClient;
@@ -873,6 +874,22 @@ public class MiniRouterDFSCluster {
         final String nsId = ns.getNameserviceId();
         waitNamenodeRegistered(
             resolver, nsId, FederationNamenodeServiceState.ACTIVE);
+      }
+    }
+  }
+
+  /**
+   * Wait for name spaces to be active.
+   * @throws Exception If we cannot check the status or we timeout.
+   */
+  public void waitObserverNamespaces() throws Exception {
+    for (RouterContext r : this.routers) {
+      Router router = r.router;
+      final ActiveNamenodeResolver resolver = router.getNamenodeResolver();
+      for (FederationNamespaceInfo ns : resolver.getNamespaces()) {
+        final String nsId = ns.getNameserviceId();
+        waitNamenodeRegistered(
+            resolver, nsId, FederationNamenodeServiceState.OBSERVER, true);
       }
     }
   }

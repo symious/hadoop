@@ -149,7 +149,11 @@ public class MockResolver
       }
       namenodes = nnWithoutObserver;
     }
-    return Collections.unmodifiableList(new ArrayList<>(namenodes));
+
+    List<FederationNamenodeContext> priorityList = new ArrayList<>();
+    priorityList.addAll(namenodes);
+    Collections.sort(priorityList, new NamenodePriorityComparator());
+    return priorityList;
   }
 
   @Override

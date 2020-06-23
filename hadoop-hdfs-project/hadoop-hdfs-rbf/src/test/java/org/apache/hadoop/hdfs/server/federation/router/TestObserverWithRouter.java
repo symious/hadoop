@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster;
 import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster.RouterContext;
+import org.apache.hadoop.hdfs.server.federation.metrics.FederationRPCMetrics;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeContext;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState;
 import org.junit.After;
@@ -71,6 +72,7 @@ public class TestObserverWithRouter {
       }
     }
     cluster.waitActiveNamespaces();
+    cluster.waitObserverNamespaces();
   }
 
   @After
@@ -88,28 +90,25 @@ public class TestObserverWithRouter {
         .getRouter().getNamenodeResolver()
         .getNamenodesForNameserviceId(cluster.getNameservices().get(0), true);
     assertEquals("First namenode should be observer",
-        namenodes.get(0).getState(), FederationNamenodeServiceState.OBSERVER);
+        FederationNamenodeServiceState.OBSERVER, namenodes.get(0).getState());
+
+    FederationRPCMetrics rpcMetrics = routerContext.getRouter().getRpcServer()
+        .getRPCMetrics();
 
     FileSystem fileSystem = routerContext.getFileSystem();
     Path path = new Path("/testFile");
     // Send Create call to active
     fileSystem.create(path).close();
-
     // Send read request to observer
     fileSystem.open(path).close();
 
-    /*
-    // TODO: try to use an existing metric
-    long rpcCountForActive = routerContext.getRouter().rpcCountMap()
-        .get(FederationNamenodeServiceState.ACTIVE).get();
+    long rpcCountForActive = rpcMetrics.getProxyOpActiveCommunicate();
     // Create, close, msync call should send to active
-    assertEquals("Three call should send to active", rpcCountForActive, 3);
+    assertEquals("Three calls should send to active", 3, rpcCountForActive);
 
-    long rpcCountForObserver = routerContext.getRouter().rpcCountMap()
-        .get(FederationNamenodeServiceState.OBSERVER).get();
+    long rpcCountForObserver = rpcMetrics.getProxyOpObserverCommunicate();
     // getBlockLocations should send to observer
-    assertEquals("One call should send to observer", rpcCountForObserver, 1);
+    assertEquals("One call should send to observer", 1, rpcCountForObserver);
     fileSystem.close();
-     */
   }
 }
