@@ -247,7 +247,7 @@ function usage
   echo "--logdir=[path]         Path to store logs"
   echo "--mvncache=[path]       Path to the maven cache to use"
   echo "--native                Also build the native components"
-  echo "--deploy                Deploy to DI private nexus repo"
+  echo "--deploy                Deploy Maven artifacts using ~/.m2/settings.xml"
   echo "--version=[version]     Use an alternative version string"
 }
 
@@ -293,6 +293,11 @@ function option_parse
       ;;
     esac
   done
+
+  if [[ "${DEPLOY}" = true && ! -f "${HOME}/.m2/settings.xml" ]]; then
+    hadoop_error "ERROR: No ~/.m2/settings.xml file, cannot deploy Maven artifacts."
+    exit 1
+  fi
 
   DOCKERCMD=$(command -v docker)
   if [[ "${DOCKER}" = true && -z "${DOCKERCMD}" ]]; then
@@ -357,6 +362,11 @@ function dockermode
     extrad+=("-v" "${lines}:${lines}")
   fi
 
+  if [[ "${DEPLOY}" = true ]]; then
+    modp+=("--deploy")
+    extrad+=("-v" "${HOME}/.m2/settings.xml:/home/${user_name}/.m2/settings.xml")
+  fi
+
   if [[ "${DOCKERCACHE}" = true ]]; then
     modp+=("--mvncache=/maven")
   else
@@ -371,12 +381,6 @@ function dockermode
   done
 
   modp+=("--indocker")
-
-  BUILD_CTX=ctx-${RANDOM}
-  echo $BUILD_CTX
-  mkdir ${BUILD_CTX}
-  cp ${HOME}/.m2/settings.xml ${BUILD_CTX}
-  ls ${BUILD_CTX}
 
   (
     lines=$(grep -n 'YETUS CUT HERE' "${DOCKERFILE}" | cut -f1 -d:)
@@ -399,14 +403,10 @@ function dockermode
     echo "ENV HOME /home/${user_name}"
     echo "RUN mkdir -p /maven"
     echo "RUN chown -R ${user_name} /maven"
-    echo "COPY settings.xml /home/${user_name}/.m2/settings.xml"
 
     echo "USER ${user_name}"
     printf "\n\n"
-  ) > ${BUILD_CTX}/Dockerfile
-  docker build -t "${imgname}" ${BUILD_CTX}
-
-  rm -rf ${BUILD_CTX}
+  ) | docker build -t "${imgname}" -
 
   run docker run -i -t \
     --privileged \
@@ -443,15 +443,23 @@ function makearelease
 
   big_console_header "Maven Build and Install"
 
+  local target="install"
+  if [[ "${DEPLOY}" = true ]]; then
+    target="deploy"
+  fi
+
   # Create SRC and BIN tarballs for release,
   # shellcheck disable=SC2046
-  run_and_redirect "${LOGDIR}/mvn_install.log" \
-    "${MVN}" "${MVN_ARGS[@]}" install \
+  run_and_redirect "${LOGDIR}/mvn_${target}.log" \
+    "${MVN}" "${MVN_ARGS[@]}" ${target} \
       -Pdist,src,yarn-ui \
       "${signflags[@]}" \
       -DskipTests -Dmaven.javadoc.skip=true -Dtar $(hadoop_native_flags)
 
   big_console_header "Staging the release"
+
+  # Stage BIN tarball
+  run cd "${BASEDIR}"
 
   run mv \
     "${BASEDIR}/hadoop-dist/target/hadoop-${HADOOP_VERSION}.tar.gz" \
@@ -461,20 +469,6 @@ function makearelease
   run mv \
     "${BASEDIR}/hadoop-dist/target/hadoop-${HADOOP_VERSION}-src.tar.gz" \
     "${ARTIFACTS_DIR}/hadoop-${HADOOP_VERSION}-src.tar.gz"
-
-  # Deploy to DI's private nexus repo
-  if [[ "${DEPLOY}" = false ]]; then
-    echo ""
-    echo "Remember to deploy to DI's private nexus repo"
-    echo ""
-    return
-  fi
-
-  big_console_header "Deploying the release"
-
-  run_and_redirect "${LOGDIR}/mvn_deploy.log" \
-    "${MVN}" "${MVN_ARGS[@]}" deploy \
-    -Pdist -DskipTests -Dmaven.javadoc.skip=true -DskipShade -U
 }
 
 # find root of the source tree
