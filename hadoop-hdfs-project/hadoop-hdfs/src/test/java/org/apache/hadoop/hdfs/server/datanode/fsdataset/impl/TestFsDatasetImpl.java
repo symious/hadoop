@@ -58,6 +58,7 @@ import org.apache.hadoop.hdfs.server.datanode.metrics.DataNodeMetrics;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.io.MultipleIOException;
 import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.util.FakeTimer;
 import org.apache.hadoop.util.StringUtils;
 import org.junit.Assert;
@@ -79,6 +80,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeoutException;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DN_CACHED_DFSUSED_CHECK_INTERVAL_MS;
@@ -194,6 +196,100 @@ public class TestFsDatasetImpl {
   }
 
   @Test
+  public void testReadLockEnabledByDefault()
+      throws IOException, InterruptedException {
+    final FsDatasetSpi ds = dataset;
+    final AtomicBoolean accessed = new AtomicBoolean(false);
+    final CountDownLatch latch = new CountDownLatch(1);
+    final CountDownLatch waiterLatch = new CountDownLatch(1);
+
+    Thread holder = new Thread() {
+      public void run() {
+        try (AutoCloseableLock l = ds.acquireDatasetReadLock()) {
+          latch.countDown();
+          sleep(10000);
+        } catch (Exception e) {
+        }
+      }
+    };
+
+    Thread waiter = new Thread() {
+      public void run() {
+        try (AutoCloseableLock l = ds.acquireDatasetReadLock()) {
+          waiterLatch.countDown();
+          accessed.getAndSet(true);
+        } catch (Exception e) {
+        }
+      }
+    };
+
+    holder.start();
+    latch.await();
+    waiter.start();
+    waiterLatch.await();
+    // The holder thread is still holding the lock, but the waiter can still
+    // run as the lock is a shared read lock.
+    assertEquals(true, accessed.get());
+    holder.interrupt();
+    holder.join();
+    waiter.join();
+  }
+
+  @Test(timeout=10000)
+  public void testReadLockCanBeDisabledByConfig()
+      throws IOException, InterruptedException {
+    HdfsConfiguration conf = new HdfsConfiguration();
+    conf.setBoolean(
+        DFSConfigKeys.DFS_DATANODE_LOCK_READ_WRITE_ENABLED_KEY, false);
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
+        .numDataNodes(1).build();
+    try {
+      cluster.waitActive();
+      DataNode dn = cluster.getDataNodes().get(0);
+      final FsDatasetSpi<?> ds = DataNodeTestUtils.getFSDataset(dn);
+      final CountDownLatch latch = new CountDownLatch(1);
+      final CountDownLatch waiterLatch = new CountDownLatch(1);
+      final AtomicBoolean accessed = new AtomicBoolean(false);
+
+      Thread holder = new Thread() {
+        public void run() {
+          try (AutoCloseableLock l = ds.acquireDatasetReadLock()) {
+            latch.countDown();
+            sleep(10000);
+          } catch (Exception e) {
+          }
+        }
+      };
+
+      Thread waiter = new Thread() {
+        public void run() {
+          try (AutoCloseableLock l = ds.acquireDatasetReadLock()) {
+            accessed.getAndSet(true);
+            waiterLatch.countDown();
+          } catch (Exception e) {
+          }
+        }
+      };
+
+      holder.start();
+      latch.await();
+      waiter.start();
+      Thread.sleep(200);
+      // Waiting thread should not have been able to update the variable
+      // as the read lock is disabled and hence an exclusive lock.
+      assertEquals(false, accessed.get());
+      holder.interrupt();
+      holder.join();
+      waiterLatch.await();
+      // After the holder thread exits, the variable is updated.
+      assertEquals(true, accessed.get());
+      waiter.join();
+    } finally {
+      cluster.shutdown();
+    }
+  }
+
+  @Test
   public void testAddVolumes() throws IOException {
     final int numNewVolumes = 3;
     final int numExistingVolumes = getNumVolumes();
@@ -234,8 +330,8 @@ public class TestFsDatasetImpl {
 
   @Test
   public void testAddVolumeWithSameStorageUuid() throws IOException {
-    HdfsConfiguration conf = new HdfsConfiguration();
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
+    HdfsConfiguration config = new HdfsConfiguration();
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(config)
         .numDataNodes(1).build();
     try {
       cluster.waitActive();
