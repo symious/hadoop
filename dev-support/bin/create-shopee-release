@@ -236,6 +236,7 @@ function set_defaults
   OSNAME=$(uname -s)
 
   DEPLOY=false
+  NO_TTY=false
 }
 
 function usage
@@ -248,6 +249,7 @@ function usage
   echo "--mvncache=[path]       Path to the maven cache to use"
   echo "--native                Also build the native components"
   echo "--deploy                Deploy Maven artifacts using ~/.m2/settings.xml"
+  echo "--no-tty                Disable the tty for Jenkins to run docker"
   echo "--version=[version]     Use an alternative version string"
 }
 
@@ -287,6 +289,9 @@ function option_parse
       ;;
       --deploy)
         DEPLOY=true
+      ;;
+      --no-tty)
+        NO_TTY=true
       ;;
       --version=*)
         HADOOP_VERSION=${i#*=}
@@ -335,6 +340,7 @@ function dockermode
   declare -a extrad
   declare user_name
   declare group_id
+  declare dockerp
 
   if [[ "${DOCKER}" != true ]]; then
     return
@@ -364,7 +370,12 @@ function dockermode
 
   if [[ "${DEPLOY}" = true ]]; then
     modp+=("--deploy")
-    extrad+=("-v" "${HOME}/.m2/settings.xml:/home/${user_name}/.m2/settings.xml")
+  fi
+
+  if [[ "${NO_TTY}" = true ]]; then
+    dockerp=("-i")
+  else
+    dockerp=("-i -t")
   fi
 
   if [[ "${DOCKERCACHE}" = true ]]; then
@@ -408,10 +419,11 @@ function dockermode
     printf "\n\n"
   ) | docker build -t "${imgname}" -
 
-  run docker run -i -t \
+  run docker run ${dockerp} \
     --privileged \
     "${extrad[@]}"  \
     -v "${BASEDIR}:/build/source" \
+    -v "${HOME}/.m2/settings.xml:/home/${user_name}/.m2/settings.xml" \
     -u "${user_name}" \
     -w "/build/source" \
     "${imgname}" \
@@ -452,23 +464,15 @@ function makearelease
   # shellcheck disable=SC2046
   run_and_redirect "${LOGDIR}/mvn_${target}.log" \
     "${MVN}" "${MVN_ARGS[@]}" ${target} \
-      -Pdist,src,yarn-ui \
-      "${signflags[@]}" \
+      -Pdist,yarn-ui \
       -DskipTests -Dmaven.javadoc.skip=true -Dtar $(hadoop_native_flags)
 
   big_console_header "Staging the release"
 
-  # Stage BIN tarball
-  run cd "${BASEDIR}"
-
+  # Prepare BIN tarball
   run mv \
     "${BASEDIR}/hadoop-dist/target/hadoop-${HADOOP_VERSION}.tar.gz" \
     "${ARTIFACTS_DIR}/hadoop-${HADOOP_VERSION}.tar.gz"
-
-  # Stage SRC tarball
-  run mv \
-    "${BASEDIR}/hadoop-dist/target/hadoop-${HADOOP_VERSION}-src.tar.gz" \
-    "${ARTIFACTS_DIR}/hadoop-${HADOOP_VERSION}-src.tar.gz"
 }
 
 # find root of the source tree
