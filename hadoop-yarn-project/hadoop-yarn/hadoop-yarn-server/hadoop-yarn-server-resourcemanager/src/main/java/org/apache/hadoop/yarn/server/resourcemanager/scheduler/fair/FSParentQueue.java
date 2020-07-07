@@ -32,6 +32,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.QueueUserACLInfo;
@@ -40,6 +41,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.util.resource.Resources;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ActiveUsersManager;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplicationAttempt;
+
+import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSQueueMetrics.FS_PARENT_ASSIGN_SORT;
 
 @Private
 @Unstable
@@ -184,14 +187,18 @@ public class FSParentQueue extends FSQueue {
     if (!assignContainerPreCheck(node)) {
       return assigned;
     }
-
+    long start = Time.monotonicNowNanos();
     // Hold the write lock when sorting childQueues
     writeLock.lock();
     try {
       Collections.sort(childQueues, policy.getComparator());
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("####### childQueues length:" + childQueues.size());
+      }
     } finally {
       writeLock.unlock();
     }
+    this.getMetrics().monitorSchedulerMetrics(FS_PARENT_ASSIGN_SORT, Time.monotonicNowNanos() - start);
 
     /*
      * We are releasing the lock between the sort and iteration of the

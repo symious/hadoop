@@ -33,6 +33,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.QueueUserACLInfo;
@@ -45,6 +46,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerAppUtils
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplicationAttempt;
 import org.apache.hadoop.yarn.util.resource.Resources;
 
+import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSQueueMetrics.FS_APP_ATTEMPT_ASSIGN;
+import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSQueueMetrics.FS_LEAF_ASSIGN;
 import static org.apache.hadoop.yarn.util.resource.Resources.none;
 
 @Private
@@ -330,6 +333,7 @@ public class FSLeafQueue extends FSQueue {
 
   @Override
   public Resource assignContainer(FSSchedulerNode node) {
+    long start = Time.monotonicNowNanos();
     Resource assigned = none();
     if (LOG.isDebugEnabled()) {
       LOG.debug("Node " + node.getNodeName() + " offered to queue: " +
@@ -344,7 +348,9 @@ public class FSLeafQueue extends FSQueue {
       if (SchedulerAppUtils.isPlaceBlacklisted(sched, node, LOG)) {
         continue;
       }
+      long startFSAppAttempt = Time.monotonicNowNanos();
       assigned = sched.assignContainer(node);
+      this.getMetrics().monitorSchedulerMetrics(FS_APP_ATTEMPT_ASSIGN, Time.monotonicNowNanos() - startFSAppAttempt);
       if (!assigned.equals(none())) {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Assigned container in queue:" + getName() + " " +
@@ -353,6 +359,7 @@ public class FSLeafQueue extends FSQueue {
         break;
       }
     }
+    this.getMetrics().monitorSchedulerMetrics(FS_LEAF_ASSIGN, Time.monotonicNowNanos() - start);
     return assigned;
   }
 
