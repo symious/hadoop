@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+
+set -e
+
+BINDIR=$(cd -P -- "$(dirname -- "${BASH_SOURCE-0}")" >/dev/null && pwd -P)
+DOCKERFILE=${BINDIR}/../docker/Dockerfile
+PERSONALITY=${BINDIR}/shopee-personality
+
+BASEDIR="${BINDIR}/../.."
+
+if [[ -z ${PATCH_ID} ]]; then
+  PATCH_ID="rnd.${RANDOM}"
+fi
+echo $PATCH_ID
+REPORT_DIR="${BASEDIR}/patchprocess/patch.${PATCH_ID}"
+
+if [[ ! -d ${REPORT_DIR} ]]; then
+  if mkdir -p "${REPORT_DIR}"; then
+    echo "${REPORT_DIR} has been created"
+  else
+    echo "Unable to create ${REPORT_DIR}"
+    exit 1
+  fi
+fi
+
+YETUS_ARGS+=("--personality=${PERSONALITY}")
+YETUS_ARGS+=("--project=hadoop")
+
+# lots of different output formats
+YETUS_ARGS+=("--brief-report-file=${REPORT_DIR}/brief.txt")
+YETUS_ARGS+=("--console-report-file=${REPORT_DIR}/console.txt")
+YETUS_ARGS+=("--html-report-file=${REPORT_DIR}/report.html")
+
+# auto-kill any surefire stragglers during unit test runs
+YETUS_ARGS+=("--reapermode=kill")
+
+# set relatively high limits for SRE machines
+# changing these to higher values may cause problems
+# with other jobs on systemd-enabled machines
+YETUS_ARGS+=("--proclimit=10240")
+YETUS_ARGS+=("--dockermemlimit=64g")
+
+# -1 findbugs issues that show up prior to the patch being applied
+YETUS_ARGS+=("--findbugs-strict-precheck")
+
+YETUS_ARGS+=("--git-offline")
+#YETUS_ARGS+=("--gitlab-url=git.garena.com")
+#YETUS_ARGS+=("--gitlab-repo=shopee/data-infra/hadoop")
+
+# rsync these files back into the archive dir
+YETUS_ARGS+=("--archive-list=checkstyle-errors.xml,findbugsXml.xml")
+
+# URL for user-side presentation in reports and such to our artifacts
+# (needs to match the archive bits below)
+YETUS_ARGS+=("--build-url-artifacts=artifact/out")
+
+# plugins to enable
+YETUS_ARGS+=("--plugins=checkstyle,findbugs,maven,shadedclient,dupname,gitlab,jira,junit,briefreport,htmlout")
+
+# don't let these tests cause -1s because we aren't really paying that
+# much attention to them
+YETUS_ARGS+=("--tests-filter=checkstyle")
+
+# run in docker mode and specifically point to our
+# Dockerfile since we don't want to use the auto-pulled version.
+YETUS_ARGS+=("--docker")
+YETUS_ARGS+=("--dockerfile=${DOCKERFILE}")
+
+# effectively treat dev-suport as a custom maven module
+YETUS_ARGS+=("--skip-dirs=dev-support")
+
+# help keep the SRE boxes clean
+YETUS_ARGS+=("--sentinel")
+
+exec "${BINDIR}/yetus-wrapper" qbt "${YETUS_ARGS[@]}" "$@"
