@@ -28,9 +28,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
+import java.io.FileInputStream;
+import java.io.InputStreamReader;
 import java.io.IOException;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -122,8 +124,8 @@ public class ShadowFileRpcPasswordMapping extends Configured
     BufferedReader br = null;
     try {
       cache.clear();
-      File file = new File(shadowFile);
-      FileReader fr = new FileReader(file);
+      FileInputStream file = new FileInputStream(shadowFile);
+      Reader fr = new InputStreamReader(file, StandardCharsets.UTF_8);
       br = new BufferedReader(fr);
       String line;
       while ((line = br.readLine()) != null) {

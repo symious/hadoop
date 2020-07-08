@@ -1465,7 +1465,8 @@ public class UserGroupInformation {
    */
   @InterfaceAudience.Public
   @InterfaceStability.Evolving
-  public static UserGroupInformation createRemoteUser(String user, AuthMethod authMethod, String rpcPassword) {
+  public static UserGroupInformation createRemoteUser(String user,
+      AuthMethod authMethod, String rpcPassword) {
     if (user == null || user.isEmpty()) {
       throw new IllegalArgumentException("Null user");
     }
@@ -1613,7 +1614,8 @@ public class UserGroupInformation {
   public static UserGroupInformation createUserForTesting(String user, 
                                                           String[] userGroups) {
     ensureInitialized();
-    UserGroupInformation ugi = createRemoteUser(user, SdiCredentialsUtil.getSdiUserRpcPassword());
+    UserGroupInformation ugi = createRemoteUser(user,
+        SdiCredentialsUtil.getSdiUserRpcPassword());
     // make sure that the testing object is setup
     if (!(groups instanceof TestingGroups)) {
       groups = new TestingGroups(groups);
@@ -1756,7 +1758,8 @@ public class UserGroupInformation {
       credentials.getSecretKey(SDI_CREDENTIAL_ENV_VAR_TEXT) == null) {
       return null;
     }
-    return new String(credentials.getSecretKey(SDI_CREDENTIAL_ENV_VAR_TEXT));
+    return new String(credentials.getSecretKey(SDI_CREDENTIAL_ENV_VAR_TEXT),
+        StandardCharsets.UTF_8);
   }
   
   /**
