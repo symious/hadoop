@@ -116,7 +116,7 @@ public class ApplicationCLI extends YarnCLI {
           + "Supports optional use of -appTypes to filter applications "
           + "based on application type, -appStates to filter applications "
           + "based on application state and -appTags to filter applications "
-          + "based on application tag.");
+          + "based on application tag. These three params are required");
       opts.addOption(MOVE_TO_QUEUE_CMD, true, "Moves the application to a "
           + "different queue. Deprecated command. Use 'changeQueue' instead.");
       opts.addOption(QUEUE_CMD, true, "Works with the movetoqueue command to"
@@ -243,8 +243,7 @@ public class ApplicationCLI extends YarnCLI {
             for (String state : states) {
               if (!state.trim().isEmpty()) {
                 if (state.trim().equalsIgnoreCase(ALLSTATES_OPTION)) {
-                  allAppStates = true;
-                  break;
+                  continue;
                 }
                 try {
                   appStates.add(YarnApplicationState.valueOf(
@@ -271,6 +270,13 @@ public class ApplicationCLI extends YarnCLI {
             }
           }
         }
+
+        //Required Check
+        if (appTypes.isEmpty() || appTags.isEmpty() || appStates.isEmpty()){
+          printUsage(title, opts);
+          return exitCode;
+        }
+
         listApplications(appTypes, appStates, appTags);
       } else if (args[0].equalsIgnoreCase(APPLICATION_ATTEMPT)) {
         if (args.length != 3) {
@@ -765,7 +771,6 @@ public class ApplicationCLI extends YarnCLI {
   private String getAllValidApplicationStates() {
     StringBuilder sb = new StringBuilder();
     sb.append("The valid application state can be" + " one of the following: ");
-    sb.append(ALLSTATES_OPTION + ",");
     for (YarnApplicationState appState : YarnApplicationState.values()) {
       sb.append(appState + ",");
     }
