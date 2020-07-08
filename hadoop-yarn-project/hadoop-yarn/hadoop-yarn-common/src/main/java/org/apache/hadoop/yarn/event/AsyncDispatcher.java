@@ -32,6 +32,7 @@ import org.apache.hadoop.classification.InterfaceStability.Evolving;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.ShutdownHookManager;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 
@@ -79,6 +80,8 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
    */
   private String dispatcherThreadName = "AsyncDispatcher event handler";
 
+  private DispatcherMetrics metrics;
+
   public AsyncDispatcher() {
     this(new LinkedBlockingQueue<Event>());
   }
@@ -124,7 +127,13 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
             return;
           }
           if (event != null) {
-            dispatch(event);
+            if (metrics != null) {
+              long startTime = Time.monotonicNowNanos();
+              dispatch(event);
+              metrics.incrementEventType(event, (Time.monotonicNowNanos() - startTime) / 1000);
+            } else {
+              dispatch(event);
+            }
           }
         }
       }
@@ -325,5 +334,9 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
 
   protected boolean isStopped() {
     return stopped;
+  }
+
+  public void setMetrics(DispatcherMetrics metrics) {
+    this.metrics =  metrics;
   }
 }
