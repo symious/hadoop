@@ -4,15 +4,16 @@ set -e
 
 BINDIR=$(cd -P -- "$(dirname -- "${BASH_SOURCE-0}")" >/dev/null && pwd -P)
 DOCKERFILE=${BINDIR}/../docker/Dockerfile
-PERSONALITY=${BINDIR}/shopee-personality
+PERSONALITY=${BINDIR}/qbt-personality
 
-BASEDIR="${BINDIR}/../.."
+BASEDIR="${HOME}/patchprocess"
 
 if [[ -z ${PATCH_ID} ]]; then
   PATCH_ID="rnd.${RANDOM}"
 fi
-echo $PATCH_ID
-REPORT_DIR="${BASEDIR}/patchprocess/patch.${PATCH_ID}"
+PATCH_DIR="${BASEDIR}/patch.${PATCH_ID}"
+REPORT_DIR="${BASEDIR}/patch.${PATCH_ID}/reports"
+echo "patch dir: $PATCH_DIR"
 
 if [[ ! -d ${REPORT_DIR} ]]; then
   if mkdir -p "${REPORT_DIR}"; then
@@ -25,6 +26,7 @@ fi
 
 YETUS_ARGS+=("--personality=${PERSONALITY}")
 YETUS_ARGS+=("--project=hadoop")
+YETUS_ARGS+=("--patch-dir=${PATCH_DIR}")
 
 # lots of different output formats
 YETUS_ARGS+=("--brief-report-file=${REPORT_DIR}/brief.txt")
@@ -41,11 +43,9 @@ YETUS_ARGS+=("--proclimit=10240")
 YETUS_ARGS+=("--dockermemlimit=64g")
 
 # -1 findbugs issues that show up prior to the patch being applied
-YETUS_ARGS+=("--findbugs-strict-precheck")
+#YETUS_ARGS+=("--findbugs-strict-precheck")
 
 YETUS_ARGS+=("--git-offline")
-#YETUS_ARGS+=("--gitlab-url=git.garena.com")
-#YETUS_ARGS+=("--gitlab-repo=shopee/data-infra/hadoop")
 
 # rsync these files back into the archive dir
 YETUS_ARGS+=("--archive-list=checkstyle-errors.xml,findbugsXml.xml")
@@ -55,11 +55,11 @@ YETUS_ARGS+=("--archive-list=checkstyle-errors.xml,findbugsXml.xml")
 YETUS_ARGS+=("--build-url-artifacts=artifact/out")
 
 # plugins to enable
-YETUS_ARGS+=("--plugins=checkstyle,findbugs,maven,shadedclient,dupname,gitlab,jira,junit,briefreport,htmlout")
+YETUS_ARGS+=("--plugins=checkstyle,spotbugs,findbugs,maven,shadedclient,dupname,javac,compile,unit,briefreport,htmlout")
 
 # don't let these tests cause -1s because we aren't really paying that
 # much attention to them
-YETUS_ARGS+=("--tests-filter=checkstyle")
+YETUS_ARGS+=("--tests-filter=checkstyle,javac")
 
 # run in docker mode and specifically point to our
 # Dockerfile since we don't want to use the auto-pulled version.

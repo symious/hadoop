@@ -216,6 +216,15 @@ RUN curl -L -s -S \
 ###
 ENV MAVEN_OPTS -Xms256m -Xmx1536m -Dhttps.protocols=TLSv1.2 -Dhttps.cipherSuites=TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
 
+# Setup SDI password store
+RUN mkdir -p /etc/hadoop
+COPY shadow /etc/hadoop/shadow.orig
+COPY shadow.bypass /etc/hadoop/shadow.bypass
+RUN chmod 777 /etc/hadoop
+RUN ln -s /etc/hadoop/shadow.orig /etc/hadoop/shadow \
+    && chmod 666 /etc/hadoop/shadow
+ENV HADOOP_USER_RPCPASSWORD "I AM THE DANGER"
+
 
 ###
 # Everything past this point is either not needed for testing or breaks Yetus.
@@ -244,15 +253,6 @@ ENV FORREST_HOME=/opt/apache-forrest
 RUN curl -L -o hugo.deb https://github.com/gohugoio/hugo/releases/download/v0.30.2/hugo_0.30.2_Linux-64bit.deb \
     && dpkg --install hugo.deb \
     && rm hugo.deb
-
-# Setup SDI password store
-RUN mkdir -p /etc/hadoop
-COPY shadow /etc/hadoop/shadow.orig
-COPY shadow.bypass /etc/hadoop/shadow.bypass
-RUN chmod 777 /etc/hadoop
-RUN ln -s /etc/hadoop/shadow.orig /etc/hadoop/shadow \
-    && chmod 666 /etc/hadoop/shadow
-ENV HADOOP_USER_RPCPASSWORD "I AM THE DANGER"
 
 # install some useful tools
 RUN apt-get -q update \

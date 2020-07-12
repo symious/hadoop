@@ -39,7 +39,9 @@ function personality_globals
   PYLINT_OPTIONS="--indent-string='  '"
 
   #shellcheck disable=SC2034
-  GITLAB_BASE_URL="git.garena.com"
+  GITLAB_BASE_URL="https://git.garena.com"
+  #shellcheck disable=SC2034
+  GITLAB_API_URL="https://git.garena.com/api/v4"
   #shellcheck disable=SC2034
   GITLAB_REPO="shopee/data-infra/hadoop"
 
