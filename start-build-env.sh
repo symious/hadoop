@@ -27,7 +27,7 @@ if [ "$CPU_ARCH" = "aarch64" ]; then
   DOCKER_FILE="${DOCKER_DIR}/Dockerfile_aarch64"
 fi
 
-docker build -t hadoop-build -f $DOCKER_FILE $DOCKER_DIR
+docker build --network=host -t hadoop-build -f $DOCKER_FILE $DOCKER_DIR
 
 USER_NAME=${SUDO_USER:=$USER}
 USER_ID=$(id -u "${USER_NAME}")
@@ -87,7 +87,7 @@ DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
 # within the container and use the result on your normal
 # system.  And this also is a significant speedup in subsequent
 # builds because the dependencies are downloaded only once.
-docker run --rm=true $DOCKER_INTERACTIVE_RUN \
+docker run --network=host --rm=true $DOCKER_INTERACTIVE_RUN \
   -v "${PWD}:${DOCKER_HOME_DIR}/hadoop${V_OPTS:-}" \
   -w "${DOCKER_HOME_DIR}/hadoop" \
   -v "${HOME}/.m2:${DOCKER_HOME_DIR}/.m2${V_OPTS:-}" \
