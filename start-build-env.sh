@@ -19,7 +19,7 @@ set -e               # exit on error
 
 cd "$(dirname "$0")" # connect to root
 
-docker build -t hadoop-build dev-support/docker
+docker build --network=host -t hadoop-build dev-support/docker
 
 USER_NAME=${SUDO_USER:=$USER}
 USER_ID=$(id -u "${USER_NAME}")
@@ -77,7 +77,7 @@ DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
 # within the container and use the result on your normal
 # system.  And this also is a significant speedup in subsequent
 # builds because the dependencies are downloaded only once.
-docker run --rm=true $DOCKER_INTERACTIVE_RUN --detach-keys="ctrl-@" \
+docker run --network=host --rm=true $DOCKER_INTERACTIVE_RUN --detach-keys="ctrl-@" \
   -v "${PWD}:/home/${USER_NAME}/hadoop${V_OPTS:-}" \
   -w "/home/${USER_NAME}/hadoop" \
   -v "${HOME}/.m2:/home/${USER_NAME}/.m2${V_OPTS:-}" \
