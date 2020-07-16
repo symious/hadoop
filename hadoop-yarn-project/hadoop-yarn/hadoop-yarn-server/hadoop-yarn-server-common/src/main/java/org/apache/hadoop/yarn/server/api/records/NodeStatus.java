@@ -132,4 +132,28 @@ public abstract class NodeStatus {
   @Unstable
   public abstract void setOpportunisticContainersStatus(
       OpportunisticContainersStatus opportunisticContainersStatus);
+
+  @Public
+  @Stable
+  public abstract float getLoad1();
+
+  @Private
+  @Unstable
+  public abstract void setLoad1(float load1);
+
+  @Public
+  @Stable
+  public abstract float getLoad5();
+
+  @Private
+  @Unstable
+  public abstract void setLoad5(float load5);
+
+  @Public
+  @Stable
+  public abstract int getDiskPercent();
+
+  @Private
+  @Unstable
+  public abstract void setDiskPercent(int diskPercent);
 }

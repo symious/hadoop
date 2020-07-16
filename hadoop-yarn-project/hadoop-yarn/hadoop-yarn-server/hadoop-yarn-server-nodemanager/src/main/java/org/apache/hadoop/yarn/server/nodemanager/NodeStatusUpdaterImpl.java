@@ -34,6 +34,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+import org.apache.hadoop.util.SysInfo;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.ResourcePlugin;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.ResourcePluginManager;
 import org.slf4j.Logger;
@@ -143,6 +144,8 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
 
   private final NodeHealthCheckerService healthChecker;
   private final NodeManagerMetrics metrics;
+
+  private static int coreNumber = 0;
 
   private Runnable statusUpdaterRunnable;
   private Thread  statusUpdater;
@@ -499,6 +502,36 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
 
     nodeStatus.setOpportunisticContainersStatus(
         getOpportunisticContainersStatus());
+
+    //Add Node Status
+    //Disk
+    nodeStatus.setDiskPercent(this.metrics.getGoodLocalDirsDiskUtilizationPerc());
+    if(this.metrics.getGoodLocalDirsDiskUtilizationPerc() < this.metrics.getGoodLogDirsDiskUtilizationPerc()) {
+      nodeStatus.setDiskPercent(this.metrics.getGoodLogDirsDiskUtilizationPerc());
+    }
+
+    //CPU
+    SysInfo sysInfo = SysInfo.newInstance();
+    if (coreNumber == 0) {
+      coreNumber = sysInfo.getNumProcessors();
+      if (coreNumber == 0) {
+        LOG.error("Can't read core info by SysInfo");
+        // if encounter error will set as 56.
+        coreNumber = 56;
+      }
+    }
+
+    //let load as loadN/CoreNumber
+    Float load1 = sysInfo.getLoad1() / coreNumber;
+    nodeStatus.setLoad1(load1);
+
+    Float load5 = sysInfo.getLoad5() / coreNumber;
+    nodeStatus.setLoad5(load5);
+
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Info of Node, core: " + coreNumber + ", load1: " + load1 +
+          ", load5: " + load5);
+    }
     return nodeStatus;
   }
 

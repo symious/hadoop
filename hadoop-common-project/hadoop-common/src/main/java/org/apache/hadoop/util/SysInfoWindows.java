@@ -206,6 +206,16 @@ public class SysInfoWindows extends SysInfo {
     return ret;
   }
 
+  @Override
+  public float getLoad1() {
+    return 0;
+  }
+
+  @Override
+  public float getLoad5() {
+    return 0;
+  }
+
   /** {@inheritDoc} */
   @Override
   public float getNumVCoresUsed() {

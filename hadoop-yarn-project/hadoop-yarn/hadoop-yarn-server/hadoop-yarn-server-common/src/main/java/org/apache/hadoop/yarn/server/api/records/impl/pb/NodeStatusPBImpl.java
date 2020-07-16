@@ -38,6 +38,7 @@ import org.apache.hadoop.yarn.proto.YarnProtos.ApplicationIdProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ContainerStatusProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ContainerProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.NodeIdProto;
+import org.apache.hadoop.yarn.proto.YarnServerCommonProtos;
 import org.apache.hadoop.yarn.proto.YarnServerCommonProtos.NodeHealthStatusProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonProtos.NodeStatusProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonProtos.NodeStatusProtoOrBuilder;
@@ -423,6 +424,42 @@ public class NodeStatusPBImpl extends NodeStatus {
     }
     this.builder.setOpportunisticContainersStatus(
         convertToProtoFormat(opportunisticContainersStatus));
+  }
+
+  @Override
+  public float getLoad1() {
+    NodeStatusProtoOrBuilder p = this.viaProto ? this.proto : this.builder;
+    return (p.getLoad1());
+  }
+
+  @Override
+  public void setLoad1(float load1) {
+    maybeInitBuilder();
+    this.builder.setLoad1(load1);
+  }
+
+  @Override
+  public float getLoad5() {
+    NodeStatusProtoOrBuilder p = this.viaProto ? this.proto : this.builder;
+    return (p.getLoad5());
+  }
+
+  @Override
+  public void setLoad5(float load5) {
+    maybeInitBuilder();
+    this.builder.setLoad5(load5);
+  }
+
+  @Override
+  public int getDiskPercent() {
+    NodeStatusProtoOrBuilder p = this.viaProto ? this.proto : this.builder;
+    return (p.getDiskPercent());
+  }
+
+  @Override
+  public void setDiskPercent(int diskPercent) {
+    maybeInitBuilder();
+    this.builder.setDiskPercent(diskPercent);
   }
 
   private NodeIdProto convertToProtoFormat(NodeId nodeId) {

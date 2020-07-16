@@ -109,6 +109,20 @@ public abstract class SysInfo {
   public abstract float getCpuUsagePercentage();
 
   /**
+   * Obtain Load1. Return 0 if it is unavailable
+   *
+   * @return Load1 as a float.
+   */
+  public abstract float getLoad1();
+
+  /**
+   * Obtain Load5. Return 0 if it is unavailable
+   *
+   * @return Load5 as a float.
+   */
+  public abstract float getLoad5();
+
+  /**
    * Obtain the number of VCores used. Return -1 if it is unavailable
    *
    * @return Number of VCores used a percentage (from 0 to #VCores).
