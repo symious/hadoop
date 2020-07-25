@@ -154,6 +154,8 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeRequ
 import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigResponse;
 import org.apache.hadoop.yarn.util.Records;
 import org.junit.Assert;
 import org.slf4j.Logger;
@@ -823,6 +825,13 @@ public class MockResourceManagerFacade implements ApplicationClientProtocol,
     validateRunning();
 
     return RefreshServiceAclsResponse.newInstance();
+  }
+
+  @Override
+  public UpdateRMConfigResponse updateRMConfig(UpdateRMConfigRequest request)
+      throws YarnException, IOException {
+    validateRunning();
+    return UpdateRMConfigResponse.newInstance();
   }
 
   @Override

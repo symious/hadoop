@@ -54,6 +54,8 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeRequ
 import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -160,6 +162,12 @@ public class DefaultRMAdminRequestInterceptor
   public RefreshServiceAclsResponse refreshServiceAcls(
       RefreshServiceAclsRequest request) throws YarnException, IOException {
     return rmAdminProxy.refreshServiceAcls(request);
+  }
+
+  @Override
+  public UpdateRMConfigResponse updateRMConfig(UpdateRMConfigRequest request)
+      throws YarnException, IOException {
+    return rmAdminProxy.updateRMConfig(request);
   }
 
   @Override

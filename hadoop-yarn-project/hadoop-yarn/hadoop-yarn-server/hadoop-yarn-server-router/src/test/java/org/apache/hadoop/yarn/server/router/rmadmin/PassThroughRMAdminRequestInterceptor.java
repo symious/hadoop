@@ -48,6 +48,8 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeRequ
 import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigResponse;
 
 /**
  * Mock intercepter that does not do anything other than forwarding it to the
@@ -92,6 +94,12 @@ public class PassThroughRMAdminRequestInterceptor
   public RefreshServiceAclsResponse refreshServiceAcls(
       RefreshServiceAclsRequest request) throws YarnException, IOException {
     return getNextInterceptor().refreshServiceAcls(request);
+  }
+
+  @Override
+  public UpdateRMConfigResponse updateRMConfig(UpdateRMConfigRequest request)
+      throws YarnException, IOException {
+    return getNextInterceptor().updateRMConfig(request);
   }
 
   @Override

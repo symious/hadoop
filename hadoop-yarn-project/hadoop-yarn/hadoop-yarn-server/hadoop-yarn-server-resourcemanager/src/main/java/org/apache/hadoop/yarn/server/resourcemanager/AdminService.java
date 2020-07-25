@@ -88,6 +88,8 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeRequ
 import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigResponse;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.NodeLabelsUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.reservation.ReservationSystem;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.DynamicResourceConfiguration;
@@ -582,6 +584,26 @@ public class AdminService extends CompositeService implements
             "AdminService");
 
     return recordFactory.newRecordInstance(RefreshServiceAclsResponse.class);
+  }
+
+  @Override
+  public UpdateRMConfigResponse updateRMConfig(UpdateRMConfigRequest request)
+      throws YarnException, IOException {
+    final String operation = "updateRMConfig";
+    UserGroupInformation user = checkAcls(operation);
+
+    checkRMStatus(user.getShortUserName(), operation, "update RM config.");
+
+    Configuration newConf = loadNewConfiguration();
+    Configuration rmConf = rm.getRMContext().getYarnConfiguration();
+    //update slow node params
+
+    RMAuditLogger.logSuccess(user.getShortUserName(), operation,
+          "AdminService");
+
+    UpdateRMConfigResponse response =
+        UpdateRMConfigResponse.newInstance();
+    return response;
   }
 
   private void refreshServiceAcls() throws IOException, YarnException {

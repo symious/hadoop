@@ -70,6 +70,11 @@ message GetGroupsForUserResponseProto {
   repeated string groups = 1;
 }
 
+message UpdateRMConfigRequestProto {
+}
+message UpdateRMConfigResponseProto {
+}
+
 message UpdateNodeResourceRequestProto {
   repeated NodeResourceMapProto node_resource_map = 1;
 }

@@ -463,7 +463,7 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       this.readLock.unlock();
     }
   }
-  
+
   public void setHealthReport(String healthReport) {
     this.writeLock.lock();
 
