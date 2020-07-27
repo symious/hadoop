@@ -349,7 +349,7 @@ public class YarnConfiguration extends Configuration {
     "0.0.0.0:" + DEFAULT_RM_RESOURCE_TRACKER_PORT;
 
   public static final String RM_SCHEDULER_SLOWNODE_CHECK_ENABLED =
-      RM_PREFIX + "slownode.check.enable";
+      RM_PREFIX + "slownode.check.enabled";
   public static final boolean RM_SCHEDULER_SLOWNODE_CHECK_ENABLED_DEFAULT = false;
   public static final String RM_SCHEDULER_LOAD1_WATERMARK_HIGH =
       RM_PREFIX + "load1.watermark.high";
