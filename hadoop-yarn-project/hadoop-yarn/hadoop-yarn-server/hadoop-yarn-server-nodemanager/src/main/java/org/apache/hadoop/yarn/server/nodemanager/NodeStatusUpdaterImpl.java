@@ -505,9 +505,9 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
 
     //Add Node Status
     //Disk
-    nodeStatus.setDiskPercent(this.metrics.getGoodLocalDirsDiskUtilizationPerc());
+    nodeStatus.setDiskUsage(this.metrics.getGoodLocalDirsDiskUtilizationPerc());
     if(this.metrics.getGoodLocalDirsDiskUtilizationPerc() < this.metrics.getGoodLogDirsDiskUtilizationPerc()) {
-      nodeStatus.setDiskPercent(this.metrics.getGoodLogDirsDiskUtilizationPerc());
+      nodeStatus.setDiskUsage(this.metrics.getGoodLogDirsDiskUtilizationPerc());
     }
 
     //CPU

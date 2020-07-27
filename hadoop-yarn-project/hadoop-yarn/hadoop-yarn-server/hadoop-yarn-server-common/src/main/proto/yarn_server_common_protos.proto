@@ -42,7 +42,7 @@ message NodeStatusProto {
   optional OpportunisticContainersStatusProto opportunistic_containers_status = 9;
   optional float load1 = 10;
   optional float load5 = 11;
-  optional int32 disk_percent = 12;
+  optional int32 disk_usage = 12;
 }
 
 message OpportunisticContainersStatusProto {

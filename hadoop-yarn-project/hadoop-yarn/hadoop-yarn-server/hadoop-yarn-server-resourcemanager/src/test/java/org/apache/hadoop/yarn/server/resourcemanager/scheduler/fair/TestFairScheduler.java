@@ -95,6 +95,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptS
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeResourceUpdateEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.AbstractYarnScheduler;
 
@@ -3044,6 +3045,61 @@ public class TestFairScheduler extends FairSchedulerTestBase {
         assertEquals(ERR, (i + 1) / 2, app3.getLiveContainers().size());
       }
     }
+  }
+
+  @Test(timeout = 5000)
+  public void testHighLoadAssignContainer() throws Exception {
+    scheduler.init(conf);
+    scheduler.start();
+    scheduler.reinitialize(conf, resourceManager.getRMContext());
+
+    final String user = "user1";
+    final String queue = "q1";
+
+    RMNode node1 =
+        MockNodes
+            .newNodeInfo(1, Resources.createResource(8192, 8), 1, "127.0.0.1");
+    RMNode node2 =
+        MockNodes
+            .newNodeInfo(1, Resources.createResource(8192, 8), 2, "127.0.0.2");
+
+    NodeAddedSchedulerEvent nodeEvent1 = new NodeAddedSchedulerEvent(node1);
+    NodeAddedSchedulerEvent nodeEvent2 = new NodeAddedSchedulerEvent(node2);
+
+    // Set Node as slow node
+    node1.setGoodTarget(false);
+    node2.setGoodTarget(false);
+    resourceManager.getRMContext().getRMNodes().put(node1.getNodeID(),node1);
+    resourceManager.getRMContext().getRMNodes().put(node2.getNodeID(),node2);
+
+    scheduler.handle(nodeEvent1);
+    scheduler.handle(nodeEvent2);
+
+    ApplicationAttemptId attId1 =
+        createSchedulingRequest(1024, queue, user, 2);
+
+    FSAppAttempt app1 = scheduler.getSchedulerApp(attId1);
+
+    scheduler.getQueueManager().getLeafQueue(queue, true);
+    scheduler.update();
+
+    NodeUpdateSchedulerEvent updateEvent1 = new NodeUpdateSchedulerEvent(node1);
+    NodeUpdateSchedulerEvent updateEvent2 = new NodeUpdateSchedulerEvent(node2);
+
+    scheduler.handle(updateEvent1);
+    scheduler.handle(updateEvent2);
+    String ERR =
+        "Wrong number of assigned containers after updates";
+    assertEquals(ERR, 0, app1.getLiveContainers().size());
+
+    // Slow nodes recovered
+    node1.setGoodTarget(true);
+    node2.setGoodTarget(true);
+
+    scheduler.handle(updateEvent1);
+    scheduler.handle(updateEvent2);
+
+    assertEquals(ERR, 2, app1.getLiveContainers().size());
   }
   
   @SuppressWarnings("unchecked")

@@ -348,6 +348,20 @@ public class YarnConfiguration extends Configuration {
   public static final String DEFAULT_RM_RESOURCE_TRACKER_ADDRESS =
     "0.0.0.0:" + DEFAULT_RM_RESOURCE_TRACKER_PORT;
 
+  public static final String RM_SCHEDULER_SLOWNODE_CHECK_ENABLED =
+      RM_PREFIX + "slownode.check.enable";
+  public static final boolean RM_SCHEDULER_SLOWNODE_CHECK_ENABLED_DEFAULT = false;
+  public static final String RM_SCHEDULER_LOAD1_WATERMARK_HIGH =
+      RM_PREFIX + "load1.watermark.high";
+  public static final String RM_SCHEDULER_LOAD5_WATERMARK_HIGH =
+      RM_PREFIX + "load5.watermark.high";
+  public static final String RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH =
+      RM_PREFIX + "disk.usage.watermark.high";
+  public static final int RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT = 100;
+
+  public static final float RM_SCHEDULER_LOAD1_WATERMARK_HIGH_DEFAULT = 1.2f;
+  public static final float RM_SCHEDULER_LOAD5_WATERMARK_HIGH_DEFAULT = 1.2f;
+
   /** The expiry interval for application master reporting.*/
   public static final String RM_AM_EXPIRY_INTERVAL_MS = 
     YARN_PREFIX  + "am.liveness-monitor.expiry-interval-ms";

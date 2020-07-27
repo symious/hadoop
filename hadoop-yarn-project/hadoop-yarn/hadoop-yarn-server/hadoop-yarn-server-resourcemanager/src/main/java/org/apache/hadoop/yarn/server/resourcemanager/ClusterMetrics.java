@@ -30,6 +30,7 @@ import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableGaugeInt;
+import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 import com.google.common.annotations.VisibleForTesting;
 
@@ -48,6 +49,9 @@ public class ClusterMetrics {
   @Metric("# of Shutdown NMs") MutableGaugeInt numShutdownNMs;
   @Metric("AM container launch delay") MutableRate aMLaunchDelay;
   @Metric("AM register delay") MutableRate aMRegisterDelay;
+  @Metric("#Total number of high load1 skipped times") MutableGaugeLong highLoad1Skipped;
+  @Metric("#Total number of high load5 skipped times") MutableGaugeLong highLoad5Skipped;
+  @Metric("#Total number of high disk Usage skipped times") MutableGaugeLong highDiskUsageSkipped;
 
   private static final MetricsInfo RECORD_INFO = info("ClusterMetrics",
   "Metrics for the Yarn Cluster");
@@ -190,4 +194,28 @@ public class ClusterMetrics {
     aMRegisterDelay.add(delay);
   }
 
+  //SLOW nodes
+  public long geHighLoad1Skipped() {
+    return highLoad1Skipped.value();
+  }
+
+  public void incrHighLoad1Skipped() {
+    highLoad1Skipped.incr();
+  }
+
+  public long getHighLoad5Skipped() {
+    return highLoad5Skipped.value();
+  }
+
+  public void incrHighLoad5Skipped() {
+    highLoad5Skipped.incr();
+  }
+
+  public long getHighDiskUsageSkipped() {
+    return highDiskUsageSkipped.value();
+  }
+
+  public void incrHighDiskUsageSkipped() {
+    highDiskUsageSkipped.incr();
+  }
 }

@@ -151,9 +151,9 @@ public abstract class NodeStatus {
 
   @Public
   @Stable
-  public abstract int getDiskPercent();
+  public abstract int getDiskUsage();
 
   @Private
   @Unstable
-  public abstract void setDiskPercent(int diskPercent);
+  public abstract void setDiskUsage(int diskPercent);
 }

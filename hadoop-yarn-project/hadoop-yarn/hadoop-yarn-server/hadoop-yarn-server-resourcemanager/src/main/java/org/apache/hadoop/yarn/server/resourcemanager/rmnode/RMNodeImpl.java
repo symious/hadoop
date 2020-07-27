@@ -31,6 +31,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
@@ -90,6 +91,15 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD1_WATERMARK_HIGH;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD1_WATERMARK_HIGH_DEFAULT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD5_WATERMARK_HIGH;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD5_WATERMARK_HIGH_DEFAULT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_SLOWNODE_CHECK_ENABLED;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_SLOWNODE_CHECK_ENABLED_DEFAULT;
+
 /**
  * This class is used to keep track of all the applications/containers
  * running on a node.
@@ -122,6 +132,9 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
   private volatile Resource originalTotalCapability;
   private volatile Resource totalCapability;
   private final Node node;
+
+  //Record status of Node
+  private boolean isGoodTarget = Boolean.TRUE;
 
   private String healthReport;
   private long lastHealthReportTime;
@@ -462,6 +475,16 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
     } finally {
       this.readLock.unlock();
     }
+  }
+
+  @Override
+  public boolean isGoodTarget() {
+    return isGoodTarget;
+  }
+
+  @Override
+  public void setGoodTarget(boolean isGoodTarget) {
+    this.isGoodTarget = isGoodTarget;
   }
 
   public void setHealthReport(String healthReport) {
@@ -1227,6 +1250,10 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
 
       if(rmNode.nextHeartBeat) {
         rmNode.nextHeartBeat = false;
+
+        //Check Slow Node
+        rmNode.setGoodTarget(rmNode.isGoodNodeManager(rmNode, statusEvent));
+
         rmNode.context.getDispatcher().getEventHandler().handle(
             new NodeUpdateSchedulerEvent(rmNode));
       }
@@ -1240,6 +1267,59 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
 
       return initialState;
     }
+  }
+
+  private boolean isGoodNodeManager(RMNodeImpl rmNode,
+      RMNodeStatusEvent statusEvent) {
+
+    if (rmNode.context.getYarnConfiguration()
+        .getBoolean(RM_SCHEDULER_SLOWNODE_CHECK_ENABLED,
+            RM_SCHEDULER_SLOWNODE_CHECK_ENABLED_DEFAULT)) {
+
+      float load1 = statusEvent.getLoad1();
+      float load5 = statusEvent.getLoad5();
+      int diskUsed = statusEvent.getDiskUsage();
+
+      float load1WatermarkHigh = rmNode.context.getYarnConfiguration()
+          .getFloat(RM_SCHEDULER_LOAD1_WATERMARK_HIGH,
+              RM_SCHEDULER_LOAD1_WATERMARK_HIGH_DEFAULT);
+      float load5WatermarkHigh = rmNode.context.getYarnConfiguration()
+          .getFloat(RM_SCHEDULER_LOAD5_WATERMARK_HIGH,
+              RM_SCHEDULER_LOAD5_WATERMARK_HIGH_DEFAULT);
+      int diskWatermarkHigh = rmNode.context.getYarnConfiguration()
+          .getInt(RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH,
+              RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT);
+
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(
+            "CHECKING:" + " Info of NODE: " + rmNode.getHostName() +
+                ", Load1: " + load1 + ", load5: " + load5 +
+                ", disk:" + diskUsed + ", watermark: load1: " +
+                load1WatermarkHigh +
+                ", load5:" + load5WatermarkHigh + ", disk line:" +
+                diskWatermarkHigh);
+      }
+
+      //record metrics
+      ClusterMetrics metrics = ClusterMetrics.getMetrics();
+
+      if (load1 > load1WatermarkHigh) {
+        metrics.incrHighLoad1Skipped();
+        return false;
+      }
+
+      if (load5 > load5WatermarkHigh) {
+        metrics.incrHighLoad5Skipped();
+        return false;
+      }
+
+      if (diskUsed > diskWatermarkHigh) {
+        metrics.incrHighDiskUsageSkipped();
+        return false;
+      }
+    }
+
+    return true;
   }
 
   public static class StatusUpdateWhenUnHealthyTransition implements

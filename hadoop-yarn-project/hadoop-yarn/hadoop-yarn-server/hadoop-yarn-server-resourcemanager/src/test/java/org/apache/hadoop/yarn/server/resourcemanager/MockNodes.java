@@ -117,6 +117,7 @@ public class MockNodes {
     private ResourceUtilization containersUtilization;
     private ResourceUtilization nodeUtilization;
     private Resource physicalResource;
+    private boolean isGoodTarget = true;
 
     public MockRMNodeImpl(NodeId nodeId, String nodeAddr, String httpAddress,
         Resource perNode, String rackName, String healthReport,
@@ -282,9 +283,20 @@ public class MockNodes {
     }
 
     @Override
+    public boolean isGoodTarget() {
+      return isGoodTarget;
+    }
+
+    @Override
+    public void setGoodTarget(boolean isGoodTarget) {
+      this.isGoodTarget = isGoodTarget;
+    }
+
+    @Override
     public Resource getPhysicalResource() {
       return this.physicalResource;
     }
+
   };
 
   private static RMNode buildRMNode(int rack, final Resource perNode,

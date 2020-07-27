@@ -86,5 +86,15 @@ public class RMNodeStatusEvent extends RMNodeEvent {
         Collections.EMPTY_LIST : this.nodeStatus.getIncreasedContainers();
   }
 
+  public float getLoad1() {
+    return nodeStatus.getLoad1();
+  }
 
+  public float getLoad5() {
+    return nodeStatus.getLoad5();
+  }
+
+  public int getDiskUsage() {
+    return nodeStatus.getDiskUsage();
+  }
 }

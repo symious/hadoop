@@ -451,15 +451,15 @@ public class NodeStatusPBImpl extends NodeStatus {
   }
 
   @Override
-  public int getDiskPercent() {
+  public int getDiskUsage() {
     NodeStatusProtoOrBuilder p = this.viaProto ? this.proto : this.builder;
-    return (p.getDiskPercent());
+    return (p.getDiskUsage());
   }
 
   @Override
-  public void setDiskPercent(int diskPercent) {
+  public void setDiskUsage(int diskUsage) {
     maybeInitBuilder();
-    this.builder.setDiskPercent(diskPercent);
+    this.builder.setDiskUsage(diskUsage);
   }
 
   private NodeIdProto convertToProtoFormat(NodeId nodeId) {

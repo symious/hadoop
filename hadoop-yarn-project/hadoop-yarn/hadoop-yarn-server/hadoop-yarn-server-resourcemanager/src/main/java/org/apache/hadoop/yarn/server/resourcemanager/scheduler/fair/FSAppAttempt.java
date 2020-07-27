@@ -53,6 +53,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerEven
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerFinishedEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerState;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ActiveUsersManager;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.NodeType;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueMetrics;
@@ -849,6 +851,25 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
   private Resource assignContainer(
       FSSchedulerNode node, PendingAsk pendingAsk, NodeType type,
       boolean reserved, SchedulerRequestKey schedulerKey) {
+
+    //If node is not good, will skip allocate
+    RMNode rmNode = this.rmContext.getRMNodes().get(node.getNodeID());
+    if (null != rmNode) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("CHECKING: NODE INFO: " + node.getNodeID().getHost() +
+            ", Is good target?:" + rmNode.isGoodTarget() +
+            ", isAMRunning:" + isAmRunning() + ", unmanager am:" +
+            getUnmanagedAM() + " live containers number:" +
+            liveContainers.size() + ", isWaiting for am:" +
+            isWaitingForAMContainer());
+      }
+      if (!rmNode.isGoodTarget()) {
+        if (reserved) {
+          unreserve(schedulerKey, node);
+        }
+        return Resources.none();
+      }
+    }
 
     // How much does this request need?
     Resource capability = pendingAsk.getPerAllocationResource();

@@ -102,6 +102,15 @@ import org.apache.hadoop.yarn.server.resourcemanager.security.authorize.RMPolicy
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.BlockingService;
 
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD1_WATERMARK_HIGH;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD1_WATERMARK_HIGH_DEFAULT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD5_WATERMARK_HIGH;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD5_WATERMARK_HIGH_DEFAULT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_SLOWNODE_CHECK_ENABLED;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_SLOWNODE_CHECK_ENABLED_DEFAULT;
+
 public class AdminService extends CompositeService implements
     HAServiceProtocol, ResourceManagerAdministrationProtocol {
 
@@ -597,6 +606,21 @@ public class AdminService extends CompositeService implements
     Configuration newConf = loadNewConfiguration();
     Configuration rmConf = rm.getRMContext().getYarnConfiguration();
     //update slow node params
+    rmConf.setBoolean(RM_SCHEDULER_SLOWNODE_CHECK_ENABLED,
+        newConf.getBoolean(RM_SCHEDULER_SLOWNODE_CHECK_ENABLED,
+            RM_SCHEDULER_SLOWNODE_CHECK_ENABLED_DEFAULT));
+
+    rmConf.setFloat(RM_SCHEDULER_LOAD1_WATERMARK_HIGH,
+        newConf.getFloat(RM_SCHEDULER_LOAD1_WATERMARK_HIGH,
+            RM_SCHEDULER_LOAD1_WATERMARK_HIGH_DEFAULT));
+
+    rmConf.setFloat(RM_SCHEDULER_LOAD5_WATERMARK_HIGH,
+        newConf.getFloat(RM_SCHEDULER_LOAD5_WATERMARK_HIGH,
+            RM_SCHEDULER_LOAD5_WATERMARK_HIGH_DEFAULT));
+
+    rmConf.setInt(RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH,
+        newConf.getInt(RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH,
+            RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT));
 
     RMAuditLogger.logSuccess(user.getShortUserName(), operation,
           "AdminService");

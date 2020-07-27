@@ -184,4 +184,7 @@ public interface RMNode {
    */
   Integer getDecommissioningTimeout();
 
+  boolean isGoodTarget();
+
+  void setGoodTarget(boolean isGoodTarget);
 }
