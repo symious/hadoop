@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+function usage
+{
+  echo "Please specify hadoop version"
+  echo "usage: dev-support/bin/update-version HADOOP_VERSION"
+}
+
+## @description  Given a filename or dir, return the absolute version of it
+## @audience     public
+## @stability    stable
+## @param        directory
+## @replaceable  no
+## @return       0 success
+## @return       1 failure
+## @return       stdout abspath
+function hadoop_abs
+{
+  declare obj=$1
+  declare dir
+  declare fn
+
+  if [[ ! -e ${obj} ]]; then
+    return 1
+  elif [[ -d ${obj} ]]; then
+    dir=${obj}
+  else
+    dir=$(dirname -- "${obj}")
+    fn=$(basename -- "${obj}")
+    fn="/${fn}"
+  fi
+
+  dir=$(cd -P -- "${dir}" >/dev/null 2>/dev/null && pwd -P)
+  if [[ $? = 0 ]]; then
+    echo "${dir}${fn}"
+    return 0
+  fi
+  return 1
+}
+
+if [ -z "$1" ]; then
+  usage
+  exit 1
+fi
+HADOOP_VERSION=$1
+
+BIN=$(hadoop_abs "${BASH_SOURCE:-$0}")
+BINDIR=$(dirname "${BIN}")
+BASEDIR=$(hadoop_abs "${BINDIR}/../..")
+
+echo "BASEDIR: ${BASEDIR}"
+cd "${BASEDIR}"
+
+echo "set HADOOP_VERSION to ${HADOOP_VERSION}"
+mvn versions:set -DnewVersion="${HADOOP_VERSION}" -DgenerateBackupPoms=false
+git add .
+echo "git commit changes..."
+git commit -m "SPDI-1234. update version to ${HADOOP_VERSION}"
+echo "done"
