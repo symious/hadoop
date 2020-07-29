@@ -116,7 +116,7 @@ public class ApplicationCLI extends YarnCLI {
           + "Supports optional use of -appTypes to filter applications "
           + "based on application type, -appStates to filter applications "
           + "based on application state and -appTags to filter applications "
-          + "based on application tag. These three params are required");
+          + "based on application tag. appStates and appTags are required");
       opts.addOption(MOVE_TO_QUEUE_CMD, true, "Moves the application to a "
           + "different queue. Deprecated command. Use 'changeQueue' instead.");
       opts.addOption(QUEUE_CMD, true, "Works with the movetoqueue command to"
@@ -272,7 +272,7 @@ public class ApplicationCLI extends YarnCLI {
         }
 
         //Required Check
-        if (appTypes.isEmpty() || appTags.isEmpty() || appStates.isEmpty()){
+        if (appTags.isEmpty() || appStates.isEmpty()){
           printUsage(title, opts);
           return exitCode;
         }
