@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
 
-function usage
-{
-  echo "Please specify hadoop version"
-  echo "usage: dev-support/bin/update-version HADOOP_VERSION"
-}
-
 ## @description  Given a filename or dir, return the absolute version of it
 ## @audience     public
 ## @stability    stable
@@ -38,8 +32,11 @@ function hadoop_abs
   return 1
 }
 
-if [ -z "$1" ]; then
-  usage
+usage="Usage: dev-support/bin/update-version <HADOOP_VERSION>"
+
+# if no args specified, show usage
+if [ $# -le 1 ]; then
+  echo $usage
   exit 1
 fi
 HADOOP_VERSION=$1
