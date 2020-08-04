@@ -394,7 +394,7 @@ function dockermode
   modp+=("--indocker")
 
   (
-    lines=$(grep -n 'YETUS CUT HERE' "${DOCKERFILE}" | cut -f1 -d:)
+    lines=$(grep -n 'RELEASE CUT HERE' "${DOCKERFILE}" | cut -f1 -d:)
     if [[ -z "${lines}" ]]; then
       cat "${DOCKERFILE}"
     else

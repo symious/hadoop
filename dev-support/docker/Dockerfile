@@ -216,6 +216,12 @@ RUN curl -L -s -S \
 ###
 ENV MAVEN_OPTS -Xms256m -Xmx1536m -Dhttps.protocols=TLSv1.2 -Dhttps.cipherSuites=TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
 
+###
+# Everything past this point is not needed for releasing.
+# So tell release script not to read the rest of the file:
+# RELEASE CUT HERE
+###
+
 # Setup SDI password store
 RUN mkdir -p /etc/hadoop
 COPY shadow /etc/hadoop/shadow.orig
