@@ -660,6 +660,15 @@ public class UserGroupInformation {
   }
 
   /**
+   * Set the last login time for logged in user
+   *
+   * @param loginTime the number of milliseconds since the beginning of time
+   */
+  private void setLastLogin(long loginTime) {
+    user.setLastLogin(loginTime);
+  }
+
+  /**
    * Create a UserGroupInformation for the given subject.
    * This does not change the subject or acquire new credentials.
    * @param subject the user's subject
@@ -1112,6 +1121,7 @@ public class UserGroupInformation {
       metrics.loginSuccess.add(Time.now() - start);
       loginUser = new UserGroupInformation(subject);
       loginUser.setLogin(login);
+      loginUser.setLastLogin(start);
       loginUser.setAuthenticationMethod(AuthenticationMethod.KERBEROS);
     } catch (LoginException le) {
       if (start > 0) {
