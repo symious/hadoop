@@ -227,12 +227,13 @@ public class DefaultContainerExecutor extends ContainerExecutor {
    */
   @Private
   @VisibleForTesting
-  protected ContainerLocalizer createContainerLocalizer(String user, String userRpcPassword,
-      String appId, String locId, List<String> localDirs,
+  protected ContainerLocalizer createContainerLocalizer(String user,
+      String userRpcPassword,
+      String appId, String locId, String tokenFileName, List<String> localDirs,
       FileContext localizerFc) throws IOException {
     ContainerLocalizer localizer =
         new ContainerLocalizer(localizerFc, user, userRpcPassword, appId, locId,
-            getPaths(localDirs),
+            tokenFileName, getPaths(localDirs),
             RecordFactoryProvider.getRecordFactory(getConf()));
     return localizer;
   }

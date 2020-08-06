@@ -119,11 +119,12 @@ public class ContainerLocalizer {
   public ContainerLocalizer(FileContext lfs, String user, String appId,
       String localizerId, String tokenFileName,  List<Path> localDirs,
       RecordFactory recordFactory) throws IOException {
-    this(lfs, user, null, appId, localizerId, localDirs, recordFactory);
+    this(lfs, user, null, appId, localizerId, tokenFileName, localDirs, recordFactory);
   }
 
-  public ContainerLocalizer(FileContext lfs, String user, String userRpcPassword, String appId,
-      String localizerId, List<Path> localDirs,
+  public ContainerLocalizer(FileContext lfs, String user,
+      String userRpcPassword, String appId,
+      String localizerId, String tokenFileName, List<Path> localDirs,
       RecordFactory recordFactory) throws IOException {
     if (null == user) {
       throw new IOException("Cannot initialize for null user");
