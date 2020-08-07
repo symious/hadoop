@@ -42,6 +42,7 @@ import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceOption;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.event.InlineDispatcher;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
@@ -117,6 +118,12 @@ public class TestRMNodeTransitions {
         new RMContextImpl(rmDispatcher, mock(ContainerAllocationExpirer.class),
           null, null, mock(DelegationTokenRenewer.class), null, null, null,
           null, null);
+
+    if (rmContext instanceof RMContextImpl) {
+      RMContextImpl rmContextImpl = (RMContextImpl) rmContext;
+      rmContextImpl.setYarnConfiguration(new YarnConfiguration());
+    }
+
     NodesListManager nodesListManager = mock(NodesListManager.class);
     HostsFileReader reader = mock(HostsFileReader.class);
     when(nodesListManager.getHostsReader()).thenReturn(reader);
@@ -648,6 +655,7 @@ public class TestRMNodeTransitions {
 
     ApplicationId runningAppId = BuilderUtils.newApplicationId(0, 1);
     rmContext.getRMApps().put(runningAppId, Mockito.mock(RMApp.class));
+
     // Create a running container
     ContainerId runningContainerId = BuilderUtils.newContainerId(
         BuilderUtils.newApplicationAttemptId(
