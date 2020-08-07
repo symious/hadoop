@@ -172,6 +172,26 @@
   </property>
 
   <property>
+    <name>yarn.resourcemanager.slownode.check.enabled</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>yarn.resourcemanager.load1.watermark.high</name>
+    <value>1.2</value>
+  </property>
+
+  <property>
+    <name>yarn.resourcemanager.load5.watermark.high</name>
+    <value>1.0</value>
+  </property>
+
+  <property>
+    <name>yarn.resourcemanager.disk.usage.watermark.high</name>
+    <value>90</value>
+  </property>
+
+  <property>
     <description>
     The Kerberos keytab file to be used for spnego filter for the RM web
     interface.
