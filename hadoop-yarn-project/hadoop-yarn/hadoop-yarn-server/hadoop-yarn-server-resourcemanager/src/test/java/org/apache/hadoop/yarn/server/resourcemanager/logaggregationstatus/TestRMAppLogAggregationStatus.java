@@ -96,6 +96,7 @@ public class TestRMAppLogAggregationStatus {
 
     rmContext
         .setRMTimelineCollectorManager(mock(RMTimelineCollectorManager.class));
+    ((RMContextImpl) rmContext).setYarnConfiguration(new YarnConfiguration());
 
     scheduler = mock(YarnScheduler.class);
     doAnswer(
