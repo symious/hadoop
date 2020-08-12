@@ -57,7 +57,7 @@ YETUS_ARGS+=("--archive-list=checkstyle-errors.xml,findbugsXml.xml")
 YETUS_ARGS+=("--build-url-artifacts=artifact/out")
 
 # plugins to enable
-YETUS_ARGS+=("--plugins=checkstyle,spotbugs,findbugs,maven,shadedclient,dupname,javac,compile,unit,briefreport,htmlout")
+YETUS_ARGS+=("--plugins=checkstyle,spotbugs,findbugs,maven,shadedclient,dupname,javac,unit,briefreport,htmlout")
 
 # don't let these tests cause -1s because we aren't really paying that
 # much attention to them
