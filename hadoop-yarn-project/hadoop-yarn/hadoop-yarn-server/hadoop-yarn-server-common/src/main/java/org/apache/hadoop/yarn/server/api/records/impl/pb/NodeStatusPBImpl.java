@@ -433,7 +433,7 @@ public class NodeStatusPBImpl extends NodeStatus {
   }
 
   @Override
-  public void setLoad1(float load1) {
+  public synchronized void setLoad1(float load1) {
     maybeInitBuilder();
     this.builder.setLoad1(load1);
   }
@@ -445,7 +445,7 @@ public class NodeStatusPBImpl extends NodeStatus {
   }
 
   @Override
-  public void setLoad5(float load5) {
+  public synchronized void setLoad5(float load5) {
     maybeInitBuilder();
     this.builder.setLoad5(load5);
   }
@@ -457,7 +457,7 @@ public class NodeStatusPBImpl extends NodeStatus {
   }
 
   @Override
-  public void setDiskUsage(int diskUsage) {
+  public synchronized void setDiskUsage(int diskUsage) {
     maybeInitBuilder();
     this.builder.setDiskUsage(diskUsage);
   }
