@@ -214,7 +214,7 @@ public class TestRMFailover extends ClientBaseWithFixes {
     conf.setBoolean(YarnConfiguration.AUTO_FAILOVER_ENABLED, false);
     WebAppProxyServer webAppProxyServer = new WebAppProxyServer();
     try {
-      conf.set(YarnConfiguration.PROXY_ADDRESS, "0.0.0.0:9099");
+      conf.set(YarnConfiguration.PROXY_ADDRESS, "0.0.0.0:9199");
       cluster.init(conf);
       cluster.start();
       getAdminService(0).transitionToActive(req);
@@ -229,7 +229,7 @@ public class TestRMFailover extends ClientBaseWithFixes {
 
       // send httpRequest with fakeApplicationId
       // expect to get "Not Found" response and 404 response code
-      URL wrongUrl = new URL("http://0.0.0.0:9099/proxy/" + fakeAppId);
+      URL wrongUrl = new URL("http://0.0.0.0:9199/proxy/" + fakeAppId);
       HttpURLConnection proxyConn = (HttpURLConnection) wrongUrl
           .openConnection();
 
