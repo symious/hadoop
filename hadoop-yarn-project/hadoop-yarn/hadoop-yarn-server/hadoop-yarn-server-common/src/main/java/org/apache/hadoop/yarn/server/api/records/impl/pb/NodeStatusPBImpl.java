@@ -427,7 +427,7 @@ public class NodeStatusPBImpl extends NodeStatus {
   }
 
   @Override
-  public float getLoad1() {
+  public synchronized float getLoad1() {
     NodeStatusProtoOrBuilder p = this.viaProto ? this.proto : this.builder;
     return (p.getLoad1());
   }
@@ -439,7 +439,7 @@ public class NodeStatusPBImpl extends NodeStatus {
   }
 
   @Override
-  public float getLoad5() {
+  public synchronized float getLoad5() {
     NodeStatusProtoOrBuilder p = this.viaProto ? this.proto : this.builder;
     return (p.getLoad5());
   }
@@ -451,7 +451,7 @@ public class NodeStatusPBImpl extends NodeStatus {
   }
 
   @Override
-  public int getDiskUsage() {
+  public synchronized int getDiskUsage() {
     NodeStatusProtoOrBuilder p = this.viaProto ? this.proto : this.builder;
     return (p.getDiskUsage());
   }
