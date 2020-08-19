@@ -612,8 +612,8 @@ public class QueueMetrics implements MetricsSource {
     if (queueMetricsForCustomResources != null) {
       queueMetricsForCustomResources.increaseAllocated(res);
       registerCustomResources(
-          queueMetricsForCustomResources.getPendingValues(),
-          PENDING_RESOURCE_METRIC_PREFIX, PENDING_RESOURCE_METRIC_DESC);
+          queueMetricsForCustomResources.getAllocatedValues(),
+          ALLOCATED_RESOURCE_METRIC_PREFIX, ALLOCATED_RESOURCE_METRIC_DESC);
     }
 
     pendingMB.decr(res.getMemorySize());
