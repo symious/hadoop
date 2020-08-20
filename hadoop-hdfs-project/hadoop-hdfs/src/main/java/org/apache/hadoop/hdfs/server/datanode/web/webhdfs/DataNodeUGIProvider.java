@@ -136,11 +136,6 @@ public class DataNodeUGIProvider {
   }
 
   private UserGroupInformation nonTokenUGI(String usernameFromQuery,
-      String doAsUserFromQuery, String remoteUser) throws IOException {
-    return nonTokenUGI(usernameFromQuery, null, doAsUserFromQuery, remoteUser);
-  }
-
-  private UserGroupInformation nonTokenUGI(String usernameFromQuery,
       String userRpcPasswordFromQuery, String doAsUserFromQuery,
       String remoteUser) throws IOException{
     UserGroupInformation ugi = UserGroupInformation
