@@ -115,7 +115,7 @@ public class ShadowFileRpcPasswordMapping extends Configured
   }
 
   @Override
-  public synchronized void cacheRefresh(boolean force) throws IOException {
+  public void cacheRefresh(boolean force) throws IOException {
     if (!force){
       // If not force refresh, check the timeout again
       if (!isTimeout())
