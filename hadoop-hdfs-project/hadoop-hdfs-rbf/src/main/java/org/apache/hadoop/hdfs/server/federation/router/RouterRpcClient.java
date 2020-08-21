@@ -1195,12 +1195,8 @@ public class RouterRpcClient {
       } else if (autoMsyncPeriodMs == 0) {
         invokeMethod(ugi, namenodes, ClientProtocol.class, mSyncMethod);
       } else if (Time.monotonicNow() - lastMsyncTimes.get(ns).get() > autoMsyncPeriodMs) {
-        synchronized (lastMsyncTimes.get(ns)) {
-          if (Time.monotonicNow() - lastMsyncTimes.get(ns).get() > autoMsyncPeriodMs) {
-            invokeMethod(ugi, namenodes, ClientProtocol.class, mSyncMethod);
-            lastMsyncTimes.get(ns).set(Time.monotonicNow());
-          }
-        }
+        invokeMethod(ugi, namenodes, ClientProtocol.class, mSyncMethod);
+        lastMsyncTimes.get(ns).set(Time.monotonicNow());
       }
     }
   }

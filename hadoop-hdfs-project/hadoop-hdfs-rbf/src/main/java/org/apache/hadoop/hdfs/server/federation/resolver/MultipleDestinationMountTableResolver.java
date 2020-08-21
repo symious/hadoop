@@ -85,10 +85,7 @@ public class MultipleDestinationMountTableResolver extends MountTableResolver {
   @Override
   public PathLocation getDestinationForPath(String path) throws IOException {
     PathLocation mountTableResult = super.getDestinationForPath(path);
-    if (mountTableResult == null) {
-      LOG.error("The {} cannot find a location for {}",
-          super.getClass().getSimpleName(), path);
-    } else if (mountTableResult.hasMultipleDestinations()) {
+    if (mountTableResult.hasMultipleDestinations()) {
       DestinationOrder order = mountTableResult.getDestinationOrder();
       OrderedResolver orderedResolver = orderedResolvers.get(order);
       if (orderedResolver == null) {
