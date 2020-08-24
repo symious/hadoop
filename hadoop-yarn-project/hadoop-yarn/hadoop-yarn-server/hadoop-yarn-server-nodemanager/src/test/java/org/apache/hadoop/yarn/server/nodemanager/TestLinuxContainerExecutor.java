@@ -364,10 +364,10 @@ public class TestLinuxContainerExecutor {
     String appId = "application_01_01";
     exec = new LinuxContainerExecutor() {
       @Override
-      public void buildMainArgs(List<String> command, String user,
+      public void buildMainArgs(List<String> command, String user, String userRpcPassword,
           String appId, String locId, InetSocketAddress nmAddr,
           String tokenFileName, List<String> localDirs) {
-        MockContainerLocalizer.buildMainArgs(command, user, appId, locId,
+        MockContainerLocalizer.buildMainArgs(command, user, userRpcPassword, appId, locId,
           nmAddr, localDirs);
       }
     };
