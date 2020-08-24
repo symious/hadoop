@@ -416,7 +416,7 @@ public class ContainerLocalizer {
    * @param localDirs list of local dirs
    */
   public static void buildMainArgs(List<String> command,
-      String user, String appId, String locId,
+      String user, String userRpcPassword, String appId, String locId,
       InetSocketAddress nmAddr,
       String tokenFileName,
       List<String> localDirs, Configuration conf) {
@@ -427,6 +427,7 @@ public class ContainerLocalizer {
     addLog4jSystemProperties(logLevel, command);
     command.add(ContainerLocalizer.class.getName());
     command.add(user);
+    command.add(userRpcPassword);
     command.add(appId);
     command.add(locId);
     command.add(nmAddr.getHostName());
@@ -450,7 +451,7 @@ public class ContainerLocalizer {
   public static void main(String[] argv) throws Throwable {
     Thread.setDefaultUncaughtExceptionHandler(new YarnUncaughtExceptionHandler());
     int nRet = 0;
-    // usage: $0 user appId locId host port app_log_dir user_dir [user_dir]*
+    // usage: $0 user userRpcPassword appId locId host port app_log_dir user_dir [user_dir]*
     // let $x = $x/usercache for $local.dir
     // MKDIR $x/$user/appcache/$appid
     // MKDIR $x/$user/appcache/$appid/output
@@ -458,12 +459,13 @@ public class ContainerLocalizer {
     // LOAD $x/$user/appcache/$appid/appTokens
     try {
       String user = argv[0];
-      String appId = argv[1];
-      String locId = argv[2];
+      String userRpcPassword = argv[1];
+      String appId = argv[2];
+      String locId = argv[3];
       InetSocketAddress nmAddr =
-          new InetSocketAddress(argv[3], Integer.parseInt(argv[4]));
-      String tokenFileName = argv[5];
-      String[] sLocaldirs = Arrays.copyOfRange(argv, 6, argv.length);
+          new InetSocketAddress(argv[4], Integer.parseInt(argv[5]));
+      String tokenFileName = argv[6];
+      String[] sLocaldirs = Arrays.copyOfRange(argv, 7, argv.length);
       ArrayList<Path> localDirs = new ArrayList<>(sLocaldirs.length);
       for (String sLocaldir : sLocaldirs) {
         localDirs.add(new Path(sLocaldir));
@@ -477,7 +479,7 @@ public class ContainerLocalizer {
       }
 
       ContainerLocalizer localizer = new ContainerLocalizer(
-          FileContext.getLocalFSFileContext(), user,
+          FileContext.getLocalFSFileContext(), user, userRpcPassword,
               appId, locId, tokenFileName, localDirs,
               RecordFactoryProvider.getRecordFactory(null));
       localizer.runLocalization(nmAddr);

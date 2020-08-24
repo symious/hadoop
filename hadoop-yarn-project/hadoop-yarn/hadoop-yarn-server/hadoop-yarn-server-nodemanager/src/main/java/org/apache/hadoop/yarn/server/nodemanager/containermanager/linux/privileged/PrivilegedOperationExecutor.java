@@ -149,13 +149,13 @@ public class PrivilegedOperationExecutor {
         workingDir, env, 0L, inheritParentEnv);
 
     try {
-      exec.execute();
       if (LOG.isDebugEnabled()) {
         LOG.debug("command array:");
         LOG.debug(Arrays.toString(fullCommandArray));
         LOG.debug("Privileged Execution Operation Output:");
         LOG.debug(exec.getOutput());
       }
+      exec.execute();
     } catch (ExitCodeException e) {
       if (operation.isFailureLoggingEnabled()) {
         StringBuilder logBuilder = new StringBuilder("Shell execution returned "

@@ -342,6 +342,7 @@ public class LinuxContainerExecutor extends ContainerExecutor {
     Path nmPrivateContainerTokensPath = ctx.getNmPrivateContainerTokens();
     InetSocketAddress nmAddr = ctx.getNmAddr();
     String user = ctx.getUser();
+    String userRpcPassword = ctx.getUserRpcPassword();
     String appId = ctx.getAppId();
     String locId = ctx.getLocId();
     LocalDirsHandlerService dirsHandler = ctx.getDirsHandler();
@@ -383,7 +384,7 @@ public class LinuxContainerExecutor extends ContainerExecutor {
 
     List<String> localizerArgs = new ArrayList<>();
 
-    buildMainArgs(localizerArgs, user, appId, locId, nmAddr,
+    buildMainArgs(localizerArgs, user, userRpcPassword, appId, locId, nmAddr,
         nmPrivateContainerTokensPath.getName(), localDirs);
     Path containerLogDir = getContainerLogDir(dirsHandler, appId, locId);
     localizerArgs = replaceWithContainerLogDir(localizerArgs, containerLogDir);
@@ -441,10 +442,10 @@ public class LinuxContainerExecutor extends ContainerExecutor {
    * @see ContainerLocalizer#buildMainArgs
    */
   @VisibleForTesting
-  public void buildMainArgs(List<String> command, String user, String appId,
+  public void buildMainArgs(List<String> command, String user, String userRpcPassword, String appId,
       String locId, InetSocketAddress nmAddr, String tokenFileName,
       List<String> localDirs) {
-    ContainerLocalizer.buildMainArgs(command, user, appId, locId, nmAddr,
+    ContainerLocalizer.buildMainArgs(command, user, userRpcPassword, appId, locId, nmAddr,
         tokenFileName, localDirs, super.getConf());
   }
 
