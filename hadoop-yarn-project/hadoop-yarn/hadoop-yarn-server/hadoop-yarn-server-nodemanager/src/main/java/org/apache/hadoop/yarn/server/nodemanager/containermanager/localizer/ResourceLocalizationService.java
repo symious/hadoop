@@ -19,9 +19,9 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer;
 
 import static org.apache.hadoop.fs.CreateFlag.CREATE;
 import static org.apache.hadoop.fs.CreateFlag.OVERWRITE;
+import static org.apache.hadoop.security.sdi.SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR;
+import static org.apache.hadoop.security.sdi.SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR_TEXT;
 
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.security.sdi.SDICredentialsProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,6 +31,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -495,12 +496,16 @@ public class ResourceLocalizationService extends CompositeService
       return;
     }
     String userRpcPassword = null;
-    if (c.getLaunchContext() != null && c.getLaunchContext().getEnvironment() != null) {
-      userRpcPassword = c.getLaunchContext().getEnvironment().get(SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR);
+    if (c.getLaunchContext() != null &&
+        c.getLaunchContext().getEnvironment() != null) {
+      userRpcPassword =
+          c.getLaunchContext().getEnvironment().get(SDI_CREDENTIAL_ENV_VAR);
     }
     if ((userRpcPassword == null || userRpcPassword.isEmpty()) &&
-        c.getCredentials().getSecretKey(SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR_TEXT) != null) {
-      userRpcPassword = new String(c.getCredentials().getSecretKey(SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR_TEXT));
+        c.getCredentials().getSecretKey(SDI_CREDENTIAL_ENV_VAR_TEXT) != null) {
+      userRpcPassword = new String(
+          c.getCredentials().getSecretKey(SDI_CREDENTIAL_ENV_VAR_TEXT),
+          StandardCharsets.UTF_8);
     }
     // create a loading cache for the file statuses
     LoadingCache<Path,Future<FileStatus>> statCache =

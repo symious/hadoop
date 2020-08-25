@@ -28,6 +28,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -966,7 +967,8 @@ public abstract class TaskAttemptImpl implements
       if (creds != null) {
         byte[] pwd = creds.getSecretKey(new Text(SDI_CREDENTIAL_ENV_VAR));
         if (pwd != null) {
-          environment.put(SDI_CREDENTIAL_ENV_VAR, new String(pwd));
+          environment.put(SDI_CREDENTIAL_ENV_VAR,
+              new String(pwd, StandardCharsets.UTF_8));
         }
       }
     }
