@@ -60,7 +60,7 @@
         <Field name="nativeCoder" />
         <Bug pattern="UUF_UNUSED_FIELD" />
     </Match>
-     <!-- 
+     <!--
        Further SaslException should be ignored during cleanup and
        original exception should be re-thrown.
      --> 
@@ -469,5 +469,11 @@
     <Class name="org.apache.hadoop.ipc.ProtobufHelper" />
     <Method name="getFixedByteString" />
     <Bug pattern="AT_OPERATION_SEQUENCE_ON_CONCURRENT_ABSTRACTION" />
+  </Match>
+
+  <Match>
+    <Class name="org.apache.hadoop.crypto.bcrypt.BCrypt"/>
+    <Method name="streamtowords"/>
+    <Bug pattern="BIT_IOR_OF_SIGNED_BYTE"/>
   </Match>
 </FindBugsFilter>
