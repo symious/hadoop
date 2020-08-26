@@ -421,4 +421,10 @@
     <Filed name="done"/>
     <Bug pattern="JLM_JSR166_UTILCONCURRENT_MONITORENTER"/>
   </Match>
+
+  <Match>
+    <Class name="org.apache.hadoop.crypto.bcrypt.BCrypt"/>
+    <Method name="streamtowords"/>
+    <Bug pattern="BIT_IOR_OF_SIGNED_BYTE"/>
+  </Match>
 </FindBugsFilter>
