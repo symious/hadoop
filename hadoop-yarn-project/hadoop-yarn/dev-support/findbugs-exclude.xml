@@ -641,4 +641,9 @@
     <Bug pattern="EQ_OVERRIDING_EQUALS_NOT_SYMMETRIC" />
   </Match>
 
+  <Match>
+    <Class name="org.apache.hadoop.yarn.server.api.impl.pb.client.ResourceManagerAdministrationProtocolPBClientImpl" />
+    <Method name="updateRMConfig"/>
+    <Bug pattern="BC_UNCONFIRMED_CAST" />
+  </Match>
 </FindBugsFilter>

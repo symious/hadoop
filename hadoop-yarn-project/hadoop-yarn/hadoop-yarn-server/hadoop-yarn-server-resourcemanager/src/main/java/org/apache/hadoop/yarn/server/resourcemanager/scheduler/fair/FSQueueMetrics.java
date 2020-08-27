@@ -401,7 +401,7 @@ public class FSQueueMetrics extends QueueMetrics {
     }
   }
 
-  class SchedulerMetric {
+  static class SchedulerMetric {
 
     private static final long DEFAULT_VALUE = 0;
 
