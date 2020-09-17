@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.nodemanager;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.nio.ByteBuffer;
@@ -33,8 +34,11 @@ import java.util.Map.Entry;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentMap;
 
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.util.SysInfo;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ContainerLocalizer;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.ResourcePlugin;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.ResourcePluginManager;
 import org.slf4j.Logger;
@@ -156,6 +160,8 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
 
   private NMNodeLabelsHandler nodeLabelsHandler;
   private final NodeLabelsProvider nodeLabelsProvider;
+
+  private static boolean cleaned = false;
 
   public NodeStatusUpdaterImpl(Context context, Dispatcher dispatcher,
       NodeHealthCheckerService healthChecker, NodeManagerMetrics metrics) {
@@ -929,7 +935,11 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
             if (YarnConfiguration.timelineServiceV2Enabled(context.getConf())) {
               updateTimelineCollectorData(response);
             }
-
+            if (!nodeStatus.getNodeHealthStatus().getIsNodeHealthy()) {
+              cleanLocalAppData();
+            } else {
+              cleaned = false;
+            }
           } catch (ConnectException e) {
             //catch and throw the exception if tried MAX wait time to connect RM
             dispatcher.getEventHandler().handle(
@@ -1019,6 +1029,39 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     statusUpdater =
         new Thread(statusUpdaterRunnable, "Node Status Updater");
     statusUpdater.start();
+  }
+
+  private void cleanLocalAppData() {
+    ConcurrentMap<ApplicationId, Application> applications =
+        context.getApplications();
+
+    // If unhealthy and no container live can clean the data under apps
+    if (!cleaned && !applications.isEmpty() && context.getContainers().isEmpty()) {
+      String[] localDirs =
+          context.getConf().get(YarnConfiguration.NM_LOCAL_DIRS).split(",");
+
+      for (Application application : applications.values()) {
+        String user = application.getUser();
+        String appId = application.getAppId().toString();
+        for (String localDir : localDirs) {
+          String appLocalDir =
+              localDir + "/" + ContainerLocalizer.USERCACHE + "/" + user + "/"  +
+                  ContainerLocalizer.APPCACHE + "/" + appId;
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Delete Dir:" + appLocalDir);
+          }
+          try {
+            File appLocalFile = new File(appLocalDir);
+            FileUtil.fullyDeleteContents(appLocalFile);
+          } catch (Exception e) {
+            LOG.error(
+                "Caught exception in status-updater when Node during unhealthy status",
+                e);
+          }
+        }
+      }
+      cleaned = true;
+    }
   }
 
   private boolean handleShutdownOrResyncCommand(
