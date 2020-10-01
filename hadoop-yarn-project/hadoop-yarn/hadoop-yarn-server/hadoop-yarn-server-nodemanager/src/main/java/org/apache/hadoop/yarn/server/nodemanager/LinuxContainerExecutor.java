@@ -343,6 +343,9 @@ public class LinuxContainerExecutor extends ContainerExecutor {
     InetSocketAddress nmAddr = ctx.getNmAddr();
     String user = ctx.getUser();
     String userRpcPassword = ctx.getUserRpcPassword();
+    if (StringUtils.isNullOrEmpty(userRpcPassword)) {
+      userRpcPassword = ContainerLocalizer.NULL_USER_RPC_PASSWORD;
+    }
     String appId = ctx.getAppId();
     String locId = ctx.getLocId();
     LocalDirsHandlerService dirsHandler = ctx.getDirsHandler();

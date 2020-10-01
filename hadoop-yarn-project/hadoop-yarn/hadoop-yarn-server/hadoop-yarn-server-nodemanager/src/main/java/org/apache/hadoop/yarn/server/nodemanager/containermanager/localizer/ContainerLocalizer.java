@@ -100,6 +100,7 @@ public class ContainerLocalizer {
   private static final FsPermission USERCACHE_FOLDER_PERMS =
       new FsPermission((short) 0755);
 
+  public static final String NULL_USER_RPC_PASSWORD = "YARN_NULL_USER_RPC_PASSWORD";
   private final String user;
   private final String userRpcPassword;
   private final String appId;
@@ -460,6 +461,9 @@ public class ContainerLocalizer {
     try {
       String user = argv[0];
       String userRpcPassword = argv[1];
+      if (NULL_USER_RPC_PASSWORD.equals(userRpcPassword)) {
+        userRpcPassword = null;
+      }
       String appId = argv[2];
       String locId = argv[3];
       InetSocketAddress nmAddr =
