@@ -4,7 +4,8 @@ set -e
 
 BINDIR=$(cd -P -- "$(dirname -- "${BASH_SOURCE-0}")" >/dev/null && pwd -P)
 DOCKERFILE=${BINDIR}/../docker/Dockerfile
-PERSONALITY=${BINDIR}/qbt-personality
+PERSONALITY=${BINDIR}/hadoop.sh
+UNIT_TEST_FILTER_FILE=${BINDIR}/unit-test-filter"
 
 if [[ -z ${BASEDIR} ]]; then
   BASEDIR="${HOME}/patchprocess"
@@ -55,9 +56,6 @@ YETUS_ARGS+=("--archive-list=checkstyle-errors.xml,findbugsXml.xml")
 # URL for user-side presentation in reports and such to our artifacts
 # (needs to match the archive bits below)
 YETUS_ARGS+=("--build-url-artifacts=artifact/out")
-
-# plugins to enable
-YETUS_ARGS+=("--plugins=checkstyle,spotbugs,findbugs,maven,shadedclient,dupname,javac,unit,briefreport,htmlout")
 
 # don't let these tests cause -1s because we aren't really paying that
 # much attention to them
