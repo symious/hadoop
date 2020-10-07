@@ -5,7 +5,7 @@ set -e
 BINDIR=$(cd -P -- "$(dirname -- "${BASH_SOURCE-0}")" >/dev/null && pwd -P)
 DOCKERFILE=${BINDIR}/../docker/Dockerfile
 PERSONALITY=${BINDIR}/hadoop.sh
-UNIT_TEST_FILTER_FILE=${BINDIR}/unit-test-filter"
+UNIT_TEST_FILTER_FILE=${BINDIR}/unit-test-filter
 
 if [[ -z ${BASEDIR} ]]; then
   BASEDIR="${HOME}/patchprocess"

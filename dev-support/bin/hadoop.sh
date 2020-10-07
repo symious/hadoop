@@ -19,7 +19,7 @@
 #
 # Override these to match Apache Hadoop's requirements
 #personality_plugins "all,-ant,-gradle,-scalac,-scaladoc"
-personality_plugins "checkstyle,spotbugs,findbugs,maven,shadedclient,dupname,javac,unit,briefreport,htmlout")
+personality_plugins "checkstyle,spotbugs,findbugs,maven,shadedclient,dupname,javac,unit,briefreport,htmlout"
 
 ## @description  Globals specific to this personality
 ## @audience     private
