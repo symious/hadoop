@@ -50,6 +50,9 @@ YETUS_ARGS+=("--dockermemlimit=64g")
 
 YETUS_ARGS+=("--git-offline")
 
+# Excluding some unit tests
+YETUS_ARGS+=("--unit-test-filter-file=${UNIT_TEST_FILTER_FILE}")
+
 # rsync these files back into the archive dir
 YETUS_ARGS+=("--archive-list=checkstyle-errors.xml,findbugsXml.xml")
 
