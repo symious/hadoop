@@ -1,1 +1,4 @@
-!org.apache.hadoop.contrib.bkjournal.TestBookKeeperHACheckpoints.testStandbyAndObserverState
+!org.apache.hadoop.contrib.bkjournal.TestBookKeeperHACheckpoints#testStandbyAndObserverState
+!TestHistoryViewerPrinter#testHumanPrinterAll
+!org.apache.hadoop.contrib.utils.join.TestDataJoin$1
+!org.apache.hadoop.tools.mapred.TestCopyMapper
