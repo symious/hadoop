@@ -1,4 +1,11 @@
-!org.apache.hadoop.contrib.bkjournal.TestBookKeeperHACheckpoints#testStandbyAndObserverState
+!org.apache.hadoop.contrib.bkjournal.TestBookKeeperHACheckpoints
 !TestHistoryViewerPrinter#testHumanPrinterAll
 !org.apache.hadoop.contrib.utils.join.TestDataJoin$1
 !org.apache.hadoop.tools.mapred.TestCopyMapper
+!org.apache.hadoop.hdfs.TestEncryptionZones
+!org.apache.hadoop.hdfs.TestEncryptionZonesWithKMS
+!org.apache.hadoop.hdfs.security.TestDelegationToken
+!org.apache.hadoop.hdfs.security.TestDelegationTokenForProxyUser
+!org.apache.hadoop.hdfs.server.namenode.ha.TestDelegationTokensWithHA
+!org.apache.hadoop.hdfs.server.namenode.TestAuditLogs#testAuditHftp
+!org.apache.hadoop.fs.http.server.TestHttpFSWithKerberos
