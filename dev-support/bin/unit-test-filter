@@ -6,6 +6,8 @@
 !org.apache.hadoop.hdfs.TestEncryptionZonesWithKMS
 !org.apache.hadoop.hdfs.security.TestDelegationToken
 !org.apache.hadoop.hdfs.security.TestDelegationTokenForProxyUser
+!org.apache.hadoop.hdfs.server.federation.resolver.order.TestLocalResolver#testLocalResolver
+!org.apache.hadoop.hdfs.server.federation.resolver.TestMultipleDestinationResolver#testLocalResolver
 !org.apache.hadoop.hdfs.server.namenode.ha.TestDelegationTokensWithHA
 !org.apache.hadoop.hdfs.server.namenode.TestAuditLogs#testAuditHftp
 !org.apache.hadoop.fs.http.server.TestHttpFSWithKerberos
