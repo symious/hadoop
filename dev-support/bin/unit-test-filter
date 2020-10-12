@@ -1,7 +1,10 @@
 !org.apache.hadoop.contrib.bkjournal.TestBookKeeperHACheckpoints
 !TestHistoryViewerPrinter#testHumanPrinterAll
 !org.apache.hadoop.contrib.utils.join.TestDataJoin$1
-!org.apache.hadoop.tools.mapred.TestCopyMapper
+!org.apache.hadoop.fs.http.server.TestHttpFSWithKerberos
+!org.apache.hadoop.hdfs.TestDistributedFileSystem#testAllWithDualPort
+!org.apache.hadoop.hdfs.TestDistributedFileSystem#testFileChecksum
+!org.apache.hadoop.hdfs.TestDistributedFileSystem#testAllWithNoXmlDefaults
 !org.apache.hadoop.hdfs.TestEncryptionZones
 !org.apache.hadoop.hdfs.TestEncryptionZonesWithKMS
 !org.apache.hadoop.hdfs.security.TestDelegationToken
@@ -9,5 +12,11 @@
 !org.apache.hadoop.hdfs.server.federation.resolver.order.TestLocalResolver#testLocalResolver
 !org.apache.hadoop.hdfs.server.federation.resolver.TestMultipleDestinationResolver#testLocalResolver
 !org.apache.hadoop.hdfs.server.namenode.ha.TestDelegationTokensWithHA
-!org.apache.hadoop.hdfs.server.namenode.TestAuditLogs#testAuditHftp
-!org.apache.hadoop.fs.http.server.TestHttpFSWithKerberos
+!org.apache.hadoop.hdfs.server.namenode.TestAuditLogs#testAuditHftp[*]
+!org.apache.hadoop.hdfs.web.TestHftpFileSystem
+!org.apache.hadoop.hdfs.web.TestWebHdfsUrl#testWebHdfsSpecialCharacterFile
+!org.apache.hadoop.hdfs.web.TestWebHdfsUrl#testWebHdfsBackwardCompatibleSpecialCharacterFile
+!org.apache.hadoop.hdfs.web.TestHttpsFileSystem#testHsftpFileSystem
+!org.apache.hadoop.hdfs.web.TestWebHDFS#testWebHdfsOffsetAndLength
+!org.apache.hadoop.security.TestPermissionSymlinks
+!org.apache.hadoop.tools.mapred.TestCopyMapper
