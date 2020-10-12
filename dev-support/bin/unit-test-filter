@@ -1,7 +1,14 @@
 !org.apache.hadoop.contrib.bkjournal.TestBookKeeperHACheckpoints
 !TestHistoryViewerPrinter#testHumanPrinterAll
 !org.apache.hadoop.contrib.utils.join.TestDataJoin$1
+!org.apache.hadoop.fs.azure.ITestNativeAzureFileSystemContractPageBlobLive
+!org.apache.hadoop.fs.azure.ITestWasbUriAndConfiguration
+!org.apache.hadoop.fs.azurebfs.contract.ITestAzureBlobFileSystemBasics
 !org.apache.hadoop.fs.http.server.TestHttpFSWithKerberos
+!org.apache.hadoop.fs.s3
+!org.apache.hadoop.fs.s3a
+!org.apache.hadoop.fs.s3native
+!org.apache.hadoop.fs.contract.s3a
 !org.apache.hadoop.hdfs.TestDistributedFileSystem#testAllWithDualPort
 !org.apache.hadoop.hdfs.TestDistributedFileSystem#testFileChecksum
 !org.apache.hadoop.hdfs.TestDistributedFileSystem#testAllWithNoXmlDefaults
