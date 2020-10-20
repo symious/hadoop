@@ -6,6 +6,7 @@
 !org.apache.hadoop.fs.azure.ITestWasbUriAndConfiguration
 !org.apache.hadoop.fs.azurebfs.contract.ITestAzureBlobFileSystemBasics
 !org.apache.hadoop.fs.http.server.TestHttpFSWithKerberos
+!org.apache.hadoop.fs.contract.s3a.ITestS3AContractSeek
 !org.apache.hadoop.fs.s3.ITestInMemoryS3FileSystemContract
 !org.apache.hadoop.fs.s3.Jets3tS3FileSystemContractTest
 !org.apache.hadoop.fs.s3a.fileContext.ITestS3AFileContextCreateMkdir
