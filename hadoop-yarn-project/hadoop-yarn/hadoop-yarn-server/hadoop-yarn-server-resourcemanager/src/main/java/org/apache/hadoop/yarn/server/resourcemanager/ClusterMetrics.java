@@ -32,6 +32,7 @@ import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableGaugeInt;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.yarn.api.records.Resource;
 import com.google.common.annotations.VisibleForTesting;
 
 @InterfaceAudience.Private
@@ -51,6 +52,8 @@ public class ClusterMetrics {
   @Metric("AM register delay") MutableRate aMRegisterDelay;
   @Metric("Memory Utilization") MutableGaugeLong utilizedMB;
   @Metric("Vcore Utilization") MutableGaugeLong utilizedVirtualCores;
+  @Metric("Memory Capability") MutableGaugeLong capabilityMB;
+  @Metric("Vcore Capability") MutableGaugeLong capabilityVirtualCores;
   @Metric("#Total number of high load1 skipped times") MutableGaugeLong highLoad1Skipped;
   @Metric("#Total number of high load5 skipped times") MutableGaugeLong highLoad5Skipped;
   @Metric("#Total number of high disk Usage skipped times") MutableGaugeLong highDiskUsageSkipped;
@@ -84,7 +87,7 @@ public class ClusterMetrics {
   }
 
   @VisibleForTesting
-  synchronized static void destroy() {
+  public synchronized static void destroy() {
     isInitialized.set(false);
     INSTANCE = null;
   }
@@ -218,6 +221,28 @@ public class ClusterMetrics {
 
   public void incrUtilizedVirtualCores(long delta) {
     utilizedVirtualCores.incr(delta);
+  }
+
+  public long getCapabilityMB() {
+    return capabilityMB.value();
+  }
+
+  public long getCapabilityVirtualCores() {
+    return capabilityVirtualCores.value();
+  }
+
+  public void incrCapability(Resource res) {
+    if (res != null) {
+      capabilityMB.incr(res.getMemorySize());
+      capabilityVirtualCores.incr(res.getVirtualCores());
+    }
+  }
+
+  public void decrCapability(Resource res) {
+    if (res != null) {
+      capabilityMB.decr(res.getMemorySize());
+      capabilityVirtualCores.decr(res.getVirtualCores());
+    }
   }
 
   //SLOW nodes

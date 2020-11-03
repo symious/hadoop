@@ -184,6 +184,10 @@ public interface RMNode {
    */
   Integer getDecommissioningTimeout();
 
+  long calculateHeartBeatInterval(long defaultInterval,
+      long minInterval, long maxInterval, float speedupFactor,
+      float slowdownFactor);
+
   boolean isGoodTarget();
 
   void setGoodTarget(boolean isGoodTarget);

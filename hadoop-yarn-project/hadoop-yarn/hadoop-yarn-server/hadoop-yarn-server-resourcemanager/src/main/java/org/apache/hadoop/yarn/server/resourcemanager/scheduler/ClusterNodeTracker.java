@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import org.apache.hadoop.yarn.server.resourcemanager.ClusterMetrics;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -91,6 +92,7 @@ public class ClusterNodeTracker<N extends SchedulerNode> {
 
       // Update cluster capacity
       Resources.addTo(clusterCapacity, node.getTotalResource());
+      ClusterMetrics.getMetrics().incrCapability(node.getTotalResource());
 
       // Update maximumAllocation
       updateMaxResources(node, true);
@@ -184,6 +186,7 @@ public class ClusterNodeTracker<N extends SchedulerNode> {
 
       // Update cluster capacity
       Resources.subtractFrom(clusterCapacity, node.getTotalResource());
+      ClusterMetrics.getMetrics().decrCapability(node.getTotalResource());
 
       // Update maximumAllocation
       updateMaxResources(node, false);
