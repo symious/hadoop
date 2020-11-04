@@ -243,6 +243,29 @@ public class Router extends CompositeService {
       addService(this.safemodeService);
     }
 
+    /**
+     * Refresh mount table cache immediately after adding, modifying or deleting
+     * the mount table entries. If this service is not enabled mount table cache
+     * are refreshed periodically by StateStoreCacheUpdateService
+     */
+    if (conf.getBoolean(RBFConfigKeys.MOUNT_TABLE_CACHE_IMMEDIATE_UPDATE,
+        RBFConfigKeys.MOUNT_TABLE_CACHE_IMMEDIATE_UPDATE_DEFAULT)) {
+      // There is not use of starting refresh service if state store and admin
+      // servers are not enabled
+      boolean dependentServicesRunning =
+          this.stateStore != null && getAdminServerAddress() != null;
+      if (dependentServicesRunning) {
+        MountTableRefreshService refreshService =
+            new MountTableRefreshService(this);
+        addService(refreshService);
+        LOG.info(MountTableRefreshService.class.getSimpleName()
+            + " service is enabled");
+      } else {
+        LOG.warn(MountTableRefreshService.class.getSimpleName()
+            + " not started becuase depenendent services are not enabled.");
+      }
+    }
+
     super.serviceInit(conf);
   }
 

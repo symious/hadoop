@@ -222,7 +222,22 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
           FEDERATION_ROUTER_PREFIX + "mount-table.cache.expire.minute";
   public static final long FEDERATION_MOUNT_TABLE_CACHE_EXPIRE_MINUTE_DEFAULT =
           TimeUnit.MINUTES.toMinutes(10);
-
+  /**
+   * If true then cache updated immediately after mount table entry change
+   * otherwise it is updated periodically based configuration.
+   */
+  public static final String MOUNT_TABLE_CACHE_IMMEDIATE_UPDATE =
+      FEDERATION_ROUTER_PREFIX + "mount-table.cache.immediate.update";
+  public static final boolean MOUNT_TABLE_CACHE_IMMEDIATE_UPDATE_DEFAULT = true;
+  /**
+   * How long to wait for all the admin servers to finish the update. value is
+   * in minute
+   */
+  public static final String MOUNT_TABLE_CACHE_IMMEDIATE_UPDATE_MAX_TIME =
+      FEDERATION_ROUTER_PREFIX + "mount-table.cache.immediate.update.max.time";
+  // 2 minutes
+  public static final int MOUNT_TABLE_CACHE_IMMEDIATE_UPDATE_MAX_TIME_DEFAULT =
+      2;
   // HDFS Router-based federation admin
   public static final String DFS_ROUTER_ADMIN_HANDLER_COUNT_KEY =
       FEDERATION_ROUTER_PREFIX + "admin.handler.count";

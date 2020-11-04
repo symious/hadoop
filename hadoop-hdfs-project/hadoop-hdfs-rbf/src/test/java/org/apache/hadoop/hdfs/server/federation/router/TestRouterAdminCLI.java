@@ -607,6 +607,12 @@ public class TestRouterAdminCLI {
         err.toString().startsWith("nameservice: Unknown command: wrong"));
   }
 
+  @Test
+  public void testRefreshMountTableCache() throws Exception {
+    String[] argv = new String[] { "-refresh" };
+    assertEquals(0, ToolRunner.run(admin, argv));
+  }
+
   /**
    * Wait for the Router transforming to expected state.
    * @param expectedState Expected Router state.

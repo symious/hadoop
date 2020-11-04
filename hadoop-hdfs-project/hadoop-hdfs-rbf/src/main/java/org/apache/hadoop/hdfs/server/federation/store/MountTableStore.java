@@ -20,8 +20,11 @@ package org.apache.hadoop.hdfs.server.federation.store;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
+import org.apache.hadoop.hdfs.server.federation.router.MountTableRefreshService;
 import org.apache.hadoop.hdfs.server.federation.store.driver.StateStoreDriver;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Management API for the HDFS mount table information stored in
@@ -42,8 +45,31 @@ import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
 @InterfaceStability.Evolving
 public abstract class MountTableStore extends CachedRecordStore<MountTable>
     implements MountTableManager {
+  private static final Logger LOG =
+      LoggerFactory.getLogger(MountTableStore.class);
+  private MountTableRefreshService refreshService;
 
   public MountTableStore(StateStoreDriver driver) {
     super(MountTable.class, driver);
   }
+
+  public void setRefreshService(MountTableRefreshService refreshService) {
+    this.refreshService = refreshService;
+  }
+
+  /**
+   * Update mount table cache of this router as well as all the routers.
+   */
+  protected void updateCache() {
+    if (refreshService != null) {
+      try {
+        refreshService.refresh();
+      } catch (StateStoreUnavailableException e) {
+        LOG.error(
+            "Can not refresh munt table cache as state store is not available",
+            e);
+      }
+    }
+  }
+
 }

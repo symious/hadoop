@@ -53,6 +53,8 @@ import org.apache.hadoop.hdfs.server.federation.store.protocol.GetSafeModeReques
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetSafeModeResponse;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.LeaveSafeModeRequest;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.LeaveSafeModeResponse;
+import org.apache.hadoop.hdfs.server.federation.store.protocol.RefreshMountTableEntriesRequest;
+import org.apache.hadoop.hdfs.server.federation.store.protocol.RefreshMountTableEntriesResponse;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.RemoveMountTableEntryRequest;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.RemoveMountTableEntryResponse;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.UpdateMountTableEntryRequest;
@@ -309,6 +311,12 @@ public class RouterAdminServer extends AbstractService
       isInSafeMode = safeModeService.isInSafeMode();
     }
     return GetSafeModeResponse.newInstance(isInSafeMode);
+  }
+
+  @Override
+  public RefreshMountTableEntriesResponse refreshMountTableEntries(
+      RefreshMountTableEntriesRequest request) throws IOException {
+    return getMountTableStore().refreshMountTableEntries(request);
   }
 
   /**

@@ -54,6 +54,8 @@ import org.apache.hadoop.hdfs.server.federation.store.protocol.GetSafeModeReques
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetSafeModeResponse;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.LeaveSafeModeRequest;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.LeaveSafeModeResponse;
+import org.apache.hadoop.hdfs.server.federation.store.protocol.RefreshMountTableEntriesRequest;
+import org.apache.hadoop.hdfs.server.federation.store.protocol.RefreshMountTableEntriesResponse;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.RemoveMountTableEntryRequest;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.RemoveMountTableEntryResponse;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.UpdateMountTableEntryRequest;
@@ -108,7 +110,8 @@ public class RouterAdmin extends Configured implements Tool {
         + "\t[-clrQuota <path>]\n"
         + "\t[-safemode enter | leave | get]\n"
         + "\t[-nameservice enable | disable <nameservice>]\n"
-        + "\t[-getDisabledNameservices]\n";
+        + "\t[-getDisabledNameservices]\n"
+        + "\t[-refresh]\n";
 
     System.out.println(usage);
   }
@@ -171,8 +174,9 @@ public class RouterAdmin extends Configured implements Tool {
     }
 
     // Initialize RouterClient
+    String address="";
     try {
-      String address = getConf().getTrimmed(
+      address = getConf().getTrimmed(
           RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_KEY,
           RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_DEFAULT);
       InetSocketAddress routerSocket = NetUtils.createSocketAddr(address);
@@ -225,6 +229,11 @@ public class RouterAdmin extends Configured implements Tool {
         manageNameservice(subcmd, nsId);
       } else if ("-getDisabledNameservices".equals(cmd)) {
         getDisabledNameservices();
+      } else if ("-refresh".equals(cmd)) {
+        if (refresh()) {
+          System.out.println(
+              "Successfully updated mount table cache on router " + address);
+        }
       } else {
         printUsage();
         return exitCode;
@@ -811,6 +820,19 @@ public class RouterAdmin extends Configured implements Tool {
   private static String normalizeFileSystemPath(final String path) {
     Path normalizedPath = new Path(path);
     return normalizedPath.toString();
+  }
+
+  /**
+   * refresh mount table cache on connected router
+   *
+   * @return true if cache refreshed successfully
+   * @throws IOException
+   */
+  private boolean refresh() throws IOException {
+    RefreshMountTableEntriesResponse response =
+        client.getMountTableManager().refreshMountTableEntries(
+            RefreshMountTableEntriesRequest.newInstance());
+    return response.getResult();
   }
 
   /**
