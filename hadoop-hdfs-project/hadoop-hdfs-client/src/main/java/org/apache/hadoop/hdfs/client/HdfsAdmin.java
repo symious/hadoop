@@ -46,6 +46,7 @@ import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
+import org.apache.hadoop.hdfs.protocol.OpenFilesIterator.OpenFilesType;
 import org.apache.hadoop.security.AccessControlException;
 
 /**
@@ -481,7 +482,14 @@ public class HdfsAdmin {
    * <p/>
    * This method can only be called by HDFS superusers.
    */
+  @Deprecated
   public RemoteIterator<OpenFileEntry> listOpenFiles() throws IOException {
     return dfs.listOpenFiles();
   }
+
+  public RemoteIterator<OpenFileEntry> listOpenFiles(
+      EnumSet<OpenFilesType> openFilesTypes) throws IOException {
+    return dfs.listOpenFiles(openFilesTypes);
+  }
+
 }

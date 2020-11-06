@@ -57,6 +57,7 @@ import org.apache.hadoop.hdfs.protocol.LastBlockWithStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
+import org.apache.hadoop.hdfs.protocol.OpenFilesIterator;
 import org.apache.hadoop.hdfs.protocol.RollingUpgradeInfo;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.hdfs.protocol.SnapshottableDirectoryStatus;
@@ -1392,6 +1393,14 @@ public class RouterClientProtocol implements ClientProtocol {
 
   @Override
   public BatchedEntries<OpenFileEntry> listOpenFiles(long prevId)
+      throws IOException {
+    rpcServer.checkOperation(OperationCategory.READ, false);
+    return null;
+  }
+
+  @Override
+  public BatchedEntries<OpenFileEntry> listOpenFiles(long prevId,
+      EnumSet<OpenFilesIterator.OpenFilesType> openFilesTypes)
       throws IOException {
     rpcServer.checkOperation(OperationCategory.READ, false);
     return null;

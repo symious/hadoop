@@ -29,6 +29,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -48,6 +49,7 @@ import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FsShell;
 import org.apache.hadoop.fs.FsStatus;
+import org.apache.hadoop.fs.FsTracer;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.shell.Command;
@@ -74,6 +76,8 @@ import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.RollingUpgradeAction;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
 import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
+import org.apache.hadoop.hdfs.protocol.OpenFilesIterator;
+import org.apache.hadoop.hdfs.protocol.OpenFilesIterator.OpenFilesType;
 import org.apache.hadoop.hdfs.protocol.ReconfigurationProtocol;
 import org.apache.hadoop.hdfs.protocol.RollingUpgradeInfo;
 import org.apache.hadoop.hdfs.protocol.SnapshotException;
@@ -458,7 +462,7 @@ public class DFSAdmin extends FsShell {
     "\t[-getDatanodeInfo <datanode_host:ipc_port>]\n" +
     "\t[-metasave filename]\n" +
     "\t[-triggerBlockReport [-incremental] <datanode_host:ipc_port>]\n" +
-    "\t[-listOpenFiles]\n" +
+    "\t[-listOpenFiles [-blockingDecommission]]\n" +
     "\t[-help [cmd]]\n";
 
   /**
@@ -899,18 +903,37 @@ public class DFSAdmin extends FsShell {
    * Usage: hdfs dfsadmin -listOpenFiles
    *
    * @throws IOException
+   * @param argv
    */
-  public int listOpenFiles() throws IOException {
-    DistributedFileSystem dfs = getDFS();
-    RemoteIterator<OpenFileEntry> openFilesRemoteIterator;
-
-    try{
-      openFilesRemoteIterator = dfs.listOpenFiles();
-      printOpenFiles(openFilesRemoteIterator);
-    } catch (IOException ioe){
-      System.out.println("List open files failed.");
-      throw ioe;
+  public int listOpenFiles(String[] argv) throws IOException {
+    List<OpenFilesType> types = new ArrayList<>();
+    if (argv != null) {
+      List<String> args = new ArrayList<>(Arrays.asList(argv));
+      if (StringUtils.popOption("-blockingDecommission", args)) {
+        types.add(OpenFilesType.BLOCKING_DECOMMISSION);
+      }
     }
+    if (types.isEmpty()) {
+      types.add(OpenFilesType.ALL_OPEN_FILES);
+    }
+    EnumSet<OpenFilesType> openFilesTypes = EnumSet.copyOf(types);
+
+    DistributedFileSystem dfs = getDFS();
+    Configuration dfsConf = dfs.getConf();
+    URI dfsUri = dfs.getUri();
+    boolean isHaEnabled = HAUtilClient.isLogicalUri(dfsConf, dfsUri);
+
+    RemoteIterator<OpenFileEntry> openFilesRemoteIterator;
+    if (isHaEnabled) {
+      ProxyAndInfo<ClientProtocol> proxy = NameNodeProxies.createNonHAProxy(
+          dfsConf, HAUtil.getAddressOfActive(getDFS()), ClientProtocol.class,
+          UserGroupInformation.getCurrentUser(), false);
+      openFilesRemoteIterator = new OpenFilesIterator(proxy.getProxy(),
+          FsTracer.get(dfsConf), openFilesTypes);
+    } else {
+      openFilesRemoteIterator = dfs.listOpenFiles(openFilesTypes);
+    }
+    printOpenFiles(openFilesRemoteIterator);
     return 0;
   }
 
@@ -1179,9 +1202,11 @@ public class DFSAdmin extends FsShell {
         + "\tIf 'incremental' is specified, it will be an incremental\n"
         + "\tblock report; otherwise, it will be a full block report.\n";
 
-    String listOpenFiles = "-listOpenFiles\n"
+    String listOpenFiles = "-listOpenFiles [-blockingDecommission]\n"
         + "\tList all open files currently managed by the NameNode along\n"
-        + "\twith client name and client machine accessing them.\n";
+        + "\twith client name and client machine accessing them.\n"
+        + "\tIf 'blockingDecommission' option is specified, it will list the\n"
+        + "\topen files only that are blocking the ongoing Decommission.";
 
     String help = "-help [cmd]: \tDisplays help for the given command or all commands if none\n" +
       "\t\tis specified.\n";
@@ -2050,7 +2075,8 @@ public class DFSAdmin extends FsShell {
       System.err.println("Usage: hdfs dfsadmin"
           + " [-triggerBlockReport [-incremental] <datanode_host:ipc_port>]");
     } else if ("-listOpenFiles".equals(cmd)) {
-      System.err.println("Usage: hdfs dfsadmin [-listOpenFiles]");
+      System.err.println("Usage: hdfs dfsadmin"
+          + " [-listOpenFiles [-blockingDecommission]]");
     } else {
       System.err.println("Usage: hdfs dfsadmin");
       System.err.println("Note: Administrative commands can only be run as the HDFS superuser.");
@@ -2210,7 +2236,7 @@ public class DFSAdmin extends FsShell {
         return exitCode;
       }
     } else if ("-listOpenFiles".equals(cmd)) {
-      if (argv.length != 1) {
+      if ((argv.length != 1) && (argv.length != 2)) {
         printUsage(cmd);
         return exitCode;
       }
@@ -2298,7 +2324,7 @@ public class DFSAdmin extends FsShell {
       } else if ("-triggerBlockReport".equals(cmd)) {
         exitCode = triggerBlockReport(argv);
       } else if ("-listOpenFiles".equals(cmd)) {
-        exitCode = listOpenFiles();
+        exitCode = listOpenFiles(argv);
       } else if ("-help".equals(cmd)) {
         if (i < argv.length) {
           printHelp(argv[i]);

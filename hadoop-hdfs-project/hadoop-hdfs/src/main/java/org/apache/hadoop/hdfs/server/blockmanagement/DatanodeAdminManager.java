@@ -36,10 +36,14 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
+import org.apache.hadoop.hdfs.server.namenode.INode;
+import org.apache.hadoop.hdfs.server.namenode.INodeFile;
 import org.apache.hadoop.hdfs.server.namenode.INodeId;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.Namesystem;
 import org.apache.hadoop.hdfs.util.CyclicIteration;
+import org.apache.hadoop.hdfs.util.LightWeightHashSet;
+import org.apache.hadoop.hdfs.util.LightWeightLinkedSet;
 import org.apache.hadoop.util.ChunkedArrayList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -698,11 +702,14 @@ public class DatanodeAdminManager {
         final List<BlockInfo> insufficientlyReplicated,
         boolean pruneSufficientlyReplicated) {
       boolean firstReplicationLog = true;
+      // Low redundancy in UC Blocks only
+      int underReplicatedBlocksInOpenFiles = 0;
+      LightWeightHashSet<Long> underReplicatedOpenFiles =
+          new LightWeightLinkedSet<>();
+      // All low redundancy blocks. Includes underReplicatedOpenFiles.
       int underReplicatedBlocks = 0;
       // All maintenance and decommission replicas.
       int outOfServiceOnlyReplicas = 0;
-      // Low redundancy in UC Blocks only
-      int underReplicatedInOpenFiles = 0;
       while (it.hasNext()) {
         if (insufficientlyReplicated == null
             && numBlocksCheckedPerLock >= numBlocksPerCheck) {
@@ -787,15 +794,24 @@ public class DatanodeAdminManager {
         // Update various counts
         underReplicatedBlocks++;
         if (bc.isUnderConstruction()) {
-          underReplicatedInOpenFiles++;
+          INode ucFile = namesystem.getFSDirectory().getInode(bc.getId());
+          if(!(ucFile instanceof  INodeFile) ||
+              !ucFile.asFile().isUnderConstruction()) {
+            LOG.warn("File " + ucFile.getLocalName() + " is not under " +
+                "construction. Skipping add to low redundancy open files!");
+          } else {
+            underReplicatedBlocksInOpenFiles++;
+            underReplicatedOpenFiles.add(ucFile.getId());
+          }
         }
         if ((curReplicas == 0) && (num.outOfServiceReplicas() > 0)) {
           outOfServiceOnlyReplicas++;
         }
       }
 
-      datanode.getLeavingServiceStatus().set(underReplicatedBlocks,
-          outOfServiceOnlyReplicas, underReplicatedInOpenFiles);
+      datanode.getLeavingServiceStatus().set(underReplicatedBlocksInOpenFiles,
+          underReplicatedOpenFiles, underReplicatedBlocks,
+          outOfServiceOnlyReplicas);
     }
   }
 
