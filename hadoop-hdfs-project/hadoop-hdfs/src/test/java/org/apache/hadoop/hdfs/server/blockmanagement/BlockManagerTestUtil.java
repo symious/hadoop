@@ -176,7 +176,7 @@ public class BlockManagerTestUtil {
    */
   public static void checkRedundancy(final BlockManager blockManager) {
     blockManager.computeDatanodeWork();
-    blockManager.processPendingReconstructions();
+    blockManager.processPendingReplications();
     blockManager.rescanPostponedMisreplicatedBlocks();
   }
 

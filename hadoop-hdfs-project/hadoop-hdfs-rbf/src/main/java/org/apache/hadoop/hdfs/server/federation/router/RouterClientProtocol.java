@@ -1394,13 +1394,14 @@ public class RouterClientProtocol implements ClientProtocol {
   @Override
   public BatchedEntries<OpenFileEntry> listOpenFiles(long prevId)
       throws IOException {
-    rpcServer.checkOperation(OperationCategory.READ, false);
-    return null;
+    return listOpenFiles(prevId,
+        EnumSet.of(OpenFilesIterator.OpenFilesType.ALL_OPEN_FILES),
+        OpenFilesIterator.FILTER_PATH_DEFAULT);
   }
 
   @Override
   public BatchedEntries<OpenFileEntry> listOpenFiles(long prevId,
-      EnumSet<OpenFilesIterator.OpenFilesType> openFilesTypes)
+      EnumSet<OpenFilesIterator.OpenFilesType> openFilesTypes, String path)
       throws IOException {
     rpcServer.checkOperation(OperationCategory.READ, false);
     return null;

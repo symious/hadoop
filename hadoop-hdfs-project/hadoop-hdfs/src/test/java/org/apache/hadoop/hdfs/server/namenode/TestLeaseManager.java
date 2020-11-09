@@ -35,6 +35,7 @@ import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
+import org.apache.hadoop.hdfs.protocol.OpenFilesIterator;
 import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
@@ -401,8 +402,11 @@ public class TestLeaseManager {
         leaseManager.getINodeWithLeases().size());
     assertEquals(iNodeUnderAncestorLeaseCount,
         leaseManager.getINodeWithLeases(ancestorDirectory).size());
-    assertEquals(0, (fsNamesystem.getFilesBlockingDecom(0) == null ?
-        0 : fsNamesystem.getFilesBlockingDecom(0).size()));
+    assertEquals(0,
+        (fsNamesystem.getFilesBlockingDecom(0,
+            OpenFilesIterator.FILTER_PATH_DEFAULT) == null ? 0
+                : fsNamesystem.getFilesBlockingDecom(0,
+                    OpenFilesIterator.FILTER_PATH_DEFAULT).size()));
   }
 
   private Map<String, INode> createINodeTree(INodeDirectory parentDir,
