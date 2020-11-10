@@ -56,6 +56,7 @@ import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceOption;
 import org.apache.hadoop.yarn.api.records.ResourceUtilization;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.factories.RecordFactory;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
@@ -713,6 +714,24 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
     }
   }
 
+  public static long getHeartBeatIntervalByQueueSize(long numRmEvents,
+      long heartBeatIntervalMin, long heartBeatIntervalMax,
+      float slowdownFactor) {
+    // if < 1000 use min ms
+    if (numRmEvents < 5000) {
+      return heartBeatIntervalMin;
+    }
+
+    double factor = Math.log(numRmEvents) /
+        Math.log(YarnConfiguration.DEFAULT_RM_EVENT_BASE_NUMBER);
+    long newInterval = (long) (factor * slowdownFactor * 1000);
+
+    //ReCheck
+    newInterval = Math.min(heartBeatIntervalMax, newInterval);
+    newInterval = Math.max(heartBeatIntervalMin, newInterval);
+    return newInterval;
+  }
+
   @Override
   public long calculateHeartBeatInterval(long defaultInterval, long minInterval,
       long maxInterval, float speedupFactor, float slowdownFactor) {
@@ -752,7 +771,8 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
             + " clusterUtil: " + clusterUtil);
       }
     }
-    return newInterval;
+    return getHeartBeatIntervalByQueueSize(
+        ClusterMetrics.getMetrics().getNumRmEvents(), newInterval, maxInterval, slowdownFactor);
   }
 
   public void handle(RMNodeEvent event) {

@@ -720,7 +720,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
         NodeLabelsUtils.convertToStringSet(heartbeatReq.getNodeLabels()));
     Assert.assertTrue("Valid Node Labels were not accepted by RM",
         nodeHeartbeatResponse.getAreNodeLabelsAcceptedByRM());
-    
+
     // After modification of labels next heartbeat sends null informing no update
     Set<String> oldLabels = nodeLabelsMgr.getNodeLabels().get(nodeId);
     int responseId = nodeStatusObject.getResponseId();
@@ -743,6 +743,47 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     Assert.assertFalse("Node Labels should not accepted by RM",
         nodeHeartbeatResponse.getAreNodeLabelsAcceptedByRM());
     rm.stop();
+  }
+
+  @Test
+  public void testNodeHeartbeatInterval() throws Exception {
+    long heartBeatInterval = 1000;
+    //Check 0 events
+    heartBeatInterval =
+        RMNodeImpl.getHeartBeatIntervalByQueueSize(0, 1000, 20000, 2.0f);
+    Assert.assertEquals("Wrong Hearbeat Interval", 1000, heartBeatInterval);
+    //Check 100 events
+    heartBeatInterval =
+        RMNodeImpl.getHeartBeatIntervalByQueueSize(100, 1000, 20000, 2.0f);
+    Assert.assertEquals("Wrong Hearbeat Interval", 1000, heartBeatInterval);
+    //Check 1000 events
+    heartBeatInterval =
+        RMNodeImpl.getHeartBeatIntervalByQueueSize(1000, 1000, 20000, 2.0f);
+    Assert.assertEquals("Wrong Hearbeat Interval", 1000, heartBeatInterval);
+    //Check 3000 events
+    heartBeatInterval =
+        RMNodeImpl.getHeartBeatIntervalByQueueSize(3000, 1000, 20000, 2.0f);
+    Assert.assertEquals("Wrong Hearbeat Interval", 1000, heartBeatInterval);
+    //Check 1 0000 events
+    heartBeatInterval =
+        RMNodeImpl.getHeartBeatIntervalByQueueSize(10000, 1000, 20000, 2.0f);
+    Assert.assertEquals("Wrong Hearbeat Interval", 2666, heartBeatInterval);
+    //Check 10 0000 events
+    heartBeatInterval =
+        RMNodeImpl.getHeartBeatIntervalByQueueSize(100000, 1000, 20000, 2.0f);
+    Assert.assertEquals("Wrong Hearbeat Interval", 3333, heartBeatInterval);
+    //Check 100 0000 events
+    heartBeatInterval =
+        RMNodeImpl.getHeartBeatIntervalByQueueSize(1000000, 1000, 20000, 2.0f);
+    Assert.assertEquals("Wrong Hearbeat Interval", 4000, heartBeatInterval);
+    //Check 500 0000 events
+    heartBeatInterval =
+        RMNodeImpl.getHeartBeatIntervalByQueueSize(5000000, 1000, 20000, 2.0f);
+    Assert.assertEquals("Wrong Hearbeat Interval", 4465, heartBeatInterval);
+    //Check 1000 0000 events
+    heartBeatInterval =
+        RMNodeImpl.getHeartBeatIntervalByQueueSize(10000000, 1000, 20000, 2.0f);
+    Assert.assertEquals("Wrong Hearbeat Interval", 4666, heartBeatInterval);
   }
 
   @Test

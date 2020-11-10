@@ -339,4 +339,8 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
   public void setMetrics(DispatcherMetrics metrics) {
     this.metrics =  metrics;
   }
+
+  public int getLastEventQueueSizeLogged(){
+    return this.lastEventQueueSizeLogged;
+  }
 }
