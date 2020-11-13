@@ -1214,4 +1214,42 @@ public class TestRMNodeTransitions {
     calcIntervalTest(rmNode, nodeUtil, hbDefault, hbMin, hbMax,
         speedup, slowdown, vcoreUnit * 1.0F, hbDefault); // 100%
   }
+
+  @Test
+  public void testCalculateHeartBeatIntervalByQueueSize() throws Exception {
+    long heartBeatInterval;
+    //Check 0 events
+    heartBeatInterval =
+        RMNodeImpl.calculateHeartBeatIntervalByQueueSize(0, 1000, 20000, 2.0f);
+    Assert.assertEquals("Wrong Heartbeat Interval", 1000, heartBeatInterval);
+    //Check 1000 events, <= 5000 should return min interval
+    heartBeatInterval =
+        RMNodeImpl.calculateHeartBeatIntervalByQueueSize(1000, 1000, 20000, 2.0f);
+    Assert.assertEquals("Wrong Heartbeat Interval", 1000, heartBeatInterval);
+    //Check 5000 events
+    heartBeatInterval =
+        RMNodeImpl.calculateHeartBeatIntervalByQueueSize(5000, 1000, 20000, 2.0f);
+    Assert.assertEquals("Wrong Heartbeat Interval", 1000, heartBeatInterval);
+    //Check 5001 events
+    heartBeatInterval =
+        RMNodeImpl.calculateHeartBeatIntervalByQueueSize(5001, 1000, 20000, 2.0f);
+    Assert.assertEquals("Wrong Heartbeat Interval", 1386, heartBeatInterval);
+    //Check 10,000 events
+    heartBeatInterval =
+        RMNodeImpl.calculateHeartBeatIntervalByQueueSize(10000, 1000, 20000, 2.0f);
+    Assert.assertEquals("Wrong Heartbeat Interval", 17034, heartBeatInterval);
+    //Check 100,000 events
+    heartBeatInterval =
+        RMNodeImpl.calculateHeartBeatIntervalByQueueSize(100000, 1000, 120000, 2.0f);
+    Assert.assertEquals("Wrong Heartbeat Interval", 22923, heartBeatInterval);
+    //Check 1,000,000 events
+    heartBeatInterval =
+        RMNodeImpl.calculateHeartBeatIntervalByQueueSize(1000000, 1000, 120000, 2.0f);
+    Assert.assertEquals("Wrong Heartbeat Interval", 27620, heartBeatInterval);
+    //Check 5,000,000 events, should return max interval
+    heartBeatInterval =
+        RMNodeImpl.calculateHeartBeatIntervalByQueueSize(5000000, 1000, 30000, 2.0f);
+    Assert.assertEquals("Wrong Heartbeat Interval", 30000, heartBeatInterval);
+  }
+
 }
