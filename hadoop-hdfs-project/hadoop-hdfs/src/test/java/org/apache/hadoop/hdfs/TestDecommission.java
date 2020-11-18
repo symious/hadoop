@@ -778,11 +778,11 @@ public class TestDecommission extends AdminStatesBaseTest {
 
     // Disable redundancy monitor check so that open files blocking
     // decommission can be listed and verified.
-//    getConf().setInt(
-//        DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY,
-//        1000);
+    getConf().setInt(
+        DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY,
+        1000);
     getConf().setLong(
-        DFSConfigKeys.DFS_NAMENODE_LIST_OPENFILES_NUM_RESPONSES, 1);
+        DFSConfigKeys.DFS_NAMENODE_LIST_OPENFILES_NUM_RESPONSES, 5);
 
     //At most 1 node can be decommissioned
     startSimpleCluster(1, 4);
