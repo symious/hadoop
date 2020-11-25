@@ -416,6 +416,10 @@ public abstract class AbstractYarnScheduler
   public RMContainer getRMContainer(ContainerId containerId) {
     SchedulerApplicationAttempt attempt =
         getCurrentAttemptForContainer(containerId);
+    if (containerId != null && attempt == null) {
+      LOG.info("Current attempt is null, the container id is: " +
+          containerId.getContainerId());
+    }
     return (attempt == null) ? null : attempt.getRMContainer(containerId);
   }
 

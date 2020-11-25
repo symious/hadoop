@@ -591,6 +591,7 @@ public abstract class FSQueue implements Queue, Schedulable {
   protected void incUsedResource(Resource res) {
     synchronized (resourceUsage) {
       Resources.addTo(resourceUsage, res);
+      metrics.setCachedResourceUsage(resourceUsage.getMemorySize());
       if (parent != null) {
         parent.incUsedResource(res);
       }
@@ -605,6 +606,7 @@ public abstract class FSQueue implements Queue, Schedulable {
   protected void decUsedResource(Resource res) {
     synchronized (resourceUsage) {
       Resources.subtractFrom(resourceUsage, res);
+      metrics.setCachedResourceUsage(resourceUsage.getMemorySize());
       if (parent != null) {
         parent.decUsedResource(res);
       }

@@ -50,6 +50,7 @@ public class FSQueueMetrics extends QueueMetrics {
   @Metric("Maximum AM share of CPU in vcores") MutableGaugeInt maxAMShareVCores;
   @Metric("AM resource usage of memory in MB") MutableGaugeLong amResourceUsageMB;
   @Metric("AM resource usage of CPU in vcores") MutableGaugeInt amResourceUsageVCores;
+  @Metric("Cached resource usage of memory in MB") MutableGaugeLong cachedResourceUsage;
 
   @Metric("Sort time of FSParent.assign.sort of queue in nano seconds") MutableGaugeLong fsParentAssignSortNS;
   @Metric("Max Sort time of FSParent.assign.sort of queue in nano seconds") MutableGaugeLong maxFsParentAssignSortNS;
@@ -186,6 +187,14 @@ public class FSQueueMetrics extends QueueMetrics {
   public void setAMResourceUsage(Resource resource) {
     amResourceUsageMB.set(resource.getMemorySize());
     amResourceUsageVCores.set(resource.getVirtualCores());
+  }
+
+  public long getCachedResourceUsage() {
+    return cachedResourceUsage.value();
+  }
+
+  public void setCachedResourceUsage(long resourceUsage) {
+    cachedResourceUsage.set(resourceUsage);
   }
 
   public long getFsParentAssignSortNS() {
