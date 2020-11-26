@@ -195,6 +195,11 @@ call :updatepath %HADOOP_BIN_PATH%
   set CLASS=org.apache.hadoop.security.alias.CredentialShell
   goto :eof
 
+:fedbalance
+  set CLASS=org.apache.hadoop.tools.fedbalance.FedBalance
+  set CLASSPATH=%CLASSPATH%;%TOOL_PATH%
+  goto :eof
+
 :key
   set CLASS=org.apache.hadoop.crypto.key.KeyShell
   goto :eof
