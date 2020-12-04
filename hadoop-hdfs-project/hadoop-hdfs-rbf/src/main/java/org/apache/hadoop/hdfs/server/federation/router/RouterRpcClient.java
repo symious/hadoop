@@ -18,6 +18,10 @@
 
 package org.apache.hadoop.hdfs.server.federation.router;
 
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_KEY;
+import static org.apache.hadoop.hdfs.server.federation.fairness.RouterRpcFairnessConstants.CONCURRENT_NS;
+
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
@@ -56,6 +60,8 @@ import org.apache.hadoop.hdfs.NameNodeProxiesClient.ProxyAndInfo;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.server.federation.fairness.AbstractRouterRpcFairnessPolicyController;
+import org.apache.hadoop.hdfs.server.federation.fairness.RouterRpcFairnessPolicyController;
 import org.apache.hadoop.hdfs.server.federation.resolver.ActiveNamenodeResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeContext;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState;
@@ -78,9 +84,6 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-
-import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT;
-import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_KEY;
 
 /**
  * A client proxy for Router -> NN communication using the NN ClientProtocol.
@@ -135,6 +138,9 @@ public class RouterRpcClient {
 
   private static final String CLIENT_IP_STR = "clientIp";
 
+  /** Fairness manager to control handlers assigned per NS. */
+  private RouterRpcFairnessPolicyController routerRpcFairnessPolicyController;
+
   /**
    * Create a router RPC client to manage remote procedure calls to NNs.
    *
@@ -154,6 +160,8 @@ public class RouterRpcClient {
 
     this.connectionManager = new ConnectionManager(conf);
     this.connectionManager.start();
+    this.routerRpcFairnessPolicyController =
+        FederationUtil.newFairnessPolicyController(conf);
 
     int numThreads = conf.getInt(
         RBFConfigKeys.DFS_ROUTER_CLIENT_THREADS_SIZE,
@@ -212,6 +220,9 @@ public class RouterRpcClient {
     }
     if (this.executorService != null) {
       this.executorService.shutdownNow();
+    }
+    if (this.routerRpcFairnessPolicyController != null) {
+      this.routerRpcFairnessPolicyController.shutdown();
     }
   }
 
@@ -728,14 +739,19 @@ public class RouterRpcClient {
   public Object invokeSingle(final String nsId, RemoteMethod method)
       throws IOException {
     UserGroupInformation ugi = RouterRpcServer.getRemoteUser();
-    msync(nsId, ugi, method.getMethod());
-    List<? extends FederationNamenodeContext> nns = getNamenodesForNameservice(
-        nsId, observerReadEnabled && isRead(method.getMethod()));
-    RemoteLocationContext loc = new RemoteLocation(nsId, "/", "/");
-    Class<?> proto = method.getProtocol();
-    Method m = method.getMethod();
-    Object[] params = method.getParams(loc);
-    return invokeMethod(ugi, nns, proto, m, params);
+    acquirePermit(nsId, ugi, method);
+    try {
+      msync(nsId, ugi, method.getMethod());
+      List<? extends FederationNamenodeContext> nns = getNamenodesForNameservice(
+          nsId, observerReadEnabled && isRead(method.getMethod()));
+      RemoteLocationContext loc = new RemoteLocation(nsId, "/", "/");
+      Class<?> proto = method.getProtocol();
+      Method m = method.getMethod();
+      Object[] params = method.getParams(loc);
+      return invokeMethod(ugi, nns, proto, m, params);
+    } finally {
+      releasePermit(nsId, ugi, method);
+    }
   }
 
   /**
@@ -830,6 +846,7 @@ public class RouterRpcClient {
     for (final RemoteLocationContext loc : locations) {
       String ns = loc.getNameserviceId();
       msync(ns, ugi, m);
+      acquirePermit(ns, ugi, remoteMethod);
       List<? extends FederationNamenodeContext> namenodes =
           getNamenodesForNameservice(ns, observerReadEnabled && isRead(m));
       try {
@@ -841,7 +858,7 @@ public class RouterRpcClient {
             isExpectedValue(expectedResultValue, result)) {
           // Valid result, stop here
           @SuppressWarnings("unchecked")
-          T ret = (T)result;
+          T ret = (T) result;
           return ret;
         }
         if (firstResult == null) {
@@ -853,7 +870,7 @@ public class RouterRpcClient {
         ioe = processException(ioe, loc);
 
         // Record it and move on
-        lastThrownException =  ioe;
+        lastThrownException = ioe;
         if (firstThrownException == null) {
           firstThrownException = lastThrownException;
         }
@@ -865,9 +882,8 @@ public class RouterRpcClient {
             e.getClass(), m.getName(), ns, e);
         lastThrownException = new IOException(
             "Unexpected exception proxying API " + e.getMessage(), e);
-        if (firstThrownException == null) {
-          firstThrownException = lastThrownException;
-        }
+      } finally {
+        releasePermit(ns, ugi, remoteMethod);
       }
     }
 
@@ -1121,12 +1137,17 @@ public class RouterRpcClient {
       T location = locations.iterator().next();
       String ns = location.getNameserviceId();
       msync(ns, ugi, m);
-      final List<? extends FederationNamenodeContext> namenodes =
-          getNamenodesForNameservice(ns, observerReadEnabled && isRead(m));
-      Class<?> proto = method.getProtocol();
-      Object[] paramList = method.getParams(location);
-      Object result = invokeMethod(ugi, namenodes, proto, m, paramList);
-      return Collections.singletonMap(location, clazz.cast(result));
+      acquirePermit(ns, ugi, method);
+      try {
+        final List<? extends FederationNamenodeContext> namenodes =
+            getNamenodesForNameservice(ns, observerReadEnabled && isRead(m));
+        Class<?> proto = method.getProtocol();
+        Object[] paramList = method.getParams(location);
+        Object result = invokeMethod(ugi, namenodes, proto, m, paramList);
+        return Collections.singletonMap(location, clazz.cast(result));
+      } finally {
+        releasePermit(ns, ugi, method);
+      }
     }
 
     List<T> orderedLocations = new LinkedList<>();
@@ -1179,6 +1200,7 @@ public class RouterRpcClient {
       this.router.getRouterMetrics().incInvokedConcurrent(m);
     }
 
+    acquirePermit(CONCURRENT_NS, ugi, method);
     try {
       List<Future<Object>> futures = null;
       if (timeOutMs > 0) {
@@ -1250,6 +1272,8 @@ public class RouterRpcClient {
       LOG.error("Unexpected error while invoking API: {}", ex.getMessage());
       throw new IOException(
           "Unexpected error while invoking API " + ex.getMessage(), ex);
+    } finally {
+      releasePermit(CONCURRENT_NS, ugi, method);
     }
   }
 
@@ -1364,5 +1388,55 @@ public class RouterRpcClient {
       return false;
     }
     return !method.getAnnotation(ReadOnly.class).activeOnly();
+  }
+  /**
+   * Acquire permit to continue processing the request for specific nsId.
+   *
+   * @param nsId Identifier of the block pool.
+   * @param ugi UserGroupIdentifier associated with the user.
+   * @param m Remote method that needs to be invoked.
+   * @throws IOException If permit could not be acquired for the nsId.
+   */
+  private void acquirePermit(
+      final String nsId, final UserGroupInformation ugi, final RemoteMethod m)
+      throws IOException {
+    if (routerRpcFairnessPolicyController != null
+        && !routerRpcFairnessPolicyController.acquirePermit(nsId)) {
+      // Throw StandByException,
+      // Clients could fail over and try another router.
+      if (rpcMonitor != null) {
+        rpcMonitor.getRPCMetrics().incrProxyOpPermitRejected();
+      }
+      LOG.debug("Permit denied for ugi: {} for method: {}",
+          ugi, m.getMethodName());
+      String msg =
+          "Router " + router.getRouterId() +
+              " is overloaded for NS: " + nsId;
+      throw new StandbyException(msg);
+    }
+  }
+
+  /**
+   * Release permit for specific nsId after processing against downstream
+   * nsId is completed.
+   *
+   * @param nsId Identifier of the block pool.
+   * @param ugi UserGroupIdentifier associated with the user.
+   * @param m Remote method that needs to be invoked.
+   */
+  private void releasePermit(
+      final String nsId, final UserGroupInformation ugi, final RemoteMethod m) {
+    if (routerRpcFairnessPolicyController != null) {
+      routerRpcFairnessPolicyController.releasePermit(nsId);
+      LOG.trace("Permit released for ugi: {} for method: {}", ugi,
+          m.getMethodName());
+    }
+  }
+
+  @VisibleForTesting
+  public AbstractRouterRpcFairnessPolicyController
+      getRouterRpcFairnessPolicyController() {
+    return (AbstractRouterRpcFairnessPolicyController
+          )routerRpcFairnessPolicyController;
   }
 }
