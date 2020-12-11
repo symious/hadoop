@@ -99,6 +99,31 @@ public class TestDecayRpcScheduler {
     assertEquals(0.125, scheduler.getDecayFactor(), 0.00001);
   }
 
+  @Test
+  @SuppressWarnings("deprecation")
+  public void testParseStaticUser() {
+    // Default
+    scheduler = new DecayRpcScheduler(1, "", new Configuration());
+    assertEquals(DecayRpcScheduler.IPC_SCHEDULER_DECAYSCHEDULER_FACTOR_DEFAULT,
+        scheduler.getDecayFactor(), 0.00001);
+
+    // Custom
+    Configuration conf = new Configuration();
+    conf.set("prefix." +
+            DecayRpcScheduler.IPC_DECAYSCHEDULER_STATIC_USER_PREFIX + 1,
+        "1_user");
+    conf.set("prefix." +
+            DecayRpcScheduler.IPC_DECAYSCHEDULER_STATIC_USER_PREFIX + 2,
+        "2_user");
+    conf.set("prefix." +
+            DecayRpcScheduler.IPC_DECAYSCHEDULER_STATIC_USER_PREFIX + 3,
+        "3_user");
+    scheduler = new DecayRpcScheduler(4, "prefix", conf);
+    assertEquals(1, scheduler.getPriorityLevel(mockCall("1_user")));
+    assertEquals(2, scheduler.getPriorityLevel(mockCall("2_user")));
+    assertEquals(3, scheduler.getPriorityLevel(mockCall("3_user")));
+  }
+
   public void assertEqualDecimalArrays(double[] a, double[] b) {
     assertEquals(a.length, b.length);
     for(int i = 0; i < a.length; i++) {
