@@ -18,10 +18,15 @@
 package org.apache.hadoop.ipc;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.ipc.proto.RefreshCallQueueProtocolProtos.RefreshCallQueueTypeProto;
+import org.apache.hadoop.ipc.RefreshCallQueueProtocol.RefreshCallQueueType;
 import org.apache.hadoop.security.proto.SecurityProtos.TokenProto;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
@@ -131,5 +136,32 @@ public class ProtobufHelper {
         setKindBytes(getFixedByteString(tok.getKind())).
         setServiceBytes(getFixedByteString(tok.getService()));
     return builder.build();
+  }
+
+  public static EnumSet<RefreshCallQueueType> convertRefreshCallQueueTypes(
+      List<RefreshCallQueueTypeProto> refreshCallQueueTypeProtos) {
+    EnumSet<RefreshCallQueueType> types =
+        EnumSet.noneOf(RefreshCallQueueType.class);
+    for (RefreshCallQueueTypeProto typeProto : refreshCallQueueTypeProtos) {
+      RefreshCallQueueType type =
+          RefreshCallQueueType.valueOf((short)typeProto.getNumber());
+      if (type != null) {
+        types.add(type);
+      }
+    }
+    return types;
+  }
+
+  public static List<RefreshCallQueueTypeProto> convertRefreshCallQueueTypes(
+      EnumSet<RefreshCallQueueType> types) {
+    List<RefreshCallQueueTypeProto> typeProtos = new ArrayList<>();
+    for (RefreshCallQueueType type : types) {
+      RefreshCallQueueTypeProto typeProto =
+          RefreshCallQueueTypeProto.valueOf(type.getMode());
+      if (typeProto != null) {
+        typeProtos.add(typeProto);
+      }
+    }
+    return typeProtos;
   }
 }

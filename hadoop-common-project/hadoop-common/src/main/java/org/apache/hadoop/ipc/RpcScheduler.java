@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.ipc;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ipc.metrics.RpcMetrics;
 
 /**
@@ -71,4 +72,9 @@ public interface RpcScheduler {
   }
 
   void stop();
+
+  /**
+   * Reload some config, no need to reconstruct the scheduler.
+   */
+  void reload(Configuration conf);
 }

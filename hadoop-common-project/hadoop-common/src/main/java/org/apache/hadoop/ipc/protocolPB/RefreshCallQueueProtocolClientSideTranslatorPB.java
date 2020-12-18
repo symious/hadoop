@@ -20,6 +20,7 @@ package org.apache.hadoop.ipc.protocolPB;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.EnumSet;
 
 import org.apache.hadoop.ipc.ProtobufHelper;
 import org.apache.hadoop.ipc.ProtocolMetaInterface;
@@ -58,6 +59,21 @@ public class RefreshCallQueueProtocolClientSideTranslatorPB implements
     try {
       rpcProxy.refreshCallQueue(NULL_CONTROLLER,
           VOID_REFRESH_CALL_QUEUE_REQUEST);
+    } catch (ServiceException se) {
+      throw ProtobufHelper.getRemoteException(se);
+    }
+  }
+
+  @Override
+  public void refreshCallQueue(EnumSet<RefreshCallQueueType> types)
+      throws IOException {
+    RefreshCallQueueRequestProto.Builder req =
+        RefreshCallQueueRequestProto.newBuilder();
+    if (types != null) {
+      req.addAllTypes(ProtobufHelper.convertRefreshCallQueueTypes(types));
+    }
+    try {
+      rpcProxy.refreshCallQueue(NULL_CONTROLLER, req.build());
     } catch (ServiceException se) {
       throw ProtobufHelper.getRemoteException(se);
     }

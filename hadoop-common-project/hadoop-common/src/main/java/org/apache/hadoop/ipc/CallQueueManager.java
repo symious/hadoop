@@ -436,6 +436,10 @@ public class CallQueueManager<E extends Schedulable>
       "Replacement: " + stringRepr(newQ));
   }
 
+  public synchronized void reloadQueue(Configuration conf) {
+    this.scheduler.reload(conf);
+  }
+
   /**
    * Checks if queue is empty by checking at CHECKPOINT_NUM points with
    * CHECKPOINT_INTERVAL_MS interval.

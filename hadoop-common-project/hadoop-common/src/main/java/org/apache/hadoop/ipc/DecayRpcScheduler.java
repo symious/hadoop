@@ -1134,4 +1134,9 @@ public class DecayRpcScheduler implements RpcScheduler,
     MetricsProxy.removeInstance(namespace);
     decayRpcSchedulerDetailedMetrics.shutdown();
   }
+
+  @Override
+  public void reload(Configuration conf) {
+    // Do reload operation here
+  }
 }

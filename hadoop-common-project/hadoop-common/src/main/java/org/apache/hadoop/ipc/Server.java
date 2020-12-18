@@ -52,6 +52,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -86,6 +87,7 @@ import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.ipc.CallQueueManager.CallQueueOverflowException;
+import org.apache.hadoop.ipc.RefreshCallQueueProtocol.RefreshCallQueueType;
 import org.apache.hadoop.ipc.RPC.RpcInvoker;
 import org.apache.hadoop.ipc.RPC.VersionMismatch;
 import org.apache.hadoop.ipc.metrics.RpcDetailedMetrics;
@@ -747,6 +749,7 @@ public abstract class Server {
   /*
    * Refresh the call queue
    */
+  @Deprecated
   public synchronized void refreshCallQueue(Configuration conf) {
     // Create the next queue
     String prefix = getQueueClassPrefix();
@@ -756,6 +759,30 @@ public abstract class Server {
     callQueue.swapQueue(getSchedulerClass(prefix, conf),
         getQueueClass(prefix, conf), maxQueueSize, prefix, conf);
     callQueue.setClientBackoffEnabled(getClientBackoffEnable(prefix, conf));
+  }
+
+  /*
+   * Refresh the call queue on different types
+   */
+  public synchronized void refreshCallQueue(Configuration configuration,
+      EnumSet<RefreshCallQueueType> types) {
+    // Fall back to overall refresh
+    if (types.contains(RefreshCallQueueType.REFRESH)) {
+      // Create the next queue
+      String prefix = getQueueClassPrefix();
+      this.maxQueueSize = handlerCount * configuration.getInt(
+          CommonConfigurationKeys.IPC_SERVER_HANDLER_QUEUE_SIZE_KEY,
+          CommonConfigurationKeys.IPC_SERVER_HANDLER_QUEUE_SIZE_DEFAULT);
+      callQueue.swapQueue(getSchedulerClass(prefix, configuration),
+          getQueueClass(prefix, configuration), maxQueueSize, prefix,
+          configuration);
+      callQueue.setClientBackoffEnabled(getClientBackoffEnable(prefix,
+          configuration));
+    } else {
+      if (types.contains(RefreshCallQueueType.RELOAD)) {
+        callQueue.reloadQueue(configuration);
+      }
+    }
   }
 
   /**

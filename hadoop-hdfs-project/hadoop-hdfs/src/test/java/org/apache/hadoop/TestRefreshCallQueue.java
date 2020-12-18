@@ -173,5 +173,32 @@ public class TestRefreshCallQueue {
     assertEquals(150 * serviceHandlerCount, rpcServer.getClientRpcServer()
         .getMaxQueueSize());
  }
+  @Test
+  public void testReload() throws Exception {
+    // We want to count additional events, so we reset here
+    mockQueueConstructions = 0;
+    mockQueuePuts = 0;
+    setUp(MockCallQueue.class);
 
+    assertTrue("Mock queue should have been constructed",
+        mockQueueConstructions > 0);
+    assertTrue("Puts are routed through MockQueue", canPutInMockQueue());
+    int lastMockQueueConstructions = mockQueueConstructions;
+
+    // Replace queue with the queue specified in core-site.xml, which would be
+    // the LinkedBlockingQueue
+    DFSAdmin admin = new DFSAdmin(config);
+    String[] args = new String[]{"-refreshCallQueue", "-reload"};
+    int exitCode = admin.run(args);
+    assertEquals("DFSAdmin should return 0", 0, exitCode);
+
+    assertEquals("Mock queue should have no additional constructions",
+        lastMockQueueConstructions, mockQueueConstructions);
+    try {
+      assertFalse("Puts are routed through LBQ instead of MockQueue",
+          canPutInMockQueue());
+    } catch (IOException ioe) {
+      fail("Could not put into queue at all");
+    }
+  }
 }

@@ -1777,6 +1777,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     namesystem.logAuditEvent(true, "refreshSuperUserGroupsConfiguration", null);
   }
 
+  @Deprecated
   @Override // RefreshCallQueueProtocol
   public void refreshCallQueue() throws IOException {
     LOG.info("Refreshing call queue.");
@@ -1787,6 +1788,17 @@ public class NameNodeRpcServer implements NamenodeProtocols {
       serviceRpcServer.refreshCallQueue(conf);
     }
     namesystem.logAuditEvent(true, "refreshCallQueue", null);
+  }
+
+  @Override // RefreshCallQueueProtocol
+  public void refreshCallQueue(EnumSet<RefreshCallQueueType> types) {
+    LOG.info("Refreshing call queue with RefreshCallQueueType: " + types);
+
+    Configuration conf = new Configuration();
+    clientRpcServer.refreshCallQueue(conf, types);
+    if (this.serviceRpcServer != null) {
+      serviceRpcServer.refreshCallQueue(conf, types);
+    }
   }
 
   @Override // GenericRefreshProtocol
