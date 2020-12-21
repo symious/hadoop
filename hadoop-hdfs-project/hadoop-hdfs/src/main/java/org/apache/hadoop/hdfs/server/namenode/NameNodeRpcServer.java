@@ -1684,6 +1684,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     ProxyUsers.refreshSuperUserGroupsConfiguration();
   }
 
+  @Deprecated
   @Override // RefreshCallQueueProtocol
   public void refreshCallQueue() {
     LOG.info("Refreshing call queue.");
@@ -1692,6 +1693,17 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     clientRpcServer.refreshCallQueue(conf);
     if (this.serviceRpcServer != null) {
       serviceRpcServer.refreshCallQueue(conf);
+    }
+  }
+
+  @Override // RefreshCallQueueProtocol
+  public void refreshCallQueue(EnumSet<RefreshCallQueueType> types) {
+    LOG.info("Refreshing call queue with RefreshCallQueueType: " + types);
+
+    Configuration conf = new Configuration();
+    clientRpcServer.refreshCallQueue(conf, types);
+    if (this.serviceRpcServer != null) {
+      serviceRpcServer.refreshCallQueue(conf, types);
     }
   }
 

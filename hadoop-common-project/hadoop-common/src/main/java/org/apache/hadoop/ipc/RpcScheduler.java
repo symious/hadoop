@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.ipc;
 
+import org.apache.hadoop.conf.Configuration;
+
 /**
  * Implement this interface to be used for RPC scheduling and backoff.
  *
@@ -41,4 +43,9 @@ public interface RpcScheduler {
       ProcessingDetails details);
 
   void stop();
+
+  /**
+   * Reload some config, no need to reconstruct the scheduler.
+   */
+  void reload(Configuration conf);
 }

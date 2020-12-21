@@ -51,6 +51,7 @@ import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -98,6 +99,7 @@ import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcResponseHeaderProto.Rpc
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcSaslProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcSaslProto.SaslAuth;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcSaslProto.SaslState;
+import org.apache.hadoop.ipc.RefreshCallQueueProtocol.RefreshCallQueueType;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.SaslPropertiesResolver;
@@ -736,6 +738,7 @@ public abstract class Server {
   /*
    * Refresh the call queue
    */
+  @Deprecated
   public synchronized void refreshCallQueue(Configuration conf) {
     // Create the next queue
     String prefix = getQueueClassPrefix();
@@ -745,6 +748,30 @@ public abstract class Server {
     callQueue.swapQueue(getSchedulerClass(prefix, conf),
         getQueueClass(prefix, conf), maxQueueSize, prefix, conf);
     callQueue.setClientBackoffEnabled(getClientBackoffEnable(prefix, conf));
+  }
+
+  /*
+   * Refresh the call queue on different types
+   */
+  public synchronized void refreshCallQueue(Configuration configuration,
+      EnumSet<RefreshCallQueueType> types) {
+    // Fall back to overall refresh
+    if (types.contains(RefreshCallQueueType.REFRESH)) {
+      // Create the next queue
+      String prefix = getQueueClassPrefix();
+      this.maxQueueSize = handlerCount * configuration.getInt(
+          CommonConfigurationKeys.IPC_SERVER_HANDLER_QUEUE_SIZE_KEY,
+          CommonConfigurationKeys.IPC_SERVER_HANDLER_QUEUE_SIZE_DEFAULT);
+      callQueue.swapQueue(getSchedulerClass(prefix, configuration),
+          getQueueClass(prefix, configuration), maxQueueSize, prefix,
+          configuration);
+      callQueue.setClientBackoffEnabled(getClientBackoffEnable(prefix,
+          configuration));
+    } else {
+      if (types.contains(RefreshCallQueueType.RELOAD)) {
+        callQueue.reloadQueue(configuration);
+      }
+    }
   }
 
   /**

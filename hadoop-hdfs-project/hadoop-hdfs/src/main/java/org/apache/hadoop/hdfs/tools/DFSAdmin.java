@@ -87,6 +87,7 @@ import org.apache.hadoop.io.MultipleIOException;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RefreshCallQueueProtocol;
+import org.apache.hadoop.ipc.RefreshCallQueueProtocol.RefreshCallQueueType;
 import org.apache.hadoop.ipc.RefreshResponse;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.protocolPB.GenericRefreshProtocolClientSideTranslatorPB;
@@ -444,7 +445,7 @@ public class DFSAdmin extends FsShell {
     "\t[-refreshUserToGroupsMappings]\n" +
     "\t[-refreshUserToRpcPasswordMappings]\n" +
     "\t[-refreshSuperUserGroupsConfiguration]\n" +
-    "\t[-refreshCallQueue]\n" +
+    "\t[-refreshCallQueue] [-reload]\n" +
     "\t[-refresh <host:ipc_port> <key> [arg1..argn]\n" +
     "\t[-reconfig <namenode|datanode> <host:ipc_port> " +
       "<start|status|properties>]\n" +
@@ -1690,7 +1691,21 @@ public class DFSAdmin extends FsShell {
     return 0;
   }
 
-  public int refreshCallQueue() throws IOException {
+  public int refreshCallQueue(String[] argv) throws IOException {
+    // Check the refresh type
+    String path = null;
+    List<RefreshCallQueueType> types = new ArrayList<>();
+    if (argv != null) {
+      List<String> args = new ArrayList<>(Arrays.asList(argv));
+      if (StringUtils.popOption("-reload", args)) {
+        types.add(RefreshCallQueueType.RELOAD);
+      }
+    }
+    if (types.isEmpty()) {
+      types.add(RefreshCallQueueType.REFRESH);
+    }
+    EnumSet<RefreshCallQueueType> refreshCallQueueTypes = EnumSet.copyOf(types);
+
     // Get the current configuration
     Configuration conf = getConf();
     
@@ -1713,9 +1728,9 @@ public class DFSAdmin extends FsShell {
       List<IOException> exceptions = new ArrayList<>();
       for (ProxyAndInfo<RefreshCallQueueProtocol> proxy : proxies) {
         try{
-          proxy.getProxy().refreshCallQueue();
-          System.out.println("Refresh call queue successful for "
-              + proxy.getAddress());
+          proxy.getProxy().refreshCallQueue(refreshCallQueueTypes);
+          System.out.println("Refresh call queue " + refreshCallQueueTypes
+              + " successful for " + proxy.getAddress());
         }catch (IOException ioe){
           System.out.println("Refresh call queue failed for "
               + proxy.getAddress());
@@ -1732,8 +1747,9 @@ public class DFSAdmin extends FsShell {
               RefreshCallQueueProtocol.class).getProxy();
 
       // Refresh the call queue
-      refreshProtocol.refreshCallQueue();
-      System.out.println("Refresh call queue successful");
+      refreshProtocol.refreshCallQueue(refreshCallQueueTypes);
+      System.out.println("Refresh call queue " + refreshCallQueueTypes
+          + " successful");
     }
 
     return 0;
@@ -2045,7 +2061,7 @@ public class DFSAdmin extends FsShell {
                          + " [-refreshSuperUserGroupsConfiguration]");
     } else if ("-refreshCallQueue".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
-                         + " [-refreshCallQueue]");
+          + " [-refreshCallQueue [-reload]]");
     } else if ("-reconfig".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
           + " [-reconfig <namenode|datanode> <host:ipc_port> "
@@ -2193,6 +2209,11 @@ public class DFSAdmin extends FsShell {
         printUsage(cmd);
         return exitCode;
       }
+    } else if ("-refreshCallQueue".equals(cmd)) {
+      if ((argv.length > 2)) {
+        printUsage(cmd);
+        return exitCode;
+      }
     } else if ("-printTopology".equals(cmd)) {
       if(argv.length != 1) {
         printUsage(cmd);
@@ -2309,7 +2330,7 @@ public class DFSAdmin extends FsShell {
       } else if ("-refreshSuperUserGroupsConfiguration".equals(cmd)) {
         exitCode = refreshSuperUserGroupsConfiguration();
       } else if ("-refreshCallQueue".equals(cmd)) {
-        exitCode = refreshCallQueue();
+        exitCode = refreshCallQueue(argv);
       } else if ("-refresh".equals(cmd)) {
         exitCode = genericRefresh(argv, i);
       } else if ("-printTopology".equals(cmd)) {

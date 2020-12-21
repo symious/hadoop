@@ -28,10 +28,16 @@ option java_generic_services = true;
 option java_generate_equals_and_hash = true;
 package hadoop.common;
 
+enum RefreshCallQueueTypeProto {
+  REFRESH = 1;
+  RELOAD = 2;
+}
+
 /**
  *  Refresh callqueue request.
  */
 message RefreshCallQueueRequestProto {
+  repeated RefreshCallQueueTypeProto types = 1;
 }
 
 /**

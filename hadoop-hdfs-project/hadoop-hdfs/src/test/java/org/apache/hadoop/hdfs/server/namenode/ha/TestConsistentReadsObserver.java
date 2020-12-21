@@ -487,5 +487,9 @@ public class TestConsistentReadsObserver {
     @Override
     public void stop() {
     }
+
+    @Override
+    public void reload(Configuration configuration) {
+    }
   }
 }
