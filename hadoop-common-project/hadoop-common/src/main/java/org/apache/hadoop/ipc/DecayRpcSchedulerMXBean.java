@@ -24,9 +24,11 @@ package org.apache.hadoop.ipc;
 public interface DecayRpcSchedulerMXBean {
   // Get an overview of the requests in history.
   String getSchedulingDecisionSummary();
+  String getStaticDecisionSummary();
   String getCallVolumeSummary();
   int getUniqueIdentityCount();
   long getTotalCallVolume();
   double[] getAverageResponseTime();
   long[] getResponseTimeCountInLastWindow();
+  long[] getStaticUserTotalCount();
 }
