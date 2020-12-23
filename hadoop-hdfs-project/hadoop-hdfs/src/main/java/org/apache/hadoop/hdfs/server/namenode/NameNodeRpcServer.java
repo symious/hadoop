@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.namenode;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_ROOT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_COUNT_KEY;
@@ -210,6 +211,7 @@ import org.apache.hadoop.tracing.SpanReceiverInfo;
 import org.apache.hadoop.tracing.TraceAdminPB.TraceAdminService;
 import org.apache.hadoop.tracing.TraceAdminProtocolPB;
 import org.apache.hadoop.tracing.TraceAdminProtocolServerSideTranslatorPB;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.VersionInfo;
 import org.apache.hadoop.util.VersionUtil;
 import org.slf4j.Logger;
@@ -255,8 +257,13 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   
   private final String minimumDataNodeVersion;
 
+  // Custom trash folder
+  private final String[] customTrashRoot;
+  private Configuration conf;
+
   public NameNodeRpcServer(Configuration conf, NameNode nn)
       throws IOException {
+    this.conf = conf;
     this.nn = nn;
     this.namesystem = nn.getNamesystem();
     this.retryCache = namesystem.getRetryCache();
@@ -543,6 +550,8 @@ public class NameNodeRpcServer implements NamenodeProtocols {
         this.clientRpcServer.addAuxiliaryListener(auxiliaryPort);
       }
     }
+    String[] customTrashRoot = conf.getStrings(FS_TRASH_ROOT);
+    this.customTrashRoot = customTrashRoot;
   }
 
   /** Allow access to the lifeline RPC server for testing */
@@ -1063,12 +1072,84 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     }
     boolean success = false;
     try {
-      namesystem.renameTo(src, dst, cacheEntry != null, options);
+      if (Arrays.asList(options).contains(Options.Rename.TO_TRASH)) {
+        trash(src, dst, cacheEntry, options);
+      } else {
+        namesystem.renameTo(src, dst, cacheEntry != null, options);
+      }
       success = true;
     } finally {
       RetryCache.setState(cacheEntry, success);
     }
     metrics.incrFilesRenamed();
+  }
+
+  /**
+   * Hijacks old format trash destination, converts to new destination, creates
+   * directories as necessary, moves src to trash
+   * @param src source to be moved to trash
+   * @param origDst original trash destination
+   * @return trash destination according to new format /Trash/$USER
+   * @throws IOException
+   */
+  private void trash(String src, String origDst, CacheEntry cacheEntry,
+      Options.Rename... options) throws IOException {
+    // Client using old path
+    String origDstNorm = new Path(origDst).toString();
+    String[] split = origDstNorm.split("/");
+    // If trash is new format already, use the original dest
+    if (split[1].equals("Trash") || this.conf.getStrings(FS_TRASH_ROOT) == null) {
+      namesystem.renameTo(src, origDst, cacheEntry != null, options);
+      return;
+    }
+    LOG.debug("Hijacking trash, src:" + src + ",dst:" + origDst);
+    // Old format is /user/$USER/.Trash/Current/abcxyz....
+    String user = split[2];
+
+    Path trashRoot = new Path("/Trash", user);
+    if (src.startsWith(trashRoot.toString())) {
+      // Already in trash
+      namesystem.delete(src, true, cacheEntry != null);
+      return;
+    }
+
+    Path trashPath;
+
+    if (src.endsWith("/.Trash/Current")) {
+      // Checkpoint operation
+      long checkpointTime = Long.parseLong(new Path(origDst).getName());
+      Path checkpointTimePath = new Path("/" + checkpointTime);
+      trashPath = Path.mergePaths(trashRoot, checkpointTimePath);
+      // If this checkpoint time already exists under new trash dir, add 1ms
+      while (getFileInfo(trashPath.toString()) != null) {
+        checkpointTime += 1;
+        checkpointTimePath = new Path("/" + checkpointTime);
+        trashPath = Path.mergePaths(trashRoot, checkpointTimePath);
+      }
+    } else {
+      Path trashCurrent = new Path(trashRoot, new Path("Current"));
+      trashPath = Path.mergePaths(trashCurrent, new Path(src));
+      Path baseTrashPath =
+          Path.mergePaths(trashCurrent, (new Path(src)).getParent());
+      try {
+        if (!mkdirs(baseTrashPath.toString(),
+            new FsPermission(FsAction.ALL, FsAction.NONE, FsAction.NONE),
+            true)) {      // create current
+          LOG.warn("Can't create(mkdir) trash directory: " + baseTrashPath);
+          return;
+        }
+      } catch (IOException e) {
+        LOG.warn("Can't create trash directory: " + baseTrashPath, e);
+      }
+    }
+
+    String orig = trashPath.toString();
+    if (getFileInfo(orig) != null) {
+      trashPath = new Path(orig + Time.now());
+    }
+    LOG.debug("Trash hijacked, from:" + origDst + ", to:" + trashPath);
+    String newDest = trashPath.toUri().getPath();
+    namesystem.renameTo(src, newDest, cacheEntry != null, options);
   }
 
   @Override // ClientProtocol
