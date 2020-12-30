@@ -36,7 +36,7 @@ public class TestHDFSTrashCustomRoot {
   private static Configuration conf = new HdfsConfiguration();
 
   private final static Path TEST_ROOT = new Path("/TestHDFSTrash-ROOT");
-  private final static String BASE_TRASH_ROOT_STR = "/Trash";
+  private final static String BASE_TRASH_ROOT_STR = "/Trash/subdir";
   private final static Path BASE_TRASH_ROOT = new Path(BASE_TRASH_ROOT_STR);
 
   final private static String GROUP1_NAME = "group1";
@@ -71,13 +71,6 @@ public class TestHDFSTrashCustomRoot {
 
     fs.mkdirs(BASE_TRASH_ROOT);
     fs.setPermission(BASE_TRASH_ROOT, new FsPermission((short) 0777));
-    DFSTestUtil.verifyFilePermission(
-        fs.getFileStatus(BASE_TRASH_ROOT),
-        superUser.getShortUserName(),
-        null, FsAction.ALL, FsAction.ALL, FsAction.ALL);
-
-    fs.mkdirs(new Path("/user"));
-    fs.setPermission(new Path("/user"), new FsPermission((short) 0777));
     DFSTestUtil.verifyFilePermission(
         fs.getFileStatus(BASE_TRASH_ROOT),
         superUser.getShortUserName(),
@@ -154,45 +147,6 @@ public class TestHDFSTrashCustomRoot {
   }
 
   @Test
-  public void testMismatchedClientConfig() throws Exception {
-    Configuration testConf = new Configuration(conf);
-    testConf.set(CommonConfigurationKeys.FS_TRASH_INTERVAL_KEY, "1");
-    testConf.set(CommonConfigurationKeys.FS_TRASH_CHECKPOINT_INTERVAL_KEY, "0.1"); // 6 seconds
-
-    Path user1Tmp = new Path(TEST_ROOT, "test-del-u1");
-    fs = DFSTestUtil.login(fs, testConf, user1);
-
-    // Client using new config
-    fs.mkdirs(user1Tmp);
-    Trash u1Trash = getPerUserTrash(user1, fs, testConf, 0, false);
-    Path u1t = u1Trash.getCurrentTrashDir(user1Tmp);
-    assertTrue(String.format("Failed to move %s to trash", user1Tmp),
-        u1Trash.moveToTrash(user1Tmp));
-    assertTrue(fs.exists(u1t));
-
-    // Client using old config
-    fs.mkdirs(user1Tmp);
-    Trash u1Trash2 = getPerUserTrash(user1, fs, testConf, 1, false);
-    Path u1t2 = u1Trash2.getCurrentTrashDir(user1Tmp);
-    assertTrue(String.format("Failed to move %s to trash", user1Tmp),
-        u1Trash2.moveToTrash(user1Tmp));
-    assertTrue(fs.exists(u1t2));
-
-    Runnable emptier = u1Trash2.getEmptier();
-    Thread emptierThread = new Thread(emptier);
-    emptierThread.start();
-
-    // Now wait for 8s
-    Thread.sleep(8000);
-    // No rogue Current
-    for (FileStatus trashRoot : fs.getTrashRoots(true)) {
-      assertFalse(trashRoot.toString().endsWith("Current"));
-    }
-    emptierThread.interrupt();
-    emptierThread.join();
-  }
-
-  @Test
   public void testTrashEmptier() throws Exception {
     Configuration config = new Configuration(conf);
     // Trash with 12 second deletes and 6 seconds checkpoints
@@ -249,31 +203,17 @@ public class TestHDFSTrashCustomRoot {
    * directories for different users.
    */
   private Trash getPerUserTrash(UserGroupInformation ugi,
-      FileSystem fileSystem, Configuration config, int opt, boolean randomId) throws IOException {
+      FileSystem fileSystem, Configuration config) throws IOException {
     // generate an unique path per instance
-    UUID trashId;
-    if (randomId) {
-      trashId = UUID.randomUUID();
-    } else {
-      trashId = UUID.nameUUIDFromBytes(ugi.getShortUserName().getBytes());
-    }
+    UUID trashId = UUID.randomUUID();
     StringBuffer sb = new StringBuffer()
         .append(ugi.getUserName())
         .append("-")
         .append(trashId.toString());
-    Path userTrashRoot;
-    if (opt == 0) {
-      userTrashRoot = new Path(BASE_TRASH_ROOT, sb.toString());
-    } else {
-      userTrashRoot = new Path("/user/" + sb.toString(), ".Trash");
-    }
+    Path userTrashRoot = new Path(BASE_TRASH_ROOT, sb.toString());
     FileSystem spyUserFs = Mockito.spy(fileSystem);
     Mockito.when(spyUserFs.getTrashRoot(Mockito.any(Path.class)))
         .thenReturn(userTrashRoot);
     return new Trash(spyUserFs, config);
-  }
-  private Trash getPerUserTrash(UserGroupInformation ugi,
-      FileSystem fileSystem, Configuration config) throws IOException {
-    return getPerUserTrash(ugi, fileSystem, config, 0, true);
   }
 }
