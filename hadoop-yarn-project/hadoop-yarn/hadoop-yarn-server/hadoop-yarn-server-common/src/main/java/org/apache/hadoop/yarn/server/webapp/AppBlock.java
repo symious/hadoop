@@ -180,7 +180,7 @@ public class AppBlock extends HtmlBlock {
       // Application Kill
       html.div()
         .button()
-          .$onclick("confirmAction()").b("Kill Application").__()
+          .$onclick("").b("").__()
           .__();
 
       StringBuilder script = new StringBuilder();
