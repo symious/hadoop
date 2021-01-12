@@ -60,6 +60,7 @@ import org.apache.hadoop.yarn.conf.HAUtil;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.AsyncDispatcher;
 import org.apache.hadoop.yarn.event.Dispatcher;
+import org.apache.hadoop.yarn.event.DispatcherMetrics;
 import org.apache.hadoop.yarn.event.EventDispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.exceptions.YarnException;
@@ -449,11 +450,17 @@ public class ResourceManager extends CompositeService
   }
 
   protected EventHandler<SchedulerEvent> createSchedulerEventDispatcher() {
-    return new EventDispatcher(this.scheduler, "SchedulerEventDispatcher");
+    EventDispatcher dispatcher = new EventDispatcher(this.scheduler, "SchedulerEventDispatcher");
+    DispatcherMetrics metrics = SchedulerEventDispatcherMetrics.registerMetrics();
+    dispatcher.setMetrics(metrics);
+    return dispatcher;
   }
 
   protected Dispatcher createDispatcher() {
-    return new AsyncDispatcher("RM Event dispatcher");
+    AsyncDispatcher dispatcher = new AsyncDispatcher("RM Event dispatcher");
+    DispatcherMetrics metrics = RMAsyncDispatcherMetrics.registerMetrics();
+    dispatcher.setMetrics(metrics);
+    return dispatcher;
   }
 
   protected ResourceScheduler createScheduler() {

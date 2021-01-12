@@ -47,6 +47,7 @@ public class EventDispatcher<T extends Event> extends
   private final Thread eventProcessor;
   private volatile boolean stopped = false;
   private boolean shouldExitOnError = true;
+  private DispatcherMetrics metrics;
 
   private static final Logger LOG =
       LoggerFactory.getLogger(EventDispatcher.class);
@@ -68,7 +69,13 @@ public class EventDispatcher<T extends Event> extends
         }
 
         try {
-          handler.handle(event);
+          if (metrics != null) {
+            long startTime = System.nanoTime();
+            handler.handle(event);
+            metrics.incrementEventType(event, (System.nanoTime() - startTime) / 1000);
+          } else {
+            handler.handle(event);
+          }
         } catch (Throwable t) {
           // An error occurred, but we are shutting down anyway.
           // If it was an InterruptedException, the very act of
@@ -135,5 +142,9 @@ public class EventDispatcher<T extends Event> extends
   @VisibleForTesting
   public void disableExitOnError() {
     shouldExitOnError = false;
+  }
+
+  public void setMetrics(DispatcherMetrics metrics) {
+    this.metrics = metrics;
   }
 }
