@@ -76,6 +76,7 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.RefreshUserToGroupsMapp
 import org.apache.hadoop.yarn.server.api.protocolrecords.RemoveFromClusterNodeLabelsRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigRequest;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.util.UnitsConversionUtil;
 import org.apache.hadoop.yarn.util.resource.ResourceUtils;
@@ -341,9 +342,18 @@ public class RMAdminCLI extends HAAdmin {
   private int refreshQueues() throws IOException, YarnException {
     // Refresh the queue properties
     ResourceManagerAdministrationProtocol adminProtocol = createAdminProtocol();
-    RefreshQueuesRequest request = 
+    RefreshQueuesRequest request =
       recordFactory.newRecordInstance(RefreshQueuesRequest.class);
     adminProtocol.refreshQueues(request);
+    return 0;
+  }
+
+  private int updateRMConfig() throws IOException, YarnException {
+    // Reload RM Config
+    ResourceManagerAdministrationProtocol adminProtocol = createAdminProtocol();
+    UpdateRMConfigRequest request =
+        recordFactory.newRecordInstance(UpdateRMConfigRequest.class);
+    adminProtocol.updateRMConfig(request);
     return 0;
   }
 
@@ -772,6 +782,8 @@ public class RMAdminCLI extends HAAdmin {
         exitCode = getGroups(usernames);
       } else if ("-updateNodeResource".equals(cmd)) {
         exitCode = handleUpdateNodeResource(args, cmd, isHAEnabled);
+      } else if ("-updateRMConfig".equals(cmd)) {
+        exitCode = updateRMConfig();
       } else if ("-addToClusterNodeLabels".equals(cmd)) {
         exitCode = handleAddToClusterNodeLabels(args, cmd, isHAEnabled);
       } else if ("-removeFromClusterNodeLabels".equals(cmd)) {

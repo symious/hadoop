@@ -37,6 +37,7 @@ import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.Nodes
 import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.RefreshAdminAclsRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.RefreshClusterMaxPriorityRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.RefreshNodesRequestProto;
+import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.UpdateRMConfigRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.RefreshNodesResourcesRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.RefreshQueuesRequestProto;
 import org.apache.hadoop.yarn.proto.YarnServerResourceManagerServiceProtos.RefreshServiceAclsRequestProto;
@@ -75,6 +76,8 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeRequ
 import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.AddToClusterNodeLabelsRequestPBImpl;
 import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.AddToClusterNodeLabelsResponsePBImpl;
 import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.CheckForDecommissioningNodesRequestPBImpl;
@@ -105,6 +108,8 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.UpdateNodeResou
 import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.UpdateNodeResourceResponsePBImpl;
 
 import org.apache.hadoop.thirdparty.protobuf.ServiceException;
+import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.UpdateRMConfigRequestPBImpl;
+import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.UpdateRMConfigResponsePBImpl;
 
 @Private
 public class ResourceManagerAdministrationProtocolPBClientImpl implements ResourceManagerAdministrationProtocol, Closeable {
@@ -207,6 +212,20 @@ public class ResourceManagerAdministrationProtocolPBClientImpl implements Resour
     try {
       return new RefreshServiceAclsResponsePBImpl(proxy.refreshServiceAcls(
           null, requestProto));
+    } catch (ServiceException e) {
+      RPCUtil.unwrapAndThrowException(e);
+      return null;
+    }
+  }
+
+  @Override
+  public UpdateRMConfigResponse updateRMConfig(UpdateRMConfigRequest request)
+      throws YarnException, IOException {
+    UpdateRMConfigRequestProto requestProto =
+        ((UpdateRMConfigRequestPBImpl) request).getProto();
+    try {
+      return new UpdateRMConfigResponsePBImpl(
+          proxy.updateRMConfig(null, requestProto));
     } catch (ServiceException e) {
       RPCUtil.unwrapAndThrowException(e);
       return null;

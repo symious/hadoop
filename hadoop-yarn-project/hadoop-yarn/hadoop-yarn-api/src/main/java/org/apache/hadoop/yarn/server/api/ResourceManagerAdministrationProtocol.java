@@ -56,6 +56,9 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeRequ
 import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigResponse;
+
 
 @Private
 public interface ResourceManagerAdministrationProtocol extends GetUserMappingsProtocol {
@@ -94,7 +97,13 @@ public interface ResourceManagerAdministrationProtocol extends GetUserMappingsPr
   public RefreshServiceAclsResponse refreshServiceAcls(
       RefreshServiceAclsRequest request)
   throws YarnException, IOException;
-  
+
+
+  @Private
+  @Idempotent
+  public UpdateRMConfigResponse updateRMConfig(
+      UpdateRMConfigRequest request) throws YarnException, IOException;
+
   /**
    * <p>The interface used by admin to update nodes' resources to the
    * <code>ResourceManager</code> </p>.

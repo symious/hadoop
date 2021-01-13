@@ -95,6 +95,8 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeRequ
 import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigResponse;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.NodeLabelsUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.reservation.ReservationSystem;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.DynamicResourceConfiguration;
@@ -106,6 +108,15 @@ import org.apache.hadoop.yarn.server.resourcemanager.security.authorize.RMPolicy
 
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.protobuf.BlockingService;
+
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD1_WATERMARK_HIGH;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD1_WATERMARK_HIGH_DEFAULT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD5_WATERMARK_HIGH;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD5_WATERMARK_HIGH_DEFAULT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_SLOWNODE_CHECK_ENABLED;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_SLOWNODE_CHECK_ENABLED_DEFAULT;
 
 public class AdminService extends CompositeService implements
     HAServiceProtocol, ResourceManagerAdministrationProtocol {
@@ -590,6 +601,41 @@ public class AdminService extends CompositeService implements
             "AdminService");
 
     return recordFactory.newRecordInstance(RefreshServiceAclsResponse.class);
+  }
+
+  @Override
+  public UpdateRMConfigResponse updateRMConfig(UpdateRMConfigRequest request)
+      throws YarnException, IOException {
+    final String operation = "updateRMConfig";
+    UserGroupInformation user = checkAcls(operation);
+
+    checkRMStatus(user.getShortUserName(), operation, "update RM config.");
+
+    Configuration newConf = loadNewConfiguration();
+    Configuration rmConf = rm.getRMContext().getYarnConfiguration();
+    //update slow node params
+    rmConf.setBoolean(RM_SCHEDULER_SLOWNODE_CHECK_ENABLED,
+        newConf.getBoolean(RM_SCHEDULER_SLOWNODE_CHECK_ENABLED,
+            RM_SCHEDULER_SLOWNODE_CHECK_ENABLED_DEFAULT));
+
+    rmConf.setFloat(RM_SCHEDULER_LOAD1_WATERMARK_HIGH,
+        newConf.getFloat(RM_SCHEDULER_LOAD1_WATERMARK_HIGH,
+            RM_SCHEDULER_LOAD1_WATERMARK_HIGH_DEFAULT));
+
+    rmConf.setFloat(RM_SCHEDULER_LOAD5_WATERMARK_HIGH,
+        newConf.getFloat(RM_SCHEDULER_LOAD5_WATERMARK_HIGH,
+            RM_SCHEDULER_LOAD5_WATERMARK_HIGH_DEFAULT));
+
+    rmConf.setInt(RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH,
+        newConf.getInt(RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH,
+            RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT));
+
+    RMAuditLogger.logSuccess(user.getShortUserName(), operation,
+          "AdminService");
+
+    UpdateRMConfigResponse response =
+        UpdateRMConfigResponse.newInstance();
+    return response;
   }
 
   private void refreshServiceAcls() throws IOException, YarnException {

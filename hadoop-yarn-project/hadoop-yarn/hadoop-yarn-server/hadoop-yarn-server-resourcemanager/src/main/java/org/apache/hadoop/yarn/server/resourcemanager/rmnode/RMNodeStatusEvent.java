@@ -79,11 +79,21 @@ public class RMNodeStatusEvent extends RMNodeEvent {
       List<LogAggregationReport> logAggregationReportsForApps) {
     this.logAggregationReportsForApps = logAggregationReportsForApps;
   }
-  
+
   public List<Container> getNMReportedIncreasedContainers() {
     return this.nodeStatus.getIncreasedContainers() == null ?
         Collections.emptyList() : this.nodeStatus.getIncreasedContainers();
   }
 
+  public float getLoad1() {
+    return nodeStatus.getLoad1();
+  }
 
+  public float getLoad5() {
+    return nodeStatus.getLoad5();
+  }
+
+  public int getDiskUsage() {
+    return nodeStatus.getDiskUsage();
+  }
 }

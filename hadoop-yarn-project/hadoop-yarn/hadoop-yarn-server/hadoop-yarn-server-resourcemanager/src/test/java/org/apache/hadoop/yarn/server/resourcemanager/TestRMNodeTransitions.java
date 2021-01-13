@@ -36,6 +36,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
 
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.util.HostsFileReader;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -126,6 +127,12 @@ public class TestRMNodeTransitions {
         new RMContextImpl(rmDispatcher, mock(ContainerAllocationExpirer.class),
           null, null, mock(DelegationTokenRenewer.class), null, null, null,
           null, null);
+
+    if (rmContext instanceof RMContextImpl) {
+      RMContextImpl rmContextImpl = (RMContextImpl) rmContext;
+      rmContextImpl.setYarnConfiguration(new YarnConfiguration());
+    }
+
     NodesListManager nodesListManager = mock(NodesListManager.class);
     HostsFileReader reader = mock(HostsFileReader.class);
     when(nodesListManager.getHostsReader()).thenReturn(reader);

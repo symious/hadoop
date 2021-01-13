@@ -56,6 +56,9 @@ public class ClusterMetrics {
   @Metric("Vcore Utilization") MutableGaugeLong utilizedVirtualCores;
   @Metric("Memory Capability") MutableGaugeLong capabilityMB;
   @Metric("Vcore Capability") MutableGaugeLong capabilityVirtualCores;
+  @Metric("#Total number of high load1 skipped times") MutableGaugeLong highLoad1Skipped;
+  @Metric("#Total number of high load5 skipped times") MutableGaugeLong highLoad5Skipped;
+  @Metric("#Total number of high disk Usage skipped times") MutableGaugeLong highDiskUsageSkipped;
 
   private static final MetricsInfo RECORD_INFO = info("ClusterMetrics",
   "Metrics for the Yarn Cluster");
@@ -250,5 +253,30 @@ public class ClusterMetrics {
 
   public void incrUtilizedVirtualCores(long delta) {
     utilizedVirtualCores.incr(delta);
+  }
+
+  //SLOW nodes
+  public long geHighLoad1Skipped() {
+    return highLoad1Skipped.value();
+  }
+
+  public void incrHighLoad1Skipped() {
+    highLoad1Skipped.incr();
+  }
+
+  public long getHighLoad5Skipped() {
+    return highLoad5Skipped.value();
+  }
+
+  public void incrHighLoad5Skipped() {
+    highLoad5Skipped.incr();
+  }
+
+  public long getHighDiskUsageSkipped() {
+    return highDiskUsageSkipped.value();
+  }
+
+  public void incrHighDiskUsageSkipped() {
+    highDiskUsageSkipped.incr();
   }
 }

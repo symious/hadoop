@@ -90,6 +90,13 @@ public class SysInfoLinux extends SysInfo {
                       "[ \t]*([0-9]*)[ \t]*([0-9]*)[ \t].*");
   private CpuTimeTracker cpuTimeTracker;
 
+
+  private static final String PROCFS_LOAD = "/proc/loadavg";
+
+  private static final float DEFAULT_LOAD = -1;
+  private float load1 = DEFAULT_LOAD;
+  private float load5 = DEFAULT_LOAD;
+
   /**
    * Pattern for parsing /proc/net/dev.
    */
@@ -658,6 +665,64 @@ public class SysInfoLinux extends SysInfo {
       overallCpuUsage = overallCpuUsage / getNumProcessors();
     }
     return overallCpuUsage;
+  }
+
+  @Override
+  public float getLoad1() {
+    if (load1 == DEFAULT_LOAD) {
+      loadAvgFile();
+    }
+    return load1;
+  }
+
+  @Override
+  public float getLoad5() {
+    if (load5 == DEFAULT_LOAD) {
+      loadAvgFile();
+    }
+    return load5;
+  }
+
+  private void loadAvgFile() {
+    BufferedReader in;
+    InputStreamReader fReader;
+    try {
+      fReader = new InputStreamReader(
+          new FileInputStream(PROCFS_LOAD), Charset.forName("UTF-8"));
+      in = new BufferedReader(fReader);
+    } catch (FileNotFoundException f) {
+      // shouldn't happen....
+      load1 = 0;
+      load5 = 0;
+      return;
+    }
+
+    try {
+      String str = in.readLine();
+      if (!StringUtils.isNullOrEmpty(str)) {
+        String[] loads = str.split(" ");
+        if (loads.length == 5) {
+          load1 = Float.parseFloat(loads[0]);
+          load5 = Float.parseFloat(loads[1]);
+        }
+      }
+    } catch (Exception io) {
+      LOG.warn("Error reading the stream " + io);
+      load1 = 0;
+      load5 = 0;
+    } finally {
+      // Close the streams
+      try {
+        fReader.close();
+        try {
+          in.close();
+        } catch (IOException i) {
+          LOG.warn("Error closing the stream " + in);
+        }
+      } catch (IOException i) {
+        LOG.warn("Error closing the stream " + fReader);
+      }
+    }
   }
 
   /** {@inheritDoc} */

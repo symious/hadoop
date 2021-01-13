@@ -48,7 +48,8 @@ public class RMNodeWrapper implements RMNode {
   private RMNode node;
   private List<UpdatedContainerInfo> updates;
   private boolean pulled = false;
-  
+  private boolean isGoodTarget = true;
+
   public RMNodeWrapper(RMNode node) {
     this.node = node;
     updates = node.pullContainerUpdates();
@@ -216,6 +217,16 @@ public class RMNodeWrapper implements RMNode {
   @Override
   public RMContext getRMContext() {
     return node.getRMContext();
+  }
+
+  @Override
+  public boolean isGoodTarget() {
+    return isGoodTarget;
+  }
+
+  @Override
+  public void setGoodTarget(boolean isGoodTarget) {
+    this.isGoodTarget = isGoodTarget;
   }
 
   @Override
