@@ -687,10 +687,11 @@ public class SysInfoLinux extends SysInfo {
     BufferedReader in;
     InputStreamReader fReader;
     try {
-      fReader = new InputStreamReader(
-          new FileInputStream(PROCFS_LOAD), Charset.forName("UTF-8"));
+      fReader =
+          new InputStreamReader(Files.newInputStream(Paths.get(PROCFS_LOAD)),
+              Charset.forName("UTF-8"));
       in = new BufferedReader(fReader);
-    } catch (FileNotFoundException f) {
+    } catch (IOException f) {
       // shouldn't happen....
       load1 = 0;
       load5 = 0;
@@ -699,7 +700,7 @@ public class SysInfoLinux extends SysInfo {
 
     try {
       String str = in.readLine();
-      if (!StringUtils.isNullOrEmpty(str)) {
+      if (str != null) {
         String[] loads = str.split(" ");
         if (loads.length == 5) {
           load1 = Float.parseFloat(loads[0]);
