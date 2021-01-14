@@ -728,6 +728,8 @@ public class YarnConfiguration extends Configuration {
   public static final float
       DEFAULT_RM_NM_HEARTBEAT_INTERVAL_SLOWDOWN_FACTOR = 1.0f;
 
+  public static final int DEFAULT_RM_EVENT_BASE_NUMBER = 5000;
+
   /** Number of worker threads that write the history data. */
   public static final String RM_HISTORY_WRITER_MULTI_THREADED_DISPATCHER_POOL_SIZE =
       RM_PREFIX + "history-writer.multi-threaded-dispatcher.pool-size";

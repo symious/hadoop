@@ -964,7 +964,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
         NodeLabelsUtils.convertToStringSet(heartbeatReq.getNodeLabels()));
     Assert.assertTrue("Valid Node Labels were not accepted by RM",
         nodeHeartbeatResponse.getAreNodeLabelsAcceptedByRM());
-    
+
     // After modification of labels next heartbeat sends null informing no update
     Set<String> oldLabels = nodeLabelsMgr.getNodeLabels().get(nodeId);
     int responseId = nodeStatusObject.getResponseId();

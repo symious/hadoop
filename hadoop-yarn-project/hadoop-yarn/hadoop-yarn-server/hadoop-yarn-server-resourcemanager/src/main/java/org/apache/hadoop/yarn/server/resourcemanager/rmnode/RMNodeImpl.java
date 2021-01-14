@@ -31,7 +31,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
@@ -96,6 +95,7 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.DEFAULT_RM_EVENT_BASE_NUMBER;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD1_WATERMARK_HIGH;
@@ -739,6 +739,22 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
     }
   }
 
+  public static long calculateHeartBeatIntervalByQueueSize(long numRmEvents,
+      long minInterval, long maxInterval, float slowdownFactor) {
+
+    if (numRmEvents <= DEFAULT_RM_EVENT_BASE_NUMBER) {
+      return minInterval;
+    }
+
+    double factor = Math.log(numRmEvents - DEFAULT_RM_EVENT_BASE_NUMBER + 1);
+    long newInterval = (long) (factor * slowdownFactor * minInterval);
+
+    //ReCheck
+    newInterval = Math.min(maxInterval, newInterval);
+    newInterval = Math.max(minInterval, newInterval);
+    return newInterval;
+  }
+
   @Override
   public long calculateHeartBeatInterval(long defaultInterval, long minInterval,
       long maxInterval, float speedupFactor, float slowdownFactor) {
@@ -778,7 +794,8 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
             + " clusterUtil: " + clusterUtil);
       }
     }
-    return newInterval;
+    return calculateHeartBeatIntervalByQueueSize(
+        metrics.getNumRmEvents(), newInterval, maxInterval, slowdownFactor);
   }
 
   public void handle(RMNodeEvent event) {

@@ -54,6 +54,8 @@ import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.NodeAttribute;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.event.AsyncDispatcher;
+import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.factories.RecordFactory;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
@@ -627,6 +629,15 @@ public class ResourceTrackerService extends AbstractService implements
       throws YarnException, IOException {
 
     NodeStatus remoteNodeStatus = request.getNodeStatus();
+
+    //Update RM Event Queue Size
+    Dispatcher dispatcher = rmContext.getDispatcher();
+    ClusterMetrics metrics = ClusterMetrics.getMetrics();
+    if (dispatcher instanceof AsyncDispatcher) {
+      AsyncDispatcher asyncDispatcher = (AsyncDispatcher) dispatcher;
+      metrics.setNumRmEvents(asyncDispatcher.getLastEventQueueSizeLogged());
+    }
+
     /**
      * Here is the node heartbeat sequence...
      * 1. Check if it's a valid (i.e. not excluded) node
@@ -712,6 +723,11 @@ public class ResourceTrackerService extends AbstractService implements
           heartBeatIntervalMax, heartBeatIntervalSpeedupFactor,
           heartBeatIntervalSlowdownFactor);
     }
+
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Current next interval time is :" + newInterval);
+    }
+
     NodeHeartbeatResponse nodeHeartBeatResponse =
         YarnServerBuilderUtils.newNodeHeartbeatResponse(
             getNextResponseId(lastNodeHeartbeatResponse.getResponseId()),

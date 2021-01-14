@@ -59,6 +59,7 @@ public class ClusterMetrics {
   @Metric("#Total number of high load1 skipped times") MutableGaugeLong highLoad1Skipped;
   @Metric("#Total number of high load5 skipped times") MutableGaugeLong highLoad5Skipped;
   @Metric("#Total number of high disk Usage skipped times") MutableGaugeLong highDiskUsageSkipped;
+  @Metric("# of RM Events") MutableGaugeLong numRmEvents;
 
   private static final MetricsInfo RECORD_INFO = info("ClusterMetrics",
   "Metrics for the Yarn Cluster");
@@ -278,5 +279,14 @@ public class ClusterMetrics {
 
   public void incrHighDiskUsageSkipped() {
     highDiskUsageSkipped.incr();
+  }
+
+  // Num of RM Events
+  public long getNumRmEvents() {
+    return numRmEvents.value();
+  }
+
+  public void setNumRmEvents(long num) {
+    numRmEvents.set(num);
   }
 }
