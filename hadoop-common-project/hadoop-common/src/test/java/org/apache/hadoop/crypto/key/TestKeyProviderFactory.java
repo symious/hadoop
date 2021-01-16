@@ -38,6 +38,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import static org.apache.hadoop.security.sdi.SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -178,13 +179,14 @@ public class TestKeyProviderFactory {
 
     // get a new instance of the provider to ensure it was saved correctly
     provider = KeyProviderFactory.getProviders(conf).get(0);
+    int sdiCredentialNum = provider.getKeys().contains(SDI_CREDENTIAL_ENV_VAR) ? 1 : 0;
     assertArrayEquals(new byte[]{2},
         provider.getCurrentKey("key4").getMaterial());
     assertArrayEquals(key3, provider.getCurrentKey("key3").getMaterial());
     assertEquals("key3@0", provider.getCurrentKey("key3").getVersionName());
 
     List<String> keys = provider.getKeys();
-    assertTrue("Keys should have been returned.", keys.size() == 2);
+    assertTrue("Keys should have been returned.", keys.size() == 2 + sdiCredentialNum);
     assertTrue("Returned Keys should have included key3.", keys.contains("key3"));
     assertTrue("Returned Keys should have included key4.", keys.contains("key4"));
 

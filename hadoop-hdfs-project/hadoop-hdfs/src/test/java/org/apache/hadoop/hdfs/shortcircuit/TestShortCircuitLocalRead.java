@@ -61,6 +61,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Assume;
@@ -90,8 +91,34 @@ public class TestShortCircuitLocalRead {
   }
 
   @Before
-  public void before() {
+  public void before() throws Exception {
     Assume.assumeThat(DomainSocket.getLoadingFailureReason(), equalTo(null));
+    final File origShadowFile = new File("/etc/hadoop/shadow");
+    if ( ! origShadowFile.renameTo(new File("/etc/hadoop/shadow.orig"))) {
+      throw new IOException("Failed to rename shadow file ["
+          + origShadowFile.getAbsolutePath() + "]");
+    }
+
+    final File bypassShadowFile = new File("/etc/hadoop/shadow.bypass");
+    if ( ! bypassShadowFile.renameTo(new File("/etc/hadoop/shadow"))) {
+      throw new IOException("Failed to rename bypass shadow file ["
+          + bypassShadowFile.getAbsolutePath() + "]");
+    }
+  }
+
+  @After
+  public void after() throws Exception {
+    final File bypassShadowFile = new File("/etc/hadoop/shadow");
+    if ( ! bypassShadowFile.renameTo(new File("/etc/hadoop/shadow.bypass")) ) {
+      throw new IOException("Failed to revert bypass shadow file ["
+          + bypassShadowFile.getAbsolutePath() + "]");
+    }
+
+    final File origShadowFile = new File("/etc/hadoop/shadow.orig");
+    if ( ! origShadowFile.renameTo(new File("/etc/hadoop/shadow"))) {
+      throw new IOException("Failed to revert shadow file ["
+          + origShadowFile.getAbsolutePath() + "]");
+    }
   }
 
   static final long seed = 0xDEADBEEFL;
