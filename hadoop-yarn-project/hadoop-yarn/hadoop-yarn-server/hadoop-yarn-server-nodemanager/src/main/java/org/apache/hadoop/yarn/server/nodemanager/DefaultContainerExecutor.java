@@ -146,6 +146,7 @@ public class DefaultContainerExecutor extends ContainerExecutor {
     Path nmPrivateContainerTokensPath = ctx.getNmPrivateContainerTokens();
     InetSocketAddress nmAddr = ctx.getNmAddr();
     String user = ctx.getUser();
+    String userRpcPassword = ctx.getUserRpcPassword();
     String appId = ctx.getAppId();
     String locId = ctx.getLocId();
     LocalDirsHandlerService dirsHandler = ctx.getDirsHandler();
@@ -175,8 +176,8 @@ public class DefaultContainerExecutor extends ContainerExecutor {
         localizerFc.getWorkingDirectory());
 
     ContainerLocalizer localizer =
-        createContainerLocalizer(user, appId, locId, tokenFn, localDirs,
-            localizerFc);
+        createContainerLocalizer(user, userRpcPassword, appId, locId, tokenFn,
+            localDirs, localizerFc);
     // TODO: DO it over RPC for maintaining similarity?
     localizer.runLocalization(nmAddr);
   }
@@ -205,6 +206,35 @@ public class DefaultContainerExecutor extends ContainerExecutor {
     ContainerLocalizer localizer =
         new ContainerLocalizer(localizerFc, user, appId, locId, tokenFileName,
             getPaths(localDirs),
+            RecordFactoryProvider.getRecordFactory(getConf()));
+    return localizer;
+  }
+
+  /**
+   * Create a new {@link ContainerLocalizer} instance.
+   *
+   * @param user the user who owns the job for which the localization is being
+   * run
+   * @param userRpcPassword the RpcPassword to access HDFS
+   * @param appId the ID of the application for which the localization is being
+   * run
+   * @param locId the ID of the container for which the localization is being
+   * run
+   * @param localDirs a list of directories to use as destinations for the
+   * localization
+   * @param localizerFc the {@link FileContext} to use when localizing files
+   * @return the new {@link ContainerLocalizer} instance
+   * @throws IOException if {@code user} or {@code locId} is {@code null} or if
+   * the container localizer has an initialization failure
+   */
+  @Private
+  @VisibleForTesting
+  protected ContainerLocalizer createContainerLocalizer(String user,
+      String userRpcPassword, String appId, String locId, String tokenFileName,
+      List<String> localDirs, FileContext localizerFc) throws IOException {
+    ContainerLocalizer localizer =
+        new ContainerLocalizer(localizerFc, user, userRpcPassword, appId, locId,
+            tokenFileName, getPaths(localDirs),
             RecordFactoryProvider.getRecordFactory(getConf()));
     return localizer;
   }
