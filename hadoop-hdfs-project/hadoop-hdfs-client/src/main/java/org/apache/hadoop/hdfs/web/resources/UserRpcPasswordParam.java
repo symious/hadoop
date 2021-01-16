@@ -17,8 +17,8 @@
  */
 package org.apache.hadoop.hdfs.web.resources;
 
-import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 import java.text.MessageFormat;
 import java.util.regex.Pattern;
