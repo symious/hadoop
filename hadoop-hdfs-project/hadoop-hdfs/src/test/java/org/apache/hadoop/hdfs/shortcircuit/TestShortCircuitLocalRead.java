@@ -27,6 +27,8 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.net.URI;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.PrivilegedExceptionAction;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
@@ -93,32 +95,29 @@ public class TestShortCircuitLocalRead {
   @Before
   public void before() throws Exception {
     Assume.assumeThat(DomainSocket.getLoadingFailureReason(), equalTo(null));
-    final File origShadowFile = new File("/etc/hadoop/shadow");
-    if ( ! origShadowFile.renameTo(new File("/etc/hadoop/shadow.orig"))) {
-      throw new IOException("Failed to rename shadow file ["
-          + origShadowFile.getAbsolutePath() + "]");
+
+    final String symLinkName = "/etc/hadoop/shadow";
+    final File symLinkFile = new File(symLinkName);
+    if ( ! symLinkFile.delete()) {
+      throw new IOException("Failed to delete symbolic link shadow file ["
+          + symLinkName + "]");
     }
 
-    final File bypassShadowFile = new File("/etc/hadoop/shadow.bypass");
-    if ( ! bypassShadowFile.renameTo(new File("/etc/hadoop/shadow"))) {
-      throw new IOException("Failed to rename bypass shadow file ["
-          + bypassShadowFile.getAbsolutePath() + "]");
-    }
+    Files.createSymbolicLink(Paths.get(symLinkName),
+        Paths.get("/etc/hadoop/shadow.bypass"));
   }
 
   @After
   public void after() throws Exception {
-    final File bypassShadowFile = new File("/etc/hadoop/shadow");
-    if ( ! bypassShadowFile.renameTo(new File("/etc/hadoop/shadow.bypass")) ) {
-      throw new IOException("Failed to revert bypass shadow file ["
-          + bypassShadowFile.getAbsolutePath() + "]");
+    final String symLinkName = "/etc/hadoop/shadow";
+    final File symLinkFile = new File(symLinkName);
+    if ( ! symLinkFile.delete()) {
+      throw new IOException("Failed to delete symbolic link shadow file ["
+          + symLinkName + "]");
     }
 
-    final File origShadowFile = new File("/etc/hadoop/shadow.orig");
-    if ( ! origShadowFile.renameTo(new File("/etc/hadoop/shadow"))) {
-      throw new IOException("Failed to revert shadow file ["
-          + origShadowFile.getAbsolutePath() + "]");
-    }
+    Files.createSymbolicLink(Paths.get(symLinkName),
+        Paths.get("/etc/hadoop/shadow.orig"));
   }
 
   static final long seed = 0xDEADBEEFL;
