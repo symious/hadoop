@@ -373,6 +373,7 @@ public class TestReplicationPolicyWithUpgradeDomain
         excessReplicas.contains(storages[4]));
 
     // No delete hint, different excess type deletion
+    delHintNode = storages[0].getDatanodeDescriptor();
     nonExcess.clear();
     nonExcess.add(storages[0]);
     nonExcess.add(storages[1]);

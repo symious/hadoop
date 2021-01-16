@@ -90,6 +90,7 @@ DOCKER_INTERACTIVE_RUN=${DOCKER_INTERACTIVE_RUN-"-i -t"}
 # system.  And this also is a significant speedup in subsequent
 # builds because the dependencies are downloaded only once.
 docker run --network=host --rm=true $DOCKER_INTERACTIVE_RUN \
+  --detach-keys="ctrl-@" \
   -v "${PWD}:${DOCKER_HOME_DIR}/hadoop${V_OPTS:-}" \
   -w "${DOCKER_HOME_DIR}/hadoop" \
   -v "${HOME}/.m2:${DOCKER_HOME_DIR}/.m2${V_OPTS:-}" \
