@@ -69,6 +69,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.sdi.SDICredentialsProvider;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.service.AbstractService;
@@ -499,8 +500,17 @@ public class ResourceLocalizationService extends CompositeService
       return;
     }
     String userRpcPassword = null;
-    if (c.getLaunchContext() != null && c.getLaunchContext().getEnvironment() != null) {
-      userRpcPassword = c.getLaunchContext().getEnvironment().get("HADOOP_USER_RPCPASSWORD");
+    if (c.getLaunchContext() != null &&
+        c.getLaunchContext().getEnvironment() != null) {
+      userRpcPassword = c.getLaunchContext().getEnvironment()
+          .get(SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR);
+    }
+    if ((userRpcPassword == null || userRpcPassword.isEmpty()) &&
+        c.getCredentials()
+            .getSecretKey(SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR_TEXT) !=
+            null) {
+      userRpcPassword = new String(c.getCredentials()
+          .getSecretKey(SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR_TEXT));
     }
     // create a loading cache for the file statuses
     LoadingCache<Path,Future<FileStatus>> statCache =
