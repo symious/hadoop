@@ -1754,6 +1754,11 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
   }
 
   @Override
+  public void refreshUserToRpcPasswordMappings() throws IOException {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public String[] getGroupsForUser(String user) throws IOException {
     return routerProto.getGroupsForUser(user);
   }

@@ -87,6 +87,11 @@ public class RouterUserProtocol
   }
 
   @Override
+  public void refreshUserToRpcPasswordMappings() throws IOException {
+    throw new UnsupportedOperationException();
+  }
+
+  @Override
   public String[] getGroupsForUser(String user) throws IOException {
     LOG.debug("Getting groups for user {}", user);
     rpcServer.checkOperation(OperationCategory.UNCHECKED);
