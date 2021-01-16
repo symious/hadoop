@@ -217,6 +217,9 @@ public class WebHdfsFileSystem extends FileSystem
     UserParam.setUserPattern(conf.get(
         HdfsClientConfigKeys.DFS_WEBHDFS_USER_PATTERN_KEY,
         HdfsClientConfigKeys.DFS_WEBHDFS_USER_PATTERN_DEFAULT));
+    UserRpcPasswordParam.setUserRpcPasswordPattern(conf.get(
+            HdfsClientConfigKeys.DFS_WEBHDFS_USER_RPCPASSWORD_PATTERN_KEY,
+            HdfsClientConfigKeys.DFS_WEBHDFS_USER_RPCPASSWORD_PATTERN_DEFAULT));
     AclPermissionParam.setAclPermissionPattern(conf.get(
         HdfsClientConfigKeys.DFS_WEBHDFS_ACL_PERMISSION_PATTERN_KEY,
         HdfsClientConfigKeys.DFS_WEBHDFS_ACL_PERMISSION_PATTERN_DEFAULT));
@@ -606,11 +609,11 @@ public class WebHdfsFileSystem extends FileSystem
         authParams.add(new DoAsParam(userUgi.getShortUserName()));
         userUgi = realUgi;
       }
-      UserParam userParam = new UserParam((userUgi.getShortUserName()));
+      UserRpcPasswordParam userRpcPasswordParam = new UserRpcPasswordParam(userUgi);
 
       //in insecure, use user.name parameter, in secure, use spnego auth
       if(isInsecureCluster) {
-        authParams.add(userParam);
+        authParams.add(userRpcPasswordParam);
       }
     }
     return authParams.toArray(new Param<?,?>[0]);

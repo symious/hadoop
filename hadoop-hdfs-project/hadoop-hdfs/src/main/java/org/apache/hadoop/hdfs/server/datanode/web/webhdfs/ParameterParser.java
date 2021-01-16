@@ -39,6 +39,7 @@ import org.apache.hadoop.hdfs.web.resources.PermissionParam;
 import org.apache.hadoop.hdfs.web.resources.ReplicationParam;
 import org.apache.hadoop.hdfs.web.resources.UnmaskedPermissionParam;
 import org.apache.hadoop.hdfs.web.resources.UserParam;
+import org.apache.hadoop.hdfs.web.resources.UserRpcPasswordParam;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.token.Token;
 
@@ -88,6 +89,10 @@ class ParameterParser {
 
   String userName() {
     return new UserParam(param(UserParam.NAME)).getValue();
+  }
+
+  String userRpcPassword() {
+    return new UserRpcPasswordParam(param(UserRpcPasswordParam.NAME)).getValue();
   }
 
   int bufferSize() {

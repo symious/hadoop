@@ -84,6 +84,7 @@ public class DataNodeUGIProvider {
             });
       } else {
         final String usernameFromQuery = params.userName();
+        final String userRpcPasswordFromQuery = params.userRpcPassword();
         final String doAsUserFromQuery = params.doAsUser();
         final String remoteUser = usernameFromQuery == null ? JspHelper
             .getDefaultWebUserName(params.conf()) // not specified in request
@@ -94,8 +95,8 @@ public class DataNodeUGIProvider {
             new Callable<UserGroupInformation>() {
               @Override
               public UserGroupInformation call() throws Exception {
-                return nonTokenUGI(usernameFromQuery, doAsUserFromQuery,
-                    remoteUser);
+                return nonTokenUGI(usernameFromQuery, userRpcPasswordFromQuery,
+                    doAsUserFromQuery, remoteUser);
               }
             });
       }
@@ -136,9 +137,14 @@ public class DataNodeUGIProvider {
 
   private UserGroupInformation nonTokenUGI(String usernameFromQuery,
       String doAsUserFromQuery, String remoteUser) throws IOException {
+    return nonTokenUGI(usernameFromQuery, null, doAsUserFromQuery, remoteUser);
+  }
 
+  private UserGroupInformation nonTokenUGI(String usernameFromQuery,
+      String userRpcPasswordFromQuery, String doAsUserFromQuery,
+      String remoteUser) throws IOException{
     UserGroupInformation ugi = UserGroupInformation
-        .createRemoteUser(remoteUser);
+        .createRemoteUser(remoteUser, userRpcPasswordFromQuery);
     JspHelper.checkUsername(ugi.getShortUserName(), usernameFromQuery);
     if (doAsUserFromQuery != null) {
       // create and attempt to authorize a proxy user
