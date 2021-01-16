@@ -307,7 +307,7 @@ public class TestLinuxContainerExecutorWithMocks {
           .build());
 
       List<String> result=readMockParams();
-      assertThat(result).hasSize(26);
+      assertThat(result).hasSize(27);
       assertThat(result.get(0)).isEqualTo(YarnConfiguration.
           DEFAULT_NM_NONSECURE_MODE_LOCAL_USER);
       assertThat(result.get(1)).isEqualTo("test");
@@ -330,11 +330,11 @@ public class TestLinuxContainerExecutorWithMocks {
       assertThat(result.get(18)).isEqualTo("org.apache.hadoop.yarn.server." +
           "nodemanager.containermanager.localizer.ContainerLocalizer");
       assertThat(result.get(19)).isEqualTo("test");
-      assertThat(result.get(20)).isEqualTo("application_0");
-      assertThat(result.get(21)).isEqualTo("12345");
-      assertThat(result.get(22)).isEqualTo("localhost");
-      assertThat(result.get(23)).isEqualTo("8040");
-      assertThat(result.get(24)).isEqualTo("nmPrivateCTokensPath");
+      Assert.assertEquals(result.get(21), "application_0");
+      Assert.assertEquals(result.get(22), "12345");
+      Assert.assertEquals(result.get(23), "localhost");
+      Assert.assertEquals(result.get(24), "8040");
+      Assert.assertEquals(result.get(25), "nmPrivateCTokensPath");
 
     } catch (InterruptedException e) {
       LOG.error("Error:"+e.getMessage(),e);

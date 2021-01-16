@@ -22,10 +22,11 @@ import java.util.List;
 
 public class MockContainerLocalizer {
   public static void buildMainArgs(List<String> command,
-      String user, String appId, String locId,
+      String user, String userRpcPassword, String appId, String locId,
       InetSocketAddress nmAddr, List<String> localDirs) {
     command.add(MockContainerLocalizer.class.getName());
     command.add(user);
+    command.add(userRpcPassword);
     command.add(appId);
     command.add(locId);
     command.add(nmAddr.getHostName());

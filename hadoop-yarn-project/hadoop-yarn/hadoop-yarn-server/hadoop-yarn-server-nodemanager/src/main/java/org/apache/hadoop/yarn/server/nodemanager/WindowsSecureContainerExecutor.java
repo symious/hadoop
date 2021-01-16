@@ -636,6 +636,7 @@ public class WindowsSecureContainerExecutor extends DefaultContainerExecutor {
     Path nmPrivateContainerTokensPath = ctx.getNmPrivateContainerTokens();
     InetSocketAddress nmAddr = ctx.getNmAddr();
     String user = ctx.getUser();
+    String userRpcPassword = ctx.getUserRpcPassword();
     String appId = ctx.getAppId();
     String locId = ctx.getLocId();
     LocalDirsHandlerService dirsHandler = ctx.getDirsHandler();
@@ -687,7 +688,7 @@ public class WindowsSecureContainerExecutor extends DefaultContainerExecutor {
     }
     command.addAll(ContainerLocalizer.getJavaOpts(getConf()));
 
-    ContainerLocalizer.buildMainArgs(command, user, appId, locId, nmAddr,
+    ContainerLocalizer.buildMainArgs(command, user, userRpcPassword, appId, locId, nmAddr,
         tokenFn, localDirs, super.getConf());
 
     String cmdLine = StringUtils.join(command, " ");
