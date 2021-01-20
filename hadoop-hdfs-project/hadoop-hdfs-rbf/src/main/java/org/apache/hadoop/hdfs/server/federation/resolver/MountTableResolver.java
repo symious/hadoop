@@ -688,7 +688,9 @@ public class MountTableResolver
     final String SPARK_STAGING_PATTERN = "(.*)/.spark-staging";
     final String SPAKR_STAGING_PATTERN2 = "(.*)/.sparkStaging";
     final String TEMPORARY_PATTERN = "(.*)/_temporary";
+    final String UUID_PATTERN_FILE = "(.*)/.*" + UUID_PATTERN;
     final String[] TO_IGNORE_PATTERNS = {
+            UUID_PATTERN_FILE,
             PART_FILE_PATTERN,
             SPARK_STAGING_PATTERN,
             TEMPORARY_PATTERN,

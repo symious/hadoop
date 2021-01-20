@@ -582,4 +582,15 @@ public class TestMountTableResolver {
     mountTable.removeEntry("/testlocationcache");
     mountTable.removeEntry("/anothertestlocationcache");
   }
+
+  @Test
+  public void testGetDirPrefix() throws Exception {
+    String match1 = "/test_manifest/20200723_105434_14034_qrctr_5bbcdb62-d575-4292-923e-b60d73dfb073";
+    String match1Res = MountTableResolver.getDirPrefix(match1);
+    assertFalse(match1.equals(match1Res));
+
+    String unmatch1 = "/test_manifest/20200723_105434_14034_qrctr_5bbcdb62-d575-4292-923eX-b60d73dfb073";
+    String unmatch1Res = MountTableResolver.getDirPrefix(unmatch1);
+    assertTrue(unmatch1.equals(unmatch1Res));
+  }
 }
