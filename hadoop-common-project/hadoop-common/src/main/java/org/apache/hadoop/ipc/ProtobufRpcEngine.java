@@ -96,6 +96,19 @@ public class ProtobufRpcEngine implements RpcEngine {
       rpcTimeout, connectionRetryPolicy, null, null);
   }
 
+
+  @Override
+  @SuppressWarnings("unchecked")
+  public <T> ProtocolProxy<T> getProxy(Class<T> protocol, long clientVersion,
+      ConnectionId connId, Configuration conf, SocketFactory factory,
+      AlignmentContext alignmentContext)
+      throws IOException {
+    final Invoker invoker =
+        new Invoker(protocol, connId, conf, factory, alignmentContext);
+    return new ProtocolProxy<T>(protocol, (T) Proxy.newProxyInstance(
+        protocol.getClassLoader(), new Class[] {protocol}, invoker), false);
+  }
+
   @Override
   @SuppressWarnings("unchecked")
   public <T> ProtocolProxy<T> getProxy(Class<T> protocol, long clientVersion,
@@ -155,6 +168,13 @@ public class ProtobufRpcEngine implements RpcEngine {
       this.protocolName = RPC.getProtocolName(protocol);
       this.clientProtocolVersion = RPC
           .getProtocolVersion(protocol);
+    }
+
+    private Invoker(Class<?> protocol, Client.ConnectionId connId,
+        Configuration conf, SocketFactory factory,
+        AlignmentContext alignmentContext) {
+      this(protocol, connId, conf, factory);
+      this.alignmentContext = alignmentContext;
     }
 
     private RequestHeaderProto constructRpcRequestHeader(Method method) {

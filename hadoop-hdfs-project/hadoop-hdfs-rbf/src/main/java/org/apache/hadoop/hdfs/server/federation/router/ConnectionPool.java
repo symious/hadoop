@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.SocketFactory;
 
+import org.apache.hadoop.ipc.FederationConnectionId;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -63,6 +64,8 @@ import org.apache.hadoop.util.Time;
 import org.eclipse.jetty.util.ajax.JSON;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE_DEFAULT;
 
 /**
  * Maintains a pool of connections for each User (including tokens) + NN. The
@@ -231,6 +234,26 @@ public class ConnectionPool {
     return conn;
   }
 
+  // Get the nextIndex following round-robin
+  protected int getNextIndex() throws IOException {
+    ConnectionContext conn = null;
+    List<ConnectionContext> tmpConnections = this.connections;
+    int size = tmpConnections.size();
+    int threadIndex = this.clientIndex.getAndIncrement() & 0x7FFFFFFF;
+    for (int i=0; i<size; i++) {
+      int index = (threadIndex + i) % size;
+      conn = tmpConnections.get(index);
+      if (conn == null) {
+        return i;
+      }
+    }
+    // If all connections in pool are initialized, then we create a new one.
+    if(size < this.getMaxSize()){
+      return size;
+    }
+    throw new IOException("Can not find available index in connectionPool: " + this.toString());
+  }
+
   /**
    * Add a connection to the current pool. It uses a Copy-On-Write approach.
    *
@@ -351,7 +374,8 @@ public class ConnectionPool {
    */
   public ConnectionContext newConnection() throws IOException {
     return newConnection(
-        this.conf, this.namenodeAddress, this.ugi, this.protocol);
+        this.conf, this.namenodeAddress, this.ugi, this.protocol,
+        getNextIndex());
   }
 
   /**
@@ -370,7 +394,7 @@ public class ConnectionPool {
    * @throws IOException If it cannot be created.
    */
   protected static <T> ConnectionContext newConnection(Configuration conf,
-      String nnAddress, UserGroupInformation ugi, Class<T> proto)
+      String nnAddress, UserGroupInformation ugi, Class<T> proto, int index)
       throws IOException {
     if (!PROTO_MAP.containsKey(proto)) {
       String msg = "Unsupported protocol for connection to NameNode: "
@@ -394,8 +418,20 @@ public class ConnectionPool {
     }
     InetSocketAddress socket = NetUtils.createSocketAddr(nnAddress);
     final long version = RPC.getProtocolVersion(classes.protoPb);
-    Object proxy = RPC.getProtocolProxy(classes.protoPb, version, socket, ugi,
-        conf, factory, RPC.getRpcTimeout(conf), defaultPolicy, null).getProxy();
+    Object proxy = null;
+    if (conf.getBoolean(
+        RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE,
+        DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE_DEFAULT)) {
+      FederationConnectionId connectionId = new FederationConnectionId(
+          socket, ClientNamenodeProtocolPB.class, ugi, RPC.getRpcTimeout(conf),
+          defaultPolicy, conf, index);
+      proxy = RPC.getProtocolProxy(classes.protoPb, version, connectionId,
+          conf, factory).getProxy();
+    } else {
+      proxy = RPC.getProtocolProxy(classes.protoPb, version, socket, ugi,
+          conf, factory, RPC.getRpcTimeout(conf), defaultPolicy, null)
+          .getProxy();
+    }
     T client = newProtoClient(proto, classes, proxy);
     Text dtService = SecurityUtil.buildTokenService(socket);
 

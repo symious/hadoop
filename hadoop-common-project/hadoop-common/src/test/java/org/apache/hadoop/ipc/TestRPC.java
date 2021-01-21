@@ -286,6 +286,13 @@ public class TestRPC extends TestRpcBase {
           rpcTimeout, connectionRetryPolicy, null, null);
     }
 
+    @Override
+    public <T> ProtocolProxy<T> getProxy(Class<T> protocol, long clientVersion,
+        ConnectionId connId, Configuration conf, SocketFactory factory,
+        AlignmentContext alignmentContext) throws IOException {
+      throw new UnsupportedOperationException("This proxy is not supported");
+    }
+
     @SuppressWarnings("unchecked")
     @Override
     public <T> ProtocolProxy<T> getProxy(
