@@ -1074,9 +1074,8 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     try {
       if (Arrays.asList(options).contains(Options.Rename.TO_TRASH)) {
         trash(src, dst, cacheEntry, options);
-      } else {
-        namesystem.renameTo(src, dst, cacheEntry != null, options);
       }
+      namesystem.renameTo(src, dst, cacheEntry != null, options);
       success = true;
     } finally {
       RetryCache.setState(cacheEntry, success);
@@ -1099,57 +1098,46 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     String[] split = origDstNorm.split("/");
     // If trash is new format already, use the original dest
     if (split[1].equals("Trash") || this.conf.getStrings(FS_TRASH_ROOT) == null) {
-      namesystem.renameTo(src, origDst, cacheEntry != null, options);
+//      namesystem.renameTo(src, origDst, cacheEntry != null, options);
       return;
     }
-    LOG.debug("Hijacking trash, src:" + src + ",dst:" + origDst);
     // Old format is /user/$USER/.Trash/Current/abcxyz....
     String user = split[2];
+    String ugiuser = getRemoteUser().getUserName();
+    LOG.info("trash: src=" + src
+        + ", dst=" + origDst
+        + ", user=" + user
+        + ", ugiuser=" + ugiuser);
 
     Path trashRoot = new Path("/Trash", user);
     if (src.startsWith(trashRoot.toString())) {
       // Already in trash
-      namesystem.delete(src, true, cacheEntry != null);
+//      namesystem.delete(src, true, cacheEntry != null);
       return;
     }
 
-    Path trashPath;
-
-    if (src.endsWith("/.Trash/Current")) {
-      // Checkpoint operation
-      long checkpointTime = Long.parseLong(new Path(origDst).getName());
-      Path checkpointTimePath = new Path("/" + checkpointTime);
-      trashPath = Path.mergePaths(trashRoot, checkpointTimePath);
-      // If this checkpoint time already exists under new trash dir, add 1ms
-      while (getFileInfo(trashPath.toString()) != null) {
-        checkpointTime += 1;
-        checkpointTimePath = new Path("/" + checkpointTime);
-        trashPath = Path.mergePaths(trashRoot, checkpointTimePath);
-      }
-    } else {
-      Path trashCurrent = new Path(trashRoot, new Path("Current"));
-      trashPath = Path.mergePaths(trashCurrent, new Path(src));
-      Path baseTrashPath =
-          Path.mergePaths(trashCurrent, (new Path(src)).getParent());
-      try {
-        if (!mkdirs(baseTrashPath.toString(),
-            new FsPermission(FsAction.ALL, FsAction.NONE, FsAction.NONE),
-            true)) {      // create current
-          LOG.warn("Can't create(mkdir) trash directory: " + baseTrashPath);
-          return;
-        }
-      } catch (IOException e) {
-        LOG.warn("Can't create trash directory: " + baseTrashPath, e);
-      }
-    }
+    Path trashCurrent = new Path(trashRoot, new Path("Current"));
+    Path trashPath = Path.mergePaths(trashCurrent, new Path(src));
+    Path baseTrashPath =
+        Path.mergePaths(trashCurrent, (new Path(src)).getParent());
+//    try {
+//      if (!mkdirs(baseTrashPath.toString(),
+//          new FsPermission(FsAction.ALL, FsAction.NONE, FsAction.NONE),
+//          true)) {      // create current
+//        LOG.warn("Can't create(mkdir) trash directory: " + baseTrashPath);
+//        return;
+//      }
+//    } catch (IOException e) {
+//      LOG.warn("Can't create trash directory: " + baseTrashPath, e);
+//    }
 
     String orig = trashPath.toString();
     if (getFileInfo(orig) != null) {
       trashPath = new Path(orig + Time.now());
     }
-    LOG.debug("Trash hijacked, from:" + origDst + ", to:" + trashPath);
-    String newDest = trashPath.toUri().getPath();
-    namesystem.renameTo(src, newDest, cacheEntry != null, options);
+    LOG.info("trash: old=" + origDst + ", new=" + trashPath);
+//    String newDest = trashPath.toUri().getPath();
+//    namesystem.renameTo(src, newDest, cacheEntry != null, options);
   }
 
   @Override // ClientProtocol
