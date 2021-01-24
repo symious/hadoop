@@ -78,47 +78,43 @@ public class RpcPassword {
   }
 
   public RpcPassword(Configuration conf, final Timer timer) {
-    impl = 
-      ReflectionUtils.newInstance(
-          conf.getClass(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_MAPPING,
-                        ShadowFileRpcPasswordMapping.class,
-                        RpcPasswordMappingServiceProvider.class),
-          conf);
+    impl = ReflectionUtils.newInstance(conf.getClass(
+        CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_MAPPING,
+        ShadowFileRpcPasswordMapping.class,
+        RpcPasswordMappingServiceProvider.class), conf);
 
-    cacheTimeout =
-      conf.getLong(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_SECS,
-          CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_SECS_DEFAULT) * 1000;
-    negativeCacheTimeout =
-            conf.getLong(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_NEGATIVE_CACHE_SECS,
-                    CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_NEGATIVE_CACHE_SECS_DEFAULT) * 1000;
-    warningDeltaMs =
-      conf.getLong(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_WARN_AFTER_MS,
+    cacheTimeout = conf.getLong(
+        CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_SECS,
+        CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_SECS_DEFAULT) * 1000;
+
+    negativeCacheTimeout = conf.getLong(
+        CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_NEGATIVE_CACHE_SECS,
+        CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_NEGATIVE_CACHE_SECS_DEFAULT) * 1000;
+
+    warningDeltaMs = conf.getLong(
+        CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_WARN_AFTER_MS,
         CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_WARN_AFTER_MS_DEFAULT);
-    reloadRpcPasswordInBackground =
-      conf.getBoolean(
-          CommonConfigurationKeys.
-              HADOOP_SECURITY_RPC_PASSWORD_CACHE_BACKGROUND_RELOAD,
-          CommonConfigurationKeys.
-              HADOOP_SECURITY_RPC_PASSWORD_CACHE_BACKGROUND_RELOAD_DEFAULT);
-    reloadRpcPasswordThreadCount  =
-      conf.getInt(
-          CommonConfigurationKeys.
-              HADOOP_SECURITY_RPC_PASSWORD_CACHE_BACKGROUND_RELOAD_THREADS,
-          CommonConfigurationKeys.
-              HADOOP_SECURITY_RPC_PASSWORD_CACHE_BACKGROUND_RELOAD_THREADS_DEFAULT);
+
+    reloadRpcPasswordInBackground = conf.getBoolean(
+        CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_BACKGROUND_RELOAD,
+        CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_BACKGROUND_RELOAD_DEFAULT);
+
+    reloadRpcPasswordThreadCount  = conf.getInt(
+        CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_BACKGROUND_RELOAD_THREADS,
+        CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_BACKGROUND_RELOAD_THREADS_DEFAULT);
 
     this.timer = timer;
     this.cache = CacheBuilder.newBuilder()
-      .refreshAfterWrite(cacheTimeout, TimeUnit.MILLISECONDS)
-      .ticker(new TimerToTickerAdapter(timer))
-      .expireAfterWrite(10 * cacheTimeout, TimeUnit.MILLISECONDS)
-      .build(new RpcPasswordCacheLoader());
+        .refreshAfterWrite(cacheTimeout, TimeUnit.MILLISECONDS)
+        .ticker(new TimerToTickerAdapter(timer))
+        .expireAfterWrite(10 * cacheTimeout, TimeUnit.MILLISECONDS)
+        .build(new RpcPasswordCacheLoader());
 
     if (negativeCacheTimeout > 0) {
       Cache<String, Boolean> tempMap = CacheBuilder.newBuilder()
-              .expireAfterWrite(negativeCacheTimeout, TimeUnit.MILLISECONDS)
-              .ticker(new TimerToTickerAdapter(timer))
-              .build();
+          .expireAfterWrite(negativeCacheTimeout, TimeUnit.MILLISECONDS)
+          .ticker(new TimerToTickerAdapter(timer))
+          .build();
       negativeCache = Collections.newSetFromMap(tempMap.asMap());
     }
 
@@ -220,7 +216,8 @@ public class RpcPassword {
   /**
    * Deals with loading data into the cache.
    */
-  private class RpcPasswordCacheLoader extends CacheLoader<String, RpcPasswordAndBypass> {
+  private class RpcPasswordCacheLoader
+      extends CacheLoader<String, RpcPasswordAndBypass> {
 
     private ListeningExecutorService executorService;
 
@@ -268,7 +265,7 @@ public class RpcPassword {
         scope = tracer.newScope("RpcPassword#fetchRpcPassword");
         scope.addKVAnnotation("user", user);
       }
-      RpcPasswordAndBypass rpcPasswordAndBypass = null;
+      RpcPasswordAndBypass rpcPasswordAndBypass;
       try {
         rpcPasswordAndBypass = fetchRpcPasswordAndBypass(user);
       } finally {
@@ -296,9 +293,10 @@ public class RpcPassword {
      * implementation, otherwise is arranges for the cache to be updated later
      */
     @Override
-    public ListenableFuture<RpcPasswordAndBypass> reload(final String key,
-                                                 RpcPasswordAndBypass oldValue)
-        throws Exception {
+    public ListenableFuture<RpcPasswordAndBypass> reload(
+        final String key,
+        RpcPasswordAndBypass oldValue
+    ) throws Exception {
       if (!reloadRpcPasswordInBackground) {
         return super.reload(key, oldValue);
       }
@@ -332,15 +330,16 @@ public class RpcPassword {
     /**
      * Queries impl for rpc password belonging to the user. This could involve I/O and take awhile.
      */
-    private RpcPasswordAndBypass fetchRpcPasswordAndBypass(String user) throws IOException {
+    private RpcPasswordAndBypass fetchRpcPasswordAndBypass(String user)
+        throws IOException {
       long startMs = timer.monotonicNow();
       String rpcPassword = impl.getRpcPassword(user);
       boolean isBypass = impl.isBypassUser(user);
       long endMs = timer.monotonicNow();
-      long deltaMs = endMs - startMs ;
+      long deltaMs = endMs - startMs;
       if (deltaMs > warningDeltaMs) {
-        LOG.warn("Potential performance problem: getRpcPassword(user=" + user +") " +
-          "took " + deltaMs + " milliseconds.");
+        LOG.warn("Potential performance problem: getRpcPassword(user=" + user +
+            ") " + "took " + deltaMs + " milliseconds.");
       }
 
       return new RpcPasswordAndBypass(rpcPassword, isBypass);

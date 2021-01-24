@@ -34,12 +34,13 @@ import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A simple shadow file based implementation of {@link RpcPasswordMappingServiceProvider}
+ * A simple shadow file based implementation of
+ * {@link RpcPasswordMappingServiceProvider}.
  */
 @InterfaceAudience.LimitedPrivate({"HDFS", "MapReduce"})
 @InterfaceStability.Evolving
 public class ShadowFileRpcPasswordMapping extends Configured
-  implements RpcPasswordMappingServiceProvider {
+    implements RpcPasswordMappingServiceProvider {
 
   @VisibleForTesting
   protected static final Logger LOG =
@@ -49,11 +50,12 @@ public class ShadowFileRpcPasswordMapping extends Configured
       HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_DEFAULT;
   private static final String EMPTY_PASSWORD = null;
 
-  private long cacheTimeout =
-          CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_SEC_DEFAULT * 1000;
+  private long cacheTimeout = CommonConfigurationKeys.
+      HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_SEC_DEFAULT * 1000;
   private volatile long lastRefreshTime = -1L;
 
-  private ConcurrentHashMap<String, RpcPasswordAndBypass> cache = new ConcurrentHashMap<>();
+  private ConcurrentHashMap<String, RpcPasswordAndBypass> cache =
+      new ConcurrentHashMap<>();
 
   private IOException IllegalShadowLineException(String line) {
     return new IOException("Illegal shadow line: " + line);
@@ -75,7 +77,7 @@ public class ShadowFileRpcPasswordMapping extends Configured
   }
 
   /**
-   * Returns rpcPassword for a user
+   * Returns rpcPassword for a user.
    *
    * @param userName get rpcPassword for this user
    * @return list of rpcPassword for a given user
@@ -83,14 +85,14 @@ public class ShadowFileRpcPasswordMapping extends Configured
   @Override
   public String getRpcPassword(String userName) {
     try {
-      if ( isTimeout() || cache.size() == 0) {
+      if (isTimeout() || cache.size() == 0) {
         cacheRefresh(false);
       }
       if (!cache.containsKey(userName)){
         return null;
       }
       return cache.get(userName).getRpcPassword();
-    }catch (IOException e){
+    } catch (IOException e){
       e.printStackTrace();
     }
     return null;
@@ -99,14 +101,14 @@ public class ShadowFileRpcPasswordMapping extends Configured
   @Override
   public boolean isBypassUser(String user) {
     try {
-      if ( isTimeout() || cache.size() == 0) {
+      if (isTimeout() || cache.size() == 0) {
         cacheRefresh(false);
       }
       if (!cache.containsKey(user)){
         return false;
       }
       return cache.get(user).isBypass();
-    }catch (IOException e){
+    } catch (IOException e){
       e.printStackTrace();
     }
     return false;

@@ -30,29 +30,30 @@ import java.io.IOException;
 @InterfaceAudience.Public
 @InterfaceStability.Evolving
 public interface RpcPasswordMappingServiceProvider {
-    public static final String RPC_PASSWORD_MAPPING_CONFIG_PREFIX = CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_PASSWORD_MAPPING;
+  static final String RPC_PASSWORD_MAPPING_CONFIG_PREFIX =
+      CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_PASSWORD_MAPPING;
 
-    /**
-     * Get rpc password of a given user.
-     * Returns null in case of non-existing user
-     * @param user User's name
-     * @return password of user
-     * @throws IOException
-     */
-    public String getRpcPassword(String user) throws IOException;
-    /**
-     * Check if it is a bypass user.
-     * @param user User's name
-     * @return bypass user or not
-     * @throws IOException
-     */
-    public boolean isBypassUser(String user) throws IOException;
+  /**
+   * Get rpc password of a given user.
+   * Returns null in case of non-existing user
+   * @param user User's name
+   * @return password of user
+   * @throws IOException
+   */
+  String getRpcPassword(String user) throws IOException;
+  /**
+   * Check if it is a bypass user.
+   * @param user User's name
+   * @return bypass user or not
+   * @throws IOException
+   */
+  boolean isBypassUser(String user) throws IOException;
 
-    /**
-     * Refresh the cache.
-     * @param force force refresh
-     * @throws IOException
-     */
-    public void cacheRefresh(boolean force) throws IOException;
+  /**
+   * Refresh the cache.
+   * @param force force refresh
+   * @throws IOException
+   */
+  void cacheRefresh(boolean force) throws IOException;
 }
 
