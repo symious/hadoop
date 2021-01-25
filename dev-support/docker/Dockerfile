@@ -210,10 +210,19 @@ RUN curl -L -s -S \
 ###
 # Avoid out of memory errors in builds
 ###
-ENV MAVEN_OPTS -Xms256m -Xmx1536m
+ENV MAVEN_OPTS -Xms256m -Xmx3072m
 
 # Skip gpg verification when downloading Yetus via yetus-wrapper
 ENV HADOOP_SKIP_YETUS_VERIFICATION true
+
+# Setup SDI password store
+RUN mkdir -p /etc/hadoop
+COPY shadow /etc/hadoop/shadow.orig
+COPY shadow.bypass /etc/hadoop/shadow.bypass
+RUN chmod 777 /etc/hadoop
+RUN ln -s /etc/hadoop/shadow.orig /etc/hadoop/shadow \
+    && chmod 666 /etc/hadoop/shadow
+ENV HADOOP_USER_RPCPASSWORD "I AM THE DANGER"
 
 ###
 # Everything past this point is either not needed for testing or breaks Yetus.
@@ -225,15 +234,6 @@ ENV HADOOP_SKIP_YETUS_VERIFICATION true
 RUN curl -L -o hugo.deb https://github.com/gohugoio/hugo/releases/download/v0.58.3/hugo_0.58.3_Linux-64bit.deb \
     && dpkg --install hugo.deb \
     && rm hugo.deb
-
-# Setup SDI password store
-RUN mkdir -p /etc/hadoop
-COPY shadow /etc/hadoop/shadow.orig
-COPY shadow.bypass /etc/hadoop/shadow.bypass
-RUN chmod 777 /etc/hadoop
-RUN ln -s /etc/hadoop/shadow.orig /etc/hadoop/shadow \
-    && chmod 666 /etc/hadoop/shadow
-ENV HADOOP_USER_RPCPASSWORD "I AM THE DANGER"
 
 # install some useful tools
 RUN apt-get -q update \

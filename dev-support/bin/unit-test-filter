@@ -1,8 +1,15 @@
+!org.apache.hadoop.fs.TestSWebHdfsFileContextMainOperations
+!org.apache.hadoop.fs.TestSymlinkHdfsFileContext#testWebHDFS
+!org.apache.hadoop.fs.TestWebHdfsFileContextMainOperations
 !org.apache.hadoop.fs.http.client.Test*
 !org.apache.hadoop.hdfs.TestEncryptionZones
 !org.apache.hadoop.hdfs.TestEncryptionZonesWithKMS
 !org.apache.hadoop.hdfs.security.TestDelegationToken
 !org.apache.hadoop.hdfs.security.TestDelegationTokenForProxyUser
-!org.apache.hadoop.hdfs.web.TestHttpsFileSystem#testHsftpFileSystem
+!org.apache.hadoop.hdfs.tools.TestWebHDFSStoragePolicyCommands
+!org.apache.hadoop.hdfs.web.TestHttpsFileSystem
 !org.apache.hadoop.hdfs.web.TestWebHdfs*
 !org.apache.hadoop.hdfs.web.TestWebHDFS*
+!org.apache.hadoop.hdfs.TestDistributedFileSystem#testAllWithNoXmlDefaults
+!org.apache.hadoop.hdfs.TestViewDistributedFileSystem#testAllWithNoXmlDefaults
+!org.apache.hadoop.hdfs.TestWriteReadStripedFile#testWriteReadUsingWebHdfs
