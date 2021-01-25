@@ -23,6 +23,7 @@ import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,10 +59,6 @@ public class ShadowFileRpcPasswordMapping extends Configured
 
   private ConcurrentHashMap<String, RpcPasswordAndBypass> cache =
       new ConcurrentHashMap<>();
-
-  private IOException IllegalShadowLineException(String line) {
-    return new IOException("Illegal shadow line: " + line);
-  }
 
   @Override
   public void setConf(Configuration conf) {
@@ -132,7 +129,11 @@ public class ShadowFileRpcPasswordMapping extends Configured
       String line;
       while ((line = br.readLine()) != null) {
         //process the line
-        processRow(line);
+        try {
+          processRow(line);
+        } catch (IllegalShadowLineException e) {
+          LOG.warn("unable to process shadow line: {}", line, e);
+        }
       }
       if (LOG.isDebugEnabled()) {
         LOG.debug("Refreshed " + cache.size() + "records from shadowFile.");
@@ -147,12 +148,12 @@ public class ShadowFileRpcPasswordMapping extends Configured
     }
   }
 
-  private void processRow(String string) throws IOException {
+  private void processRow(String string) throws IllegalShadowLineException {
     // handle comment line
     if(string.startsWith("#"))
       return;
     if(string.split(",").length != 3){
-      throw IllegalShadowLineException(string);
+      throw new IllegalShadowLineException(string);
     }
     String user = string.split(",")[0];
     String shadow = string.split(",")[1];
@@ -162,5 +163,23 @@ public class ShadowFileRpcPasswordMapping extends Configured
 
   private boolean isTimeout(){
     return Time.now() - lastRefreshTime > cacheTimeout;
+  }
+
+  private static class IllegalShadowLineException extends IOException {
+    public IllegalShadowLineException(String message) {
+      super(message);
+    }
+
+    public IllegalShadowLineException(String message, Throwable err) {
+      super(message, err);
+    }
+
+    @Override
+    public String toString() {
+      final StringBuilder sb =
+          new StringBuilder("IllegalShadowLineException ");
+      sb.append(super.getMessage());
+      return sb.toString();
+    }
   }
 }
