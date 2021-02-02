@@ -1054,28 +1054,36 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
         context.getApplications();
 
     // If unhealthy and no container live can clean the data under apps
-    if (!cleaned && !applications.isEmpty() && context.getContainers().isEmpty()) {
+    if (!cleaned && !applications.isEmpty() &&
+        context.getContainers().isEmpty()) {
       String[] localDirs =
           context.getConf().get(YarnConfiguration.NM_LOCAL_DIRS).split(",");
-
-      for (Application application : applications.values()) {
-        String user = application.getUser();
-        String appId = application.getAppId().toString();
-        for (String localDir : localDirs) {
+      // Scan the all localDirs and got the max app data dir
+      // Delete the max one
+      for (String localDir : localDirs) {
+        String maxAppLocalDir = "";
+        long maxDirSizeBytes = 0;
+        for (Application application : applications.values()) {
+          String user = application.getUser();
+          String appId = application.getAppId().toString();
           String appLocalDir =
-              localDir + "/" + ContainerLocalizer.USERCACHE + "/" + user + "/"  +
+              localDir + "/" + ContainerLocalizer.USERCACHE + "/" + user + "/" +
                   ContainerLocalizer.APPCACHE + "/" + appId;
-          if (LOG.isDebugEnabled()) {
-            LOG.debug("Delete Dir:" + appLocalDir);
+          // Du disk size
+          long currentDirSizeBytes = FileUtil.getDU(new File(appLocalDir));
+          if (currentDirSizeBytes > maxDirSizeBytes) {
+            maxDirSizeBytes = currentDirSizeBytes;
+            maxAppLocalDir = appLocalDir;
           }
-          try {
-            File appLocalFile = new File(appLocalDir);
-            FileUtil.fullyDeleteContents(appLocalFile);
-          } catch (Exception e) {
-            LOG.error(
-                "Caught exception in status-updater when Node during unhealthy status",
-                e);
-          }
+        }
+        //Delete the max one
+        LOG.info("Delete Dir:" + maxAppLocalDir);
+        try {
+          FileUtil.fullyDeleteContents(new File(maxAppLocalDir));
+        } catch (Exception e) {
+          LOG.error(
+              "Caught exception in status-updater when Node during unhealthy status",
+              e);
         }
       }
       cleaned = true;
