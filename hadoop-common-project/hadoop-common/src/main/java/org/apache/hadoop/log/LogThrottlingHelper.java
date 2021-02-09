@@ -273,6 +273,21 @@ public class LogThrottlingHelper {
   }
 
   /**
+   * Return the summary information for given index.
+   *
+   * @param recorderName The name of the recorder.
+   * @param idx The index value.
+   * @return The summary information.
+   */
+  public SummaryStatistics getCurrentStats(String recorderName, int idx) {
+    LoggingAction currentLog = currentLogs.get(recorderName);
+    if (currentLog != null) {
+      return currentLog.getStats(idx);
+    }
+    return null;
+  }
+
+  /**
    * Helper function to create a message about how many log statements were
    * suppressed in the provided log action. If no statements were suppressed,
    * this returns an empty string. The message has the format (without quotes):
