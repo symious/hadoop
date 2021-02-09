@@ -28,6 +28,7 @@ import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.test.GenericTestUtils.LogCapturer;
 import org.apache.hadoop.test.MetricsAsserts;
 import org.apache.hadoop.util.FakeTimer;
+import org.apache.hadoop.util.Time;
 import org.apache.log4j.Level;
 import org.junit.Test;
 
@@ -206,6 +207,10 @@ public class TestFSNamesystemLock {
     // find the held interval time in the log
     Pattern pattern = Pattern.compile(".*[\n].*\\d+ms(.*[\n].*){1,}");
     assertTrue(pattern.matcher(logs.getOutput()).find());
+    // only keep the "yyyy-MM-dd" part of date
+    String startTimeStr =
+        "held at " + Time.formatTime(timer.monotonicNow()).substring(0, 10);
+    assertTrue(logs.getOutput().contains(startTimeStr));
     assertTrue(logs.getOutput().contains(
         "Number of suppressed write-lock reports: 2"));
   }
@@ -293,6 +298,10 @@ public class TestFSNamesystemLock {
     Pattern tLongPattern = Pattern.compile(
         String.format(stackTracePatternString, tLong.getClass().getName()));
     assertTrue(tLongPattern.matcher(logs.getOutput()).find());
+    // only keep the "yyyy-MM-dd" part of date
+    String startTimeStr =
+        "held at " + Time.formatTime(timer.monotonicNow()).substring(0, 10);
+    assertTrue(logs.getOutput().contains(startTimeStr));
     assertTrue(logs.getOutput().contains(
         "Number of suppressed read-lock reports: 3"));
 
