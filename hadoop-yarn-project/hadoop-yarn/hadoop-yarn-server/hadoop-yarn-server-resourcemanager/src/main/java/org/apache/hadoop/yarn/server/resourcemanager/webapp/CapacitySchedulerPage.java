@@ -392,7 +392,7 @@ class CapacitySchedulerPage extends RmView {
           .$style(
               "border-style: solid; border-color: #000000; border-width: 1px;"
                   + " cursor: hand; cursor: pointer; border-radius: 4px")
-          .$onclick("confirmAction()").b("Dump scheduler logs").__().select()
+          .$onclick("").b("").__().select()
           .$id("time").option().$value("60").__("1 min").__().option()
           .$value("300").__("5 min").__().option().$value("600").__("10 min").__()
           .__().__();
