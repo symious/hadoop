@@ -6052,4 +6052,46 @@ public class TestCapacityScheduler extends CapacitySchedulerTestBase {
     Assert.assertEquals(0, desQueue.getUsedResources().getMemorySize());
     rm1.close();
   }
+
+  @Test(timeout = 30000)
+  public void testSubmitAppWithQueuePath() throws Exception {
+    Configuration conf =
+        TestUtils.getConfigurationWithQueueLabels(new Configuration(false));
+
+    MockRM rm = new MockRM(conf);
+    rm.start();
+    MockNM nm1 =
+        new MockNM("h1:1234", 200 * GB, rm.getResourceTrackerService());
+    nm1.registerNode();
+
+    // launch app1 successfully with queue name : a1
+    RMApp app1 = MockRMAppSubmitter.submit(rm,
+        MockRMAppSubmissionData.Builder.createWithMemory(1024, rm)
+            .withAppName("app").withUser("user").withQueue("a1")
+            .withWaitForAppAcceptedState(true).build());
+    Assert.assertEquals(RMAppState.ACCEPTED, app1.getState());
+
+    // launch app2 successfully with queue path : root.a.a1
+    RMApp app2 = MockRMAppSubmitter
+        .submit(rm, MockRMAppSubmissionData.Builder.createWithMemory(1024, rm)
+            .withAppName("app").withUser("user").withQueue("root.a.a1")
+            .withWaitForAppAcceptedState(true).build());
+    Assert.assertEquals(RMAppState.ACCEPTED, app2.getState());
+
+    // launch app3 successfully with non-root queue path : a.a1
+    RMApp app3 = MockRMAppSubmitter
+        .submit(rm, MockRMAppSubmissionData.Builder.createWithMemory(1024, rm)
+            .withAppName("app").withUser("user").withQueue("a.a1")
+            .withWaitForAppAcceptedState(true).build());
+    Assert.assertEquals(RMAppState.ACCEPTED, app3.getState());
+
+    // fail to launch app4 with incorrect queue path : root.b.a1
+    RMApp app4 = MockRMAppSubmitter
+        .submit(rm, MockRMAppSubmissionData.Builder.createWithMemory(1024, rm)
+            .withAppName("app").withUser("user").withQueue("root.b.a1")
+            .withWaitForAppAcceptedState(false).build());
+    GenericTestUtils
+        .waitFor(() -> app4.getState() == RMAppState.FAILED, 100, 5000);
+    Assert.assertEquals(RMAppState.FAILED, app4.getState());
+  }
 }

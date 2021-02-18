@@ -79,6 +79,9 @@ public class CapacitySchedulerQueueManager implements SchedulerQueueManager<
   private QueueStateManager<CSQueue, CapacitySchedulerConfiguration>
       queueStateManager;
 
+  private static final String NON_ROOT_QUEUE_PATH_PREFIX =
+      CapacitySchedulerConfiguration.ROOT + CapacitySchedulerConfiguration.DOT;
+
   /**
    * Construct the service.
    * @param conf the configuration
@@ -121,7 +124,19 @@ public class CapacitySchedulerQueueManager implements SchedulerQueueManager<
 
   @Override
   public CSQueue getQueue(String queueName) {
-    return queues.get(queueName);
+    CSQueue queue = queues.get(queueName);
+    if (queue == null
+        && queueName.contains(CapacitySchedulerConfiguration.DOT)) {
+      String queuePath = queueName.startsWith(NON_ROOT_QUEUE_PATH_PREFIX) ?
+          queueName : NON_ROOT_QUEUE_PATH_PREFIX + queueName;
+      String confirmedQueueName = queueName.substring(
+          queueName.lastIndexOf(CapacitySchedulerConfiguration.DOT) + 1);
+      queue = queues.get(confirmedQueueName);
+      if (queue != null && !queue.getQueuePath().equals(queuePath)) {
+        queue = null;
+      }
+    }
+    return queue;
   }
 
   public CSQueue getQueueByFullName(String name) {
