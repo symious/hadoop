@@ -249,7 +249,7 @@ public class DistCpProcedure extends BalanceProcedure {
       // Save and cancel permission.
       FileStatus status = srcFs.getFileStatus(src);
       fPerm = status.getPermission();
-      acl = srcFs.getAclStatus(src);
+      acl = null;
       srcFs.setPermission(src, FsPermission.createImmutable((short) 0));
     }
     updateStage(Stage.FINAL_DISTCP);
@@ -260,7 +260,6 @@ public class DistCpProcedure extends BalanceProcedure {
    */
   void restorePermission() throws IOException {
     // restore permission.
-    dstFs.removeAcl(dst);
     if (acl != null) {
       dstFs.modifyAclEntries(dst, acl.getEntries());
     }
@@ -465,7 +464,7 @@ public class DistCpProcedure extends BalanceProcedure {
       boolean useSnapshotDiff) throws IOException {
     List<String> command = new ArrayList<>();
     command.addAll(Arrays
-        .asList(new String[] {"-async", "-update", "-append", "-pruxgpcab"}));
+        .asList(new String[] {"-async", "-update", "-append", "-pruxgpcb"}));
     if (useSnapshotDiff) {
       command.add("-diff");
       command.add(LAST_SNAPSHOT_NAME);
