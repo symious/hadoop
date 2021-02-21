@@ -175,7 +175,7 @@ public class MembershipNamenodeResolver
     String cacheKey = nsId + (observerRead ? ".obs" : "");
     List<? extends FederationNamenodeContext> ret = cacheNS.get(cacheKey);
     if (ret != null) {
-      return ret;
+      return shuffleObserversInList(ret, observerRead);
     }
 
     // Not cached, generate the value
@@ -215,7 +215,28 @@ public class MembershipNamenodeResolver
     // Cache the response
     ret = Collections.unmodifiableList(result);
     cacheNS.put(cacheKey, result);
-    return ret;
+    return shuffleObserversInList(ret, observerRead);
+  }
+
+  public static <T extends FederationNamenodeContext>
+  List<T> shuffleObserversInList(List<T> srcList, boolean observerRead) {
+    List<T> resList = new ArrayList<>();
+    List<T> otherList = new ArrayList<>();
+    if (observerRead) {
+      for (T t : srcList) {
+        if (t.getState() == OBSERVER) {
+          resList.add(t);
+        } else {
+          otherList.add(t);
+        }
+      }
+      if (resList.size() > 1) {
+        Collections.shuffle(resList);
+      }
+      resList.addAll(otherList);
+      return resList;
+    }
+    return srcList;
   }
 
   @Override

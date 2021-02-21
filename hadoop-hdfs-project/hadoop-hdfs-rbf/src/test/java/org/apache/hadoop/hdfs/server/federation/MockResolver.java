@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.federation;
 import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.EXPIRED;
 import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.OBSERVER;
 import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.UNAVAILABLE;
+import static org.apache.hadoop.hdfs.server.federation.resolver.MembershipNamenodeResolver.shuffleObserversInList;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -153,7 +154,7 @@ public class MockResolver
     List<FederationNamenodeContext> priorityList = new ArrayList<>();
     priorityList.addAll(namenodes);
     Collections.sort(priorityList, new NamenodePriorityComparator());
-    return priorityList;
+    return shuffleObserversInList(priorityList, observerRead);
   }
 
   @Override

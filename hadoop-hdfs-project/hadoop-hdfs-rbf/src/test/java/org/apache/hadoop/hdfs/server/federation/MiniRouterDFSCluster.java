@@ -883,13 +883,21 @@ public class MiniRouterDFSCluster {
    * @throws Exception If we cannot check the status or we timeout.
    */
   public void waitObserverNamespaces() throws Exception {
+    waitObserverNamespaces(1);
+  }
+
+  /**
+   * Wait for name spaces to be active.
+   * @throws Exception If we cannot check the status or we timeout.
+   */
+  public void waitObserverNamespaces(int targetCount) throws Exception {
     for (RouterContext r : this.routers) {
       Router router = r.router;
       final ActiveNamenodeResolver resolver = router.getNamenodeResolver();
       for (FederationNamespaceInfo ns : resolver.getNamespaces()) {
         final String nsId = ns.getNameserviceId();
-        waitNamenodeRegistered(
-            resolver, nsId, FederationNamenodeServiceState.OBSERVER, true);
+        waitNamenodeRegistered(resolver, nsId,
+            FederationNamenodeServiceState.OBSERVER, true, targetCount);
       }
     }
   }

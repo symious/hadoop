@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.federation.router;
 
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.NAMENODES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 
 import java.io.IOException;
 import java.util.List;
@@ -48,7 +49,7 @@ public class TestObserverWithRouter {
     conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY, true);
     conf.setInt(DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY, 0);
 
-    cluster = new MiniRouterDFSCluster(true, 1, 3);
+    cluster = new MiniRouterDFSCluster(true, 1, 4);
     cluster.addNamenodeOverrides(conf);
     cluster.addRouterOverrides(conf);
     // Start NNs and DNs and wait until ready
@@ -69,10 +70,11 @@ public class TestObserverWithRouter {
         cluster.switchToActive(ns, NAMENODES[0]);
         cluster.switchToStandby(ns, NAMENODES[1]);
         cluster.switchToObserver(ns, NAMENODES[2]);
+        cluster.switchToObserver(ns, NAMENODES[3]);
       }
     }
     cluster.waitActiveNamespaces();
-    cluster.waitObserverNamespaces();
+    cluster.waitObserverNamespaces(2);
   }
 
   @After
@@ -110,5 +112,27 @@ public class TestObserverWithRouter {
     // getBlockLocations should send to observer
     assertEquals("One call should send to observer", 1, rpcCountForObserver);
     fileSystem.close();
+  }
+
+  @Test
+  public void testMultiObserverRead() throws Exception {
+    int observer1Chosen = 0, observer2Chosen = 0;
+    String observer1Id = NAMENODES[2];
+    String observer2Id = NAMENODES[3];
+    for (int i = 0; i < 10; i ++ ) {
+
+      RouterContext routerContext = cluster.getRandomRouter();
+      List<? extends FederationNamenodeContext> namenodes = routerContext
+          .getRouter().getNamenodeResolver()
+          .getNamenodesForNameserviceId(cluster.getNameservices().get(0), true);
+      String chosenNamenodeId = namenodes.get(0).getNamenodeId();
+      if (chosenNamenodeId.equals(observer1Id)) {
+        observer1Chosen ++;
+      } else if (chosenNamenodeId.equals(observer2Id)) {
+        observer2Chosen ++;
+      }
+    }
+    assertNotEquals(observer2Chosen, 0);
+    assertNotEquals(observer1Chosen, 0);
   }
 }

@@ -189,22 +189,43 @@ public final class FederationTestUtils {
       final ActiveNamenodeResolver resolver, final String nsId,
       final FederationNamenodeServiceState state, final Boolean observerRead)
       throws Exception {
+    waitNamenodeRegistered(resolver, nsId, state, observerRead, 1);
+  }
+  /**
+   * Wait for a namenode to be registered with a particular state.
+   * @param resolver Active namenode resolver.
+   * @param nsId Nameservice identifier.
+   * @param state State to check for.
+   * @param observerRead if true give first priority to OBSERVER
+   * @throws Exception Failed to verify State Store registration of namenode
+   *                   nsId for state.
+   */
+  public static void waitNamenodeRegistered(
+      final ActiveNamenodeResolver resolver, final String nsId,
+      final FederationNamenodeServiceState state, final Boolean observerRead,
+      final int targetCount)
+      throws Exception {
 
     GenericTestUtils.waitFor(new Supplier<Boolean>() {
       @Override
       public Boolean get() {
+        int count = 0;
         try {
           List<? extends FederationNamenodeContext> nns =
               resolver.getNamenodesForNameserviceId(nsId, observerRead);
           for (FederationNamenodeContext nn : nns) {
             if (nn.getState().equals(state)) {
-              return true;
+              count++;
             }
           }
         } catch (IOException e) {
           // Ignore
         }
-        return false;
+        if (count == targetCount) {
+          return true;
+        } else {
+          return false;
+        }
       }
     }, 1000, 20 * 1000);
   }
