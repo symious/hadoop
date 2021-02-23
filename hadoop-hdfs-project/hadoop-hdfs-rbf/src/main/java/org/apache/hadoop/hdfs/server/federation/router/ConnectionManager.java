@@ -237,8 +237,9 @@ public class ConnectionManager {
     // Add a new connection to the pool if it wasn't usable
     if (conn == null || !conn.isUsable()) {
       if (!this.creatorQueue.offer(pool)) {
-        LOG.error("Cannot add more than {} connections at the same time",
-            this.creatorQueueMaxSize);
+        LOG.error("Cannot add more than {} connections at the same time " +
+                "(Add pool: nnAddress = {}, ugi = {})" ,
+            this.creatorQueueMaxSize, nnAddress, ugi);
       }
     }
 
