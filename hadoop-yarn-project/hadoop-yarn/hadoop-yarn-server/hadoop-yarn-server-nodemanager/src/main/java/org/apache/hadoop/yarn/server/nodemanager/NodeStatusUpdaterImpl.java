@@ -407,7 +407,7 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
               nodeManagerVersionId, containerReports, getRunningApplications(),
               nodeLabels, physicalResource, nodeAttributes, nodeStatus);
 
-      if (containerReports != null) {
+      if (containerReports != null && !containerReports.isEmpty()) {
         LOG.info("Registering with RM using containers :" + containerReports);
       }
       if (logAggregationEnabled) {
