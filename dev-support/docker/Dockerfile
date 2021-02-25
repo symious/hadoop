@@ -236,9 +236,12 @@ RUN curl -L -o hugo.deb https://github.com/gohugoio/hugo/releases/download/v0.58
     && rm hugo.deb
 
 # install some useful tools
+# hadolint ignore=DL3008
 RUN apt-get -q update \
     && apt-get -q install -y --no-install-recommends \
-        vim-tiny less
+        vim-tiny less \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Add a welcome message and environment checks.
 COPY hadoop_env_checks.sh /root/hadoop_env_checks.sh

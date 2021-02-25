@@ -1,7 +1,10 @@
 !org.apache.hadoop.fs.TestSWebHdfsFileContextMainOperations
 !org.apache.hadoop.fs.TestSymlinkHdfsFileContext#testWebHDFS
 !org.apache.hadoop.fs.TestWebHdfsFileContextMainOperations
+!org.apache.hadoop.fs.contract.router.web.TestRouterWebHDFSContract*
 !org.apache.hadoop.fs.http.client.Test*
+!org.apache.hadoop.fs.http.server.TestHttpFSServer#testECPolicy
+!org.apache.hadoop.fs.http.server.TestHttpFSWithKerberos
 !org.apache.hadoop.hdfs.TestEncryptionZones
 !org.apache.hadoop.hdfs.TestEncryptionZonesWithKMS
 !org.apache.hadoop.hdfs.security.TestDelegationToken
