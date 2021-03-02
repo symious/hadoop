@@ -58,11 +58,14 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -72,6 +75,9 @@ import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheStats;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceAudience.Public;
@@ -502,6 +508,8 @@ public abstract class Server {
   private boolean logSlowRPC = false;
   private boolean rpcPasswordAuthenticate;
   private final PasswordEncoder passwordEncoder;
+  // UserAndPassword -> passwd matched
+  private final Cache<UserAndPassword, Boolean> passwordMatchedCache;
 
   /**
    * Checks if LogSlowRPC is set true.
@@ -2728,7 +2736,7 @@ public abstract class Server {
       try{
         // authenticate proxy user
         String userName;
-        String rpcPassword;
+        final String rpcPassword;
         if (user != null) {
           if (user.getRealUser() != null) {
             userName = user.getRealUser().getUserName();
@@ -2745,19 +2753,34 @@ public abstract class Server {
         }
 
         if (!UserGroupInformation.createRemoteUser(userName).isBypassUser()) {
-          String hashedRpcPassword =
-              UserGroupInformation.createRemoteUser(userName).queryRpcPassword();
+          final String hashedRpcPassword = UserGroupInformation.
+              createRemoteUser(userName).queryRpcPassword();
 
           if (hashedRpcPassword == null) {
             throw new IOException(
                 "No rpcPassword record on server side for user: " + userName);
           }
-          if (rpcPassword == null
-              || !passwordEncoder.matches(rpcPassword, hashedRpcPassword)) {
-            throw new IOException("Rpc Authentication failed for user: " + userName);
+          if (rpcPassword == null) {
+            throw new IOException("Rpc password empty from client side " +
+                "for user: " + userName);
+          }
+
+          Callable<Boolean> passwordMatchedLoader = new Callable<Boolean>() {
+            @Override
+            public Boolean call() throws Exception {
+              return passwordEncoder.matches(rpcPassword, hashedRpcPassword);
+            }
+          };
+          if (!passwordMatchedCache.get(
+              new UserAndPassword(userName, rpcPassword),
+              passwordMatchedLoader)) {
+            throw new IOException("Rpc Authentication failed for user: " +
+                userName);
           }
         }
         rpcMetrics.incrAuthenticationSuccesses();
+      } catch (ExecutionException e) {
+        LOG.error("Get Authentication error from cache for user: " + user, e);
       } catch (IOException ie) {
         LOG.info("Connection Authentication from " + this
                 + " for protocol " + connectionContext.getProtocol()
@@ -3118,6 +3141,17 @@ public abstract class Server {
         CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC,
         CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_DEFAULT));
     this.passwordEncoder = new BCryptPasswordEncoder();
+
+    int passwordMatchCacheMinute = conf.getInt(
+        CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_MINUTE,
+        CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_MINUTE_DEFAULT);
+    int passwordMatchCacheSize = conf.getInt(
+        CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_SIZE,
+        CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_SIZE_DEFAULT);
+    this.passwordMatchedCache = CacheBuilder.newBuilder()
+        .expireAfterWrite(passwordMatchCacheMinute, TimeUnit.MINUTES)
+        .maximumSize(passwordMatchCacheSize)
+        .build();
 
     // Create the responder here
     responder = new Responder();
@@ -3571,6 +3605,14 @@ public abstract class Server {
   }
 
   /**
+   * The CacheStats of passwordMatchedCache
+   * @return The CacheStats of passwordMatchedCache.
+   */
+  public CacheStats getPasswordMatchedCacheStats() {
+    return passwordMatchedCache.stats();
+  }
+
+  /**
    * When the read or write buffer size is larger than this limit, i/o will be 
    * done in chunks of this size. Most RPC requests and responses would be
    * be smaller.
@@ -3863,5 +3905,33 @@ public abstract class Server {
 
   protected int getMaxIdleTime() {
     return connectionManager.maxIdleTime;
+  }
+
+  private class UserAndPassword {
+    private String username;
+    private String password;
+
+    public UserAndPassword(String username, String password) {
+      this.username = username;
+      this.password = password;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      UserAndPassword that = (UserAndPassword) o;
+      return Objects.equals(username, that.username) &&
+          Objects.equals(password, that.password);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(username, password);
+    }
   }
 }

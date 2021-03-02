@@ -709,6 +709,34 @@ public class CommonConfigurationKeysPublic {
    * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
    * core-default.xml</a>
    */
+  public static final String HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_MINUTE =
+      "hadoop.security.rpc-password.match.cache.expire.minute";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final int
+      HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_MINUTE_DEFAULT = 5;
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_SIZE =
+      "hadoop.security.rpc-password.match.cache.size";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final int
+      HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_SIZE_DEFAULT = 10000;
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
   public static final String  HADOOP_SECURITY_AUTHENTICATION =
     "hadoop.security.authentication";
   /**

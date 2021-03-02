@@ -19,6 +19,7 @@ package org.apache.hadoop.ipc.metrics;
 
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.cache.CacheStats;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -119,6 +120,27 @@ public class RpcMetrics {
   MutableCounterLong rpcClientBackoff;
   @Metric("Number of Slow RPC calls")
   MutableCounterLong rpcSlowCalls;
+
+  @Metric("Total request count of PasswordMatchedCached")
+  public long passwordMatchedCacheTotalRequest() {
+    return passwordMatchedCacheStats().requestCount();
+  }
+  @Metric("Hit count of PasswordMatchedCached")
+  public long passwordMatchedCacheHitCount() {
+    return passwordMatchedCacheStats().hitCount();
+  }
+  @Metric("Miss count of PasswordMatchedCached")
+  public long passwordMatchedCacheMissCount() {
+    return passwordMatchedCacheStats().missCount();
+  }
+  @Metric("Eviction count of PasswordMatchedCached")
+  public long passwordMatchedCacheEvictionCount() {
+    return passwordMatchedCacheStats().evictionCount();
+  }
+  @Metric("Load count of PasswordMatchedCached")
+  public long passwordMatchedCacheLoadCount() {
+    return passwordMatchedCacheStats().loadCount();
+  }
 
   @Metric("Number of open connections") public int numOpenConnections() {
     return server.getNumOpenConnections();
@@ -312,5 +334,9 @@ public class RpcMetrics {
 
   public double getDeferredRpcProcessingStdDev() {
     return deferredRpcProcessingTime.lastStat().stddev();
+  }
+
+  public CacheStats passwordMatchedCacheStats() {
+    return server.getPasswordMatchedCacheStats();
   }
 }
