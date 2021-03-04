@@ -508,8 +508,8 @@ public abstract class Server {
   private boolean logSlowRPC = false;
   private boolean rpcPasswordAuthenticate;
   private final PasswordEncoder passwordEncoder;
-  // UserAndPassword -> passwd matched
-  private final Cache<UserAndPassword, Boolean> passwordMatchedCache;
+  // PasswordMatchEntry -> passwd matched
+  private final Cache<PasswordMatchEntry, Boolean> passwordMatchedCache;
 
   /**
    * Checks if LogSlowRPC is set true.
@@ -2772,7 +2772,7 @@ public abstract class Server {
             }
           };
           if (!passwordMatchedCache.get(
-              new UserAndPassword(userName, rpcPassword),
+              new PasswordMatchEntry(userName, rpcPassword, hashedRpcPassword),
               passwordMatchedLoader)) {
             throw new IOException("Rpc Authentication failed for user: " +
                 userName);
@@ -3907,13 +3907,16 @@ public abstract class Server {
     return connectionManager.maxIdleTime;
   }
 
-  private class UserAndPassword {
+  private class PasswordMatchEntry {
     private String username;
-    private String password;
+    private String rawPassword;
+    private String hashedPassword;
 
-    public UserAndPassword(String username, String password) {
+    public PasswordMatchEntry(String username, String rawPassword,
+        String hashedPassword) {
       this.username = username;
-      this.password = password;
+      this.rawPassword = rawPassword;
+      this.hashedPassword = hashedPassword;
     }
 
     @Override
@@ -3924,14 +3927,15 @@ public abstract class Server {
       if (o == null || getClass() != o.getClass()) {
         return false;
       }
-      UserAndPassword that = (UserAndPassword) o;
+      PasswordMatchEntry that = (PasswordMatchEntry) o;
       return Objects.equals(username, that.username) &&
-          Objects.equals(password, that.password);
+          Objects.equals(rawPassword, that.rawPassword) &&
+          Objects.equals(hashedPassword, that.hashedPassword);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(username, password);
+      return Objects.hash(username, rawPassword, hashedPassword);
     }
   }
 }
