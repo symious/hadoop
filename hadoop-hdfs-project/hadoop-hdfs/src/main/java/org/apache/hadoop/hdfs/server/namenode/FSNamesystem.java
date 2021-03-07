@@ -4560,7 +4560,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     return blockManager.getMissingReplOneBlocksCount();
   }
   
-  @Metric({"ExpiredHeartbeats", "Number of expired heartbeats"})
+  @Metric(value = {"ExpiredHeartbeats", "Number of expired heartbeats"},
+      type = Metric.Type.COUNTER)
   public int getExpiredHeartbeats() {
     return datanodeStatistics.getExpiredHeartbeats();
   }
@@ -4755,6 +4756,20 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       "acquire FSNameSystemLock"})
   public int getFsLockQueueLength() {
     return fsLock.getQueueLength();
+  }
+
+  @Metric(value = {"ReadLockLongHoldCount", "The number of time " +
+          "the read lock has been held for longer than the threshold"},
+          type = Metric.Type.COUNTER)
+  public long getNumOfReadLockLongHold() {
+    return fsLock.getNumOfReadLockLongHold();
+  }
+
+  @Metric(value = {"WriteLockLongHoldCount", "The number of time " +
+          "the write lock has been held for longer than the threshold"},
+          type = Metric.Type.COUNTER)
+  public long getNumOfWriteLockLongHold() {
+    return fsLock.getNumOfWriteLockLongHold();
   }
 
   int getNumberOfDatanodes(DatanodeReportType type) {

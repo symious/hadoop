@@ -1103,6 +1103,12 @@ public class TestRMNodeTransitions {
         node.getLaunchedContainers().contains(cid1));
     Assert.assertTrue("second container not running",
         node.getLaunchedContainers().contains(cid2));
+    assertEquals("unexpected number of running containers",
+        2, node.getUpdatedExistContainers().size());
+    Assert.assertTrue("first container not running",
+        node.getUpdatedExistContainers().containsKey(cid1));
+    Assert.assertTrue("second container not running",
+        node.getUpdatedExistContainers().containsKey(cid2));
     assertEquals("already completed containers",
         0, completedContainers.size());
     containerStats.remove(0);
@@ -1122,6 +1128,10 @@ public class TestRMNodeTransitions {
         1, node.getLaunchedContainers().size());
     Assert.assertTrue("second container not running",
         node.getLaunchedContainers().contains(cid2));
+    assertEquals("unexpected number of running containers",
+        1, node.getUpdatedExistContainers().size());
+    Assert.assertTrue("second container not running",
+        node.getUpdatedExistContainers().containsKey(cid2));
   }
 
   @Test
