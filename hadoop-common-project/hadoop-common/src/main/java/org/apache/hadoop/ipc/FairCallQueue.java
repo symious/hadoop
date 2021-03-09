@@ -459,6 +459,10 @@ public class FairCallQueue<E extends Schedulable> extends AbstractQueue<E>
             currentQueueSizes[i]);
         rb.addCounter(Interns.info("FairCallQueueOverflowedCalls_p" + i,
             "FCQ Overflowed Calls"), currentOverflowedCalls[i]);
+        rb.addCounter(Interns.info("FairCallQueueBorrowedCalls_p" + i,
+            "FCQ Borrowed Calls"), currentBorrowedCalls[i]);
+        rb.addCounter(Interns.info("FairCallQueueLentCalls_p" + i,
+            "FCQ Lent Calls"), currentLentCalls[i]);
       }
     }
   }

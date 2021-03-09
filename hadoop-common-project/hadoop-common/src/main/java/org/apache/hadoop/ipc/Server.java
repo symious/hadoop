@@ -3907,7 +3907,7 @@ public abstract class Server {
     return connectionManager.maxIdleTime;
   }
 
-  private class PasswordMatchEntry {
+  private static class PasswordMatchEntry {
     private String username;
     private String rawPassword;
     private String hashedPassword;
