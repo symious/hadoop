@@ -2660,12 +2660,6 @@ public class DistributedFileSystem extends FileSystem
   public Path getTrashRoot(Path path) {
     try {
 
-      String configuredTrashRoot = getTrashRootConfig();
-      if (configuredTrashRoot != null && !dfs.isHDFSEncryptionEnabled()) {
-        DFSClient.LOG.debug("Use custom trash root " + configuredTrashRoot);
-        return this.makeQualified(new Path(configuredTrashRoot));
-      }
-
       if ((path == null) || !dfs.isHDFSEncryptionEnabled()) {
         return super.getTrashRoot(path);
       }
