@@ -1107,7 +1107,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
         + ", ugiuser=" + ugiuser);
 
     // If trash is new format already, use the original dest
-    if (split[1].equals("Trash") || this.conf.getStrings(FS_TRASH_ROOT) == null) {
+    if (split[1].equals("Trash")) {
       namesystem.renameTo(src, origDst, cacheEntry != null, options);
       return;
     }

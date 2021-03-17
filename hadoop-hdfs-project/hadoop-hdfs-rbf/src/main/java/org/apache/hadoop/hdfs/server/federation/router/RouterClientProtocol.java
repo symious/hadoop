@@ -80,6 +80,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -447,9 +448,16 @@ public class RouterClientProtocol implements ClientProtocol {
 
     final List<RemoteLocation> srcLocations =
         rpcServer.getLocationsForPath(src, true, false);
-    // srcLocations may be trimmed by getRenameDestinations()
     final List<RemoteLocation> locs = new LinkedList<>(srcLocations);
-    RemoteParam dstParam = getRenameDestinations(locs, dst);
+
+    RemoteParam dstParam;
+    // srcLocations may be trimmed by getRenameDestinations()
+    if (Arrays.asList(options).contains(Options.Rename.TO_TRASH)) {
+      dstParam = getRenameDestinationsForTrash(locs, dst);
+    } else {
+      dstParam = getRenameDestinations(locs, dst);
+    }
+
     if (locs.isEmpty()) {
       throw new IOException(
           "Rename of " + src + " to " + dst + " is not allowed," +
@@ -459,6 +467,17 @@ public class RouterClientProtocol implements ClientProtocol {
         new Class<?>[] {String.class, String.class, options.getClass()},
         new RemoteParam(), dstParam, options);
     rpcClient.invokeSequential(locs, method, null, null);
+  }
+
+  private RemoteParam getRenameDestinationsForTrash(
+      final List<RemoteLocation> srcLocations, final String dst)
+      throws IOException {
+    // Directly associate src to dst, skip namespace checking
+    final Map<RemoteLocation, String> dstMap = new HashMap<>();
+    for (RemoteLocation srcLocation: srcLocations) {
+      dstMap.put(srcLocation, dst);
+    }
+    return new RemoteParam(dstMap);
   }
 
   @Override
