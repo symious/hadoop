@@ -1610,7 +1610,7 @@ int exec_container(const char *command_file) {
                   }
                 } else {
                   if (rc < 0) {
-                    if (errno == EIO) {
+                    if (errno==5) {
                       fprintf(stderr, "Remote Connection Closed.\n");
                       exit(0);
                     } else {
@@ -1644,21 +1644,21 @@ int exec_container(const char *command_file) {
     tcsetattr (fds, TCSANOW, &new_term_settings);
 
     // The slave side of the PTY becomes the standard input and outputs of the child process
-    close(STDIN_FILENO); // Close standard input (current terminal)
-    close(STDOUT_FILENO); // Close standard output (current terminal)
-    close(STDERR_FILENO); // Close standard error (current terminal)
+    close(0); // Close standard input (current terminal)
+    close(1); // Close standard output (current terminal)
+    close(2); // Close standard error (current terminal)
 
     if (dup(fds) == -1) {
       // PTY becomes standard input (0)
-      _exit(DOCKER_EXEC_FAILED);
+      exit(DOCKER_EXEC_FAILED);
     }
     if (dup(fds) == -1) {
       // PTY becomes standard output (1)
-      _exit(DOCKER_EXEC_FAILED);
+      exit(DOCKER_EXEC_FAILED);
     }
     if (dup(fds) == -1) {
       // PTY becomes standard error (2)
-      _exit(DOCKER_EXEC_FAILED);
+      exit(DOCKER_EXEC_FAILED);
     }
 
     // Now the original file descriptor is useless
@@ -1669,8 +1669,8 @@ int exec_container(const char *command_file) {
       setsid();
     } else {
       exit_code = set_user(user);
-      if (exit_code != 0) {
-        _exit(exit_code);
+      if (exit_code!=0) {
+        goto cleanup;
       }
     }
 
@@ -1679,20 +1679,24 @@ int exec_container(const char *command_file) {
     ioctl(0, TIOCSCTTY, 1);
     if (docker) {
       ret = execvp(binary, args);
-      fprintf(ERRORFILE, "exec failed - %s\n", strerror(errno));
-      _exit(DOCKER_EXEC_FAILED);
     } else {
       if (change_user(user_detail->pw_uid, user_detail->pw_gid) != 0) {
-        _exit(DOCKER_EXEC_FAILED);
+        exit_code = DOCKER_EXEC_FAILED;
+        goto cleanup;
       }
       ret = chdir(workdir);
       if (ret != 0) {
-        fprintf(ERRORFILE, "chdir failed - %s", strerror(errno));
-        _exit(DOCKER_EXEC_FAILED);
+        exit_code = DOCKER_EXEC_FAILED;
+        goto cleanup;
       }
-      execve(binary, args, env);
-      fprintf(ERRORFILE, "exec failed - %s\n", strerror(errno));
-      _exit(DOCKER_EXEC_FAILED);
+      ret = execve(binary, args, env);
+    }
+    if (ret != 0) {
+      fprintf(ERRORFILE, "Couldn't execute the container launch with args %s - %s\n",
+            binary, strerror(errno));
+      exit_code = DOCKER_EXEC_FAILED;
+    } else {
+      exit_code = 0;
     }
   }
 
@@ -1704,8 +1708,7 @@ cleanup:
   free_values(args);
   free_values(env);
   free_configuration(&command_config);
-
-  return exit_code; // we reach this point only if an error occurs
+  return exit_code;
 }
 
 int exec_docker_command(char *docker_command, char **argv, int argc) {
@@ -2110,14 +2113,14 @@ int launch_docker_container_as_user(const char * user, const char *app_id,
     if (so_fd == NULL) {
       fprintf(ERRORFILE, "Could not append to %s\n", so);
       exit_code = UNABLE_TO_EXECUTE_CONTAINER_SCRIPT;
-      _exit(exit_code);
+      goto cleanup;
     }
     FILE* se_fd = fopen(se, "a+");
     if (se_fd == NULL) {
       fprintf(ERRORFILE, "Could not append to %s\n", se);
       exit_code = UNABLE_TO_EXECUTE_CONTAINER_SCRIPT;
       fclose(so_fd);
-      _exit(exit_code);
+      goto cleanup;
     }
     // if entry point is enabled, clone docker command output
     // to stdout.txt and stderr.txt for yarn.
@@ -2127,19 +2130,19 @@ int launch_docker_container_as_user(const char * user, const char *app_id,
       if (dup2(fileno(so_fd), fileno(stdout)) == -1) {
         fprintf(ERRORFILE, "Could not append to stdout.txt\n");
         fclose(so_fd);
-        _exit(UNABLE_TO_EXECUTE_CONTAINER_SCRIPT);
+        return UNABLE_TO_EXECUTE_CONTAINER_SCRIPT;
       }
       if (dup2(fileno(se_fd), fileno(stderr)) == -1) {
         fprintf(ERRORFILE, "Could not append to stderr.txt\n");
         fclose(se_fd);
-        _exit(UNABLE_TO_EXECUTE_CONTAINER_SCRIPT);
+        return UNABLE_TO_EXECUTE_CONTAINER_SCRIPT;
       }
     }
     fclose(so_fd);
     fclose(se_fd);
     execvp(docker_binary, docker_command);
     fprintf(ERRORFILE, "failed to execute docker command! error: %s\n", strerror(errno));
-    _exit(UNABLE_TO_EXECUTE_CONTAINER_SCRIPT);
+    return UNABLE_TO_EXECUTE_CONTAINER_SCRIPT;
   } else {
     if (use_entry_point) {
       int pid = 0;
@@ -2329,14 +2332,16 @@ int launch_container_as_user(const char *user, const char *app_id,
   // setsid
   pid_t pid = setsid();
   if (pid == -1) {
-    _exit(SETSID_OPER_FAILED);
+    exit_code = SETSID_OPER_FAILED;
+    goto cleanup;
   }
 
   fprintf(LOGFILE, "Writing pid file...\n");
   // write pid to pidfile
   if (pid_file == NULL
       || write_pid_to_file_as_nm(pid_file, pid) != 0) {
-    _exit(WRITE_PIDFILE_FAILED);
+    exit_code = WRITE_PIDFILE_FAILED;
+    goto cleanup;
   }
 
 #ifdef __linux
@@ -2349,7 +2354,8 @@ int launch_container_as_user(const char *user, const char *app_id,
          *cgroup_ptr != NULL; ++cgroup_ptr) {
       if (strcmp(*cgroup_ptr, "none") != 0 &&
             write_pid_to_cgroup_as_root(*cgroup_ptr, pid) != 0) {
-        _exit(WRITE_CGROUP_FAILED);
+        exit_code = WRITE_CGROUP_FAILED;
+        goto cleanup;
       }
     }
   }
@@ -2362,7 +2368,7 @@ int launch_container_as_user(const char *user, const char *app_id,
     container_file_source, cred_file_source, keystore_file_source, truststore_file_source);
   if (exit_code != 0) {
     fprintf(ERRORFILE, "Could not create local files and directories\n");
-    _exit(exit_code);
+    goto cleanup;
   }
 
   fprintf(LOGFILE, "Launching container...\n");
@@ -2379,10 +2385,13 @@ int launch_container_as_user(const char *user, const char *app_id,
 #endif
   umask(0027);
 
-  execlp(script_file_dest, script_file_dest, NULL);
-  fprintf(LOGFILE, "Couldn't execute the container launch file %s - %s\n",
-          script_file_dest, strerror(errno));
-  _exit(UNABLE_TO_EXECUTE_CONTAINER_SCRIPT);
+  if (execlp(script_file_dest, script_file_dest, NULL) != 0) {
+    fprintf(LOGFILE, "Couldn't execute the container launch file %s - %s\n",
+            script_file_dest, strerror(errno));
+    exit_code = UNABLE_TO_EXECUTE_CONTAINER_SCRIPT;
+    goto cleanup;
+  }
+  exit_code = 0;
 
   cleanup:
     free(exit_code_file);
@@ -2973,7 +2982,7 @@ static int run_traffic_control(const char *opts[], char *command_file) {
     execv(TC_BIN, (char**)args);
     //if we reach here, exec failed
     fprintf(LOGFILE, "failed to execute tc command! error: %s\n", strerror(errno));
-    _exit(TRAFFIC_CONTROL_EXECUTION_FAILED);
+    return TRAFFIC_CONTROL_EXECUTION_FAILED;
   }
 }
 
@@ -3224,7 +3233,7 @@ int remove_docker_container(char**argv, int argc) {
 
   if (child_pid == 0) { // child
     int rc = exec_docker_command("rm", args, 2);
-    _exit(rc);
+    exit_code = rc; // Only get here if exec fails
   } else { // parent
     exit_code = wait_and_get_exit_code(child_pid);
     if (exit_code != 0) {
