@@ -2247,7 +2247,6 @@ public class DFSAdmin extends FsShell {
 
   /**
    * @param argv The parameters passed to this program.
-   * @exception Exception if the filesystem does not exist.
    * @return 0 on success, non zero on error.
    */
   @Override
