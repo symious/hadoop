@@ -1143,7 +1143,7 @@ public class ParentQueue extends AbstractCSQueue {
               * (leafQueue.getUsersManager().getUserLimit() / 100.0f)
               * leafQueue.getUsersManager().getUserLimitFactor()));
       leafQueue.setMaxApplicationsPerUser(maxApplicationsPerUser);
-      LOG.info("LeafQueue:" + leafQueue.getQueuePath() + ", maxApplications="
+      LOG.debug("LeafQueue:" + leafQueue.getQueuePath() + ", maxApplications="
           + maxApplications + ", maxApplicationsPerUser="
           + maxApplicationsPerUser + ", Abs Cap:"
           + childQueue.getQueueCapacities().getAbsoluteCapacity(label));
