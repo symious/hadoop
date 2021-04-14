@@ -48,7 +48,7 @@ public class RpcMetrics {
   final boolean rpcQuantileEnable;
   /** The time unit used when storing/accessing time durations. */
   public final static TimeUnit TIMEUNIT = TimeUnit.MILLISECONDS;
-  
+
   RpcMetrics(Server server, Configuration conf) {
     String port = String.valueOf(server.getListenerAddress().getPort());
     name = "RpcActivityForPort" + port;
@@ -135,6 +135,10 @@ public class RpcMetrics {
 
   @Metric("Number of dropped connections") public long numDroppedConnections() {
     return server.getNumDroppedConnections();
+  }
+
+  @Metric("Number of handler processed calls") public String numHandlerProcessedCalls() {
+    return server.getHandlerProcessedCalls();
   }
 
   // Public instrumentation methods that could be extracted to an
