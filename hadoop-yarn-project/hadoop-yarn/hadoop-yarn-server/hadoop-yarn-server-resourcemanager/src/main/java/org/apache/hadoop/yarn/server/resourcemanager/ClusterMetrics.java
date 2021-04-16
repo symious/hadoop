@@ -67,6 +67,12 @@ public class ClusterMetrics {
   @Metric("#Total number of high disk Usage skipped times") MutableGaugeLong highDiskUsageSkipped;
   @Metric("# of RM Events") MutableGaugeLong numRmEvents;
   @Metric("GPU Capability") MutableGaugeLong capabilityGPUs;
+  @Metric("RM Event Processor CPU Usage 60 second Avg") MutableGaugeLong
+    rmEventProcCPUAvg;
+  @Metric("RM Event Processor CPU Usage 60 second Max") MutableGaugeLong
+    rmEventProcCPUMax;
+
+  private boolean rmEventProcMonitorEnable = false;
 
   private static final MetricsInfo RECORD_INFO = info("ClusterMetrics",
   "Metrics for the Yarn Cluster");
@@ -123,6 +129,27 @@ public class ClusterMetrics {
     INSTANCE = null;
   }
   
+  // Indicate whether RM Event Thread CPU Monitor is enabled
+  public void setRmEventProcMonitorEnable(boolean value) {
+    rmEventProcMonitorEnable = value;
+  }
+  public boolean getRmEventProcMonitorEnable() {
+    return rmEventProcMonitorEnable;
+  }
+  // RM Event Processor CPU Usage
+  public long getRmEventProcCPUAvg() {
+    return rmEventProcCPUAvg.value();
+  }
+  public void setRmEventProcCPUAvg(long value) {
+    rmEventProcCPUAvg.set(value);
+  }
+  public long getRmEventProcCPUMax() {
+    return rmEventProcCPUMax.value();
+  }
+  public void setRmEventProcCPUMax(long value) {
+    rmEventProcCPUMax.set(value);
+  }
+
   //Active Nodemanagers
   public int getNumActiveNMs() {
     return numActiveNMs.value();
