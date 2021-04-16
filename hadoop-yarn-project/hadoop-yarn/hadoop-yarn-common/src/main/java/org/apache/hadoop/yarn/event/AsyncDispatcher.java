@@ -26,6 +26,9 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import org.apache.hadoop.yarn.metrics.EventTypeMetrics;
+import org.apache.hadoop.yarn.util.Clock;
+import org.apache.hadoop.yarn.util.MonotonicClock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Marker;
@@ -85,12 +88,15 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
   protected final Map<Class<? extends Enum>, EventHandler> eventDispatchers;
   private boolean exitOnDispatchException = true;
 
+  private Map<Class<? extends Enum>,
+      EventTypeMetrics> eventTypeMetricsMap;
+
+  private Clock clock = new MonotonicClock();
+
   /**
    * The thread name for dispatcher.
    */
   private String dispatcherThreadName = "AsyncDispatcher event handler";
-
-  private DispatcherMetrics metrics;
 
   public AsyncDispatcher() {
     this(new LinkedBlockingQueue<Event>());
@@ -100,6 +106,8 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
     super("Dispatcher");
     this.eventQueue = eventQueue;
     this.eventDispatchers = new HashMap<Class<? extends Enum>, EventHandler>();
+    this.eventTypeMetricsMap = new HashMap<Class<? extends Enum>,
+        EventTypeMetrics>();
   }
 
   /**
@@ -137,10 +145,13 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
             return;
           }
           if (event != null) {
-            if (metrics != null) {
-              long startTime = System.nanoTime();
+            if (eventTypeMetricsMap.
+                get(event.getType().getDeclaringClass()) != null) {
+              long startTime = clock.getTime();
               dispatch(event);
-              metrics.incrementEventType(event, (System.nanoTime() - startTime) / 1000);
+              eventTypeMetricsMap.get(event.getType().getDeclaringClass())
+                  .increment(event.getType(),
+                      clock.getTime() - startTime);
             } else {
               dispatch(event);
             }
@@ -378,11 +389,12 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
     return stopped;
   }
 
-  public void setMetrics(DispatcherMetrics metrics) {
-    this.metrics =  metrics;
-  }
-
   public int getLastEventQueueSizeLogged(){
     return this.lastEventQueueSizeLogged;
+  }
+
+  public void addMetrics(EventTypeMetrics metrics,
+      Class<? extends Enum> eventClass) {
+    eventTypeMetricsMap.put(eventClass, metrics);
   }
 }
