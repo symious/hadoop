@@ -571,6 +571,11 @@ public abstract class Server {
   }
 
   void updateMetrics(Call call, long startTime, boolean connDropped) {
+    updateMetrics(call, startTime, connDropped, false, -1);
+  }
+
+  void updateMetrics(Call call, long startTime, boolean connDropped,
+      boolean isRequeueCall, int handlerId) {
     // delta = handler + processing + response
     long deltaNanos = Time.monotonicNowNanos() - startTime;
     long timestampNanos = call.timestampNanos;
@@ -587,7 +592,7 @@ public abstract class Server {
     long queueTime = details.get(Timing.QUEUE, RpcMetrics.TIMEUNIT);
     rpcMetrics.addRpcQueueTime(queueTime);
 
-    if (call.isResponseDeferred() || connDropped) {
+    if (call.isResponseDeferred() || connDropped || isRequeueCall) {
       // call was skipped; don't include it in processing metrics
       return;
     }
@@ -605,6 +610,9 @@ public abstract class Server {
     callQueue.addResponseTime(name, call, details);
     if (isLogSlowRPC()) {
       logSlowRpcCalls(name, call, processingTime);
+    }
+    if (handlerId >= 0) {
+      handlerProcessedCalls.getAndAdd(handlerId, 1);
     }
   }
 
@@ -2941,6 +2949,7 @@ public abstract class Server {
         // Set to true by default and update to false later if the connection
         // can be succesfully read.
         boolean connDropped = true;
+        boolean isRequeueCall=  false;
 
         try {
           call = callQueue.take(); // pop the queue; maybe blocked here
@@ -2961,6 +2970,7 @@ public abstract class Server {
              */
             // Re-queue the call and continue
             requeueCall(call);
+            isRequeueCall = true;
             continue;
           }
           if (LOG.isDebugEnabled()) {
@@ -2998,9 +3008,8 @@ public abstract class Server {
         } finally {
           CurCall.set(null);
           IOUtils.cleanupWithLogger(LOG, traceScope);
-          handlerProcessedCalls.getAndAdd(id, 1);
           if (call != null) {
-            updateMetrics(call, startTimeNanos, connDropped);
+            updateMetrics(call, startTimeNanos, connDropped, isRequeueCall, id);
             ProcessingDetails.LOG.debug(
                 "Served: [{}]{} name={} user={} details={}",
                 call, (call.isResponseDeferred() ? ", deferred" : ""),

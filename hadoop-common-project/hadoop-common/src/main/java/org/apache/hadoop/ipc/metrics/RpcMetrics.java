@@ -137,7 +137,8 @@ public class RpcMetrics {
     return server.getNumDroppedConnections();
   }
 
-  @Metric("Number of handler processed calls") public String numHandlerProcessedCalls() {
+  @Metric("Number of handler processed calls")
+  public String numHandlerProcessedCalls() {
     return server.getHandlerProcessedCalls();
   }
 
