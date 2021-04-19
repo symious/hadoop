@@ -29,6 +29,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.hadoop.yarn.metrics.EventTypeMetrics;
 import org.apache.hadoop.yarn.util.Clock;
 import org.apache.hadoop.yarn.util.MonotonicClock;
+import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Marker;
@@ -287,20 +288,26 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
   }
 
   class GenericEventHandler implements EventHandler<Event> {
+
+    private long lastTime = Time.monotonicNow();
     private void printEventQueueDetails() {
-      Iterator<Event> iterator = eventQueue.iterator();
-      Map<Enum, Long> counterMap = new HashMap<>();
-      while (iterator.hasNext()) {
-        Enum eventType = iterator.next().getType();
-        if (!counterMap.containsKey(eventType)) {
-          counterMap.put(eventType, 0L);
+      //Avoid High-Frequency printEventQueueDetails
+      if (Time.monotonicNow() - lastTime > 30000) {
+        lastTime = Time.monotonicNow();
+        Iterator<Event> iterator = eventQueue.iterator();
+        Map<Enum, Long> counterMap = new HashMap<>();
+        while (iterator.hasNext()) {
+          Enum eventType = iterator.next().getType();
+          if (!counterMap.containsKey(eventType)) {
+            counterMap.put(eventType, 0L);
+          }
+          counterMap.put(eventType, counterMap.get(eventType) + 1);
         }
-        counterMap.put(eventType, counterMap.get(eventType) + 1);
-      }
-      for (Map.Entry<Enum, Long> entry : counterMap.entrySet()) {
-        long num = entry.getValue();
-        LOG.info("Event type: " + entry.getKey()
-                + ", Event record counter: " + num);
+        for (Map.Entry<Enum, Long> entry : counterMap.entrySet()) {
+          long num = entry.getValue();
+          LOG.info("Event type: " + entry.getKey()
+              + ", Event record counter: " + num);
+        }
       }
     }
     public void handle(Event event) {
