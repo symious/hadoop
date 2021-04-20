@@ -3145,6 +3145,7 @@ public abstract class Server {
     // set the server port to the default listener port.
     this.port = listener.getAddress().getPort();
     connectionManager = new ConnectionManager();
+    this.handlerProcessedCalls = new AtomicLongArray(handlerCount);
     this.rpcMetrics = RpcMetrics.create(this, conf);
     this.rpcDetailedMetrics = RpcDetailedMetrics.create(this.port);
     this.tcpNoDelay = conf.getBoolean(
@@ -3439,8 +3440,7 @@ public abstract class Server {
     }
 
     handlers = new Handler[handlerCount];
-    handlerProcessedCalls = new AtomicLongArray(handlerCount);
-    
+
     for (int i = 0; i < handlerCount; i++) {
       handlers[i] = new Handler(i);
       handlers[i].start();
