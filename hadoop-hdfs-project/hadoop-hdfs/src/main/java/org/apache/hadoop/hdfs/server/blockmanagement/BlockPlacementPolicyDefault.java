@@ -17,6 +17,9 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
+
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
 import static org.apache.hadoop.util.Time.monotonicNow;
 
 import java.util.*;
@@ -75,7 +78,9 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     NODE_STALE("the node is stale"),
     NODE_TOO_BUSY("the node is too busy"),
     TOO_MANY_NODES_ON_RACK("the rack has too many chosen nodes"),
-    NOT_ENOUGH_STORAGE_SPACE("no enough storage space to place the block");
+    NOT_ENOUGH_STORAGE_SPACE("not enough storage space to place the block"),
+    NO_REQUIRED_STORAGE_TYPE("required storage types are unavailable"),
+    NODE_SLOW("the node is too slow");
 
     private final String text;
 
@@ -91,6 +96,8 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   protected boolean considerLoad; 
   protected double considerLoadFactor;
   private boolean preferLocalNode;
+  private boolean dataNodePeerStatsEnabled;
+  private boolean excludeSlowNodesEnabled;
   protected NetworkTopology clusterMap;
   protected Host2NodesMap host2datanodeMap;
   private FSClusterStats stats;
@@ -132,6 +139,12 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
             DFS_NAMENODE_BLOCKPLACEMENTPOLICY_DEFAULT_PREFER_LOCAL_NODE_KEY,
         DFSConfigKeys.
             DFS_NAMENODE_BLOCKPLACEMENTPOLICY_DEFAULT_PREFER_LOCAL_NODE_DEFAULT);
+    this.dataNodePeerStatsEnabled = conf.getBoolean(
+        DFSConfigKeys.DFS_DATANODE_PEER_STATS_ENABLED_KEY,
+        DFSConfigKeys.DFS_DATANODE_PEER_STATS_ENABLED_DEFAULT);
+    this.excludeSlowNodesEnabled = conf.getBoolean(
+        DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY,
+        DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_DEFAULT);
   }
 
   @Override
@@ -973,6 +986,15 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     if (counter > maxTargetPerRack) {
       logNodeIsNotChosen(node, NodeNotChosenReason.TOO_MANY_NODES_ON_RACK);
       return false;
+    }
+
+    // check if the target is a slow node
+    if (dataNodePeerStatsEnabled && excludeSlowNodesEnabled) {
+      Set<Node> nodes = DatanodeManager.getSlowNodes();
+      if (nodes.contains(node)) {
+        logNodeIsNotChosen(node, NodeNotChosenReason.NODE_SLOW);
+        return false;
+      }
     }
 
     return true;

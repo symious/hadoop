@@ -17,11 +17,16 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
+
 import static org.apache.hadoop.util.Time.monotonicNow;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.net.InetAddresses;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_DEFAULT;
+
+import org.apache.commons.lang3.StringUtils;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -46,6 +51,8 @@ import org.apache.hadoop.hdfs.server.protocol.BlockRecoveryCommand.RecoveringBlo
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.net.*;
 import org.apache.hadoop.net.NetworkTopology.InvalidTopologyException;
+import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Timer;
 
@@ -57,7 +64,9 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Manage datanodes, include decommission and other activities.
@@ -186,8 +195,17 @@ public class DatanodeManager {
    */
   private final boolean useDfsNetworkTopology;
 
+  private static final String IP_PORT_SEPARATOR = ":";
+
   @Nullable
   private final SlowPeerTracker slowPeerTracker;
+  private static Set<Node> slowNodesSet =
+    Collections.newSetFromMap(new ConcurrentHashMap<Node, Boolean>());
+  private Daemon slowPeerCollectorDaemon;
+  private final long slowPeerCollectionInterval;
+  private final int maxSlowPeerReportNodes;
+  private boolean excludeSlowNodesEnabled;
+
   @Nullable
   private final SlowDiskTracker slowDiskTracker;
   
@@ -218,11 +236,22 @@ public class DatanodeManager {
         DFSConfigKeys.DFS_DATANODE_FILEIO_PROFILING_SAMPLING_PERCENTAGE_KEY,
         DFSConfigKeys.
             DFS_DATANODE_FILEIO_PROFILING_SAMPLING_PERCENTAGE_DEFAULT));
-
     final Timer timer = new Timer();
     this.slowPeerTracker = dataNodePeerStatsEnabled ?
         new SlowPeerTracker(conf, timer) : null;
-
+    this.excludeSlowNodesEnabled = conf.getBoolean(
+        DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY,
+        DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_DEFAULT);
+    this.maxSlowPeerReportNodes = conf.getInt(
+        DFSConfigKeys.DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY,
+        DFSConfigKeys.DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_DEFAULT);
+    this.slowPeerCollectionInterval = conf.getTimeDuration(
+        DFSConfigKeys.DFS_NAMENODE_SLOWPEER_COLLECT_INTERVAL_KEY,
+        DFSConfigKeys.DFS_NAMENODE_SLOWPEER_COLLECT_INTERVAL_DEFAULT,
+        TimeUnit.MILLISECONDS);
+    if (slowPeerTracker != null && excludeSlowNodesEnabled) {
+      startSlowPeerCollector();
+    }
     this.slowDiskTracker = dataNodeDiskStatsEnabled ?
         new SlowDiskTracker(conf, timer) : null;
 
@@ -329,6 +358,44 @@ public class DatanodeManager {
         DFSConfigKeys.DFS_NAMENODE_BLOCKS_PER_POSTPONEDBLOCKS_RESCAN_KEY_DEFAULT);
   }
 
+  private void startSlowPeerCollector() {
+    if (slowPeerCollectorDaemon != null) {
+      return;
+    }
+    slowPeerCollectorDaemon = new Daemon(new Runnable() {
+      @Override
+      public void run() {
+        while (true) {
+          try {
+            slowNodesSet = getSlowPeers();
+          } catch (Exception e) {
+            LOG.error("Failed to collect slow peers", e);
+          }
+
+          try {
+            Thread.sleep(slowPeerCollectionInterval);
+          } catch (InterruptedException e) {
+            LOG.error("Slow peers collection thread interrupted", e);
+            return;
+          }
+        }
+      }
+    });
+    slowPeerCollectorDaemon.start();
+  }
+
+  public void stopSlowPeerCollector() {
+    if (slowPeerCollectorDaemon == null) {
+      return;
+    }
+    slowPeerCollectorDaemon.interrupt();
+    try {
+      slowPeerCollectorDaemon.join();
+    } catch (InterruptedException e) {
+      LOG.error("Slow peers collection thread did not shutdown", e);
+    }
+  }
+
   private static long getStaleIntervalFromConf(Configuration conf,
       long heartbeatExpireInterval) {
     long staleInterval = conf.getLong(
@@ -374,6 +441,7 @@ public class DatanodeManager {
   void close() {
     datanodeAdminManager.close();
     heartbeatManager.close();
+    stopSlowPeerCollector();
   }
 
   /** @return the network topology. */
@@ -1849,6 +1917,49 @@ public class DatanodeManager {
    */
   public String getSlowPeersReport() {
     return slowPeerTracker != null ? slowPeerTracker.getJson() : null;
+  }
+
+  /**
+   * Returns all tracking slow peers.
+   * @return
+   */
+  public Set<Node> getSlowPeers() {
+    Set<Node> slowPeersSet =
+        Collections.newSetFromMap(new ConcurrentHashMap<Node, Boolean>());
+    if (slowPeerTracker == null) {
+      return slowPeersSet;
+    }
+    ArrayList<String> slowNodes =
+        slowPeerTracker.getSlowNodes(maxSlowPeerReportNodes);
+    for (String slowNode : slowNodes) {
+      if (StringUtils.isBlank(slowNode)
+              || !slowNode.contains(IP_PORT_SEPARATOR)) {
+        continue;
+      }
+      String ipAddr = slowNode.split(IP_PORT_SEPARATOR)[0];
+      DatanodeDescriptor datanodeByHost =
+          host2DatanodeMap.getDatanodeByHost(ipAddr);
+      if (datanodeByHost != null) {
+        slowPeersSet.add(datanodeByHost);
+      }
+    }
+    return slowPeersSet;
+  }
+
+  /**
+   * Returns all tracking slow peers.
+   * @return
+   */
+  public static Set<Node> getSlowNodes() {
+    return slowNodesSet;
+  }
+
+  /**
+   * Use only for testing.
+   */
+  @VisibleForTesting
+  public SlowPeerTracker getSlowPeerTracker() {
+    return slowPeerTracker;
   }
 
   /**

@@ -28,6 +28,8 @@ import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.RamDiskReplicaLruTr
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator;
 import org.apache.hadoop.http.HttpConfig;
 
+import java.util.concurrent.TimeUnit;
+
 /** 
  * This class contains constants for configuration keys and default values
  * used in hdfs.
@@ -686,7 +688,17 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
 
   public static final String DFS_DATANODE_OUTLIERS_REPORT_INTERVAL_KEY =
       "dfs.datanode.outliers.report.interval";
+
   public static final int DFS_DATANODE_OUTLIERS_REPORT_INTERVAL_DEFAULT =
+      1800 * 1000;
+
+  public static final String DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY =
+      "dfs.namenode.max.slowpeer.collect.nodes";
+  public static final int DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_DEFAULT =
+      5;
+  public static final String DFS_NAMENODE_SLOWPEER_COLLECT_INTERVAL_KEY =
+      "dfs.namenode.slowpeer.collect.interval";
+  public static final int DFS_NAMENODE_SLOWPEER_COLLECT_INTERVAL_DEFAULT =
       1800 * 1000;
 
   // property for fsimage compression
@@ -824,6 +836,29 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_NAMENODE_BLOCKPLACEMENTPOLICY_DEFAULT_PREFER_LOCAL_NODE_KEY =
       "dfs.namenode.block-placement-policy.default.prefer-local-node";
   public static final boolean  DFS_NAMENODE_BLOCKPLACEMENTPOLICY_DEFAULT_PREFER_LOCAL_NODE_DEFAULT = true;
+
+  public static final String
+      DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY =
+      "dfs.namenode.block-placement-policy.exclude-slow-nodes.enabled";
+  public static final boolean
+      DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_DEFAULT =
+      false;
+
+  public static final String DFS_NAMENODE_GC_TIME_MONITOR_ENABLE =
+      "dfs.namenode.gc.time.monitor.enable";
+  public static final boolean DFS_NAMENODE_GC_TIME_MONITOR_ENABLE_DEFAULT =
+      true;
+  public static final String
+      DFS_NAMENODE_GC_TIME_MONITOR_OBSERVATION_WINDOW_MS =
+      "dfs.namenode.gc.time.monitor.observation.window.ms";
+  public static final long
+      DFS_NAMENODE_GC_TIME_MONITOR_OBSERVATION_WINDOW_MS_DEFAULT =
+      TimeUnit.MINUTES.toMillis(1);
+  public static final String DFS_NAMENODE_GC_TIME_MONITOR_SLEEP_INTERVAL_MS =
+      "dfs.namenode.gc.time.monitor.sleep.interval.ms";
+  public static final long
+      DFS_NAMENODE_GC_TIME_MONITOR_SLEEP_INTERVAL_MS_DEFAULT =
+      TimeUnit.SECONDS.toMillis(5);
 
   public static final String DFS_BLOCK_LOCAL_PATH_ACCESS_USER_KEY = "dfs.block.local-path-access.user";
   public static final String DFS_DOMAIN_SOCKET_PATH_KEY =
