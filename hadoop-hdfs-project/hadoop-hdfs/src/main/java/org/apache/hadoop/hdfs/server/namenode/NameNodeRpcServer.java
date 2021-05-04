@@ -263,7 +263,6 @@ public class NameNodeRpcServer implements NamenodeProtocols {
 
   public NameNodeRpcServer(Configuration conf, NameNode nn)
       throws IOException {
-    this.conf = conf;
     this.nn = nn;
     this.namesystem = nn.getNamesystem();
     this.retryCache = namesystem.getRetryCache();

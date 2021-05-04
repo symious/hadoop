@@ -121,6 +121,7 @@
                 <fs.s3a.scale.test.huge.huge.partitionsize>${fs.s3a.scale.test.huge.partitionsize}</fs.s3a.scale.test.huge.huge.partitionsize>
                 <fs.s3a.scale.test.timeout>${fs.s3a.scale.test.timeout}</fs.s3a.scale.test.timeout>
               </systemPropertyVariables>
+              <skipTests>true</skipTests>
             </configuration>
           </plugin>
           <plugin>
