@@ -1517,6 +1517,18 @@ public class CapacityScheduler extends
       int offswitchCount = 0;
       int assignedContainers = 0;
 
+      //If node is not good, will skip allocate
+      RMNode rmNode = node.getRMNode();
+      if (null != rmNode) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("CHECKING: NODE INFO: " + node.getNodeID().getHost() +
+              ", Is good target?:" + rmNode.isGoodTarget());
+        }
+        if (!rmNode.isGoodTarget()) {
+          return;
+        }
+      }
+
       CandidateNodeSet<FiCaSchedulerNode> candidates = getCandidateNodeSet(
           node);
       CSAssignment assignment = allocateContainersToNode(candidates,
