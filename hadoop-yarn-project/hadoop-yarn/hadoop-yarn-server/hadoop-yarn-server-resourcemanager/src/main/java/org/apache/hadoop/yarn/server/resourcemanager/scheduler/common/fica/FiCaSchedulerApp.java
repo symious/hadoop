@@ -987,6 +987,11 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
       getCSLeafQueue().decAMUsedResource(oldPartition, containerResource, this);
       getCSLeafQueue().incAMUsedResource(newPartition, containerResource, this);
     }
+
+    getCSLeafQueue().getMetrics().releaseResources(oldPartition,
+        getUser(), 1, containerResource);
+    getCSLeafQueue().getMetrics().allocateResources(newPartition,
+        getUser(), 1, containerResource, false);
   }
 
   protected void getPendingAppDiagnosticMessage(

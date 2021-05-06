@@ -341,8 +341,13 @@ public class TestCapacitySchedulerNodeLabelUpdate {
     checkUserUsedResource(rm, "a", "user", "z", 1024);
     Assert.assertEquals(0,
         app.getAppAttemptResourceUsage().getUsed("x").getMemorySize());
+    Assert.assertEquals(0, app.getCSLeafQueue().
+        getMetrics().getPartitionQueueMetrics("x").getAllocatedMB());
     Assert.assertEquals(1024,
         app.getAppAttemptResourceUsage().getUsed("z").getMemorySize());
+    Assert.assertEquals(1024, app.getCSLeafQueue().
+        getMetrics().getPartitionQueueMetrics("z").getAllocatedMB());
+
     
     // change h1's label to y
     mgr.replaceLabelsOnNode(ImmutableMap.of(nm1.getNodeId(), toSet("y")));
@@ -366,10 +371,16 @@ public class TestCapacitySchedulerNodeLabelUpdate {
     checkUserUsedResource(rm, "a", "user", "z", 0);
     Assert.assertEquals(0,
         app.getAppAttemptResourceUsage().getUsed("x").getMemorySize());
+    Assert.assertEquals(0, app.getCSLeafQueue().
+        getMetrics().getPartitionQueueMetrics("x").getAllocatedMB());
     Assert.assertEquals(1024,
         app.getAppAttemptResourceUsage().getUsed("y").getMemorySize());
+    Assert.assertEquals(1024, app.getCSLeafQueue().
+        getMetrics().getPartitionQueueMetrics("y").getAllocatedMB());
     Assert.assertEquals(0,
         app.getAppAttemptResourceUsage().getUsed("z").getMemorySize());
+    Assert.assertEquals(0, app.getCSLeafQueue().
+        getMetrics().getPartitionQueueMetrics("z").getAllocatedMB());
     
     // change h1's label to no label
     Set<String> emptyLabels = new HashSet<>();
@@ -396,12 +407,20 @@ public class TestCapacitySchedulerNodeLabelUpdate {
     checkUserUsedResource(rm, "a", "user", "", 2048);
     Assert.assertEquals(0,
         app.getAppAttemptResourceUsage().getUsed("x").getMemorySize());
+    Assert.assertEquals(0, app.getCSLeafQueue().getMetrics().
+        getPartitionQueueMetrics("x").getAllocatedMB());
     Assert.assertEquals(0,
         app.getAppAttemptResourceUsage().getUsed("y").getMemorySize());
+    Assert.assertEquals(0, app.getCSLeafQueue().getMetrics().
+        getPartitionQueueMetrics("y").getAllocatedMB());
     Assert.assertEquals(0,
         app.getAppAttemptResourceUsage().getUsed("z").getMemorySize());
+    Assert.assertEquals(0, app.getCSLeafQueue().getMetrics().
+        getPartitionQueueMetrics("z").getAllocatedMB());
     Assert.assertEquals(2048,
         app.getAppAttemptResourceUsage().getUsed("").getMemorySize());
+    Assert.assertEquals(2048, app.getCSLeafQueue().getMetrics().
+        getPartitionQueueMetrics("").getAllocatedMB());
 
     // Finish the two containers, we should see used resource becomes 0
     cs.completedContainer(cs.getRMContainer(containerId2),
