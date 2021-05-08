@@ -19,7 +19,6 @@ package org.apache.hadoop.hdfs.server.namenode;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH_DEFAULT;
-import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_ROOT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_COUNT_KEY;
@@ -256,10 +255,6 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   protected final InetSocketAddress clientRpcAddress;
   
   private final String minimumDataNodeVersion;
-
-  // Custom trash folder
-  private final String[] customTrashRoot;
-  private Configuration conf;
 
   public NameNodeRpcServer(Configuration conf, NameNode nn)
       throws IOException {
@@ -549,8 +544,6 @@ public class NameNodeRpcServer implements NamenodeProtocols {
         this.clientRpcServer.addAuxiliaryListener(auxiliaryPort);
       }
     }
-    String[] customTrashRoot = conf.getStrings(FS_TRASH_ROOT);
-    this.customTrashRoot = customTrashRoot;
   }
 
   /** Allow access to the lifeline RPC server for testing */
