@@ -208,6 +208,13 @@ public class RPC {
       conf.setClass(ENGINE_PROP+"."+protocol.getName(), engine,
                     RpcEngine.class);
     }
+    // In case the config is programmatically set by old version of Hadoop.
+    if (conf.get(ENGINE_PROP + "." + protocol.getName()).
+        equals(ProtobufRpcEngine.class.getName())
+        && engine == ProtobufRpcEngine2.class) {
+      conf.setClass(ENGINE_PROP + "." + protocol.getName(), engine,
+          RpcEngine.class);
+    }
   }
 
   // return the RpcEngine configured to handle a protocol
