@@ -128,7 +128,7 @@ public class ProtobufRpcEngine2 implements RpcEngine {
                 factory)), false);
   }
 
-  private static final class Invoker implements RpcInvocationHandler {
+  protected static class Invoker implements RpcInvocationHandler {
     private final Map<String, Message> returnTypes =
         new ConcurrentHashMap<String, Message>();
     private boolean isClosed = false;
@@ -139,7 +139,7 @@ public class ProtobufRpcEngine2 implements RpcEngine {
     private AtomicBoolean fallbackToSimpleAuth;
     private AlignmentContext alignmentContext;
 
-    private Invoker(Class<?> protocol, InetSocketAddress addr,
+    protected Invoker(Class<?> protocol, InetSocketAddress addr,
         UserGroupInformation ticket, Configuration conf, SocketFactory factory,
         int rpcTimeout, RetryPolicy connectionRetryPolicy,
         AtomicBoolean fallbackToSimpleAuth, AlignmentContext alignmentContext)
@@ -154,7 +154,7 @@ public class ProtobufRpcEngine2 implements RpcEngine {
     /**
      * This constructor takes a connectionId, instead of creating a new one.
      */
-    private Invoker(Class<?> protocol, Client.ConnectionId connId,
+    protected Invoker(Class<?> protocol, Client.ConnectionId connId,
         Configuration conf, SocketFactory factory) {
       this.remoteId = connId;
       this.client = CLIENTS.getClient(conf, factory, RpcWritable.Buffer.class);
@@ -238,8 +238,6 @@ public class ProtobufRpcEngine2 implements RpcEngine {
         traceScope = tracer.newScope(RpcClientUtil.methodToTraceString(method));
       }
 
-      RequestHeaderProto rpcRequestHeader = constructRpcRequestHeader(method);
-
       if (LOG.isTraceEnabled()) {
         LOG.trace(Thread.currentThread().getId() + ": Call -> " +
             remoteId + ": " + method.getName() +
@@ -251,7 +249,7 @@ public class ProtobufRpcEngine2 implements RpcEngine {
       final RpcWritable.Buffer val;
       try {
         val = (RpcWritable.Buffer) client.call(RPC.RpcKind.RPC_PROTOCOL_BUFFER,
-            new RpcProtobufRequest(rpcRequestHeader, theRequest), remoteId,
+            constructRpcRequest(method, theRequest), remoteId,
             fallbackToSimpleAuth, alignmentContext);
 
       } catch (Throwable e) {
@@ -296,6 +294,11 @@ public class ProtobufRpcEngine2 implements RpcEngine {
       } else {
         return getReturnMessage(method, val);
       }
+    }
+
+    protected Writable constructRpcRequest(Method method, Message theRequest) {
+      RequestHeaderProto rpcRequestHeader = constructRpcRequestHeader(method);
+      return new RpcProtobufRequest(rpcRequestHeader, theRequest);
     }
 
     private Message getReturnMessage(final Method method,
@@ -347,6 +350,14 @@ public class ProtobufRpcEngine2 implements RpcEngine {
     public ConnectionId getConnectionId() {
       return remoteId;
     }
+
+    protected long getClientProtocolVersion() {
+      return clientProtocolVersion;
+    }
+
+    protected String getProtocolName() {
+      return protocolName;
+    }
   }
 
   @VisibleForTesting
@@ -370,6 +381,11 @@ public class ProtobufRpcEngine2 implements RpcEngine {
     return new Server(protocol, protocolImpl, conf, bindAddress, port,
         numHandlers, numReaders, queueSizePerHandler, verbose, secretManager,
         portRangeConfig, alignmentContext);
+  }
+
+  @VisibleForTesting
+  public static void clearClientCache() {
+    CLIENTS.clearCache();
   }
 
   public static class Server extends RPC.Server {
@@ -524,6 +540,13 @@ public class ProtobufRpcEngine2 implements RpcEngine {
         String declaringClassProtoName =
             rpcRequest.getDeclaringClassProtocolName();
         long clientVersion = rpcRequest.getClientProtocolVersion();
+        return call(server, connectionProtocolName, request, receiveTime,
+            methodName, declaringClassProtoName, clientVersion);
+      }
+
+      protected Writable call(RPC.Server server, String connectionProtocolName,
+          RpcWritable.Buffer request, long receiveTime, String methodName,
+          String declaringClassProtoName, long clientVersion) throws Exception {
         if (server.verbose) {
           LOG.info("Call: connectionProtocolName=" + connectionProtocolName +
               ", method=" + methodName);

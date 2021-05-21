@@ -43,7 +43,6 @@ import java.security.PrivilegedAction;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumMap;
@@ -1563,8 +1562,8 @@ public class UserGroupInformation {
    * map that has the translation of usernames to groups.
    */
   private static class TestingGroups extends Groups {
-    private final Map<String, List<String>> userToGroupsMapping = 
-      new HashMap<String,List<String>>();
+    private final Map<String, Set<String>> userToGroupsMapping =
+        new HashMap<>();
     private Groups underlyingImplementation;
     
     private TestingGroups(Groups underlyingImplementation) {
@@ -1574,17 +1573,22 @@ public class UserGroupInformation {
     
     @Override
     public List<String> getGroups(String user) throws IOException {
-      List<String> result = userToGroupsMapping.get(user);
-      
-      if (result == null) {
-        result = underlyingImplementation.getGroups(user);
-      }
+      return new ArrayList<>(getGroupsSet(user));
+    }
 
+    @Override
+    public Set<String> getGroupsSet(String user) throws IOException {
+      Set<String> result = userToGroupsMapping.get(user);
+      if (result == null) {
+        result = underlyingImplementation.getGroupsSet(user);
+      }
       return result;
     }
 
     private void setUserGroups(String user, String[] groups) {
-      userToGroupsMapping.put(user, Arrays.asList(groups));
+      Set<String> groupsSet = new LinkedHashSet<>();
+      Collections.addAll(groupsSet, groups);
+      userToGroupsMapping.put(user, groupsSet);
     }
   }
 
@@ -1644,11 +1648,11 @@ public class UserGroupInformation {
   }
 
   public String getPrimaryGroupName() throws IOException {
-    List<String> groups = getGroups();
-    if (groups.isEmpty()) {
+    Set<String> groupsSet = getGroupsSet();
+    if (groupsSet.isEmpty()) {
       throw new IOException("There is no primary group for UGI " + this);
     }
-    return groups.get(0);
+    return groupsSet.iterator().next();
   }
 
   /**
@@ -1771,21 +1775,24 @@ public class UserGroupInformation {
   }
 
   /**
-   * Get the group names for this user. {@link #getGroups()} is less
+   * Get the group names for this user. {@link #getGroupsSet()} is less
    * expensive alternative when checking for a contained element.
    * @return the list of users with the primary group first. If the command
    *    fails, it returns an empty list.
    */
   public String[] getGroupNames() {
-    List<String> groups = getGroups();
-    return groups.toArray(new String[groups.size()]);
+    Collection<String> groupsSet = getGroupsSet();
+    return groupsSet.toArray(new String[groupsSet.size()]);
   }
 
   /**
-   * Get the group names for this user.
+   * Get the group names for this user. {@link #getGroupsSet()} is less
+   * expensive alternative when checking for a contained element.
    * @return the list of users with the primary group first. If the command
    *    fails, it returns an empty list.
+   * @deprecated Use {@link #getGroupsSet()} instead.
    */
+  @Deprecated
   public List<String> getGroups() {
     ensureInitialized();
     try {
@@ -1829,6 +1836,21 @@ public class UserGroupInformation {
         LOG.trace("TRACE", ie);
       }
       return null;
+    }
+  }
+
+  /**
+   * Get the groups names for the user as a Set.
+   * @return the set of users with the primary group first. If the command
+   *     fails, it returns an empty set.
+   */
+  public Set<String> getGroupsSet() {
+    ensureInitialized();
+    try {
+      return groups.getGroupsSet(getShortUserName());
+    } catch (IOException ie) {
+      LOG.debug("Failed to get groups for user {}", getShortUserName(), ie);
+      return Collections.emptySet();
     }
   }
 

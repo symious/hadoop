@@ -19,17 +19,18 @@
   <parent>
     <artifactId>hadoop-yarn-server</artifactId>
     <groupId>org.apache.hadoop</groupId>
-    <version>3.3.sdi-005-SNAPSHOT</version>
+    <version>3.3.2-SNAPSHOT</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
   <artifactId>hadoop-yarn-server-nodemanager</artifactId>
-  <version>3.3.sdi-005-SNAPSHOT</version>
+  <version>3.3.2-SNAPSHOT</version>
   <name>Apache Hadoop YARN NodeManager</name>
 
   <properties>
     <!-- Basedir eeded for generating FindBugs warnings using parent pom -->
     <yarn.basedir>${project.parent.parent.basedir}</yarn.basedir>
     <container-executor.conf.dir>../etc/hadoop</container-executor.conf.dir>
+    <extra.libhadoop.rpath>../lib/native</extra.libhadoop.rpath>
     <container-executor.additional_cflags></container-executor.additional_cflags>
   </properties>
 
@@ -199,6 +200,7 @@
                   <source>${basedir}/src</source>
                   <vars>
                     <HADOOP_CONF_DIR>${container-executor.conf.dir}</HADOOP_CONF_DIR>
+                    <EXTRA_LIBHADOOP_RPATH>${extra.libhadoop.rpath}</EXTRA_LIBHADOOP_RPATH>
                     <JVM_ARCH_DATA_MODEL>${sun.arch.data.model}</JVM_ARCH_DATA_MODEL>
                   </vars>
                   <env>

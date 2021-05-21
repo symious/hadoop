@@ -150,10 +150,6 @@ public class EventDispatcher<T extends Event> extends
     shouldExitOnError = false;
   }
 
-  public void setMetrics(EventTypeMetrics metrics) {
-    this.metrics = metrics;
-  }
-
   protected long getEventProcessorId() {
     return this.eventProcessor.getId();
   }
@@ -161,4 +157,9 @@ public class EventDispatcher<T extends Event> extends
   protected boolean isStopped() {
     return this.stopped;
   }
+
+  public void setMetrics(EventTypeMetrics metrics) {
+    this.metrics = metrics;
+  }
+
 }
