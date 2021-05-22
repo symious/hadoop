@@ -144,8 +144,12 @@ public class RouterPolicyFacade {
     // respecting YARN behavior we assume default queue if the queue is not
     // specified. This also ensures that "null" can be used as a key to get the
     // default behavior.
+    //While in YARN at root.abc is equivalent to the abc queue, the routing
+    // behavior of both should be consistent in yarn federation
     if (queue == null) {
       queue = YarnConfiguration.DEFAULT_QUEUE_NAME;
+    } else if (queue.startsWith("root.") && queue.length()>5) {
+      queue = queue.substring(5);
     }
 
     // the facade might cache this request, based on its parameterization

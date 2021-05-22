@@ -145,6 +145,35 @@ public class TestRouterPolicyFacade {
   }
 
   @Test
+  public void testEquivalentQueue() throws YarnException {
+
+    // The test is that if we enter the queue with the full name or omit the
+    // prefix "root.", the routing cluster behavior should be consistent.
+    ApplicationSubmissionContext applicationSubmissionContext =
+        mock(ApplicationSubmissionContext.class);
+
+    // then the operator changes how queue1 is routed setting it to
+    // PriorityRouterPolicy with weights favoring the first subcluster in
+    // subClusterIds.
+    store.setPolicyConfiguration(SetSubClusterPolicyConfigurationRequest
+        .newInstance(getPriorityPolicy(queue1)));
+
+    String shortQueue = queue1;
+    when(applicationSubmissionContext.getQueue()).thenReturn(shortQueue);
+    SubClusterId chosen1 =
+        routerFacade.getHomeSubcluster(applicationSubmissionContext, null);
+
+    //use the full queue name with prefix "root."
+    String fullQueue = "root." + queue1;
+    when(applicationSubmissionContext.getQueue()).thenReturn(fullQueue);
+    SubClusterId chosen2 =
+        routerFacade.getHomeSubcluster(applicationSubmissionContext, null);
+
+    Assert.assertTrue(chosen1.equals(chosen2));
+
+  }
+
+  @Test
   public void testFallbacks() throws YarnException {
 
     // this tests the behavior of the system when the queue requested is
