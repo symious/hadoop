@@ -17,14 +17,26 @@
  */
 package org.apache.hadoop.yarn.server.router.clientrm;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
+
+import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationsResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetClusterMetricsResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.GetClusterNodesResponse;
+import org.apache.hadoop.yarn.api.records.ApplicationReport;
+import org.apache.hadoop.yarn.api.records.NodeReport;
 import org.apache.hadoop.yarn.api.records.YarnClusterMetrics;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Util class for Router Yarn client API calls.
  */
 public final class RouterYarnClientUtils {
+
+  private static final Logger LOG =
+      LoggerFactory.getLogger(RouterYarnClientUtils.class);
 
   private RouterYarnClientUtils() {
 
@@ -52,4 +64,29 @@ public final class RouterYarnClientUtils {
     }
     return GetClusterMetricsResponse.newInstance(tmp);
   }
+
+  public static GetApplicationsResponse mergeApps(
+      Collection<GetApplicationsResponse> responses) {
+    List<ApplicationReport> sumApplicationReportList = new ArrayList<>();
+    for (GetApplicationsResponse response : responses) {
+      List<ApplicationReport> applicationReportList =
+          response.getApplicationList();
+      sumApplicationReportList.addAll(applicationReportList);
+    }
+    LOG.info("GetApplicationsResponse size: " + sumApplicationReportList.size());
+    return GetApplicationsResponse.newInstance(sumApplicationReportList);
+  }
+
+  public static GetClusterNodesResponse mergeNodes(
+      Collection<GetClusterNodesResponse> responses) {
+    List<NodeReport> sumNodeReportList = new ArrayList<>();
+    for (GetClusterNodesResponse response : responses) {
+      List<NodeReport> nodeReportList =
+          response.getNodeReports();
+      sumNodeReportList.addAll(nodeReportList);
+    }
+    LOG.info("GetClusterNodesResponse size: " + sumNodeReportList.size());
+    return GetClusterNodesResponse.newInstance(sumNodeReportList);
+  }
+
 }
