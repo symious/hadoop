@@ -25,7 +25,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
-import org.apache.hadoop.hdfs.server.namenode.FSNamesystem.DefaultAuditLogger;
+import org.apache.hadoop.hdfs.server.namenode.FSNamesystem.FSNamesystemAuditLogger;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.log4j.Level;
 import org.junit.Rule;
@@ -53,7 +53,7 @@ public class TestAuditLogAtDebug {
   
   private DefaultAuditLogger makeSpyLogger(
       Level level, Optional<List<String>> debugCommands) {
-    DefaultAuditLogger logger = new DefaultAuditLogger();
+    DefaultAuditLogger logger = new FSNamesystemAuditLogger();
     Configuration conf = new HdfsConfiguration();
     if (debugCommands.isPresent()) {
       conf.set(DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_DEBUG_CMDLIST,
