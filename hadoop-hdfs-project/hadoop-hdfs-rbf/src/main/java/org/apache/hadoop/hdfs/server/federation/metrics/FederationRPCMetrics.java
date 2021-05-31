@@ -202,6 +202,16 @@ public class FederationRPCMetrics implements FederationRPCMBean {
   }
 
   @Override
+  public int getRpcClientAsyncCallActive() {
+    return rpcServer.getRPCClient().getAsyncCallActive();
+  }
+
+  @Override
+  public int getRpcClientAsyncCallQueue() {
+    return rpcServer.getRPCClient().getAsyncCallQueue();
+  }
+
+  @Override
   public int getRpcServerNumOpenConnections() {
     return rpcServer.getServer().getNumOpenConnections();
   }

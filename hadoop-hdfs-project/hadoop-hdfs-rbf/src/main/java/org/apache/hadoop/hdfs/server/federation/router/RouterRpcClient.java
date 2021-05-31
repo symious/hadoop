@@ -239,6 +239,24 @@ public class RouterRpcClient {
   }
 
   /**
+   * Number of active Async Tasks being handled by Thread Pool
+   *
+   * @return Number of active Async Tasks
+   */
+  public int getAsyncCallActive() {
+    return this.executorService.getActiveCount();
+  }
+
+  /**
+   * Number of queued Async Tasks being handled by Thread Pool
+   *
+   * @return Number of queued Async Tasks
+   */
+  public int getAsyncCallQueue() {
+    return this.executorService.getQueue().size();
+  }
+
+  /**
    * JSON representation of the connection pool.
    *
    * @return String representation of the JSON.

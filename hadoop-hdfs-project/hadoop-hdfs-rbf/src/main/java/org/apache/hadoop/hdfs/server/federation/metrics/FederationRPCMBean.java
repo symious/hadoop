@@ -60,6 +60,10 @@ public interface FederationRPCMBean {
 
   int getRpcServerCallQueue();
 
+  int getRpcClientAsyncCallActive();
+
+  int getRpcClientAsyncCallQueue();
+
   /**
    * Get the number of RPC connections between the clients and the Router.
    * @return Number of RPC connections between the clients and the Router.
