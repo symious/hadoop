@@ -81,6 +81,7 @@ import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.io.EnumSetWritable;
+import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.Service.STATE;
 import org.apache.hadoop.test.GenericTestUtils;
@@ -1103,4 +1104,34 @@ public class TestRouterRpc {
         RouterRpcClient.processExceptionMsg(
             "Parent directory doesn't exist: /a/a/b", "/a", "/ns1/a"));
   }
+
+  @Test
+  public void testRouterSetCallerContext() {
+    // Build client CallerContext
+    CallerContext.Builder builder = new CallerContext
+        .Builder("TEST_ROUTER_CONTEXT");
+    CallerContext clientRouterContext = builder.build();
+
+    // Reserve original CallerContext
+    CallerContext originCallerContext = CallerContext.getCurrent();
+
+    // Call RouterRpcClient.setCallerContext
+    RouterRpcClient.setCallerContext(clientRouterContext);
+
+    // Check original CallerContext
+    assertTrue(CallerContext.getCurrent().getContext()
+        .contains("TEST_ROUTER_CONTEXT"));
+
+    // Check CallerContext added by RouterRpc
+    assertTrue(CallerContext.getCurrent().getContext()
+        .contains("RouterCallIp"));
+
+    // Check CallerContext separator
+    assertTrue(CallerContext.getCurrent().getContext()
+        .contains(CallerContext.ITEM_SEPARATOR));
+
+    // Set original CallerContext
+    CallerContext.setCurrent(originCallerContext);
+  }
+
 }

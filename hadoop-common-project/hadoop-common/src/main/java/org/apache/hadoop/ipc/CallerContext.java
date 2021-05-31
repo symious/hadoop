@@ -37,6 +37,7 @@ import java.util.Arrays;
 @InterfaceStability.Evolving
 public class CallerContext {
   public static final Charset SIGNATURE_ENCODING = StandardCharsets.UTF_8;
+  public static final String ITEM_SEPARATOR = "$";
   /** The caller context.
    *
    * It will be truncated if it exceeds the maximum allowed length in
