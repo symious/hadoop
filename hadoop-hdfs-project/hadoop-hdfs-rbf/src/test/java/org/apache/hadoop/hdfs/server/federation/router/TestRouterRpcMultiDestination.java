@@ -20,9 +20,11 @@ package org.apache.hadoop.hdfs.server.federation.router;
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.createFile;
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.verifyFileExists;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.net.InetAddress;
 import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -34,6 +36,7 @@ import java.util.TreeSet;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
@@ -44,6 +47,10 @@ import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster.RouterConte
 import org.apache.hadoop.hdfs.server.federation.resolver.FileSubclusterResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.PathLocation;
 import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
+import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+import org.apache.hadoop.ipc.CallerContext;
+import org.apache.hadoop.test.GenericTestUtils;
+import org.junit.Test;
 
 /**
  * The the RPC interface of the {@link getRouter()} implemented by
@@ -212,5 +219,46 @@ public class TestRouterRpcMultiDestination extends TestRouterRpc {
     String filename1 = testDir1 + "/testrename";
     testRename(getRouterContext(), filename1, renamedFile, false);
     testRename2(getRouterContext(), filename1, renamedFile, false);
+  }
+
+  @Test
+  public void testCallerContextWithMultiDestinations() throws IOException {
+    GenericTestUtils.LogCapturer auditLog =
+        GenericTestUtils.LogCapturer.captureLogs(FSNamesystem.auditLog);
+
+    // set client context
+    CallerContext.setCurrent(
+        new CallerContext.Builder("clientContext").build());
+    // assert the initial caller context as expected
+    assertEquals("clientContext", CallerContext.getCurrent().getContext());
+
+    DistributedFileSystem routerFs =
+        (DistributedFileSystem) getRouterFileSystem();
+    // create a directory via the router
+    Path dirPath = new Path("/test_caller_context_with_multi_destinations");
+    routerFs.mkdirs(dirPath);
+    // invoke concurrently in RouterRpcClient
+    routerFs.listStatus(dirPath);
+    // invoke sequentially in RouterRpcClient
+    routerFs.getFileStatus(dirPath);
+
+    String auditFlag = "src=" + dirPath.toString();
+    String clientIpInfo = "clientIp:"
+        + InetAddress.getLocalHost().getHostAddress();
+    for (String line : auditLog.getOutput().split("\n")) {
+      if (line.contains(auditFlag)) {
+        // assert origin caller context exist in audit log
+        assertTrue(line.contains("callerContext=clientContext"));
+        String callerContext = line.substring(
+            line.indexOf("callerContext=clientContext"));
+        // assert client ip info exist in caller context
+        assertTrue(callerContext.contains(clientIpInfo));
+        // assert client ip info appears only once in caller context
+        assertEquals(callerContext.indexOf(clientIpInfo),
+            callerContext.lastIndexOf(clientIpInfo));
+      }
+    }
+    // clear client context
+    CallerContext.setCurrent(null);
   }
 }

@@ -29,6 +29,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -75,6 +76,7 @@ import org.apache.hadoop.hdfs.server.federation.MockResolver;
 import org.apache.hadoop.hdfs.server.federation.RouterConfigBuilder;
 import org.apache.hadoop.hdfs.server.federation.metrics.NamenodeBeanMetrics;
 import org.apache.hadoop.hdfs.server.federation.resolver.FileSubclusterResolver;
+import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations;
 import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations.BlockWithLocations;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
@@ -138,9 +140,13 @@ public class TestRouterRpc {
 
   @BeforeClass
   public static void globalSetUp() throws Exception {
+    Configuration namenodeConf = new Configuration();
+    namenodeConf.setBoolean(DFSConfigKeys.HADOOP_CALLER_CONTEXT_ENABLED_KEY,
+        true);
     cluster = new MiniRouterDFSCluster(false, 2);
     // We need 6 DNs to test Erasure Coding with RS-6-3-64k
     cluster.setNumDatanodesPerNameservice(6);
+    cluster.addNamenodeOverrides(namenodeConf);
 
     // Start NNs and DNs and wait until ready
     cluster.startCluster();
@@ -1105,33 +1111,25 @@ public class TestRouterRpc {
             "Parent directory doesn't exist: /a/a/b", "/a", "/ns1/a"));
   }
 
-  @Test
-  public void testRouterSetCallerContext() {
-    // Build client CallerContext
-    CallerContext.Builder builder = new CallerContext
-        .Builder("TEST_ROUTER_CONTEXT");
-    CallerContext clientRouterContext = builder.build();
+  public void testMkdirsWithCallerContext() throws IOException {
+    GenericTestUtils.LogCapturer auditlog =
+        GenericTestUtils.LogCapturer.captureLogs(FSNamesystem.auditLog);
 
-    // Reserve original CallerContext
-    CallerContext originCallerContext = CallerContext.getCurrent();
+    // Current callerContext is null
+    assertNull(CallerContext.getCurrent());
 
-    // Call RouterRpcClient.setCallerContext
-    RouterRpcClient.setCallerContext(clientRouterContext);
+    // Set client context
+    CallerContext.setCurrent(
+        new CallerContext.Builder("clientContext").build());
 
-    // Check original CallerContext
-    assertTrue(CallerContext.getCurrent().getContext()
-        .contains("TEST_ROUTER_CONTEXT"));
+    // Create a directory via the router
+    String dirPath = "/test_dir_with_callercontext";
+    FsPermission permission = new FsPermission("755");
+    routerProtocol.mkdirs(dirPath, permission, false);
 
-    // Check CallerContext added by RouterRpc
-    assertTrue(CallerContext.getCurrent().getContext()
-        .contains("RouterCallIp"));
-
-    // Check CallerContext separator
-    assertTrue(CallerContext.getCurrent().getContext()
-        .contains(CallerContext.ITEM_SEPARATOR));
-
-    // Set original CallerContext
-    CallerContext.setCurrent(originCallerContext);
+    // The audit log should contains "callerContext=clientContext,clientIp:"
+    assertTrue(auditlog.getOutput()
+        .contains("callerContext=clientContext,clientIp:"));
+    assertTrue(verifyFileExists(routerFS, dirPath));
   }
-
 }
