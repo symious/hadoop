@@ -4016,6 +4016,29 @@ public class YarnConfiguration extends Configuration {
   public static final boolean DEFAULT_ROUTER_WEBAPP_PARTIAL_RESULTS_ENABLED =
       false;
 
+  /**
+   * Specifications on how (many times) to contact Router for apps. We need to
+   * do this because Router might return partial application list because some
+   * sub-cluster RM is not responsive (e.g. failing over).
+   *
+   * Should have three values separated by comma: minimal success retries,
+   * maximum total retry, retry interval (ms).
+   */
+  public static final String APP_CLEANER_CONTACT_ROUTER_SPEC =
+      ROUTER_PREFIX + "application.cleaner.contact.router.spec";
+  public static final String DEFAULT_APP_CLEANER_CONTACT_ROUTER_SPEC =
+      "3,10,600000";
+
+  /** The interval at which the application cleaner runs, -1 means disabled. */
+  public static final String ROUTER_APP_CLEANER_INTERVAL_MS =
+      ROUTER_PREFIX + "application.cleaner.interval-ms";
+  public static final long DEFAULT_ROUTER_APP_CLEANER_INTERVAL_MS = -1;
+
+  /** The maximum number of Apps stored in StateStore warn threshold. */
+  public static final String ROUTER_MAX_APPS_WARN_THRESHOLD =
+      ROUTER_PREFIX + "application.threshold.maximum";
+  public static final int DEFAULT_ROUTER_MAX_APPS_WARN_THRESHOLD = 50000;
+
   ////////////////////////////////
   // CSI Volume configs
   ////////////////////////////////

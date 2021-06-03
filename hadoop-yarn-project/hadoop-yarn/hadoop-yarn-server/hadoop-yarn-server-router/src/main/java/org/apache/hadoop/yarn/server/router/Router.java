@@ -35,6 +35,7 @@ import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.RMWebAppUtil;
 import org.apache.hadoop.yarn.server.router.clientrm.RouterClientRMService;
 import org.apache.hadoop.yarn.server.router.rmadmin.RouterRMAdminService;
+import org.apache.hadoop.yarn.server.router.service.ApplicationCleanerService;
 import org.apache.hadoop.yarn.server.router.webapp.RouterWebApp;
 import org.apache.hadoop.yarn.server.webapp.WebServiceClient;
 import org.apache.hadoop.yarn.webapp.WebApp;
@@ -77,6 +78,12 @@ public class Router extends CompositeService {
   protected String webAppAddress;
 
   /**
+   * Add ApplicationCleanerService that cleans up old applications
+   * from table applicationsHomeSubCluster in FederationStateStore.
+   */
+  private ApplicationCleanerService applicationCleanerService;
+
+  /**
    * Priority of the Router shutdown hook.
    */
   public static final int SHUTDOWN_HOOK_PRIORITY = 30;
@@ -110,6 +117,9 @@ public class Router extends CompositeService {
     pauseMonitor = new JvmPauseMonitor();
     addService(pauseMonitor);
     jm.setPauseMonitor(pauseMonitor);
+
+    applicationCleanerService = createApplicationCleanerService();
+    addService(applicationCleanerService);
 
     WebServiceClient.initialize(config);
     super.serviceInit(conf);
@@ -154,6 +164,10 @@ public class Router extends CompositeService {
 
   protected RouterRMAdminService createRMAdminProxyService() {
     return new RouterRMAdminService();
+  }
+
+  protected ApplicationCleanerService createApplicationCleanerService(){
+    return new ApplicationCleanerService();
   }
 
   @Private
