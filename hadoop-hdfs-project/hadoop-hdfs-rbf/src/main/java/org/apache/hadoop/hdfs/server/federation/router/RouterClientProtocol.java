@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.BatchedRemoteIterator.BatchedEntries;
 import org.apache.hadoop.fs.CacheFlag;
 import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.CreateFlag;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FsServerDefaults;
 import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Path;
@@ -68,11 +69,18 @@ import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamespaceInfo
 import org.apache.hadoop.hdfs.server.federation.resolver.FileSubclusterResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
+import org.apache.hadoop.hdfs.server.federation.router.RouterRpcServer.RouterRpcServerAuditLogger;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
+import org.apache.hadoop.hdfs.server.namenode.AuditLogger;
+import org.apache.hadoop.hdfs.server.namenode.DefaultAuditLogger;
+import org.apache.hadoop.hdfs.server.namenode.HdfsAuditLogger;
 import org.apache.hadoop.hdfs.server.namenode.NameNode.OperationCategory;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
 import org.apache.hadoop.io.EnumSetWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.ipc.CallerContext;
+import org.apache.hadoop.ipc.Server;
+import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
 import org.slf4j.Logger;
@@ -80,6 +88,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -105,10 +114,23 @@ public class RouterClientProtocol implements ClientProtocol {
   private final FileSubclusterResolver subclusterResolver;
   private final ActiveNamenodeResolver namenodeResolver;
 
-  /** Identifier for the super user. */
+  /**
+   * Identifier for the super user.
+   */
   private final String superUser;
-  /** Identifier for the super group. */
+  /**
+   * Identifier for the super group.
+   */
   private final String superGroup;
+
+  // Tracks whether the default audit logger is the only configured audit
+  // logger; this allows isAuditEnabled() to return false in case the
+  // underlying logger is disabled, and avoid some unnecessary work.
+  private boolean isDefaultAuditLogger;
+  private final List<AuditLogger> auditLoggers;
+
+  private String INVOKE_TYPE_SEQUENTIAL = "sequential";
+  private String INVOKE_TYPE_CONCURRENT = "concurrent";
 
   RouterClientProtocol(Configuration conf, RouterRpcServer rpcServer) {
     this.rpcServer = rpcServer;
@@ -121,12 +143,68 @@ public class RouterClientProtocol implements ClientProtocol {
     this.superGroup = conf.get(
         DFSConfigKeys.DFS_PERMISSIONS_SUPERUSERGROUP_KEY,
         DFSConfigKeys.DFS_PERMISSIONS_SUPERUSERGROUP_DEFAULT);
+
+    this.auditLoggers = RouterRpcServer.getAuditLogger();
+    this.isDefaultAuditLogger = auditLoggers.size() == 1
+        && auditLoggers.get(0) instanceof DefaultAuditLogger;
+  }
+
+  boolean isAuditEnabled() {
+    return (!isDefaultAuditLogger || RouterRpcServer.auditLog.isInfoEnabled())
+        && !auditLoggers.isEmpty();
+  }
+
+  void logAuditEvent(boolean succeeded, String cmd, String invokeType)
+      throws IOException {
+    logAuditEvent(succeeded, cmd, invokeType, null);
+  }
+
+  void logAuditEvent(boolean succeeded, String cmd, String invokeType,
+      String src) throws IOException {
+    logAuditEvent(succeeded, cmd, invokeType, src, null, null);
+  }
+
+  private void logAuditEvent(boolean succeeded, String cmd, String invokeType,
+      String src, String dst, FileStatus stat) throws IOException {
+    if (isAuditEnabled() && isExternalInvocation()) {
+      logAuditEvent(succeeded, Server.getRemoteUser(), Server.getRemoteIp(),
+          cmd, invokeType, src, dst, stat);
+    }
+  }
+
+  private void logAuditEvent(boolean succeeded, UserGroupInformation ugi,
+        InetAddress addr, String cmd, String invokeType, String src, String dst,
+        FileStatus status) {
+    final String ugiStr = ugi.toString();
+    for (AuditLogger logger : auditLoggers) {
+      if (logger instanceof RouterRpcServerAuditLogger) {
+        RouterRpcServerAuditLogger auditLogger =
+            (RouterRpcServerAuditLogger) logger;
+        auditLogger.logAuditEvent(succeeded, ugiStr, addr, cmd, src, dst,
+            status, CallerContext.getCurrent(), ugi, null, invokeType);
+      } else if (logger instanceof HdfsAuditLogger) {
+        HdfsAuditLogger hdfsLogger = (HdfsAuditLogger) logger;
+        hdfsLogger.logAuditEvent(succeeded, ugiStr, addr, cmd, src, dst,
+            status, CallerContext.getCurrent(), ugi, null);
+      } else {
+        logger.logAuditEvent(succeeded, ugiStr, addr, cmd, src, dst, status);
+      }
+    }
+  }
+
+  /**
+   * Client invoked methods are invoked over RPC and will be in RPC call
+   * context even if the client exits.
+   */
+  boolean isExternalInvocation() {
+    return Server.isRpcInvocation();
   }
 
   @Override
   public Token<DelegationTokenIdentifier> getDelegationToken(Text renewer)
       throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE, false);
+    logAuditEvent(true, "getDelegationToken", null);
     return null;
   }
 
@@ -146,6 +224,7 @@ public class RouterClientProtocol implements ClientProtocol {
   public long renewDelegationToken(Token<DelegationTokenIdentifier> token)
       throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE, false);
+    logAuditEvent(true, "renewDelegationToken", null);
     return 0;
   }
 
@@ -153,6 +232,7 @@ public class RouterClientProtocol implements ClientProtocol {
   public void cancelDelegationToken(Token<DelegationTokenIdentifier> token)
       throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE, false);
+    logAuditEvent(true, "cancelDelegationToken", null);
   }
 
   @Override
@@ -164,8 +244,19 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod remoteMethod = new RemoteMethod("getBlockLocations",
         new Class<?>[] {String.class, long.class, long.class},
         new RemoteParam(), offset, length);
-    return rpcClient.invokeSequential(locations, remoteMethod,
-        LocatedBlocks.class, null);
+    final String operationName = "open";
+    String invokeType = null;
+    LocatedBlocks blocks;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      blocks = rpcClient.invokeSequential(locations, remoteMethod,
+          LocatedBlocks.class, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
+    return blocks;
   }
 
   @Override
@@ -204,7 +295,18 @@ public class RouterClientProtocol implements ClientProtocol {
             long.class, CryptoProtocolVersion[].class},
         createLocation.getDest(), masked, clientName, flag, createParent,
         replication, blockSize, supportedVersions);
-    return (HdfsFileStatus) rpcClient.invokeSingle(createLocation, method);
+    HdfsFileStatus status;
+    String operationName = "create";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      status = (HdfsFileStatus) rpcClient.invokeSingle(createLocation, method);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
+    return status;
   }
 
   @Override
@@ -216,8 +318,19 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("append",
         new Class<?>[] {String.class, String.class, EnumSetWritable.class},
         new RemoteParam(), clientName, flag);
-    return rpcClient.invokeSequential(
-        locations, method, LastBlockWithStatus.class, null);
+    LastBlockWithStatus lastBlockWithStatus;
+    String operationName = "append";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      lastBlockWithStatus = rpcClient.invokeSequential(
+          locations, method, LastBlockWithStatus.class, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
+    return lastBlockWithStatus;
   }
 
   @Override
@@ -230,8 +343,18 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("recoverLease",
         new Class<?>[] {String.class, String.class}, new RemoteParam(),
         clientName);
-    Object result = rpcClient.invokeSequential(
-        locations, method, Boolean.class, Boolean.TRUE);
+    Object result;
+    String operationName = "recoverLease";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      result = rpcClient.invokeSequential(
+          locations, method, Boolean.class, Boolean.TRUE);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
     return (boolean) result;
   }
 
@@ -244,8 +367,18 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("setReplication",
         new Class<?>[] {String.class, short.class}, new RemoteParam(),
         replication);
-    Object result = rpcClient.invokeSequential(
-        locations, method, Boolean.class, Boolean.TRUE);
+    Object result;
+    String operationName = "setReplication";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      result = rpcClient.invokeSequential(
+          locations, method, Boolean.class, Boolean.TRUE);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
     return (boolean) result;
   }
 
@@ -258,7 +391,16 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("setStoragePolicy",
         new Class<?>[] {String.class, String.class},
         new RemoteParam(), policyName);
-    rpcClient.invokeSequential(locations, method, null, null);
+    String operationName = "setStoragePolicy";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      rpcClient.invokeSequential(locations, method, null, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
   }
 
   @Override
@@ -280,11 +422,22 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("setPermission",
         new Class<?>[] {String.class, FsPermission.class},
         new RemoteParam(), permissions);
-    if (isPathAll(src)) {
-      rpcClient.invokeConcurrent(locations, method);
-    } else {
-      rpcClient.invokeSequential(locations, method);
+
+    String operationName = "setPermission";
+    String invokeType = null;
+    try {
+      if (isPathAll(src)) {
+        invokeType = INVOKE_TYPE_CONCURRENT;
+        rpcClient.invokeConcurrent(locations, method);
+      } else {
+        invokeType = INVOKE_TYPE_SEQUENTIAL;
+        rpcClient.invokeSequential(locations, method);
+      }
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
     }
+    logAuditEvent(true, operationName, invokeType, src);
   }
 
   @Override
@@ -297,11 +450,22 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("setOwner",
         new Class<?>[] {String.class, String.class, String.class},
         new RemoteParam(), username, groupname);
-    if (isPathAll(src)) {
-      rpcClient.invokeConcurrent(locations, method);
-    } else {
-      rpcClient.invokeSequential(locations, method);
+
+    String operationName = "setOwner";
+    String invokeType = null;
+    try {
+      if (isPathAll(src)) {
+        invokeType = INVOKE_TYPE_CONCURRENT;
+        rpcClient.invokeConcurrent(locations, method);
+      } else {
+        invokeType = INVOKE_TYPE_SEQUENTIAL;
+        rpcClient.invokeSequential(locations, method);
+      }
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
     }
+    logAuditEvent(true, operationName, invokeType, src);
   }
 
   /**
@@ -437,8 +601,19 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("rename",
         new Class<?>[] {String.class, String.class},
         new RemoteParam(), dstParam);
-    return rpcClient.invokeSequential(
-        locs, method, Boolean.class, Boolean.TRUE);
+    Boolean result;
+    String operation = "rename";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      result = rpcClient.invokeSequential(
+          locs, method, Boolean.class, Boolean.TRUE);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operation, invokeType, src, dst, null);
+      throw e;
+    }
+    logAuditEvent(true, operation, invokeType, src, dst, null);
+    return result;
   }
 
   @Override
@@ -466,7 +641,18 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("rename2",
         new Class<?>[] {String.class, String.class, options.getClass()},
         new RemoteParam(), dstParam, options);
-    rpcClient.invokeSequential(locs, method, null, null);
+    String operationName = "rename2";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      rpcClient.invokeSequential(locs, method, null, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName + " (options=" +
+          Arrays.toString(options) + ")", invokeType, src, dst, null);
+      throw e;
+    }
+    logAuditEvent(true, operationName + " (options=" +
+        Arrays.toString(options) + ")", invokeType, src, dst, null);
   }
 
   private RemoteParam getRenameDestinationsForTrash(
@@ -522,7 +708,19 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("concat",
         new Class<?>[] {String.class, String[].class},
         targetDestination.getDest(), sourceDestinations);
-    rpcClient.invokeSingle(targetDestination, method);
+    String operationName = "concat";
+    FileStatus stat = null;
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      stat = (FileStatus) rpcClient.invokeSingle(targetDestination, method);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, Arrays.toString(src),
+          trg, stat);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, Arrays.toString(src), trg,
+        stat);
   }
 
   @Override
@@ -535,8 +733,19 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("truncate",
         new Class<?>[] {String.class, long.class, String.class},
         new RemoteParam(), newLength, clientName);
-    return rpcClient.invokeSequential(locations, method, Boolean.class,
-        Boolean.TRUE);
+    boolean result;
+    String operationName = "truncate";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      result = rpcClient.invokeSequential(locations, method, Boolean.class,
+          Boolean.TRUE);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(false, operationName, invokeType, src);
+    return result;
   }
 
   @Override
@@ -548,12 +757,24 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("delete",
         new Class<?>[] {String.class, boolean.class}, new RemoteParam(),
         recursive);
-    if (isPathAll(src)) {
-      return rpcClient.invokeAll(locations, method);
-    } else {
-      return rpcClient.invokeSequential(locations, method,
-          Boolean.class, Boolean.TRUE);
+    boolean result;
+    String operationName = "delete";
+    String invokeType = null;
+    try {
+      if (isPathAll(src)) {
+        invokeType = INVOKE_TYPE_CONCURRENT;
+        result = rpcClient.invokeAll(locations, method);
+      } else {
+        invokeType = INVOKE_TYPE_SEQUENTIAL;
+        result = rpcClient.invokeSequential(locations, method,
+            Boolean.class, Boolean.TRUE);
+      }
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
     }
+    logAuditEvent(true, operationName, invokeType, src);
+    return result;
   }
 
   @Override
@@ -567,9 +788,20 @@ public class RouterClientProtocol implements ClientProtocol {
         new Class<?>[] {String.class, FsPermission.class, boolean.class},
         new RemoteParam(), masked, createParent);
 
+    String operationName = "mkdirs";
+    String invokeType = null;
+    boolean result;
     // Create in all locations
     if (isPathAll(src)) {
-      return rpcClient.invokeAll(locations, method);
+      try {
+        invokeType = INVOKE_TYPE_CONCURRENT;
+        result = rpcClient.invokeAll(locations, method);
+      } catch (AccessControlException e) {
+        logAuditEvent(false, operationName, invokeType, src);
+        throw e;
+      }
+      logAuditEvent(true, operationName, invokeType, src);
+      return result;
     }
 
     if (locations.size() > 1) {
@@ -588,7 +820,15 @@ public class RouterClientProtocol implements ClientProtocol {
     }
 
     RemoteLocation firstLocation = locations.get(0);
-    return (boolean) rpcClient.invokeSingle(firstLocation, method);
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      result = (boolean) rpcClient.invokeSingle(firstLocation, method);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
+    return result;
   }
 
   @Override
@@ -598,7 +838,16 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("renewLease",
         new Class<?>[] {String.class}, clientName);
     Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
-    rpcClient.invokeConcurrent(nss, method, false, false);
+    String operationName = "renewLease";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_CONCURRENT;
+      rpcClient.invokeConcurrent(nss, method, false, false);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, null);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, null);
   }
 
   @Override
@@ -612,9 +861,18 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("getListing",
         new Class<?>[] {String.class, startAfter.getClass(), boolean.class},
         new RemoteParam(), startAfter, needLocation);
-    Map<RemoteLocation, DirectoryListing> listings =
-        rpcClient.invokeConcurrent(
-            locations, method, false, false, DirectoryListing.class);
+    String operationName = "getListing";
+    String invokeType = null;
+    Map<RemoteLocation, DirectoryListing> listings = null;
+    try {
+      invokeType = INVOKE_TYPE_CONCURRENT;
+      listings = rpcClient.invokeConcurrent(
+          locations, method, false, false, DirectoryListing.class);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
 
     Map<String, HdfsFileStatus> nnListing = new TreeMap<>();
     int totalRemainingEntries = 0;
@@ -706,13 +964,22 @@ public class RouterClientProtocol implements ClientProtocol {
         new Class<?>[] {String.class}, new RemoteParam());
 
     HdfsFileStatus ret = null;
-    // If it's a directory, we check in all locations
-    if (isPathAll(src)) {
-      ret = getFileInfoAll(locations, method);
-    } else {
-      // Check for file information sequentially
-      ret = rpcClient.invokeSequential(
-          locations, method, HdfsFileStatus.class, null);
+    String operationName = "getFileInfo";
+    String invokeType = null;
+    try {
+      // If it's a directory, we check in all locations
+      if (isPathAll(src)) {
+        invokeType = INVOKE_TYPE_CONCURRENT;
+        ret = getFileInfoAll(locations, method);
+      } else {
+        // Check for file information sequentially
+        invokeType = INVOKE_TYPE_SEQUENTIAL;
+        ret = rpcClient.invokeSequential(
+            locations, method, HdfsFileStatus.class, null);
+      }
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
     }
 
     // If there is no real path, check mount points
@@ -728,6 +995,7 @@ public class RouterClientProtocol implements ClientProtocol {
       }
     }
 
+    logAuditEvent(true, operationName, invokeType, src);
     return ret;
   }
 
@@ -739,8 +1007,19 @@ public class RouterClientProtocol implements ClientProtocol {
         rpcServer.getLocationsForPath(src, false);
     RemoteMethod method = new RemoteMethod("isFileClosed",
         new Class<?>[] {String.class}, new RemoteParam());
-    return rpcClient.invokeSequential(locations, method, Boolean.class,
-        Boolean.TRUE);
+    String operationName = "isFileClosed";
+    String invokeType = null;
+    boolean result;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      result = rpcClient.invokeSequential(locations, method, Boolean.class,
+          Boolean.TRUE);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
+    return result;
   }
 
   @Override
@@ -778,7 +1057,18 @@ public class RouterClientProtocol implements ClientProtocol {
   public DatanodeInfo[] getDatanodeReport(HdfsConstants.DatanodeReportType type)
       throws IOException {
     rpcServer.checkOperation(OperationCategory.UNCHECKED);
-    return rpcServer.getDatanodeReport(type, true, 0);
+    String operationName = "getDatanodeReport";
+    String invokeType = null;
+    DatanodeInfo[] result = null;
+    try {
+      invokeType = INVOKE_TYPE_CONCURRENT;
+      result = rpcServer.getDatanodeReport(type, true, 0);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, null);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, null);
+    return result;
   }
 
   @Override
@@ -806,6 +1096,7 @@ public class RouterClientProtocol implements ClientProtocol {
     DatanodeStorageReport[] combinedData =
         new DatanodeStorageReport[datanodes.size()];
     combinedData = datanodes.toArray(combinedData);
+    logAuditEvent(true, "getDatanodeStorageReport", INVOKE_TYPE_CONCURRENT);
     return combinedData;
   }
 
@@ -830,6 +1121,7 @@ public class RouterClientProtocol implements ClientProtocol {
         numSafemode++;
       }
     }
+    logAuditEvent(true, "setSafeMode", INVOKE_TYPE_CONCURRENT);
     return numSafemode == results.size();
   }
 
@@ -850,6 +1142,7 @@ public class RouterClientProtocol implements ClientProtocol {
         break;
       }
     }
+    logAuditEvent(true, "restoreFailedStorage", INVOKE_TYPE_CONCURRENT);
     return success;
   }
 
@@ -860,6 +1153,7 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("saveNamespace", new Class<?>[] {});
     final Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
     rpcClient.invokeConcurrent(nss, method, true, false);
+    logAuditEvent(true, "saveNamespace", INVOKE_TYPE_CONCURRENT);
   }
 
   @Override
@@ -878,6 +1172,7 @@ public class RouterClientProtocol implements ClientProtocol {
         txid = t;
       }
     }
+    logAuditEvent(true, "rollEdits", INVOKE_TYPE_CONCURRENT);
     return txid;
   }
 
@@ -888,6 +1183,7 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("refreshNodes", new Class<?>[] {});
     final Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
     rpcClient.invokeConcurrent(nss, method, true, true);
+    logAuditEvent(true, "refreshNodes", INVOKE_TYPE_CONCURRENT);
   }
 
   @Override
@@ -898,6 +1194,7 @@ public class RouterClientProtocol implements ClientProtocol {
         new Class<?>[] {});
     final Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
     rpcClient.invokeConcurrent(nss, method, true, false);
+    logAuditEvent(true, "finalizeUpgrade", INVOKE_TYPE_CONCURRENT);
   }
 
   @Override
@@ -919,6 +1216,7 @@ public class RouterClientProtocol implements ClientProtocol {
         info = infoNs;
       }
     }
+    logAuditEvent(true, "rollingUpgrade", INVOKE_TYPE_CONCURRENT);
     return info;
   }
 
@@ -930,6 +1228,7 @@ public class RouterClientProtocol implements ClientProtocol {
         new Class<?>[] {String.class}, filename);
     final Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
     rpcClient.invokeConcurrent(nss, method, true, false);
+    logAuditEvent(true, "metaSave", INVOKE_TYPE_CONCURRENT);
   }
 
   @Override
@@ -942,8 +1241,18 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("listCorruptFileBlocks",
         new Class<?>[] {String.class, String.class},
         new RemoteParam(), cookie);
-    return rpcClient.invokeSequential(
-        locations, method, CorruptFileBlocks.class, null);
+    String operationName = "listCorruptFileBlocks";
+    String invokeType = null;
+    CorruptFileBlocks result = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      result = rpcClient.invokeSequential(
+          locations, method, CorruptFileBlocks.class, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, path);
+    }
+    logAuditEvent(true, operationName, invokeType, path);
+    return result;
   }
 
   @Override
@@ -954,6 +1263,7 @@ public class RouterClientProtocol implements ClientProtocol {
         new Class<?>[] {Long.class}, bandwidth);
     final Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
     rpcClient.invokeConcurrent(nss, method, true, false);
+    logAuditEvent(true, "setBalancerBandwidth", INVOKE_TYPE_CONCURRENT, null);
   }
 
   @Override
@@ -995,10 +1305,13 @@ public class RouterClientProtocol implements ClientProtocol {
 
     // Throw original exception if no original nor mount points
     if (summaries.isEmpty() && notFoundException != null) {
+      logAuditEvent(false, "getContentSummary", INVOKE_TYPE_CONCURRENT, null);
       throw notFoundException;
     }
 
-    return aggregateContentSummary(summaries);
+    ContentSummary ret = aggregateContentSummary(summaries);
+    logAuditEvent(true, "getContentSummary", INVOKE_TYPE_CONCURRENT, null);
+    return ret;
   }
 
   @Override
@@ -1023,7 +1336,9 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("setTimes",
         new Class<?>[] {String.class, long.class, long.class},
         new RemoteParam(), mtime, atime);
+    String operationName = "setTimes";
     rpcClient.invokeSequential(locations, method);
+    logAuditEvent(true, operationName, INVOKE_TYPE_SEQUENTIAL, src);
   }
 
   @Override
@@ -1041,7 +1356,15 @@ public class RouterClientProtocol implements ClientProtocol {
         new Class<?>[] {String.class, String.class, FsPermission.class,
             boolean.class},
         new RemoteParam(), linkLocation.getDest(), dirPerms, createParent);
-    rpcClient.invokeSequential(targetLocations, method);
+    String operationName = "createSymlink";
+    String invokeType = INVOKE_TYPE_CONCURRENT;
+    try {
+      rpcClient.invokeSequential(targetLocations, method);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, link, target, null);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, link, target, null);
   }
 
   @Override
@@ -1052,29 +1375,44 @@ public class RouterClientProtocol implements ClientProtocol {
         rpcServer.getLocationsForPath(path, true);
     RemoteMethod method = new RemoteMethod("getLinkTarget",
         new Class<?>[] {String.class}, new RemoteParam());
-    return rpcClient.invokeSequential(locations, method, String.class, null);
+    String operationName = "getLinkTarget";
+    String invokeType = INVOKE_TYPE_SEQUENTIAL;
+    String result;
+    try {
+      result =
+          rpcClient.invokeSequential(locations, method, String.class, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, path);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, path);
+    return result;
   }
 
   @Override // Client Protocol
   public void allowSnapshot(String snapshotRoot) throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE, false);
+    logAuditEvent(true, "allowSnapshot", null);
   }
 
   @Override // Client Protocol
   public void disallowSnapshot(String snapshot) throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE, false);
+    logAuditEvent(true, "disallowSnapshot", null);
   }
 
   @Override
   public void renameSnapshot(String snapshotRoot, String snapshotOldName,
       String snapshotNewName) throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE, false);
+    logAuditEvent(true, "renameSnapshot", null);
   }
 
   @Override
   public SnapshottableDirectoryStatus[] getSnapshottableDirListing()
       throws IOException {
     rpcServer.checkOperation(OperationCategory.READ, false);
+    logAuditEvent(true, "getSnapshottableDirListing", null);
     return null;
   }
 
@@ -1082,6 +1420,7 @@ public class RouterClientProtocol implements ClientProtocol {
   public SnapshotDiffReport getSnapshotDiffReport(String snapshotRoot,
       String earlierSnapshotName, String laterSnapshotName) throws IOException {
     rpcServer.checkOperation(OperationCategory.READ, false);
+    logAuditEvent(true, "getSnapshotDiffReport", null);
     return null;
   }
 
@@ -1089,6 +1428,7 @@ public class RouterClientProtocol implements ClientProtocol {
   public long addCacheDirective(CacheDirectiveInfo path,
       EnumSet<CacheFlag> flags) throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE, false);
+    logAuditEvent(true, "addCacheDirective", null);
     return 0;
   }
 
@@ -1096,39 +1436,46 @@ public class RouterClientProtocol implements ClientProtocol {
   public void modifyCacheDirective(CacheDirectiveInfo directive,
       EnumSet<CacheFlag> flags) throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE, false);
+    logAuditEvent(true, "modifyCacheDirective", null);
   }
 
   @Override
   public void removeCacheDirective(long id) throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE, false);
+    logAuditEvent(true, "removeCacheDirective", null);
   }
 
   @Override
   public BatchedEntries<CacheDirectiveEntry> listCacheDirectives(
       long prevId, CacheDirectiveInfo filter) throws IOException {
     rpcServer.checkOperation(OperationCategory.READ, false);
+    logAuditEvent(true, "listCacheDirective", null);
     return null;
   }
 
   @Override
   public void addCachePool(CachePoolInfo info) throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE, false);
+    logAuditEvent(true, "addCachePool", null);
   }
 
   @Override
   public void modifyCachePool(CachePoolInfo info) throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE, false);
+    logAuditEvent(true, "modifyCachePool", null);
   }
 
   @Override
   public void removeCachePool(String cachePoolName) throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE, false);
+    logAuditEvent(true, "removeCachePool", null);
   }
 
   @Override
   public BatchedEntries<CachePoolEntry> listCachePools(String prevKey)
       throws IOException {
     rpcServer.checkOperation(OperationCategory.READ, false);
+    logAuditEvent(true, "listCachePools", null);
     return null;
   }
 
@@ -1143,7 +1490,16 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("modifyAclEntries",
         new Class<?>[] {String.class, List.class},
         new RemoteParam(), aclSpec);
-    rpcClient.invokeSequential(locations, method, null, null);
+    String operationName = "modifyAclEntries";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      rpcClient.invokeSequential(locations, method, null, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(false, operationName, invokeType, src);
   }
 
   @Override
@@ -1157,7 +1513,16 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("removeAclEntries",
         new Class<?>[] {String.class, List.class},
         new RemoteParam(), aclSpec);
-    rpcClient.invokeSequential(locations, method, null, null);
+    String operationName = "removeAclEntries";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      rpcClient.invokeSequential(locations, method, null, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
   }
 
   @Override
@@ -1169,7 +1534,16 @@ public class RouterClientProtocol implements ClientProtocol {
         rpcServer.getLocationsForPath(src, true);
     RemoteMethod method = new RemoteMethod("removeDefaultAcl",
         new Class<?>[] {String.class}, new RemoteParam());
-    rpcClient.invokeSequential(locations, method);
+    String operationName = "removeDefaultAcl";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      rpcClient.invokeSequential(locations, method);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
   }
 
   @Override
@@ -1181,7 +1555,16 @@ public class RouterClientProtocol implements ClientProtocol {
         rpcServer.getLocationsForPath(src, true);
     RemoteMethod method = new RemoteMethod("removeAcl",
         new Class<?>[] {String.class}, new RemoteParam());
-    rpcClient.invokeSequential(locations, method);
+    String operationName = "removeAcl";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      rpcClient.invokeSequential(locations, method);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
   }
 
   @Override
@@ -1194,7 +1577,16 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod(
         "setAcl", new Class<?>[] {String.class, List.class},
         new RemoteParam(), aclSpec);
-    rpcClient.invokeSequential(locations, method);
+    String operationName = "setAcl";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      rpcClient.invokeSequential(locations, method);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
   }
 
   @Override
@@ -1206,7 +1598,19 @@ public class RouterClientProtocol implements ClientProtocol {
         rpcServer.getLocationsForPath(src, false);
     RemoteMethod method = new RemoteMethod("getAclStatus",
         new Class<?>[] {String.class}, new RemoteParam());
-    return rpcClient.invokeSequential(locations, method, AclStatus.class, null);
+    AclStatus result;
+    String operationName = "getAclStatus";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      result =
+          rpcClient.invokeSequential(locations, method, AclStatus.class, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
+    return result;
   }
 
   @Override
@@ -1220,7 +1624,16 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("createEncryptionZone",
         new Class<?>[] {String.class, String.class},
         new RemoteParam(), keyName);
-    rpcClient.invokeSequential(locations, method);
+    String operationName = "createEncryptionZone";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      rpcClient.invokeSequential(locations, method);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
   }
 
   @Override
@@ -1232,14 +1645,26 @@ public class RouterClientProtocol implements ClientProtocol {
         rpcServer.getLocationsForPath(src, false);
     RemoteMethod method = new RemoteMethod("getEZForPath",
         new Class<?>[] {String.class}, new RemoteParam());
-    return rpcClient.invokeSequential(
-        locations, method, EncryptionZone.class, null);
+    String operationName = "getEZForPath";
+    String invokeType = null;
+    EncryptionZone result;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      result = rpcClient.invokeSequential(
+          locations, method, EncryptionZone.class, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(false, operationName, invokeType, src);
+    return result;
   }
 
   @Override
   public BatchedEntries<EncryptionZone> listEncryptionZones(long prevId)
       throws IOException {
     rpcServer.checkOperation(OperationCategory.READ, false);
+    logAuditEvent(true, "listEncryptionZones", null);
     return null;
   }
 
@@ -1254,7 +1679,15 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("setXAttr",
         new Class<?>[] {String.class, XAttr.class, EnumSet.class},
         new RemoteParam(), xAttr, flag);
-    rpcClient.invokeSequential(locations, method);
+    String operationName = "setXAttr";
+    String invokeType = null;
+    try {
+      rpcClient.invokeSequential(locations, method);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
   }
 
   @SuppressWarnings("unchecked")
@@ -1268,8 +1701,19 @@ public class RouterClientProtocol implements ClientProtocol {
         rpcServer.getLocationsForPath(src, false);
     RemoteMethod method = new RemoteMethod("getXAttrs",
         new Class<?>[] {String.class, List.class}, new RemoteParam(), xAttrs);
-    return (List<XAttr>) rpcClient.invokeSequential(
-        locations, method, List.class, null);
+    String operationName = "getXAttrs";
+    String invokeType = null;
+    List<XAttr> result;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      result = (List<XAttr>) rpcClient.invokeSequential(
+          locations, method, List.class, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
+    return result;
   }
 
   @SuppressWarnings("unchecked")
@@ -1282,8 +1726,19 @@ public class RouterClientProtocol implements ClientProtocol {
         rpcServer.getLocationsForPath(src, false);
     RemoteMethod method = new RemoteMethod("listXAttrs",
         new Class<?>[] {String.class}, new RemoteParam());
-    return (List<XAttr>) rpcClient.invokeSequential(
-        locations, method, List.class, null);
+    String operationName = "listXAttrs";
+    String invokeType = null;
+    List<XAttr> result;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      result = (List<XAttr>) rpcClient.invokeSequential(
+          locations, method, List.class, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
+    return result;
   }
 
   @Override
@@ -1295,7 +1750,15 @@ public class RouterClientProtocol implements ClientProtocol {
         rpcServer.getLocationsForPath(src, true);
     RemoteMethod method = new RemoteMethod("removeXAttr",
         new Class<?>[] {String.class, XAttr.class}, new RemoteParam(), xAttr);
-    rpcClient.invokeSequential(locations, method);
+    String operationName = "removeXAttr";
+    String invokeType = INVOKE_TYPE_SEQUENTIAL;
+    try {
+      rpcClient.invokeSequential(locations, method);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(false, operationName, invokeType, src);
   }
 
   @Override
@@ -1308,7 +1771,15 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("checkAccess",
         new Class<?>[] {String.class, FsAction.class},
         new RemoteParam(), mode);
-    rpcClient.invokeSequential(locations, method);
+    String operationName = "checkAccess";
+    String invokeType = INVOKE_TYPE_SEQUENTIAL;
+    try {
+      rpcClient.invokeSequential(locations, method);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, path);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, path);
   }
 
   @Override
@@ -1348,6 +1819,7 @@ public class RouterClientProtocol implements ClientProtocol {
   public String createSnapshot(String snapshotRoot, String snapshotName)
       throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE);
+    logAuditEvent(true, "createSnapshot", null);
     return null;
   }
 
@@ -1355,18 +1827,39 @@ public class RouterClientProtocol implements ClientProtocol {
   public void deleteSnapshot(String snapshotRoot, String snapshotName)
       throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE, false);
+    logAuditEvent(true, "deleteSnapshot", null);
   }
 
   @Override
   public void setQuota(String path, long namespaceQuota, long storagespaceQuota,
       StorageType type) throws IOException {
-    rpcServer.getQuotaModule()
-        .setQuota(path, namespaceQuota, storagespaceQuota, type);
+    String operationName = "setQuota";
+    String invokeType = null;
+    try {
+      invokeType = INVOKE_TYPE_CONCURRENT;
+      rpcServer.getQuotaModule()
+          .setQuota(path, namespaceQuota, storagespaceQuota, type);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, path);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, path);
   }
 
   @Override
   public QuotaUsage getQuotaUsage(String path) throws IOException {
-    return rpcServer.getQuotaModule().getQuotaUsage(path);
+    String operationName = "getQuotaUsage";
+    String invokeType = null;
+    QuotaUsage result;
+    try {
+      invokeType = INVOKE_TYPE_CONCURRENT;
+      result = rpcServer.getQuotaModule().getQuotaUsage(path);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, path);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, path);
+    return result;
   }
 
   @Override
@@ -1402,11 +1895,13 @@ public class RouterClientProtocol implements ClientProtocol {
   @Override
   public void unsetStoragePolicy(String src) throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE, false);
+    logAuditEvent(true, "unsetStoragePolicy", null);
   }
 
   @Override
   public BlockStoragePolicy getStoragePolicy(String path) throws IOException {
     rpcServer.checkOperation(OperationCategory.READ, false);
+    logAuditEvent(true, "getStoragePolicy", null);
     return null;
   }
 
@@ -1423,6 +1918,7 @@ public class RouterClientProtocol implements ClientProtocol {
       EnumSet<OpenFilesIterator.OpenFilesType> openFilesTypes, String path)
       throws IOException {
     rpcServer.checkOperation(OperationCategory.READ, false);
+    logAuditEvent(true, "listOpenFiles", null);
     return null;
   }
 

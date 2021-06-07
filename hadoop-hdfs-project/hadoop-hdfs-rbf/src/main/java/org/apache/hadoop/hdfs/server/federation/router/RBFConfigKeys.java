@@ -280,4 +280,18 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
       FEDERATION_ROUTER_PREFIX + "quota-cache.update.interval";
   public static final long DFS_ROUTER_QUOTA_CACHE_UPATE_INTERVAL_DEFAULT =
       60000;
+
+   // HDFS Router Audit Log
+  public static final String DFS_ROUTER_AUDIT_LOGGERS_KEY =
+      "dfs.router.audit.loggers";
+  public static final String DFS_ROUTER_DEFAULT_AUDIT_LOGGER_NAME = "default";
+  public static final String DFS_ROUTER_AUDIT_LOG_TOKEN_TRACKING_ID_KEY =
+      "dfs.router.audit.log.token.tracking.id";
+  public static final boolean DFS_ROUTER_AUDIT_LOG_TOKEN_TRACKING_ID_DEFAULT =
+      false;
+  public static final String DFS_ROUTER_AUDIT_LOG_ASYNC_KEY =
+      "dfs.router.audit.log.async";
+  public static final boolean DFS_ROUTER_AUDIT_LOG_ASYNC_DEFAULT = false;
+  public static final String DFS_ROUTER_AUDIT_LOG_DEBUG_CMDLIST =
+      "dfs.router.audit.log.debug.cmdlist";
 }
