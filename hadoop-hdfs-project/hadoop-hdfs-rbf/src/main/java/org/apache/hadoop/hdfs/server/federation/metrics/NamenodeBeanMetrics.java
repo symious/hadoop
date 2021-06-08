@@ -172,7 +172,7 @@ public class NamenodeBeanMetrics
     }
   }
 
-  private FederationMetrics getFederationMetrics() {
+  private RBFMetrics getRBFMetrics() throws IOException {
     return this.router.getMetrics();
   }
 
@@ -192,17 +192,32 @@ public class NamenodeBeanMetrics
 
   @Override
   public long getUsed() {
-    return getFederationMetrics().getUsedCapacity();
+    try {
+      return getRBFMetrics().getUsedCapacity();
+    } catch (IOException e) {
+      LOG.debug("Failed to get the used capacity", e.getMessage());
+    }
+    return 0;
   }
 
   @Override
   public long getFree() {
-    return getFederationMetrics().getRemainingCapacity();
+    try {
+      return getRBFMetrics().getRemainingCapacity();
+    } catch (IOException e) {
+      LOG.debug("Failed to get remaining capacity", e.getMessage());
+    }
+    return 0;
   }
 
   @Override
   public long getTotal() {
-    return getFederationMetrics().getTotalCapacity();
+    try {
+      return getRBFMetrics().getTotalCapacity();
+    } catch (IOException e) {
+      LOG.debug("Failed to get total capacity", e.getMessage());
+    }
+    return 0;
   }
 
   @Override
@@ -260,27 +275,56 @@ public class NamenodeBeanMetrics
 
   @Override
   public long getTotalBlocks() {
-    return getFederationMetrics().getNumBlocks();
+    try {
+      return getRBFMetrics().getNumBlocks();
+    } catch (IOException e) {
+      LOG.debug("Failed to get number of blocks", e.getMessage());
+
+    }
+    return 0;
   }
 
   @Override
   public long getNumberOfMissingBlocks() {
-    return getFederationMetrics().getNumOfMissingBlocks();
+    try {
+      return getRBFMetrics().getNumOfMissingBlocks();
+    } catch (IOException e) {
+      LOG.debug("Failed to get number of missing blocks", e.getMessage());
+    }
+    return 0;
   }
 
   @Override
   public long getPendingReplicationBlocks() {
-    return getFederationMetrics().getNumOfBlocksPendingReplication();
+    try {
+      return getRBFMetrics().getNumOfBlocksPendingReplication();
+    } catch (IOException e) {
+      LOG.debug("Failed to get number of blocks pending replica",
+          e.getMessage());
+    }
+    return 0;
   }
 
   @Override
   public long getUnderReplicatedBlocks() {
-    return getFederationMetrics().getNumOfBlocksUnderReplicated();
+    try {
+      return getRBFMetrics().getNumOfBlocksUnderReplicated();
+    } catch (IOException e) {
+      LOG.debug("Failed to get number of blocks under replicated",
+          e.getMessage());
+    }
+    return 0;
   }
 
   @Override
   public long getPendingDeletionBlocks() {
-    return getFederationMetrics().getNumOfBlocksPendingDeletion();
+    try {
+      return getRBFMetrics().getNumOfBlocksPendingDeletion();
+    } catch (IOException e) {
+      LOG.debug("Failed to get number of blocks pending deletion",
+          e.getMessage());
+    }
+    return 0;
   }
 
   @Override
@@ -511,13 +555,23 @@ public class NamenodeBeanMetrics
 
   @Override
   public long getFilesTotal() {
-    return getFederationMetrics().getNumFiles();
+    try {
+      return getRBFMetrics().getNumFiles();
+    } catch (IOException e) {
+      LOG.debug("Failed to get number of files", e.getMessage());
+    }
+    return 0;
   }
 
   @Deprecated
   @Override
   public long getTotalFiles() {
-    return getFederationMetrics().getNumFiles();
+    try {
+      return getRBFMetrics().getNumFiles();
+    } catch (IOException e) {
+      LOG.debug("Failed to get number of files", e.getMessage());
+    }
+    return 0;
   }
 
   @Override

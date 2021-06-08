@@ -208,7 +208,7 @@ public class TestMetricsBase {
   public void testObserverMetrics() throws Exception {
     mockObserver();
 
-    FederationMetrics metrics = router.getMetrics();
+    RBFMetrics metrics = router.getMetrics();
     String jsonString = metrics.getNameservices();
     JSONObject jsonObject = new JSONObject(jsonString);
     Map<String, String> map = getNameserviceStateMap(jsonObject);

@@ -72,6 +72,7 @@ import org.apache.hadoop.hdfs.server.federation.store.records.MembershipStats;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
 import org.apache.hadoop.hdfs.server.federation.store.records.RouterState;
 import org.apache.hadoop.hdfs.server.federation.store.records.StateStoreVersion;
+import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.util.MBeans;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.VersionInfo;
@@ -85,10 +86,11 @@ import com.google.common.annotations.VisibleForTesting;
 /**
  * Implementation of the Router metrics collector.
  */
-public class FederationMetrics implements FederationMBean {
+@Metrics(name="RBFActivity", about="RBF metrics", context="dfs")
+public class RBFMetrics implements RouterMBean, FederationMBean {
 
   private static final Logger LOG =
-      LoggerFactory.getLogger(FederationMetrics.class);
+      LoggerFactory.getLogger(RBFMetrics.class);
 
   /** Format for a date. */
   private static final String DATE_FORMAT = "yyyy/MM/dd HH:mm:ss";
@@ -101,7 +103,8 @@ public class FederationMetrics implements FederationMBean {
   private final Router router;
 
   /** FederationState JMX bean. */
-  private ObjectName beanName;
+  private ObjectName routerBeanName;
+  private ObjectName federationBeanName;
 
   /** Resolve the namenode for each namespace. */
   private final ActiveNamenodeResolver namenodeResolver;
@@ -116,15 +119,24 @@ public class FederationMetrics implements FederationMBean {
   private RouterStore routerStore;
 
 
-  public FederationMetrics(Router router) throws IOException {
+  public RBFMetrics(Router router) throws IOException {
     this.router = router;
 
     try {
-      StandardMBean bean = new StandardMBean(this, FederationMBean.class);
-      this.beanName = MBeans.register("Router", "FederationState", bean);
-      LOG.info("Registered Router MBean: {}", this.beanName);
+      StandardMBean bean = new StandardMBean(this, RouterMBean.class);
+      this.routerBeanName = MBeans.register("Router", "Router", bean);
+      LOG.info("Registered Router MBean: {}", this.routerBeanName);
     } catch (NotCompliantMBeanException e) {
       throw new RuntimeException("Bad Router MBean setup", e);
+    }
+
+    try {
+      StandardMBean bean = new StandardMBean(this, FederationMBean.class);
+      this.federationBeanName = MBeans.register("Router", "FederationState",
+          bean);
+      LOG.info("Registered FederationState MBean: {}", this.federationBeanName);
+    } catch (NotCompliantMBeanException e) {
+      throw new RuntimeException("Bad FederationState MBean setup", e);
     }
 
     // Resolve namenode for each nameservice
@@ -153,8 +165,11 @@ public class FederationMetrics implements FederationMBean {
    * Unregister the JMX beans.
    */
   public void close() {
-    if (this.beanName != null) {
-      MBeans.unregister(beanName);
+    if (this.routerBeanName != null) {
+      MBeans.unregister(routerBeanName);
+    }
+    if (this.federationBeanName != null) {
+      MBeans.unregister(federationBeanName);
     }
   }
 
