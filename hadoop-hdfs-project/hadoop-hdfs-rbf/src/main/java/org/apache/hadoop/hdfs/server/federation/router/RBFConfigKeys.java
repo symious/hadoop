@@ -294,4 +294,12 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
   public static final boolean DFS_ROUTER_AUDIT_LOG_ASYNC_DEFAULT = false;
   public static final String DFS_ROUTER_AUDIT_LOG_DEBUG_CMDLIST =
       "dfs.router.audit.log.debug.cmdlist";
+
+  public static final String DN_REPORT_TIME_OUT =
+      FEDERATION_ROUTER_PREFIX + "dn-report.time-out";
+  public static final long  DN_REPORT_TIME_OUT_MS_DEFAULT = 1000;
+  public static final String DN_REPORT_CACHE_EXPIRE =
+      FEDERATION_ROUTER_PREFIX + "dn-report.cache-expire";
+  public static final long DN_REPORT_CACHE_EXPIRE_MS_DEFAULT =
+      TimeUnit.SECONDS.toMillis(10);
 }
