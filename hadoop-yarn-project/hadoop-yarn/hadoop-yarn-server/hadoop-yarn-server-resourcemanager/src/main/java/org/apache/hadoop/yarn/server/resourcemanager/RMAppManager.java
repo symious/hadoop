@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager;
 
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
@@ -26,8 +27,10 @@ import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.NodeId;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.LeafQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -362,6 +365,10 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
     // constructor.
     RMAppImpl application = createAndPopulateNewRMApp(
         submissionContext, submitTime, user, false, -1, null);
+
+    // Modify the nodeLabelExpression
+    assignNodeLabel(submissionContext, application.getQueue());
+
     try {
       if (UserGroupInformation.isSecurityEnabled()) {
         this.rmContext.getDelegationTokenRenewer()
@@ -387,6 +394,77 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
               RMAppEventType.APP_REJECTED, e.getMessage()));
       throw RPCUtil.getRemoteException(e);
     }
+  }
+
+  protected void assignNodeLabel(
+      ApplicationSubmissionContext submissionContext, String queueName) {
+    // Global Enabled?
+    boolean multiLabelAccess = this.conf
+        .getBoolean(YarnConfiguration.MULTI_LABEL_ACCESS_ENABLED,
+            YarnConfiguration.DEFAULT_MULTI_LABEL_ACCESS_ENABLED);
+
+    // Check if Enabled and Only support CS now
+    // Chech the expression is null? if no will not process
+    if (multiLabelAccess && (this.scheduler instanceof CapacityScheduler) &&
+        (StringUtils
+            .isNullOrEmpty(submissionContext.getNodeLabelExpression()) ||
+            StringUtils.isNullOrEmpty(
+                submissionContext.getNodeLabelExpression().trim()))) {
+      try {
+        CapacityScheduler cs = (CapacityScheduler) this.scheduler;
+        LeafQueue queue = (LeafQueue) cs.getQueue(queueName);
+
+        // If out of the range of the access multi-label time will skip this part
+        // like 1,2,3,4,5,6,10,20,21,23
+        String currentHour =
+            Calendar.getInstance().get(Calendar.HOUR_OF_DAY) + "";
+        LOG.debug("Current Hour:" + currentHour + ", Current QueuePath: " +
+            queue.getQueuePath());
+
+        if (!queue.getAccessMultiLabelTimes().contains(currentHour)) {
+          return;
+        }
+
+        String nodeLabel = selectLabelFromQueue(queue);
+
+        //Modify the nodeLabelExpression
+        if (!StringUtils.isNullOrEmpty(nodeLabel)) {
+          LOG.info("Modify the NodeLabelExpression, new label:" + nodeLabel +
+              ", app:" + submissionContext.getApplicationId() + ", queue:" +
+              queueName);
+          submissionContext.setNodeLabelExpression(nodeLabel);
+        }
+      } catch (Exception e) {
+        LOG.error("Failed On Select Label from Queue, name:" + queueName);
+      }
+    }
+  }
+
+  private String selectLabelFromQueue(LeafQueue queue) {
+    // Only deal with the leaf queue
+    if (CollectionUtils.isNotEmpty(queue.getChildQueues())) {
+      return null;
+    }
+
+    Set<String> labels = queue.getAccessibleNodeLabels();
+    String nodeLabel = queue.getDefaultNodeLabelExpression();
+    long avaMb = queue.getMetrics().getAvailableMB();
+    LOG.debug("Default Partition: " + nodeLabel + " AvaMB " + avaMb);
+    //Got the max one
+    if (CollectionUtils.isNotEmpty(labels)) {
+      for (String tmpLabel : labels) {
+        long tmpAva =
+            queue.getMetrics().getPartitionQueueMetrics(tmpLabel)
+                .getAvailableMB();
+        if (tmpAva > avaMb) {
+          nodeLabel = tmpLabel;
+          avaMb = tmpAva;
+        }
+        LOG.debug("New Partition: " + tmpLabel + " AvaMB " + tmpAva);
+      }
+    }
+    LOG.debug("Final Partition: " + nodeLabel + " AvaMB " + avaMb);
+    return nodeLabel;
   }
 
   protected void recoverApplication(ApplicationStateData appState,

@@ -26,6 +26,9 @@ import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueMetrics;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CSQueueMetrics;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.LeafQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -97,6 +100,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -106,7 +110,10 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentMap;
 
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.DEFAULT_NODE_LABELS_ENABLED;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.NODE_LABELS_ENABLED;
 import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.PREFIX;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -974,6 +981,61 @@ public class TestAppManager extends AppManagerTestBase{
           " InvalidResourceRequestException",
           e.getMessage().contains("Invalid resource request"));
     }
+  }
+
+  @Test(timeout = 30000)
+  public void testMultiLabelAccess() {
+    CapacityScheduler cs = mock(CapacityScheduler.class);
+    Configuration conf = mock(Configuration.class);
+    when(conf.getBoolean(YarnConfiguration.MULTI_LABEL_ACCESS_ENABLED,
+        YarnConfiguration.DEFAULT_MULTI_LABEL_ACCESS_ENABLED)).thenReturn(true);
+    RMContext rmContext = mock(RMContext.class);
+    when(rmContext.getYarnConfiguration()).thenReturn(conf);
+    when(conf.getBoolean(NODE_LABELS_ENABLED, DEFAULT_NODE_LABELS_ENABLED))
+        .thenReturn(true);
+    RMAppManager appManager = new RMAppManager(rmContext, cs, null, null, conf);
+    ApplicationSubmissionContext asc =
+        ApplicationSubmissionContext
+            .newInstance(null, null, "root.q1", null, null,
+                false, false, 0, Resources.none(), null, false, null, null);
+    //mock q1
+    LeafQueue q1 = mock(LeafQueue.class);
+    when(cs.getQueue("root.q1")).thenReturn(q1);
+    Set<String> q1Label = new HashSet<>();
+    q1Label.addAll(Arrays.asList("l1", "l2"));
+    when(q1.getAccessibleNodeLabels()).thenReturn(q1Label);
+    CSQueueMetrics csQueueMetrics = mock(CSQueueMetrics.class);
+    when(q1.getMetrics()).thenReturn(csQueueMetrics);
+    QueueMetrics queueMetrics1 = mock(QueueMetrics.class);
+    QueueMetrics queueMetrics2 = mock(QueueMetrics.class);
+    when(csQueueMetrics.getPartitionQueueMetrics("l1"))
+        .thenReturn(queueMetrics1);
+    when(csQueueMetrics.getPartitionQueueMetrics("l2"))
+        .thenReturn(queueMetrics2);
+    when(queueMetrics1.getAvailableMB()).thenReturn(1000l);
+    when(queueMetrics2.getAvailableMB()).thenReturn(200l);
+    // mock q1 access time range
+    Set<String> q1Set = new HashSet<>();
+    q1Set.addAll(Arrays.asList("-11,-2,-3,-4,-5".split(",")));
+    when(q1.getAccessMultiLabelTimes()).thenReturn(q1Set);
+    // not in access time
+    appManager.assignNodeLabel(asc, "root.q1");
+    assertNull(asc.getNodeLabelExpression());
+
+    // the queue can access multi label at whole day
+    q1Set = new HashSet<>();
+    q1Set.addAll(Arrays.asList(
+        "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23"
+            .split(",")));
+    when(q1.getAccessMultiLabelTimes()).thenReturn(q1Set);
+    appManager.assignNodeLabel(asc, "root.q1");
+    assertEquals(asc.getNodeLabelExpression(), "l1");
+
+    //l2 avaMem is greate than l1
+    asc.setNodeLabelExpression(null);
+    when(queueMetrics2.getAvailableMB()).thenReturn(2000l);
+    appManager.assignNodeLabel(asc, "root.q1");
+    assertEquals(asc.getNodeLabelExpression(), "l2");
   }
 
   @Test (timeout = 30000)

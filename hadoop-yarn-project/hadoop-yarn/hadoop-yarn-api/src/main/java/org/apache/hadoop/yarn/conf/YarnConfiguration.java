@@ -4178,7 +4178,14 @@ public class YarnConfiguration extends Configuration {
       + "fs-store.impl.class";
   public static final String DEFAULT_FS_NODE_LABELS_STORE_IMPL_CLASS =
       "org.apache.hadoop.yarn.nodelabels.FileSystemNodeLabelsStore";
-  
+
+  /**
+   * Enabled access multi labels by default
+   */
+  public static final String MULTI_LABEL_ACCESS_ENABLED =
+      NODE_LABELS_PREFIX + "multi-label-access.enabled";
+  public static final boolean DEFAULT_MULTI_LABEL_ACCESS_ENABLED = false;
+
   /** URI for NodeLabelManager */
   public static final String FS_NODE_LABELS_STORE_ROOT_DIR = NODE_LABELS_PREFIX
       + "fs-store.root-dir";

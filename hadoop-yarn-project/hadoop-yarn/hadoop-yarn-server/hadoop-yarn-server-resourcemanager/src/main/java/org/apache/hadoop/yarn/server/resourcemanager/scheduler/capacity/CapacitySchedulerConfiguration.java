@@ -87,11 +87,17 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   
   @Private
   public static final String DOT = ".";
-  
+
+  @Private
+  public static final String MULTI_LABEL_ACCESS_HOURS =
+      "multi-label-access-hours";
+
+  private static final String DEFAULT_MULTI_LABEL_ACCESS_HOURS = "-1";
+
   @Private
   public static final String MAXIMUM_APPLICATIONS_SUFFIX =
     "maximum-applications";
-  
+
   @Private
   public static final String MAXIMUM_SYSTEM_APPLICATIONS =
     PREFIX + MAXIMUM_APPLICATIONS_SUFFIX;
@@ -440,6 +446,26 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
         DEFAULT_MAXIMUM_APPLICATIONMASTERS_RESOURCE_PERCENT);
   }
 
+  /**
+   * Get the hours when the queue can enable access multi labels.
+   * @param queue name of the queue
+   * @return setting specified or -1 if not set
+   */
+  public Set<String> getMultiLabelAccessHoursPerQueue(String queue) {
+    String hours =
+        get(getQueuePrefix(queue) + MULTI_LABEL_ACCESS_HOURS,
+            DEFAULT_MULTI_LABEL_ACCESS_HOURS);
+
+    Set<String> set = new HashSet<String>();
+    if (!StringUtils.isNullOrEmpty(hours)) {
+      for (String str : hours.split(",")) {
+        if (!str.trim().isEmpty()) {
+          set.add(str.trim());
+        }
+      }
+    }
+    return set;
+  }
 
   /**
    * Get the maximum applications per queue setting.
@@ -447,8 +473,8 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
    * @return setting specified or -1 if not set
    */
   public int getMaximumApplicationsPerQueue(String queue) {
-    int maxApplicationsPerQueue = 
-      getInt(getQueuePrefix(queue) + MAXIMUM_APPLICATIONS_SUFFIX, 
+    int maxApplicationsPerQueue =
+      getInt(getQueuePrefix(queue) + MAXIMUM_APPLICATIONS_SUFFIX,
           (int)UNDEFINED);
     return maxApplicationsPerQueue;
   }

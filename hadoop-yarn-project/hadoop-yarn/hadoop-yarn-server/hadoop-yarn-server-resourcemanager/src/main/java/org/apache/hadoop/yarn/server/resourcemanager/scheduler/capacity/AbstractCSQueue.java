@@ -95,6 +95,7 @@ public abstract class AbstractCSQueue implements CSQueue {
 
   final ResourceCalculator resourceCalculator;
   Set<String> accessibleLabels;
+  Set<String> accessMultiLabelTimes;
   Set<String> resourceTypes;
   final RMNodeLabelsManager labelManager;
   String defaultLabelExpression;
@@ -283,9 +284,13 @@ public abstract class AbstractCSQueue implements CSQueue {
   public void setParent(CSQueue newParentQueue) {
     this.parent = newParentQueue;
   }
-  
+
   public Set<String> getAccessibleNodeLabels() {
     return accessibleLabels;
+  }
+
+  public Set<String> getAccessMultiLabelTimes() {
+    return accessMultiLabelTimes;
   }
 
   @Override
@@ -359,6 +364,8 @@ public abstract class AbstractCSQueue implements CSQueue {
       // get labels
       this.accessibleLabels =
           configuration.getAccessibleNodeLabels(getQueuePath());
+      this.accessMultiLabelTimes =
+          configuration.getMultiLabelAccessHoursPerQueue(getQueuePath());
       this.defaultLabelExpression =
           configuration.getDefaultNodeLabelExpression(
               getQueuePath());
