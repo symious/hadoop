@@ -28,10 +28,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A simple shadow file based implementation of {@link RpcPasswordMappingServiceProvider}
@@ -50,10 +53,12 @@ public class ShadowFileRpcPasswordMapping extends Configured
   private static final String EMPTY_PASSWORD = null;
 
   private long cacheTimeout =
-          CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_SEC_DEFAULT * 1000;
+          CommonConfigurationKeys.
+              HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_SEC_DEFAULT * 1000;
   private volatile long lastRefreshTime = -1L;
 
-  private ConcurrentHashMap<String, RpcPasswordAndBypass> cache = new ConcurrentHashMap<>();
+  private AtomicReference<ConcurrentHashMap<String, RpcPasswordAndBypass>>
+      cacheRef = new AtomicReference<>();
 
   private IOException IllegalShadowLineException(String line) {
     return new IOException("Illegal shadow line: " + line);
@@ -69,8 +74,11 @@ public class ShadowFileRpcPasswordMapping extends Configured
           CommonConfigurationKeys.
               HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_DEFAULT);
       cacheTimeout = conf.getLong(
-          CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_SEC,
-          CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_SEC_DEFAULT) * 1000;
+          CommonConfigurationKeys.
+              HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_SEC,
+          CommonConfigurationKeys.
+              HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_SEC_DEFAULT)
+          * 1000;
     }
   }
 
@@ -83,13 +91,16 @@ public class ShadowFileRpcPasswordMapping extends Configured
   @Override
   public String getRpcPassword(String userName) {
     try {
-      if ( isTimeout() || cache.size() == 0) {
+      if (cacheRef.get() == null || cacheRef.get().size() == 0) {
+        cacheRefresh(true);
+      }
+      if (isTimeout()) {
         cacheRefresh(false);
       }
-      if (!cache.containsKey(userName)){
+      if (!cacheRef.get().containsKey(userName)){
         return null;
       }
-      return cache.get(userName).getRpcPassword();
+      return cacheRef.get().get(userName).getRpcPassword();
     }catch (IOException e){
       e.printStackTrace();
     }
@@ -99,14 +110,17 @@ public class ShadowFileRpcPasswordMapping extends Configured
   @Override
   public boolean isBypassUser(String user) {
     try {
-      if ( isTimeout() || cache.size() == 0) {
+      if (cacheRef.get() == null || cacheRef.get().size() == 0) {
+        cacheRefresh(true);
+      }
+      if (isTimeout()) {
         cacheRefresh(false);
       }
-      if (!cache.containsKey(user)){
+      if (!cacheRef.get().containsKey(user)) {
         return false;
       }
-      return cache.get(user).isBypass();
-    }catch (IOException e){
+      return cacheRef.get().get(user).isBypass();
+    } catch (IOException e) {
       e.printStackTrace();
     }
     return false;
@@ -120,35 +134,43 @@ public class ShadowFileRpcPasswordMapping extends Configured
         return;
     }
     BufferedReader br = null;
+    ConcurrentHashMap<String, RpcPasswordAndBypass> updateCache =
+        new ConcurrentHashMap<>();
     try {
-      cache.clear();
-      File file = new File(shadowFile);
-      FileReader fr = new FileReader(file);
+      FileInputStream file = new FileInputStream(shadowFile);
+      Reader fr = new InputStreamReader(file, StandardCharsets.UTF_8);
       br = new BufferedReader(fr);
       String line;
       while ((line = br.readLine()) != null) {
         //process the line
-        processRow(line);
+        try {
+          processRow(updateCache, line);
+        } catch (IllegalShadowLineException e) {
+          LOG.warn("unable to process shadow line: {}", line, e);
+        }
       }
       if (LOG.isDebugEnabled()) {
-        LOG.debug("Refreshed " + cache.size() + "records from shadowFile.");
+        LOG.debug("Refreshed " + updateCache.size() +
+            " records from shadowFile.");
       }
+      cacheRef.set(updateCache);
       lastRefreshTime = Time.now();
-    }catch (IOException e){
+    } catch (IOException e) {
       e.printStackTrace();
-    }finally {
-      if (br != null){
+    } finally {
+      if (br != null) {
         br.close();
       }
     }
   }
 
-  private void processRow(String string) throws IOException {
+  private void processRow(ConcurrentHashMap<String, RpcPasswordAndBypass> cache,
+      String string) throws IllegalShadowLineException {
     // handle comment line
-    if(string.startsWith("#"))
+    if (string.startsWith("#"))
       return;
-    if(string.split(",").length != 3){
-      throw IllegalShadowLineException(string);
+    if (string.split(",").length != 3) {
+      throw new IllegalShadowLineException(string);
     }
     String user = string.split(",")[0];
     String shadow = string.split(",")[1];
@@ -156,7 +178,25 @@ public class ShadowFileRpcPasswordMapping extends Configured
     cache.put(user, new RpcPasswordAndBypass(shadow, bypass));
   }
 
-  private boolean isTimeout(){
+  private boolean isTimeout() {
     return Time.now() - lastRefreshTime > cacheTimeout;
+  }
+
+  private static class IllegalShadowLineException extends IOException {
+    public IllegalShadowLineException(String message) {
+      super(message);
+    }
+
+    public IllegalShadowLineException(String message, Throwable err) {
+      super(message, err);
+    }
+
+    @Override
+    public String toString() {
+      final StringBuilder sb =
+          new StringBuilder("IllegalShadowLineException ");
+      sb.append(super.getMessage());
+      return sb.toString();
+    }
   }
 }
