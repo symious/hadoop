@@ -85,6 +85,10 @@ RUN apt-get -q update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+RUN locale-gen en_US.UTF-8
+ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8'
+ENV PYTHONIOENCODING=utf-8
+
 ######
 # Set env vars required to build Hadoop
 ######
@@ -122,6 +126,7 @@ RUN mkdir -p /opt/protobuf-src \
     && tar xzf /opt/protobuf.tar.gz --strip-components 1 -C /opt/protobuf-src \
     && cd /opt/protobuf-src \
     && ./configure --prefix=/opt/protobuf \
+    && make "-j$(nproc)" \
     && make install \
     && cd /root \
     && rm -rf /opt/protobuf-src
@@ -188,7 +193,7 @@ RUN mkdir -p /opt/isa-l-src \
     && cd /opt/isa-l-src \
     && ./autogen.sh \
     && ./configure \
-    && make \
+    && make "-j$(nproc)" \
     && make install \
     && cd /root \
     && rm -rf /opt/isa-l-src
