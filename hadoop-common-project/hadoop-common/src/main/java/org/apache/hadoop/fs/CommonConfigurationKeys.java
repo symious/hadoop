@@ -443,4 +443,28 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
 
   public static final String SDI_CREDENTIAL_CONF_VAR = "hadoop.user.rpcpassword";
 
+
+  /** logging level for IOStatistics (debug or info). */
+  public static final String IOSTATISTICS_LOGGING_LEVEL
+      = "fs.iostatistics.logging.level";
+
+  /** DEBUG logging level for IOStatistics logging. */
+  public static final String IOSTATISTICS_LOGGING_LEVEL_DEBUG
+      = "debug";
+
+  /** WARN logging level for IOStatistics logging. */
+  public static final String IOSTATISTICS_LOGGING_LEVEL_WARN
+      = "warn";
+
+  /** ERROR logging level for IOStatistics logging. */
+  public static final String IOSTATISTICS_LOGGING_LEVEL_ERROR
+      = "error";
+
+  /** INFO logging level for IOStatistics logging. */
+  public static final String IOSTATISTICS_LOGGING_LEVEL_INFO
+      = "info";
+
+  /** Default value for IOStatistics logging level. */
+  public static final String IOSTATISTICS_LOGGING_LEVEL_DEFAULT
+      = IOSTATISTICS_LOGGING_LEVEL_DEBUG;
 }
