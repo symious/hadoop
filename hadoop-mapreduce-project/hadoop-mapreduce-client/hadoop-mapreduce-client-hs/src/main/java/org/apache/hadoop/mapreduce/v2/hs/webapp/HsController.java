@@ -22,6 +22,7 @@ import static org.apache.hadoop.yarn.webapp.YarnWebParams.ENTITY_STRING;
 
 import java.io.IOException;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.JobID;
 import org.apache.hadoop.mapreduce.TaskAttemptID;
@@ -31,6 +32,7 @@ import org.apache.hadoop.yarn.webapp.View;
 import org.apache.hadoop.yarn.webapp.log.AggregatedLogsPage;
 
 import com.google.inject.Inject;
+import org.apache.hadoop.yarn.webapp.log.AggregatedLogsTextBlock;
 
 /**
  * This class renders the various pages that the History Server WebApp supports
@@ -199,7 +201,12 @@ public class HsController extends AppController {
         // fall below
       }
     }
-    render(HsLogsPage.class);
+    String acceptValue = this.request().getHeader("Accept");
+    if (StringUtils.isNotBlank(acceptValue) && acceptValue.contains("text/plain")) {
+      render(AggregatedLogsTextBlock.class);
+    } else {
+      render(HsLogsPage.class);
+    }
   }
 
   /**

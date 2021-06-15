@@ -36,6 +36,7 @@ public class ContainerLogsRequest {
   private Set<String> logTypes;
   private long bytes;
   private ContainerState containerState;
+  private long startIndex;
 
   public ContainerLogsRequest() {}
 
@@ -51,6 +52,7 @@ public class ContainerLogsRequest {
     this.setLogTypes(request.getLogTypes());
     this.setBytes(request.getBytes());
     this.setContainerState(request.getContainerState());
+    this.setStartIndex(request.getStartIndex());
   }
 
   public ContainerLogsRequest(ApplicationId applicationId,
@@ -156,5 +158,13 @@ public class ContainerLogsRequest {
 
   public void setContainerState(ContainerState containerState) {
     this.containerState = containerState;
+  }
+
+  public long getStartIndex() {
+    return startIndex;
+  }
+
+  public void setStartIndex(long startIndex) {
+    this.startIndex = startIndex;
   }
 }

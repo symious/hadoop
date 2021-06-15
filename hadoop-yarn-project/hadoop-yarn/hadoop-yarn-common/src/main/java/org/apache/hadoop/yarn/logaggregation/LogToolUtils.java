@@ -82,13 +82,15 @@ public final class LogToolUtils {
    * @param fis the log file input stream
    * @param os the output stream
    * @param buf the buffer
-   * @param logType the log type.
+   * @param logType the log type
+   * @param startIndex the start index of log to read.
    * @throws IOException if we can not access the log file.
    */
   public static void outputContainerLog(String containerId, String nodeId,
       String fileName, long fileLength, long outputSize,
       String lastModifiedTime, InputStream fis, OutputStream os,
-      byte[] buf, ContainerLogAggregationType logType) throws IOException {
+      byte[] buf, ContainerLogAggregationType logType, long startIndex) throws IOException {
+
     long toSkip = 0;
     long totalBytesToRead = fileLength;
     long skipAfterRead = 0;
@@ -100,9 +102,12 @@ public final class LogToolUtils {
       }
       org.apache.hadoop.io.IOUtils.skipFully(fis, toSkip);
     } else {
+      if (startIndex > 0) {
+        skipToStartIndex(startIndex, fis);
+      }
       if (outputSize < fileLength) {
         totalBytesToRead = outputSize;
-        skipAfterRead = fileLength - outputSize;
+        skipAfterRead = fileLength - outputSize - startIndex;
       }
     }
 
@@ -128,6 +133,55 @@ public final class LogToolUtils {
     }
     org.apache.hadoop.io.IOUtils.skipFully(fis, skipAfterRead);
     os.flush();
+  }
+
+  /**
+   * Skip to start index of log.
+   * @param startIndex start index of log
+   * @param fis the log file input stream.
+   * @throws IOException if we can not access the log file.
+   */
+  private static void skipToStartIndex(long startIndex, InputStream fis)
+      throws IOException {
+
+    long totalSkipped = 0;
+    while (totalSkipped < startIndex) {
+      long ret = fis.skip(startIndex - totalSkipped);
+      if (ret == 0) {
+        //Read one byte
+        int nextByte = fis.read();
+        // Check if we have reached EOF
+        if (nextByte == -1) {
+          throw new IOException("Premature EOF from container log");
+        }
+        ret = 1;
+      }
+      totalSkipped += ret;
+    }
+  }
+
+  /**
+   *
+   * Output container log.
+   * @param containerId the containerId
+   * @param nodeId the nodeId
+   * @param fileName the log file name
+   * @param fileLength the log file length
+   * @param outputSize the output size
+   * @param lastModifiedTime the log file last modified time
+   * @param fis the log file input stream
+   * @param os the output stream
+   * @param buf the buffer
+   * @param logType the log type.
+   * @throws IOException if we can not access the log file.
+   */
+  public static void outputContainerLog(String containerId, String nodeId,
+      String fileName, long fileLength, long outputSize,
+      String lastModifiedTime, InputStream fis, OutputStream os,
+      byte[] buf, ContainerLogAggregationType logType) throws IOException {
+
+    outputContainerLog(containerId, nodeId, fileName, fileLength, outputSize,
+        lastModifiedTime, fis, os, buf, logType, 0);
   }
 
   public static void outputContainerLogThroughZeroCopy(String containerId,
