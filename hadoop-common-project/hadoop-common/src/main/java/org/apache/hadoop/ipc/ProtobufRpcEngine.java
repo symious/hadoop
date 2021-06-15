@@ -454,8 +454,7 @@ public class ProtobufRpcEngine implements RpcEngine {
         throws IOException {
       super(protocolClass, protocolImpl, conf, bindAddress, port, numHandlers,
           numReaders, queueSizePerHandler, verbose, secretManager,
-          portRangeConfig, alignmentContext);
-      setRpcPasswordAuthenticate(rpcPasswordAuthenticate);
+          portRangeConfig, alignmentContext, rpcPasswordAuthenticate);
     }
 
     /**
