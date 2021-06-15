@@ -212,7 +212,8 @@ public class LogAggregationTFileController
                           nodeName, fileType, fileLength, size,
                           Times.format(thisNodeFile.getModificationTime()),
                           valueStream, os, buf,
-                          ContainerLogAggregationType.AGGREGATED);
+                          ContainerLogAggregationType.AGGREGATED,
+                          logRequest.getStartIndex());
                       byte[] b = aggregatedLogSuffix(fileType).getBytes(
                           Charset.forName("UTF-8"));
                       os.write(b, 0, b.length);
