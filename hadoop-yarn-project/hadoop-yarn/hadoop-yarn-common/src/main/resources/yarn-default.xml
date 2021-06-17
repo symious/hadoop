@@ -4195,6 +4195,26 @@
 
   <property>
     <description>
+      The http address of the GPG web application.
+      If only a host is provided as the value,
+      the webapp will be served on a random port.
+    </description>
+    <name>yarn.federation.gpg.webapp.address</name>
+    <value>0.0.0.0:8069</value>
+  </property>
+
+  <property>
+    <description>
+      The https address of the GPG web application.
+      If only a host is provided as the value,
+      the webapp will be served on a random port.
+    </description>
+    <name> yarn.federation.gpg.webapp.https.address</name>
+    <value>0.0.0.0:8070</value>
+  </property>
+
+  <property>
+    <description>
        It is TimelineClient 1.5 configuration whether to store active
        application’s timeline data with in user directory i.e
        ${yarn.timeline-service.entity-group-fs-store.active-dir}/${user.name}

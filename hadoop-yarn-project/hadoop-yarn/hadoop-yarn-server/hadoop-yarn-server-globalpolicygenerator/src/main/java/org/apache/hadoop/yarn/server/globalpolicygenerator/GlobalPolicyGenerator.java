@@ -25,15 +25,25 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.metrics2.source.JvmMetrics;
 import org.apache.hadoop.service.CompositeService;
+import org.apache.hadoop.util.JvmPauseMonitor;
 import org.apache.hadoop.util.ShutdownHookManager;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.YarnUncaughtExceptionHandler;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.subclustercleaner.SubClusterCleaner;
+import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.GPGWebApp;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.RMWebAppUtil;
+import org.apache.hadoop.yarn.server.webapp.WebServiceClient;
+import org.apache.hadoop.yarn.webapp.WebApp;
+import org.apache.hadoop.yarn.webapp.WebApps;
+import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.annotations.VisibleForTesting;
 
 /**
  * Global Policy Generator (GPG) is a Yarn Federation component. By tuning the
@@ -53,8 +63,10 @@ public class GlobalPolicyGenerator extends CompositeService {
   // YARN Variables
   private static CompositeServiceShutdownHook gpgShutdownHook;
   public static final int SHUTDOWN_HOOK_PRIORITY = 30;
+  private Configuration conf;
   private AtomicBoolean isStopping = new AtomicBoolean(false);
   private static final String METRICS_NAME = "Global Policy Generator";
+  private static long gpgStartupTime = System.currentTimeMillis();
 
   // Federation Variables
   private GPGContext gpgContext;
@@ -63,13 +75,20 @@ public class GlobalPolicyGenerator extends CompositeService {
   private ScheduledThreadPoolExecutor scheduledExecutorService;
   private SubClusterCleaner subClusterCleaner;
 
+  private String webAppAddress;
+  private JvmPauseMonitor pauseMonitor;
+  private WebApp webApp;
+
   public GlobalPolicyGenerator() {
     super(GlobalPolicyGenerator.class.getName());
     this.gpgContext = new GPGContextImpl();
   }
 
   @Override
-  protected void serviceInit(Configuration conf) throws Exception {
+  protected void serviceInit(Configuration config) throws Exception {
+
+    this.conf = config;
+
     // Set up the context
     this.gpgContext
         .setStateStoreFacade(FederationStateStoreFacade.getInstance());
@@ -77,9 +96,18 @@ public class GlobalPolicyGenerator extends CompositeService {
     this.scheduledExecutorService = new ScheduledThreadPoolExecutor(
         conf.getInt(YarnConfiguration.GPG_SCHEDULED_EXECUTOR_THREADS,
             YarnConfiguration.DEFAULT_GPG_SCHEDULED_EXECUTOR_THREADS));
-    this.subClusterCleaner = new SubClusterCleaner(conf, this.gpgContext);
+    this.subClusterCleaner = new SubClusterCleaner(this.conf, this.gpgContext);
+
+    this.webAppAddress = WebAppUtils.getGPGWebAppURLWithoutScheme(this.conf);
 
     DefaultMetricsSystem.initialize(METRICS_NAME);
+    JvmMetrics jm = JvmMetrics.initSingleton("GPG", null);
+    pauseMonitor = new JvmPauseMonitor();
+    addService(pauseMonitor);
+    jm.setPauseMonitor(pauseMonitor);
+
+    // Init WebServiceClient
+    WebServiceClient.initialize(config);
 
     // super.serviceInit after all services are added
     super.serviceInit(conf);
@@ -99,6 +127,8 @@ public class GlobalPolicyGenerator extends CompositeService {
       LOG.info("Scheduled sub-cluster cleaner with interval: {}",
           DurationFormatUtils.formatDurationISO(scCleanerIntervalMs));
     }
+
+    startWepApp();
   }
 
   @Override
@@ -117,7 +147,13 @@ public class GlobalPolicyGenerator extends CompositeService {
     if (this.isStopping.getAndSet(true)) {
       return;
     }
+    if (webApp != null) {
+      webApp.stop();
+    }
+
     DefaultMetricsSystem.shutdown();
+    WebServiceClient.destroy();
+
     super.serviceStop();
   }
 
@@ -143,6 +179,16 @@ public class GlobalPolicyGenerator extends CompositeService {
     this.start();
   }
 
+  @VisibleForTesting
+  public void startWepApp() {
+    LOG.info("Instantiating GPGWebApp at " + webAppAddress);
+    RMWebAppUtil.setupSecurityAndFilters(conf, null);
+    WebApps.Builder<Object> builder =
+        WebApps.$for("cluster", null, null, "ws").
+            with(conf).at(webAppAddress);
+    webApp = builder.start(new GPGWebApp(this));
+  }
+
   @SuppressWarnings("resource")
   public static void startGPG(String[] argv, Configuration conf) {
     boolean federationEnabled =
@@ -164,6 +210,10 @@ public class GlobalPolicyGenerator extends CompositeService {
       LOG.error("Error starting globalpolicygenerator", t);
       System.exit(-1);
     }
+  }
+
+  public static long getGPGStartupTime() {
+    return gpgStartupTime;
   }
 
   public static void main(String[] argv) {
