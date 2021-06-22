@@ -50,7 +50,12 @@ public class BlockPlacementPolicyWithDataCenter extends
   public void initialize(Configuration conf, FSClusterStats stats,
                          NetworkTopology clusterMap,
                          Host2NodesMap host2datanodeMap) {
-    this.dcClusterMap = (DFSNetworkTopologyWithDataCenter) clusterMap;
+    if (clusterMap instanceof DFSNetworkTopologyWithDataCenter) {
+      this.dcClusterMap = (DFSNetworkTopologyWithDataCenter) clusterMap;
+    } else {
+      throw new IllegalArgumentException("BlockPlacementPolicyWithDataCenter " +
+          "must work with DFSNetworkTopologyWithDataCenter!");
+    }
     super.initialize(conf, stats, clusterMap, host2datanodeMap);
   }
 
