@@ -310,6 +310,19 @@ public class YarnClientImpl extends YarnClient {
       throw new ApplicationIdNotProvidedException(
           "ApplicationId is not provided in ApplicationSubmissionContext");
     }
+
+    if (isNMEnvWhitelistExportEnabled()) {
+      String[] whitelistVars = getConfig().get(
+          YarnConfiguration.NM_ENV_WHITELIST,
+          YarnConfiguration.DEFAULT_NM_ENV_WHITELIST).split(",");
+      for(String var : whitelistVars) {
+        if (System.getenv(var) != null && !System.getenv(var).isEmpty()) {
+          appContext.getAMContainerSpec().getEnvironment()
+              .put(var, System.getenv(var));
+        }
+      }
+    }
+
     SubmitApplicationRequest request =
         Records.newRecord(SubmitApplicationRequest.class);
     request.setApplicationSubmissionContext(appContext);
@@ -522,6 +535,12 @@ public class YarnClientImpl extends YarnClient {
   @VisibleForTesting
   protected boolean isSecurityEnabled() {
     return UserGroupInformation.isSecurityEnabled();
+  }
+
+  protected boolean isNMEnvWhitelistExportEnabled() {
+    return getConfig().getBoolean(
+        YarnConfiguration.NM_ENV_WHITELIST_EXPORT_ENABLED,
+        YarnConfiguration.DEFAULT_NM_ENV_WHITELIST_EXPORT_ENABLED);
   }
 
   @Override
