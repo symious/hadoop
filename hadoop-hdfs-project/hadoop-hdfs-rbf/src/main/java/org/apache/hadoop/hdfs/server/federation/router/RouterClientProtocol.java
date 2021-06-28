@@ -2119,12 +2119,23 @@ public class RouterClientProtocol implements ClientProtocol {
     String group = this.superGroup;
     if (subclusterResolver instanceof MountTableResolver) {
       try {
+        String mName = name.startsWith("/") ? name : "/" + name;
         MountTableResolver mountTable = (MountTableResolver) subclusterResolver;
-        MountTable entry = mountTable.getMountPoint(name);
+        MountTable entry = mountTable.getMountPoint(mName);
         if (entry != null) {
-          permission = entry.getMode();
-          owner = entry.getOwnerName();
-          group = entry.getGroupName();
+          HdfsFileStatus fInfo = getFileInfoAll(entry.getDestinations(),
+              new RemoteMethod("getFileInfo", new Class<?>[] {String.class},
+                  new RemoteParam()));
+          if (fInfo != null) {
+            permission = fInfo.getPermission();
+            owner = fInfo.getOwner();
+            group = fInfo.getGroup();
+            childrenNum = fInfo.getChildrenNum();
+          } else {
+            permission = entry.getMode();
+            owner = entry.getOwnerName();
+            group = entry.getGroupName();
+          }
         }
       } catch (IOException e) {
         LOG.error("Cannot get mount point: {}", e.getMessage());
