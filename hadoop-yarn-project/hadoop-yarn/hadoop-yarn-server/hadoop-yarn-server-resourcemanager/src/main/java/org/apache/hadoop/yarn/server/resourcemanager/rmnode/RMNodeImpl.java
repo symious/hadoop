@@ -1449,8 +1449,13 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
 
   private boolean isGoodNodeManager(RMNodeImpl rmNode,
       RMNodeStatusEvent statusEvent) {
+    RMContext context = rmNode.context;
+    // Check if scheduler is ready
+    if (null == context || !context.isSchedulerReadyForAllocatingContainers()) {
+      return true;
+    }
 
-    if (rmNode.context.getYarnConfiguration()
+    if (context.getYarnConfiguration()
         .getBoolean(RM_SCHEDULER_SLOWNODE_CHECK_ENABLED,
             RM_SCHEDULER_SLOWNODE_CHECK_ENABLED_DEFAULT)) {
 
