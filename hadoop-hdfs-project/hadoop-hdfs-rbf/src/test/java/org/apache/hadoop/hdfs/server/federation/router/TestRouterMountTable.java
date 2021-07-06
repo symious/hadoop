@@ -127,6 +127,8 @@ public class TestRouterMountTable {
           RemoveMountTableEntryRequest.newInstance(entry.getSourcePath());
       mountTableManager.removeMountTableEntry(req2);
     }
+    // Reload the Router cache
+    mountTable.loadCache(true);
   }
 
   @Test
