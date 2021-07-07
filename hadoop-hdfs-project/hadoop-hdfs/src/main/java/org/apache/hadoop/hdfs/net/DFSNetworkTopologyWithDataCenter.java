@@ -67,11 +67,14 @@ public class DFSNetworkTopologyWithDataCenter extends DFSNetworkTopology{
   public static String getDataCenter(String loc) {
     loc = NodeBase.normalize(loc);
     String[] loc_info = loc.substring(1).split(PATH_SEPARATOR);
-    if (loc_info.length != 2) {
-      LOG.error("Invalid node location with data centre: "+loc);
+    if (loc_info.length == 1) {
+      return DEFAULT_DATACENTER;
+    } else if (loc_info.length == 2) {
+      return ROOT_PATH + loc_info[0];
+    } else {
+      LOG.warn("Invalid node location with data centre: "+loc);
       return DEFAULT_DATACENTER;
     }
-    return ROOT_PATH + loc_info[0];
   }
 
   /**

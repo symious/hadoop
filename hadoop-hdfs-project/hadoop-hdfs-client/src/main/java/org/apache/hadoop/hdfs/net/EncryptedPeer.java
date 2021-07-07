@@ -139,4 +139,14 @@ public class EncryptedPeer implements Peer {
   public boolean hasSecureChannel() {
     return true;
   }
+
+  @Override
+  public String getLocalHostAddress() {
+    return enclosedPeer.getLocalHostAddress();
+  }
+
+  @Override
+  public String getRemoteHostAddress() {
+    return enclosedPeer.getRemoteHostAddress();
+  }
 }

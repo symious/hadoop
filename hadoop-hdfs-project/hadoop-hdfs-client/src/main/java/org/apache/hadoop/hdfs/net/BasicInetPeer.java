@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.net;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetAddress;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.nio.channels.ReadableByteChannel;
@@ -36,12 +37,16 @@ public class BasicInetPeer implements Peer {
   private final OutputStream out;
   private final InputStream in;
   private final boolean isLocal;
+  private final String localHostAddress;
 
   public BasicInetPeer(Socket socket) throws IOException {
     this.socket = socket;
     this.out = socket.getOutputStream();
     this.in = socket.getInputStream();
     this.isLocal = socket.getInetAddress().equals(socket.getLocalAddress());
+    // The reason to use InetAddress is that socket.getLocalAddress()
+    // may return "0.0.0.0" (isLocal is also not correct in such cases).
+    this.localHostAddress = InetAddress.getLocalHost().getHostAddress();
   }
 
   @Override
@@ -131,5 +136,15 @@ public class BasicInetPeer implements Peer {
   @Override
   public boolean hasSecureChannel() {
     return false;
+  }
+
+  @Override
+  public String getLocalHostAddress() {
+    return this.localHostAddress;
+  }
+
+  @Override
+  public String getRemoteHostAddress() {
+    return socket.getInetAddress().getHostAddress();
   }
 }

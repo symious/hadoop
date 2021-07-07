@@ -35,6 +35,7 @@ public class DomainPeer implements Peer {
   private final OutputStream out;
   private final InputStream in;
   private final ReadableByteChannel channel;
+  private final String LOCAL_HOST = "127.0.0.1";
 
   public DomainPeer(DomainSocket socket) {
     this.socket = socket;
@@ -128,5 +129,15 @@ public class DomainPeer implements Peer {
     // launch a man-in-the-middle attach on UNIX domain socket traffic.
     //
     return true;
+  }
+
+  @Override
+  public String getLocalHostAddress() {
+    return LOCAL_HOST;
+  }
+
+  @Override
+  public String getRemoteHostAddress() {
+    return LOCAL_HOST;
   }
 }

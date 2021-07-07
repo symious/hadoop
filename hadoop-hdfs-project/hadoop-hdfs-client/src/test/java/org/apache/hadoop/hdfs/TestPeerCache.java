@@ -147,6 +147,16 @@ public class TestPeerCache {
     public boolean hasSecureChannel() {
       return false;
     }
+    
+    @Override
+    public String getLocalHostAddress() {
+      throw new UnsupportedOperationException();
+    }
+    
+    @Override
+    public String getRemoteHostAddress() {
+      throw new UnsupportedOperationException();
+    }
   }
 
   @Test

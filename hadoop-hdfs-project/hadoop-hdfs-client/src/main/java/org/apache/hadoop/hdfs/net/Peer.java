@@ -120,4 +120,16 @@ public interface Peer extends Closeable {
    *                       susceptible to man-in-the-middle attacks.
    */
   boolean hasSecureChannel();
+
+  /**
+   * @return               A string representing the local end of our
+   *                       connection to the peer.
+   */
+  String getLocalHostAddress();
+  
+  /**
+   * @return               A string representing the remote end of our
+   *                       connection to the peer.
+   */
+  String getRemoteHostAddress();
 }
