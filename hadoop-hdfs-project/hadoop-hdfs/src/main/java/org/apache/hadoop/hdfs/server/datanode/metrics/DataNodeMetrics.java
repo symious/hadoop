@@ -169,7 +169,7 @@ public class DataNodeMetrics {
   final String name;
   JvmMetrics jvmMetrics = null;
   private final DNSToSwitchMapping dnsToSwitchMapping;
-  private final String LOCAL_HOST = "127.0.0.1";
+  private static final String LOCAL_HOST = "127.0.0.1";
   
   public DataNodeMetrics(String name, String sessionId, int[] intervals,
       final JvmMetrics jvmMetrics, final DNSToSwitchMapping switchMapping) {

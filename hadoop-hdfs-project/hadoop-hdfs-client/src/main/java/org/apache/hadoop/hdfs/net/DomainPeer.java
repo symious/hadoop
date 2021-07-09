@@ -35,7 +35,7 @@ public class DomainPeer implements Peer {
   private final OutputStream out;
   private final InputStream in;
   private final ReadableByteChannel channel;
-  private final String LOCAL_HOST = "127.0.0.1";
+  private static final String LOCAL_HOST = "127.0.0.1";
 
   public DomainPeer(DomainSocket socket) {
     this.socket = socket;
