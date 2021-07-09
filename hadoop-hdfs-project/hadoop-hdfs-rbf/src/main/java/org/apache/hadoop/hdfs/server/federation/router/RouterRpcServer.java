@@ -340,7 +340,7 @@ public class RouterRpcServer extends AbstractService
     this.rpcMonitor = ReflectionUtils.newInstance(rpcMonitorClass, conf);
 
     this.topConf = new TopConf(this.conf);
-    RouterRpcServer.auditLoggers = initAuditLoggers(this.conf);
+    setAuditLog(initAuditLoggers(this.conf));
 
     // Create the client
     this.rpcClient = new RouterRpcClient(this.conf, this.router,
@@ -1613,5 +1613,9 @@ public class RouterRpcServer extends AbstractService
       }
       logger.addAppender(asyncAppender);
     }
+  }
+
+  private static void setAuditLog(List<AuditLogger> auditLoggers) {
+    RouterRpcServer.auditLoggers = auditLoggers;
   }
 }
