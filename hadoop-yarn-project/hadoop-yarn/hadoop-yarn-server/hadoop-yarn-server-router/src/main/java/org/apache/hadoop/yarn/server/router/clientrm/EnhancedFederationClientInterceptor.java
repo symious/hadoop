@@ -107,16 +107,20 @@ public class EnhancedFederationClientInterceptor
       GetContainerReportRequest request) throws YarnException, IOException {
     long startTime = clock.getTime();
 
+    if (request == null) {
+      RouterServerUtil.logAndThrowException("Missing getContainerReport " +
+          "request.", null);
+    }
+
     ContainerId containerId = request.getContainerId();
+    if (containerId == null) {
+      RouterServerUtil.logAndThrowException("ContainerReportRequest miss " +
+          "containerId information.", null);
+    }
+
     ApplicationAttemptId applicationAttemptId =
         containerId.getApplicationAttemptId();
     ApplicationId applicationId = applicationAttemptId.getApplicationId();
-
-    if (request == null || applicationId == null) {
-      RouterServerUtil.logAndThrowException(
-          "Missing getContainerReport request or applicationId information.",
-          null);
-    }
 
     SubClusterId subClusterId = null;
 

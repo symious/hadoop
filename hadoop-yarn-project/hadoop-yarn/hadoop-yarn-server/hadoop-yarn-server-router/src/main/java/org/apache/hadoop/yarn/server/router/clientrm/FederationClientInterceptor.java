@@ -312,9 +312,7 @@ public class FederationClientInterceptor
           RouterServerUtil.logAndThrowException("Fail to create a new " +
               "application in " + subClusterId.getId(), yarnResponseException);
         }
-
       }
-
     }
 
     routerMetrics.incrAppsFailedCreated();
@@ -480,9 +478,8 @@ public class FederationClientInterceptor
         Map<SubClusterId, SubClusterInfo> subClustersActive =
             federationFacade.getSubClusters(true);
 
-        LOG.debug("submitApplication blacklist= " + blacklist);
-        LOG.debug("submitApplication subClustersActive.keySet()= " +
-            subClustersActive.keySet());
+        LOG.debug("submitApplication blacklist= " + blacklist +
+            " ,subClustersActive.keySet()= " + subClustersActive.keySet());
 
         //If all of sub-clusters can't submit, the last sub-cluster feedback
         // error message is thrown
