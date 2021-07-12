@@ -272,6 +272,8 @@ public class FederationClientInterceptor
 
     long startTime = clock.getTime();
 
+    Exception yarnResponseException = null;
+
     Map<SubClusterId, SubClusterInfo> subClustersActive =
         federationFacade.getSubClusters(true);
 
@@ -287,17 +289,30 @@ public class FederationClientInterceptor
       } catch (Exception e) {
         LOG.warn("Unable to create a new ApplicationId in SubCluster "
             + subClusterId.getId(), e);
+        //Record yarn feedback error
+        yarnResponseException = e;
       }
 
       if (response != null) {
-
         long stopTime = clock.getTime();
         routerMetrics.succeededAppsCreated(stopTime - startTime);
         return response;
       } else {
         // Empty response from the ResourceManager.
-        // Blacklist this subcluster for this request.
+        // Blacklist this sub-cluster for this request.
         subClustersActive.remove(subClusterId);
+
+        LOG.debug("getNewApplication subClustersActive.keySet()= " +
+            subClustersActive.keySet());
+
+        //If all of sub-clusters can't new a applicationId, the last sub-cluster
+        // feedback error message is thrown
+        if(subClustersActive.size() == 0){
+          routerMetrics.incrAppsFailedCreated();
+          RouterServerUtil.logAndThrowException("Fail to create a new " +
+              "application in " + subClusterId.getId(), yarnResponseException);
+        }
+
       }
 
     }
@@ -379,6 +394,8 @@ public class FederationClientInterceptor
 
     long startTime = clock.getTime();
 
+    Exception yarnResponseException = null;
+
     if (request == null || request.getApplicationSubmissionContext() == null
         || request.getApplicationSubmissionContext()
             .getApplicationId() == null) {
@@ -444,6 +461,8 @@ public class FederationClientInterceptor
       } catch (Exception e) {
         LOG.warn("Unable to submit the application " + applicationId
             + "to SubCluster " + subClusterId.getId(), e);
+        //Record yarn feedback error
+        yarnResponseException = e;
       }
 
       if (response != null) {
@@ -457,6 +476,24 @@ public class FederationClientInterceptor
         // Empty response from the ResourceManager.
         // Blacklist this subcluster for this request.
         blacklist.add(subClusterId);
+
+        Map<SubClusterId, SubClusterInfo> subClustersActive =
+            federationFacade.getSubClusters(true);
+
+        LOG.debug("submitApplication blacklist= " + blacklist);
+        LOG.debug("submitApplication subClustersActive.keySet()= " +
+            subClustersActive.keySet());
+
+        //If all of sub-clusters can't submit, the last sub-cluster feedback
+        // error message is thrown
+        if(subClustersActive.size() == 0 ||
+            blacklist.containsAll(subClustersActive.keySet())){
+          routerMetrics.incrAppsFailedSubmitted();
+          RouterServerUtil.logAndThrowException("Unable to submit the " +
+              "application " + applicationId + "to SubCluster " +
+              subClusterId.getId(), yarnResponseException);
+        }
+
       }
     }
 
