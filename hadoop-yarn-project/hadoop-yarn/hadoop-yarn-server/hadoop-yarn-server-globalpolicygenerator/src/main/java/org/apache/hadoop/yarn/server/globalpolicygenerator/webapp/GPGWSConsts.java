@@ -41,6 +41,11 @@ public final class GPGWSConsts {
 
   public static final String ID_FIELD = "id";
 
+  public static final String APP_HOME_IMPORT = "/app_home/import";
+
+  public static final String CLUSTER_ID = "clusterId";
+
+
   private GPGWSConsts() {
     // not called
   }

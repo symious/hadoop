@@ -20,13 +20,21 @@ package org.apache.hadoop.yarn.server.globalpolicygenerator.webapp;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.sun.jersey.api.client.Client;
+import com.sun.jersey.api.client.ClientResponse;
+import com.sun.jersey.api.client.WebResource;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.http.JettyUtils;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.apache.hadoop.yarn.server.federation.policies.exceptions.FederationPolicyInitializationException;
 import org.apache.hadoop.yarn.server.federation.policies.manager.WeightedLocalityPolicyManager;
+import org.apache.hadoop.yarn.server.federation.store.records.ApplicationHomeSubCluster;
+import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterIdInfo;
+import org.apache.hadoop.yarn.server.federation.store.records.SubClusterInfo;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterPolicyConfiguration;
 import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.GlobalPolicyGenerator;
@@ -38,6 +46,10 @@ import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.PolicyRequ
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.PolicyUpdateRequestInfo;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.PolicyUpdateResponseInfo;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.PolicyRequestInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.DeSelectFields;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.RMWSConsts;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppsInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -54,8 +66,13 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
+import static javax.servlet.http.HttpServletResponse.SC_OK;
+import static org.apache.hadoop.yarn.webapp.util.WebAppUtils.getHttpSchemePrefix;
 
 /**
  * GPGWebServices is a service that runs on one GPG that can be used to handle
@@ -88,6 +105,38 @@ public class GPGWebServices{
   private void init() {
     // clear content type
     response.setContentType(null);
+  }
+
+  /**
+   * Performs an invocation of the the remote RMWebService.
+   */
+  public static <T> T invokeRMWebService(String webAddr,
+      String path, final Class<T> returnType, String deSelectParam) {
+    Client client = Client.create();
+    T obj;
+
+    WebResource webResource =
+        client.resource(webAddr).path("ws/v1/cluster").path(path);
+    if (deSelectParam != null) {
+      webResource = webResource.queryParam(RMWSConsts.DESELECTS, deSelectParam);
+    }
+    ClientResponse response = null;
+    try {
+      response = webResource.accept(MediaType.APPLICATION_XML)
+          .get(ClientResponse.class);
+      if (response.getStatus() == SC_OK) {
+        obj = response.getEntity(returnType);
+      } else {
+        throw new YarnRuntimeException(
+            "Bad response from remote web service: " + response.getStatus());
+      }
+      return obj;
+    } finally {
+      if (response != null) {
+        response.close();
+      }
+      client.destroy();
+    }
   }
 
   @GET
@@ -190,4 +239,50 @@ public class GPGWebServices{
         new PolicyUpdateResponseInfo("Update policy success!")).build();
   }
 
+
+  @POST
+  @Path(GPGWSConsts.APP_HOME_IMPORT)
+  @Produces({ MediaType.APPLICATION_JSON + "; " + JettyUtils.UTF_8,
+      MediaType.APPLICATION_XML + "; " + JettyUtils.UTF_8 })
+  public Response importAppHomeByClusterId(
+      @QueryParam(GPGWSConsts.CLUSTER_ID) String clusterId,
+      @Context HttpServletRequest hsr) throws Exception {
+
+    init();
+
+    LOG.info("ImportAppHome request clusterId: " + clusterId);
+
+    if(StringUtils.isNotBlank(clusterId)){
+      SubClusterId subClusterId = SubClusterId.newInstance(clusterId);
+
+      SubClusterInfo subClusterInfo =
+          federationFacade.getSubCluster(subClusterId);
+      LOG.info("ImportAppHome subClusterInfo: " + subClusterInfo.toString());
+
+      String rmWebServiceAddress = getHttpSchemePrefix(conf) +
+          subClusterInfo.getRMWebServiceAddress().trim();
+      LOG.info("Contacting RM at: " + rmWebServiceAddress);
+
+      AppsInfo appsInfo = invokeRMWebService(rmWebServiceAddress,
+          RMWSConsts.APPS, AppsInfo.class,
+          DeSelectFields.DeSelectType.RESOURCE_REQUESTS.toString());
+
+      for (AppInfo appInfo : appsInfo.getApps()) {
+        ApplicationId appId = ApplicationId.fromString(appInfo.getAppId());
+        federationFacade.addApplicationHomeSubCluster(
+            ApplicationHomeSubCluster.newInstance(appId, subClusterId));
+        LOG.debug("Added  " + appId + " -> " + subClusterId + " appHomeMapping");
+      }
+
+      String succeedMsg = "Success to import " + appsInfo.getApps().size() +
+          " appHomeMappings for clusterID: [ " + subClusterId + " ] !";
+      LOG.info(succeedMsg);
+      return Response.status(Response.Status.OK).entity(succeedMsg).build();
+
+    }else{
+      return Response.status(Response.Status.INTERNAL_SERVER_ERROR).
+          entity("Request clusterId is Empty!").build();
+    }
+
+  }
 }
