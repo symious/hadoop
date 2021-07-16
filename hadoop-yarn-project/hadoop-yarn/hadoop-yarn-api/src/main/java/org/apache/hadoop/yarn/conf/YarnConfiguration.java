@@ -2646,6 +2646,21 @@ public class YarnConfiguration extends Configuration {
   public static final boolean DEFAULT_NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE =
       false;
 
+  // add new config to control if enable strict limit with soft
+  public static final String
+      NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_SOFT =
+      NM_PREFIX +
+          "linux-container-executor.cgroups.strict-resource-usage-with-soft";
+  public static final boolean
+      DEFAULT_NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_SOFT =
+      false;
+  public static final String
+      NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_SOFT_MAX_STRICT_CORE_NUMBER =
+      NM_PREFIX +
+          "linux-container-executor.cgroups.strict-resource-usage-with-soft.max-strict-core-number";
+  public static final int
+      DEFAULT_NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_STRICT_CORE_NUMBER =
+      10;
 
   // Configurations for applicaiton life time monitor feature
   public static final String RM_APPLICATION_MONITOR_INTERVAL_MS =

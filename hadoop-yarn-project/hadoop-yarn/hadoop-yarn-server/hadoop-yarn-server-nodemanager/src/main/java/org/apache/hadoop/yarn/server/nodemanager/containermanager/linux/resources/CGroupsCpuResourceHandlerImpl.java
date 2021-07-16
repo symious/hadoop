@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resourc
 
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.io.FileUtils;
+import org.apache.hadoop.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -64,6 +65,10 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
 
   private CGroupsHandler cGroupsHandler;
   private boolean strictResourceUsageMode = false;
+  private boolean strictResourceUsageModeWithSoftLimit = false;
+  private int maxStrictCoreNumber = 10;
+  private String STRICT_CORE_NUMBER = "STRICT_CORE_NUMBER";
+
   private float yarnProcessors;
   private int nodeVCores;
   private static final CGroupsHandler.CGroupController CPU =
@@ -95,6 +100,14 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
     this.strictResourceUsageMode = conf.getBoolean(
         YarnConfiguration.NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE,
         YarnConfiguration.DEFAULT_NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE);
+    this.strictResourceUsageModeWithSoftLimit =
+        conf.getBoolean(
+            YarnConfiguration.NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_SOFT,
+            YarnConfiguration.DEFAULT_NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_SOFT);
+    this.maxStrictCoreNumber = conf.getInt(
+        YarnConfiguration.NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_SOFT_MAX_STRICT_CORE_NUMBER,
+        YarnConfiguration.DEFAULT_NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_STRICT_CORE_NUMBER);
+
     this.cGroupsHandler.initializeCGroupController(CPU);
     nodeVCores = NodeManagerHardwareUtils.getVCores(plugin, conf);
 
@@ -225,16 +238,31 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
                   CGroupsHandler.CGROUP_CPU_SHARES,
                   String.valueOf(cpuShares));
         }
+
+
+        LOG.debug("Container Id: " + container.getContainerId().toString() +
+            " Container vcores: " + containerVCores);
         if (strictResourceUsageMode) {
-          if (nodeVCores != containerVCores) {
-            float containerCPU =
-                (containerVCores * yarnProcessors) / (float) nodeVCores;
-            int[] limits = getOverallLimits(containerCPU);
-            cGroupsHandler.updateCGroupParam(CPU, cgroupId,
-                CGroupsHandler.CGROUP_CPU_PERIOD_US, String.valueOf(limits[0]));
-            cGroupsHandler.updateCGroupParam(CPU, cgroupId,
-                CGroupsHandler.CGROUP_CPU_QUOTA_US, String.valueOf(limits[1]));
+          setupLimitsInternal(containerVCores, cgroupId);
+        } else if (strictResourceUsageModeWithSoftLimit) {
+          // Get STRICT CORE NUMBER from Env
+          int strictCoreNumber =
+              YarnConfiguration.DEFAULT_NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_STRICT_CORE_NUMBER;
+          String strictCoreString =
+              container.getLaunchContext().getEnvironment()
+                  .get(STRICT_CORE_NUMBER);
+          if (!StringUtils.isNullOrEmpty(strictCoreString)) {
+            strictCoreNumber = Integer.valueOf(strictCoreString);
           }
+          // Request strict core number greater than container cores
+          // and less than default strict core number
+          if (strictCoreNumber < 1 ||
+              strictCoreNumber > this.maxStrictCoreNumber ||
+              strictCoreNumber < containerVCores) {
+            strictCoreNumber = this.maxStrictCoreNumber;
+          }
+          containerVCores = strictCoreNumber;
+          setupLimitsInternal(containerVCores, cgroupId);
         }
       } catch (ResourceHandlerException re) {
         cGroupsHandler.deleteCGroup(CPU, cgroupId);
@@ -243,6 +271,19 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
       }
     }
     return null;
+  }
+
+  private void setupLimitsInternal(int containerVCores, String cgroupId)
+      throws ResourceHandlerException {
+    if (nodeVCores != containerVCores) {
+      float containerCPU =
+          (containerVCores * yarnProcessors) / (float) nodeVCores;
+      int[] limits = getOverallLimits(containerCPU);
+      cGroupsHandler.updateCGroupParam(CPU, cgroupId,
+          CGroupsHandler.CGROUP_CPU_PERIOD_US, String.valueOf(limits[0]));
+      cGroupsHandler.updateCGroupParam(CPU, cgroupId,
+          CGroupsHandler.CGROUP_CPU_QUOTA_US, String.valueOf(limits[1]));
+    }
   }
 
   @Override
