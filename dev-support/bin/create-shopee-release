@@ -148,6 +148,13 @@ function hadoop_native_flags
   esac
 }
 
+function set_container_executor_conf_dir
+{
+  if [[ -n "${CONTAINER_EXECUTOR_CONF_DIR}" ]]; then
+    echo "-Dcontainer-executor.conf.dir=${CONTAINER_EXECUTOR_CONF_DIR}"
+  fi
+}
+
 # Function to probe the exit code of the script commands,
 # and stop in the case of failure with an contextual error
 # message.
@@ -251,6 +258,7 @@ function usage
   echo "--deploy                Deploy Maven artifacts using ~/.m2/settings.xml"
   echo "--no-tty                Disable the tty for Jenkins to run docker"
   echo "--version=[version]     Use an alternative version string"
+  echo "--container-executor.conf.dir=[path]     Path to read container-executor.cfg"
 }
 
 function option_parse
@@ -295,6 +303,9 @@ function option_parse
       ;;
       --version=*)
         HADOOP_VERSION=${i#*=}
+      ;;
+      --container-executor.conf.dir=*)
+        CONTAINER_EXECUTOR_CONF_DIR=${i#*=}
       ;;
     esac
   done
@@ -465,7 +476,7 @@ function makearelease
   run_and_redirect "${LOGDIR}/mvn_${target}.log" \
     "${MVN}" "${MVN_ARGS[@]}" ${target} \
       -Pdist,yarn-ui \
-      -DskipTests -Dmaven.javadoc.skip=true -Dtar $(hadoop_native_flags)
+      -DskipTests -Dmaven.javadoc.skip=true -Dtar $(hadoop_native_flags) $(set_container_executor_conf_dir)
 
   big_console_header "Staging the release"
 
