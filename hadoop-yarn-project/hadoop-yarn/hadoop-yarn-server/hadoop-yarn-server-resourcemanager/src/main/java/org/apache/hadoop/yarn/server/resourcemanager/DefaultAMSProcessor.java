@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager;
 
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.LeafQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -85,6 +87,7 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 import java.io.IOException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -222,6 +225,43 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
     List<ResourceRequest> ask = request.getAskList();
     List<ContainerId> release = request.getReleaseList();
 
+    RMApp app =
+        getRmContext().getRMApps().get(appAttemptId.getApplicationId());
+    ApplicationSubmissionContext asc = app.getApplicationSubmissionContext();
+
+    String queueName = app.getQueue();
+    // if scheduler is CS and app nodeLabel is not null
+    // will try to check and fix the nodeLabel
+    if (getScheduler() instanceof CapacityScheduler &&
+        null != asc.getNodeLabelExpression()) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("App submitContext nodeLabel info: " +
+            asc.getNodeLabelExpression() + " appId:" + app.getApplicationId());
+      }
+      CapacityScheduler cs = (CapacityScheduler) getScheduler();
+      LeafQueue queue = (LeafQueue) cs.getQueue(queueName);
+      Set<String> accessMultiLabelTimes = queue.getAccessMultiLabelTimes();
+
+      // submit hour
+      Calendar submitTime = Calendar.getInstance();
+      submitTime.setTimeInMillis(app.getSubmitTime());
+      String submitHour = String.valueOf(submitTime.get(Calendar.HOUR_OF_DAY));
+      // current hour
+      String currentHour =
+          String.valueOf(Calendar.getInstance().get(Calendar.HOUR_OF_DAY));
+
+      // if submitHour is contains on the access times
+      // if currentHour is out of the access times range
+      if (null != accessMultiLabelTimes &&
+          accessMultiLabelTimes.contains(submitHour) &&
+          !accessMultiLabelTimes.contains(currentHour)) {
+        asc.setNodeLabelExpression(null);
+        LOG.warn(
+            "Queue: " + app.getQueue() + " AppId: " + app.getApplicationId() +
+                " is out of accessMultiLabelTimes, we set nodeLabel null");
+      }
+    }
+
     ResourceBlacklistRequest blacklistRequest =
         request.getResourceBlacklistRequest();
     List<String> blacklistAdditions =
@@ -230,11 +270,8 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
     List<String> blacklistRemovals =
         (blacklistRequest != null) ?
             blacklistRequest.getBlacklistRemovals() : Collections.emptyList();
-    RMApp app =
-        getRmContext().getRMApps().get(appAttemptId.getApplicationId());
 
     // set label expression for Resource Requests if resourceName=ANY
-    ApplicationSubmissionContext asc = app.getApplicationSubmissionContext();
     for (ResourceRequest req : ask) {
       if (null == req.getNodeLabelExpression()
           && ResourceRequest.ANY.equals(req.getResourceName())) {

@@ -418,8 +418,6 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
         // like 1,2,3,4,5,6,10,20,21,23
         String currentHour =
             Calendar.getInstance().get(Calendar.HOUR_OF_DAY) + "";
-        LOG.debug("Current Hour:" + currentHour + ", Current QueuePath: " +
-            queue.getQueuePath());
 
         if (!queue.getAccessMultiLabelTimes().contains(currentHour)) {
           return;
