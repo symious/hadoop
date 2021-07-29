@@ -99,6 +99,8 @@ public class Dispatcher {
   /** Restrict to the following nodes. */
   private final Set<String> includedNodes;
 
+  private final String dataCenterConstraint;
+
   private final Collection<Source> sources = new HashSet<Source>();
   private final Collection<StorageGroup> targets = new HashSet<StorageGroup>();
 
@@ -898,16 +900,40 @@ public class Dispatcher {
 
   /** Constructor called by Mover. */
   public Dispatcher(NameNodeConnector nnc, Set<String> includedNodes,
-      Set<String> excludedNodes, long movedWinWidth, int moverThreads,
+    Set<String> excludedNodes, long movedWinWidth, int moverThreads,
+    int dispatcherThreads, int maxConcurrentMovesPerNode,
+    int maxNoMoveInterval, Configuration conf) {
+    this(nnc, includedNodes, excludedNodes, "/", movedWinWidth,
+      moverThreads, dispatcherThreads, maxConcurrentMovesPerNode,
+      0L, 0L, 0, maxNoMoveInterval, conf);
+  }
+
+  public Dispatcher(NameNodeConnector nnc, Set<String> includedNodes,
+      Set<String> excludedNodes, String dataCenterConstraint,
+      long movedWinWidth, int moverThreads,
       int dispatcherThreads, int maxConcurrentMovesPerNode,
       int maxNoMoveInterval, Configuration conf) {
-    this(nnc, includedNodes, excludedNodes, movedWinWidth,
+    this(nnc, includedNodes, excludedNodes, dataCenterConstraint, movedWinWidth,
         moverThreads, dispatcherThreads, maxConcurrentMovesPerNode,
-        0L, 0L, 0, maxNoMoveInterval, conf);
+        0L, 0L, 0,
+        maxNoMoveInterval, conf);
+  }
+
+  public Dispatcher(NameNodeConnector nnc, Set<String> includedNodes,
+      Set<String> excludedNodes, long movedWinWidth, int moverThreads,
+      int dispatcherThreads, int maxConcurrentMovesPerNode,
+      long getBlocksSize, long getBlocksMinBlockSize,
+      int blockMoveTimeout, int maxNoMoveInterval, Configuration conf) {
+    this(nnc, includedNodes,
+      excludedNodes, "/", movedWinWidth, moverThreads,
+      dispatcherThreads, maxConcurrentMovesPerNode,
+      getBlocksSize, getBlocksMinBlockSize,
+      blockMoveTimeout, maxNoMoveInterval, conf);
   }
 
   Dispatcher(NameNodeConnector nnc, Set<String> includedNodes,
-      Set<String> excludedNodes, long movedWinWidth, int moverThreads,
+      Set<String> excludedNodes, String dataCenterConstraint,
+      long movedWinWidth, int moverThreads,
       int dispatcherThreads, int maxConcurrentMovesPerNode,
       long getBlocksSize, long getBlocksMinBlockSize,
       int blockMoveTimeout, int maxNoMoveInterval, Configuration conf) {
@@ -915,6 +941,7 @@ public class Dispatcher {
     this.excludedNodes = excludedNodes;
     this.includedNodes = includedNodes;
     this.movedBlocks = new MovedBlocks<StorageGroup>(movedWinWidth);
+    this.dataCenterConstraint = dataCenterConstraint;
 
     this.cluster = NetworkTopology.getInstance(conf);
 
@@ -936,8 +963,18 @@ public class Dispatcher {
     this.connectToDnViaHostname = conf.getBoolean(
         HdfsClientConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME,
         HdfsClientConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME_DEFAULT);
+
+    Configuration newConf = new Configuration(conf);
+    if (conf.get(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY) ==
+      "org.apache.hadoop.hdfs.server.blockmanagement." +
+          "BlockPlacementPolicyWithDataCenter") {
+      newConf.set("dfs.block.replicator.classname",
+        "org.apache.hadoop.hdfs.server.blockmanagement." +
+            "BlockPlacementPolicyDefault");
+    }
     this.placementPolicy =
-        BlockPlacementPolicy.getInstance(conf, null, cluster, null);
+      BlockPlacementPolicy.getInstance(
+          newConf, null, cluster, null);
   }
 
   public DistributedFileSystem getDistributedFileSystem() {
@@ -988,6 +1025,8 @@ public class Dispatcher {
   }
 
   private boolean shouldIgnore(DatanodeInfo dn) {
+    // ignore nodes not in specific data center
+    final boolean outOfDataCenter = !Util.isInDataCenter(dataCenterConstraint, dn);
     // ignore out-of-service nodes
     final boolean outOfService = !dn.isInService();
     // ignore nodes in exclude list
@@ -995,7 +1034,7 @@ public class Dispatcher {
     // ignore nodes not in the include list (if include list is not empty)
     final boolean notIncluded = !Util.isIncluded(includedNodes, dn);
 
-    if (outOfService || excluded || notIncluded) {
+    if (outOfDataCenter || outOfService || excluded || notIncluded) {
       if (LOG.isTraceEnabled()) {
         LOG.trace("Excluding datanode " + dn
             + ": outOfService=" + outOfService
@@ -1242,6 +1281,15 @@ public class Dispatcher {
   }
 
   static class Util {
+    /** @return true if data node is in constrained data center */
+    static boolean isInDataCenter(String dataCenterConstraint, DatanodeInfo dn) {
+      if (dn.getNetworkLocation().startsWith(dataCenterConstraint)) {
+        return true;
+      } else {
+        return false;
+      }
+    }
+
     /** @return true if data node is part of the excludedNodes. */
     static boolean isExcluded(Set<String> excludedNodes, DatanodeInfo dn) {
       return isIn(excludedNodes, dn);
