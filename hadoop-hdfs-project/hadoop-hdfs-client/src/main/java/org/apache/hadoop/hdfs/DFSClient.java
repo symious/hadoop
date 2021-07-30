@@ -2406,6 +2406,20 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   }
 
   /**
+   * Refresh cluster's network topology.
+   * See {@link ClientProtocol#refreshTopology()}
+   * for more details.
+   * @return true if refresh is successful, false otherwise.
+   * @throws IOException
+   */
+  public boolean refreshTopology() throws IOException {
+    checkOpen();
+    try (TraceScope ignored = tracer.newScope("refreshTopology")) {
+      return namenode.refreshTopology();
+    }
+  }
+
+  /**
    * Dumps DFS data structures into specified file.
    *
    * @see ClientProtocol#metaSave(String)

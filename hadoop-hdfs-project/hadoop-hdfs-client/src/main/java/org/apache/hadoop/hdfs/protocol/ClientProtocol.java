@@ -905,6 +905,13 @@ public interface ClientProtocol {
   void refreshNodes() throws IOException;
 
   /**
+   * Tells the namenode to refresh cluster's network topology.
+   * @throws IOException
+   */
+  @Idempotent
+  boolean refreshTopology() throws IOException;
+
+  /**
    * Finalize previous upgrade.
    * Remove file system state saved during the upgrade.
    * The upgrade will become irreversible.

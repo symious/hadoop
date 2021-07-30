@@ -404,6 +404,13 @@ message RefreshNodesRequestProto { // no parameters
 message RefreshNodesResponseProto { // void response
 }
 
+message RefreshTopologyRequestProto { // no parameters
+}
+
+message RefreshTopologyResponseProto {
+  required bool result = 1;
+}
+
 message FinalizeUpgradeRequestProto { // no parameters
 }
 
@@ -837,6 +844,7 @@ service ClientNamenodeProtocol {
   rpc restoreFailedStorage(RestoreFailedStorageRequestProto)
       returns(RestoreFailedStorageResponseProto);
   rpc refreshNodes(RefreshNodesRequestProto) returns(RefreshNodesResponseProto);
+  rpc refreshTopology(RefreshTopologyRequestProto) returns(RefreshTopologyResponseProto);
   rpc finalizeUpgrade(FinalizeUpgradeRequestProto)
       returns(FinalizeUpgradeResponseProto);
   rpc rollingUpgrade(RollingUpgradeRequestProto)

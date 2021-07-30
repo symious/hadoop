@@ -900,6 +900,45 @@ public class DFSAdmin extends FsShell {
   }
 
   /**
+   * Command to ask the namenode to refresh cluster topology.
+   * Usage: hdfs dfsadmin -refreshTopology
+   * @return 0 if it succeeds.
+   * @throws IOException
+   */
+  public int refreshTopology() throws IOException {
+    int exitCode = -1;
+    DistributedFileSystem dfs = getDFS();
+    Configuration dfsConf = dfs.getConf();
+    URI dfsUri = dfs.getUri();
+    boolean isHaEnabled = HAUtilClient.isLogicalUri(dfsConf, dfsUri);
+    if (isHaEnabled) {
+      boolean failure = false;
+      String nsId = dfsUri.getHost();
+      List<ProxyAndInfo<ClientProtocol>> proxies =
+          HAUtil.getProxiesForAllNameNodesInNameservice(dfsConf, nsId,
+              ClientProtocol.class);
+      for (ProxyAndInfo<ClientProtocol> proxy : proxies) {
+        if (proxy.getProxy().refreshTopology()) {
+          System.out
+              .println("Refresh topology successful for " + proxy.getAddress());
+        } else {
+          System.out.println("Refresh topology fails at " + proxy.getAddress());
+          failure = true;
+        }
+      }
+      if (!failure) exitCode = 0;
+    } else {
+      if (dfs.refreshTopology()) {
+        System.out.println("Refresh topology successful");
+        exitCode = 0;
+      } else {
+        System.out.println("Refresh topology fails.");
+      }
+    }
+    return exitCode;
+  }
+
+  /**
    * Command to list all the open files currently managed by NameNode.
    * Usage: hdfs dfsadmin -listOpenFiles
    *
@@ -2103,6 +2142,9 @@ public class DFSAdmin extends FsShell {
     } else if ("-triggerBlockReport".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
           + " [-triggerBlockReport [-incremental] <datanode_host:ipc_port>]");
+    } else if ("-refreshTopology".equals(cmd)) {
+      System.err.println("Usage: hdfs dfsadmin"
+          + " [-refreshTopology]");
     } else if ("-listOpenFiles".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
           + " [-listOpenFiles [-blockingDecommission] [-path <path>]]");
@@ -2274,6 +2316,11 @@ public class DFSAdmin extends FsShell {
         printUsage(cmd);
         return exitCode;
       }
+    } else if ("-refreshTopology".equals(cmd)) {
+      if (argv.length != 1) {
+        printUsage(cmd);
+        return exitCode;
+      }
     }
     
     // initialize DFSAdmin
@@ -2357,6 +2404,8 @@ public class DFSAdmin extends FsShell {
         exitCode = reconfig(argv, i);
       } else if ("-triggerBlockReport".equals(cmd)) {
         exitCode = triggerBlockReport(argv);
+      } else if ("-refreshTopology".equals(cmd)) {
+        exitCode = refreshTopology();
       } else if ("-listOpenFiles".equals(cmd)) {
         exitCode = listOpenFiles(argv);
       } else if ("-help".equals(cmd)) {

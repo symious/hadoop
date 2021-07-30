@@ -1176,6 +1176,26 @@ public class RouterClientProtocol implements ClientProtocol {
   }
 
   @Override
+  public boolean refreshTopology() throws IOException {
+    rpcServer.checkOperation(OperationCategory.UNCHECKED);
+
+    RemoteMethod method = new RemoteMethod("refreshTopology", new Class<?>[] {});
+    final Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
+    Map<FederationNamespaceInfo, Boolean> ret =
+        rpcClient.invokeConcurrent(nss, method, true, true, boolean.class);
+    logAuditEvent(true, "refreshTopology", INVOKE_TYPE_CONCURRENT);
+
+    boolean success = true;
+    for (boolean s : ret.values()) {
+      if (!s) {
+        success = false;
+        break;
+      }
+    }
+    return success;
+  }
+
+  @Override
   public void finalizeUpgrade() throws IOException {
     rpcServer.checkOperation(OperationCategory.UNCHECKED);
 

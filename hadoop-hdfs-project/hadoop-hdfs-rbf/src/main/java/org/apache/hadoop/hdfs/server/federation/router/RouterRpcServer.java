@@ -884,6 +884,11 @@ public class RouterRpcServer extends AbstractService
   }
 
   @Override // ClientProtocol
+  public boolean refreshTopology() throws IOException {
+    return clientProto.refreshTopology();
+  }
+
+  @Override // ClientProtocol
   public void finalizeUpgrade() throws IOException {
     clientProto.finalizeUpgrade();
   }

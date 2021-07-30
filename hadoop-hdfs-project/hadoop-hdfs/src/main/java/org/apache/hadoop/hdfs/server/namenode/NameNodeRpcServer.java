@@ -1315,6 +1315,12 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     namesystem.refreshNodes();
   }
 
+  @Override // ClientProtocol
+  public boolean refreshTopology() throws IOException {
+    checkNNStartup();
+    return namesystem.refreshTopology();
+  }
+
   @Override // NamenodeProtocol
   public long getTransactionID() throws IOException {
     checkNNStartup();

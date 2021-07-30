@@ -46,6 +46,7 @@ import org.apache.hadoop.hdfs.server.common.Util;
 import org.apache.hadoop.hdfs.server.namenode.CachedBlock;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.Namesystem;
+import org.apache.hadoop.hdfs.server.namenode.UnsupportedActionException;
 import org.apache.hadoop.hdfs.server.protocol.*;
 import org.apache.hadoop.hdfs.server.protocol.BlockRecoveryCommand.RecoveringBlock;
 import org.apache.hadoop.ipc.Server;
@@ -1177,6 +1178,74 @@ public class DatanodeManager {
     } finally {
       namesystem.writeUnlock();
     }
+  }
+
+  public boolean refreshTopology(final Configuration conf) throws IOException {
+    namesystem.writeLock();
+    boolean refreshSuccess = false;
+    boolean resolveProblem = false;
+    try {
+      // 1. Check whether admin tries to change the implementation.
+      Class<? extends DNSToSwitchMapping> previousImpl =
+          dnsToSwitchMapping.getClass();
+      Class<? extends DNSToSwitchMapping> newImpl =
+          conf.getClass(DFSConfigKeys.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
+            ScriptBasedMapping.class, DNSToSwitchMapping.class);
+      if (!previousImpl.getSimpleName().equals(newImpl.getSimpleName())) {
+        // Implementations of DNSToSwitchMapping has changed dynamically,
+        // it is not supported.
+        String msg = "Trying to switch the implementation from " + previousImpl
+            + " to " + newImpl + ". It's not allowed to change the"
+            + " implementation of DNSToSwitchMapping dynamicall.";
+        LOG.error(msg);
+        throw new UnsupportedActionException(msg);
+      }
+
+      // 2. Reload DNS to switch mapping.
+      dnsToSwitchMapping.reloadCachedMappings();
+
+      // 3. Update network topology
+      for (DatanodeDescriptor datanode : datanodeMap.values()) {
+        if (hostConfigManager.isIncluded(datanode)) {
+          // Update those included datanodes only.
+          String oldNetWorkLocation = datanode.getNetworkLocation();
+          String newNetWorkLocation = null;
+          try {
+            newNetWorkLocation = resolveNetworkLocation(datanode);
+          } catch (UnresolvedTopologyException ute) {
+            // Some of datanode's network location are not resolvable,
+            // use default-rack instead. Since caches are reloaded already,
+            // refresh should keeping going to ensure
+            // that datanodes in cluster keep working.
+            LOG.error(ute.getMessage());
+            LOG.warn("Use " + NetworkTopology.DEFAULT_RACK
+                + " to replace the unresolvable location");
+            newNetWorkLocation = NetworkTopology.DEFAULT_RACK;
+            resolveProblem = true;
+          }
+          if (!oldNetWorkLocation.equals(newNetWorkLocation)) {
+            // This datanode's network location changes.
+            // 1. Remove the old network location in NetworkTopology.
+            // 2. Set datanode's network location to the new one.
+            // 3. Add the updated datanode into the NetworkTopology.
+            networktopology.remove(datanode);
+            datanode.setNetworkLocation(newNetWorkLocation);
+            networktopology.add(datanode);
+          }
+        }
+      }
+      if (!resolveProblem) {
+        // There is no resolve problem, refresh successes.
+        refreshSuccess = true;
+      }
+    } catch (UnsupportedActionException uae) {
+      // Nothing to do,
+      // because this exception surely happened before reload cache.
+      throw new IOException(uae.getMessage());
+    } finally {
+      namesystem.writeUnlock();
+    }
+    return refreshSuccess;
   }
 
   /** Reread include/exclude files. */
