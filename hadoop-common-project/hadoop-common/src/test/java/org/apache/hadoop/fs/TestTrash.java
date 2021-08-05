@@ -328,13 +328,19 @@ public class TestTrash extends TestCase {
     mkdir(fs, myPath);
     writeFile(fs, myFile, 10);
     
-    // Verify that skip trash option really skips the trash for files (rm)
+    // Verify that skip trash option DOESN'T skip the trash for files (rm)
     {
       String[] args = new String[3];
       args[0] = "-rm";
       args[1] = "-skipTrash";
       args[2] = myFile.toString();
       int val = -1;
+      PrintStream stdout = System.out;
+      PrintStream stderr = System.err;
+      ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+      PrintStream newOut = new PrintStream(byteStream);
+      System.setOut(newOut);
+      System.setErr(newOut);
       try {
         // Clear out trash
         assertEquals("-expunge failed", 
@@ -346,7 +352,12 @@ public class TestTrash extends TestCase {
         System.err.println("Exception raised from Trash.run " +
             e.getLocalizedMessage());
       }
-      assertFalse("Expected TrashRoot (" + trashRoot + 
+      String output = byteStream.toString();
+      System.setOut(stdout);
+      System.setErr(stderr);
+      assertTrue("Can't find `skipTrash is disabled` in return message.",
+          output.contains("The `-skipTrash` option is disabled."));
+      assertTrue("Expected TrashRoot (" + trashRoot +
           ") to exist in file system:"
           + trashRootFs.getUri(), 
           trashRootFs.exists(trashRoot)); // No new Current should be created
@@ -358,7 +369,7 @@ public class TestTrash extends TestCase {
     mkdir(fs, myPath);
     writeFile(fs, myFile, 10);
     
-    // Verify that skip trash option really skips the trash for rmr
+    // Verify that skip trash option DOESN'T skip the trash for rmr
     {
       String[] args = new String[3];
       args[0] = "-rmr";
@@ -366,6 +377,12 @@ public class TestTrash extends TestCase {
       args[2] = myPath.toString();
 
       int val = -1;
+      PrintStream stdout = System.out;
+      PrintStream stderr = System.err;
+      ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+      PrintStream newOut = new PrintStream(byteStream);
+      System.setOut(newOut);
+      System.setErr(newOut);
       try {
         // Clear out trash
         assertEquals(0, shell.run(new String [] { "-expunge" } ));
@@ -377,7 +394,12 @@ public class TestTrash extends TestCase {
             e.getLocalizedMessage());
       }
 
-      assertFalse(trashRootFs.exists(trashRoot)); // No new Current should be created
+      String output = byteStream.toString();
+      System.setOut(stdout);
+      System.setErr(stderr);
+      assertTrue("Can't find `skipTrash is disabled` in return message.",
+          output.contains("The `-skipTrash` option is disabled."));
+      assertTrue(trashRootFs.exists(trashRoot)); // No new Current should be created
       assertFalse(fs.exists(myPath));
       assertFalse(fs.exists(myFile));
       assertTrue(val == 0);

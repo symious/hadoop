@@ -115,7 +115,7 @@ class Delete {
       // problem (ie. creating the trash dir, moving the item to be deleted,
       // etc), then the path will just be deleted because moveToTrash returns
       // false and it falls thru to fs.delete.  this doesn't seem right
-      if (moveToTrash(item) || !canBeSafelyDeleted(item)) {
+      if ((!inTrash(item) && moveToTrash(item)) || !canBeSafelyDeleted(item)) {
         return;
       }
       if (!item.fs.delete(item.path, deleteDirs)) {
@@ -146,22 +146,29 @@ class Delete {
       return shouldDelete;
     }
 
+    private boolean inTrash(PathData item) {
+      return item.path.toString().startsWith("/Trash");
+    }
+
     private boolean moveToTrash(PathData item) throws IOException {
-      boolean success = false;
-      if (!skipTrash) {
-        try {
-          success = Trash.moveToAppropriateTrash(item.fs, item.path, getConf());
-        } catch(FileNotFoundException fnfe) {
-          throw fnfe;
-        } catch (IOException ioe) {
-          String msg = ioe.getMessage();
-          if (ioe.getCause() != null) {
-            msg += ": " + ioe.getCause().getMessage();
-          }
-          throw new IOException(msg + ". Consider using -skipTrash option", ioe);
-        }
+      if (skipTrash) {
+        System.err.println("The `-skipTrash` option is disabled. Please remove -skipTrash option");
       }
-      return success;
+
+      try {
+        return Trash.moveToAppropriateTrash(item.fs, item.path, getConf());
+      } catch(FileNotFoundException fnfe) {
+        throw fnfe;
+      } catch (IOException ioe) {
+        String msg = ioe.getMessage();
+        if (ioe.getCause() != null) {
+          msg += ": " + ioe.getCause().getMessage();
+        }
+        if (msg.contains("as it contains the trash")) {
+          msg += ". Consider using -skipTrash option";
+        }
+        throw new IOException(msg, ioe);
+      }
     }
   }
   
