@@ -83,6 +83,10 @@ import org.apache.hadoop.yarn.server.timelineservice.storage.subapplication.SubA
 import org.apache.hadoop.yarn.server.timelineservice.storage.subapplication.SubApplicationRowKey;
 import org.apache.hadoop.yarn.server.timelineservice.storage.subapplication.SubApplicationTable;
 import org.apache.hadoop.yarn.server.timelineservice.storage.subapplication.SubApplicationTableRW;
+import org.apache.hadoop.yarn.server.timelineservice.storage.tictoapp.TicToAppColumn;
+import org.apache.hadoop.yarn.server.timelineservice.storage.tictoapp.TicToAppRowKey;
+import org.apache.hadoop.yarn.server.timelineservice.storage.tictoapp.TicToAppTable;
+import org.apache.hadoop.yarn.server.timelineservice.storage.tictoapp.TicToAppTableRW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -108,6 +112,7 @@ public class HBaseTimelineWriterImpl extends AbstractService implements
   private TypedBufferedMutator<FlowRunTable> flowRunTable;
   private TypedBufferedMutator<SubApplicationTable> subApplicationTable;
   private TypedBufferedMutator<DomainTable> domainTable;
+  private TypedBufferedMutator<TicToAppTable> ticToAppTable;
 
   /**
    * Used to convert strings key components to and from storage format.
@@ -147,6 +152,7 @@ public class HBaseTimelineWriterImpl extends AbstractService implements
     subApplicationTable =
         new SubApplicationTableRW().getTableMutator(hbaseConf, conn);
     domainTable = new DomainTableRW().getTableMutator(hbaseConf, conn);
+    ticToAppTable = new TicToAppTableRW().getTableMutator(hbaseConf, conn);
 
     UserGroupInformation ugi = UserGroupInformation.isSecurityEnabled() ?
         UserGroupInformation.getLoginUser() :
@@ -175,6 +181,7 @@ public class HBaseTimelineWriterImpl extends AbstractService implements
     String userId = context.getUserId();
     String flowName = context.getFlowName();
     String flowVersion = context.getFlowVersion();
+    String tic = context.getTic();
     long flowRunId = context.getFlowRunId();
     String appId = context.getAppId();
     String subApplicationUser = callerUgi.getShortUserName();
@@ -229,7 +236,7 @@ public class HBaseTimelineWriterImpl extends AbstractService implements
             new FlowRunRowKey(clusterId, userId, flowName, flowRunId);
         if (event != null) {
           onApplicationCreated(flowRunRowKey, clusterId, appId, userId,
-              flowVersion, te, event.getTimestamp());
+              flowVersion, tic, te, event.getTimestamp());
         }
         // if it's an application entity, store metrics
         storeFlowMetricsAppRunning(flowRunRowKey, appId, te);
@@ -284,7 +291,7 @@ public class HBaseTimelineWriterImpl extends AbstractService implements
 
   private void onApplicationCreated(FlowRunRowKey flowRunRowKey,
       String clusterId, String appId, String userId, String flowVersion,
-      TimelineEntity te, long appCreatedTimeStamp)
+      String tic, TimelineEntity te, long appCreatedTimeStamp)
       throws IOException {
 
     String flowName = flowRunRowKey.getFlowName();
@@ -302,6 +309,14 @@ public class HBaseTimelineWriterImpl extends AbstractService implements
 
     // store in flow run table
     storeAppCreatedInFlowRunTable(flowRunRowKey, appId, te);
+
+    if (tic != null && !tic.isEmpty()) {
+      // store in tic to app table
+      TicToAppRowKey ticToAppRowKey = new TicToAppRowKey(tic);
+      ColumnRWHelper.store(ticToAppRowKey.getRowKey(), ticToAppTable,
+          TicToAppColumn.ID, null, appId);
+    }
+
 
     // store in flow activity table
     byte[] flowActivityRowKeyBytes =
@@ -622,6 +637,7 @@ public class HBaseTimelineWriterImpl extends AbstractService implements
     flowActivityTable.flush();
     subApplicationTable.flush();
     domainTable.flush();
+    ticToAppTable.flush();
   }
 
   /**

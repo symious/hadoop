@@ -52,6 +52,7 @@ public class TimelineUtils {
   public static final String FLOW_RUN_ID_TAG_PREFIX =
       "TIMELINE_FLOW_RUN_ID_TAG";
   public final static String DEFAULT_FLOW_VERSION = "1";
+  public final static String TIC_TAG_PREFIX = "TIC";
 
   private static ObjectMapper mapper;
 

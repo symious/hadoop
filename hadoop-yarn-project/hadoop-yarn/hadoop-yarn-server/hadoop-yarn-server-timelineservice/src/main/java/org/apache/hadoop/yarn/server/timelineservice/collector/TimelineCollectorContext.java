@@ -26,9 +26,10 @@ import org.apache.hadoop.yarn.util.timeline.TimelineUtils;
  */
 public class TimelineCollectorContext extends TimelineContext {
   private String flowVersion;
+  private String tic;
 
   public TimelineCollectorContext() {
-    this(null, null, null, null, 0L, null);
+    this(null, null, null, null, 0L, null, null);
   }
 
   public TimelineCollectorContext(String clusterId, String userId,
@@ -36,6 +37,14 @@ public class TimelineCollectorContext extends TimelineContext {
     super(clusterId, userId, flowName, flowRunId, appId);
     this.flowVersion = flowVersion == null ?
         TimelineUtils.DEFAULT_FLOW_VERSION : flowVersion;
+  }
+
+  public TimelineCollectorContext(String clusterId, String userId,
+      String flowName, String flowVersion, Long flowRunId, String appId, String tic) {
+    super(clusterId, userId, flowName, flowRunId, appId);
+    this.flowVersion = flowVersion == null ?
+        TimelineUtils.DEFAULT_FLOW_VERSION : flowVersion;
+    this.tic = tic;
   }
 
   @Override
@@ -72,5 +81,13 @@ public class TimelineCollectorContext extends TimelineContext {
 
   public void setFlowVersion(String version) {
     this.flowVersion = version;
+  }
+
+  public String getTic() {
+    return tic;
+  }
+
+  public void setTic(String tic) {
+    this.tic = tic;
   }
 }

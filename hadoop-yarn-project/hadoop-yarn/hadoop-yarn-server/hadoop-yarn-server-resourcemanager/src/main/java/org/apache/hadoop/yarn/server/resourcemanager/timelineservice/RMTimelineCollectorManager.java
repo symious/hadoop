@@ -61,7 +61,7 @@ public class RMTimelineCollectorManager extends TimelineCollectorManager {
     if (userId != null && !userId.isEmpty()) {
       context.setUserId(userId);
     }
-
+    
     // initialize the flow in the environment with default values for those
     // that do not specify the flow tags
     // flow name: app name (or app id if app name is missing),
@@ -89,6 +89,10 @@ public class RMTimelineCollectorManager extends TimelineCollectorManager {
       case TimelineUtils.FLOW_RUN_ID_TAG_PREFIX:
         LOG.debug("Setting the flow run id: {}", parts[1]);
         context.setFlowRunId(Long.parseLong(parts[1]));
+        break;
+      case TimelineUtils.TIC_TAG_PREFIX:
+        LOG.debug("Setting the tic: {}", parts[1]);
+        context.setTic(parts[1]);
         break;
       default:
         break;
