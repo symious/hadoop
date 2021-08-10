@@ -38,6 +38,7 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
 import org.apache.hadoop.hdfs.protocol.*;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeDescriptor.BlockTargetPair;
@@ -135,6 +136,9 @@ public class DatanodeManager {
   
   /** Whether or not to avoid using stale DataNodes for reading */
   private final boolean avoidStaleDataNodesForRead;
+
+  /** Whether or not to avoid using DataNodes having high XceiverCount for reading*/
+  private final boolean avoidHighLoadDataNodesForRead;
 
   /**
    * Whether or not to avoid using stale DataNodes for writing.
@@ -338,6 +342,11 @@ public class DatanodeManager {
     this.avoidStaleDataNodesForRead = conf.getBoolean(
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_READ_KEY,
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_READ_DEFAULT);
+
+    this.avoidHighLoadDataNodesForRead = conf.getBoolean(
+        DFSConfigKeys.DFS_NAMENODE_AVOID_HIGH_LOAD_FOR_READ_KEY,
+        DFSConfigKeys.DFS_NAMENODE_AVOID_HIGH_LOAD_FOR_READ_DEFAULT);
+
     this.avoidStaleDataNodesForWrite = conf.getBoolean(
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_WRITE_KEY,
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_WRITE_DEFAULT);
@@ -536,11 +545,42 @@ public class DatanodeManager {
       } else {
         networktopology.sortByDistance(client, b.getLocations(), activeLen);
       }
+
+      if (avoidHighLoadDataNodesForRead) {
+        sortByLoad(client, b.getLocations(), activeLen);
+      }
+
       // must update cache since we modified locations array
       b.updateCachedStorageInfo();
     }
   }
-  
+
+  private void sortByLoad(Node client, DatanodeInfo[] locations,
+      int activeLen) {
+
+    final boolean multiDC = networktopology instanceof DFSNetworkTopologyWithDataCenter;
+    final Comparator<DatanodeInfo> loadComparator =
+        new DFSUtil.LoadComparator();
+
+    int i = 0;
+
+    while(i < activeLen) {
+      String currentDC = DFSUtil.getDataCenter(locations[i], multiDC);
+
+      int j = i + 1;
+
+      while (j < activeLen && currentDC.equals(DFSUtil.getDataCenter(
+          locations[j], multiDC))) {
+        j++;
+      }
+
+      if (j - i > 1) {
+        Arrays.sort(locations, i, j, loadComparator);
+      }
+
+      i = j;
+    }
+  }
 
   /** @return the datanode descriptor for the host. */
   public DatanodeDescriptor getDatanodeByHost(final String host) {
