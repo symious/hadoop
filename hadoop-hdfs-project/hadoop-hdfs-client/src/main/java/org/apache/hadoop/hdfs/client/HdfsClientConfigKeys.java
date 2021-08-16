@@ -432,4 +432,19 @@ public interface HdfsClientConfigKeys {
     String  FAILOVER_SLEEPTIME_MAX_KEY = PREFIX + "failover.sleep.max.millis";
     int     FAILOVER_SLEEPTIME_MAX_DEFAULT =  15000;
   }
+
+  String DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_KEY =
+      "dfs.client.avoid.slow.datanodes.for.read";
+  boolean DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_DEFAULT = false;
+
+  String DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_KEY =
+      "dfs.client.slownodecache.expiry.ms";
+  int DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_DEFAULT = 45;
+  String DFS_CLIENT_SLOW_NODE_CACHE_SIZE_KEY =
+      "dfs.client.slownodecache.size";
+  int DFS_CLIENT_SLOW_NODE_CACHE_SIZE_DEFAULT = 512;
+  String DFS_CLIENT_SLOW_NODE_CACHE_THRESHOLD_MS_KEY =
+      "dfs.client.slownodecache.threshold.ms";
+  long DFS_CLIENT_SLOW_NODE_CACHE_THRESHOLD_MS_DEFAULT =
+      HedgedRead.THRESHOLD_MILLIS_DEFAULT;
 }

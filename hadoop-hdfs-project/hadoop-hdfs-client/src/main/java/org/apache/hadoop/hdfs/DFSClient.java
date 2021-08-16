@@ -3181,4 +3181,16 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     checkOpen();
     return new OpenFilesIterator(namenode, tracer, openFilesTypes, path);
   }
+
+  public boolean isAvoidSlowDataNodeForReadEnabled() {
+    return this.clientContext.isAvoidSlowDataNodesForRead();
+  }
+
+  public boolean isSlowNode(DatanodeInfo datanodeInfo) {
+    return this.clientContext.getSlowNodeCache().isSlowNode(datanodeInfo);
+  }
+
+  public void addSlowNode(DatanodeInfo datanodeInfo) {
+    this.clientContext.getSlowNodeCache().addSlowNode(datanodeInfo);
+  }
 }

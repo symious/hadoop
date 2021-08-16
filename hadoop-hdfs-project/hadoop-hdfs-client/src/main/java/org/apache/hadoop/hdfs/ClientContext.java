@@ -24,7 +24,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
@@ -118,6 +121,45 @@ public class ClientContext {
   private NodeBase clientNode;
   private boolean topologyResolutionEnabled;
 
+  /**
+   * Cache slow datanodes for a specific amount of time.
+   */
+  private SlowNodeCache slowNodeCache = null;
+
+  public interface SlowNodeCache {
+    boolean isSlowNode(DatanodeInfo datanodeInfo);
+    void addSlowNode(DatanodeInfo datanodeInfo);
+    long size();
+  }
+
+  public class SlowNodeCacheImpl implements SlowNodeCache {
+    private Cache<String, Boolean> cache;
+
+    public SlowNodeCacheImpl(int expireAfterWrite, int maxSize) {
+      this.cache = CacheBuilder
+          .newBuilder()
+          .maximumSize(maxSize)
+          .expireAfterWrite(expireAfterWrite, TimeUnit.MILLISECONDS)
+          .concurrencyLevel(4)
+          .build();
+    }
+
+    @Override
+    public boolean isSlowNode(DatanodeInfo datanodeInfo) {
+      return this.cache.getIfPresent(datanodeInfo.getDatanodeUuid()) != null;
+    }
+
+    @Override
+    public void addSlowNode(DatanodeInfo datanodeInfo) {
+      this.cache.put(datanodeInfo.getDatanodeUuid(), true);
+    }
+
+    @Override
+    public long size() {
+      return this.cache.size();
+    }
+  }
+
   private ClientContext(String name, DfsClientConf conf,
       Configuration config) {
     final ShortCircuitConf scConf = conf.getShortCircuitConf();
@@ -134,6 +176,13 @@ public class ClientContext {
 
     this.byteArrayManager = ByteArrayManager.newInstance(
         conf.getWriteByteArrayManagerConf());
+
+    this.avoidSlowDataNodesForRead = conf.isAvoidSlowDataNodesForReadEnabled();
+    if(avoidSlowDataNodesForRead && slowNodeCache == null) {
+      slowNodeCache = new SlowNodeCacheImpl(conf.getSlowNodeCacheExpiryMillis(),
+          conf.getSlowNodeCacheSize());
+    }
+
     initTopologyResolution(config);
   }
 
@@ -177,6 +226,11 @@ public class ClientContext {
   public static ClientContext get(String name, Configuration config) {
     return get(name, new DfsClientConf(config), config);
   }
+
+  /**
+   * Whether to avoid slow datanodes when reading or not.
+   */
+  private boolean avoidSlowDataNodesForRead = false;
 
   /**
    * Get a client context, from a Configuration object.
@@ -250,5 +304,19 @@ public class ClientContext {
     NodeBase node = new NodeBase(datanodeInfo.getHostName(),
         datanodeInfo.getNetworkLocation());
     return NetworkTopology.getDistanceByPath(clientNode, node);
+  }
+
+  /**
+   * @return the avoidSlowDataNodesForRead
+   */
+  public boolean isAvoidSlowDataNodesForRead() {
+    return avoidSlowDataNodesForRead;
+  }
+
+  /**
+   * Obtain SlowNodeDetector of the current client.
+   */
+  public SlowNodeCache getSlowNodeCache() {
+    return slowNodeCache;
   }
 }

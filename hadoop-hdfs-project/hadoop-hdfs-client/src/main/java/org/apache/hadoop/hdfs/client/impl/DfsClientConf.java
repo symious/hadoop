@@ -43,6 +43,14 @@ import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CHECKSUM_CO
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CHECKSUM_COMBINE_MODE_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CHECKSUM_TYPE_DEFAULT;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CHECKSUM_TYPE_KEY;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_DEFAULT;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_KEY;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_KEY;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_DEFAULT;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SLOW_NODE_CACHE_SIZE_KEY;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SLOW_NODE_CACHE_SIZE_DEFAULT;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SLOW_NODE_CACHE_THRESHOLD_MS_KEY;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SLOW_NODE_CACHE_THRESHOLD_MS_DEFAULT;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_CACHED_CONN_RETRY_DEFAULT;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_CACHED_CONN_RETRY_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_DATANODE_RESTART_TIMEOUT_DEFAULT;
@@ -144,9 +152,29 @@ public class DfsClientConf {
 
   private final boolean dataTransferTcpNoDelay;
 
+  private final boolean avoidSlowDataNodesForReadEnabled;
+
+  private final int slowNodeCacheExpiryMillis;
+  private final int slowNodeCacheSize;
+  private final long slowNodeCacheThresholdMillis;
+
   public DfsClientConf(Configuration conf) {
     // The hdfsTimeout is currently the same as the ipc timeout
     hdfsTimeout = Client.getRpcTimeout(conf);
+
+    avoidSlowDataNodesForReadEnabled =
+        conf.getBoolean(DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_KEY,
+            DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_DEFAULT);
+
+    slowNodeCacheExpiryMillis =
+        conf.getInt(DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_KEY,
+            DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_DEFAULT);
+    slowNodeCacheSize =
+        conf.getInt(DFS_CLIENT_SLOW_NODE_CACHE_SIZE_KEY,
+            DFS_CLIENT_SLOW_NODE_CACHE_SIZE_DEFAULT);
+    slowNodeCacheThresholdMillis =
+        conf.getLong(DFS_CLIENT_SLOW_NODE_CACHE_THRESHOLD_MS_KEY,
+            DFS_CLIENT_SLOW_NODE_CACHE_THRESHOLD_MS_DEFAULT);
 
     maxRetryAttempts = conf.getInt(
         Retry.MAX_ATTEMPTS_KEY,
@@ -585,6 +613,34 @@ public class DfsClientConf {
    */
   public int getStripedReadThreadpoolSize() {
     return stripedReadThreadpoolSize;
+  }
+
+  /**
+   * @return the avoidSlowDataNodesForReadEnabled
+   */
+  public boolean isAvoidSlowDataNodesForReadEnabled() {
+    return avoidSlowDataNodesForReadEnabled;
+  }
+
+  /**
+   * @return the slowNodeCacheExpiryMillis
+   */
+  public int getSlowNodeCacheExpiryMillis() {
+    return slowNodeCacheExpiryMillis;
+  }
+
+  /**
+   * @return the slowNodeCacheSize
+   */
+  public int getSlowNodeCacheSize() {
+    return slowNodeCacheSize;
+  }
+
+  /**
+   * @return the slowNodeCacheThresholdMillis
+   */
+  public long getSlowNodeCacheThresholdMillis() {
+    return slowNodeCacheThresholdMillis;
   }
 
   /**
