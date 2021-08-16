@@ -191,6 +191,10 @@ public class DFSInputStream extends FSInputStream
     return lastBlockBeingWrittenLength;
   }
 
+  protected DFSClient getDFSClient() {
+    return dfsClient;
+  }
+
   /**
    * Grab the open-file info from namenode
    * @param refreshLocatedBlocks whether to re-fetch locatedblocks
