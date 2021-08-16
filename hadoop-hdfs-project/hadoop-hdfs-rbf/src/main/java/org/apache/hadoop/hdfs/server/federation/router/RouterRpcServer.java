@@ -884,8 +884,8 @@ public class RouterRpcServer extends AbstractService
   }
 
   @Override // ClientProtocol
-  public boolean refreshTopology() throws IOException {
-    return clientProto.refreshTopology();
+  public boolean refreshTopology(String ipAddr) throws IOException {
+    return clientProto.refreshTopology(ipAddr);
   }
 
   @Override // ClientProtocol

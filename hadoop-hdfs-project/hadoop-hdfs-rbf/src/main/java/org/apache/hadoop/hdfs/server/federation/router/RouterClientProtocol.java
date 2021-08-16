@@ -1176,10 +1176,11 @@ public class RouterClientProtocol implements ClientProtocol {
   }
 
   @Override
-  public boolean refreshTopology() throws IOException {
+  public boolean refreshTopology(String ipAddr) throws IOException {
     rpcServer.checkOperation(OperationCategory.UNCHECKED);
 
-    RemoteMethod method = new RemoteMethod("refreshTopology", new Class<?>[] {});
+    RemoteMethod method = new RemoteMethod(
+        "refreshTopology", new Class<?>[] {String.class}, ipAddr);
     final Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
     Map<FederationNamespaceInfo, Boolean> ret =
         rpcClient.invokeConcurrent(nss, method, true, true, boolean.class);

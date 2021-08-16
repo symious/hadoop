@@ -901,12 +901,12 @@ public class DFSAdmin extends FsShell {
 
   /**
    * Command to ask the namenode to refresh cluster topology.
-   * Usage: hdfs dfsadmin -refreshTopology
    * @return 0 if it succeeds.
    * @throws IOException
    */
-  public int refreshTopology() throws IOException {
+  public int refreshTopology(String[] argv, int i) throws IOException {
     int exitCode = -1;
+    String ipAddr = argv[i];
     DistributedFileSystem dfs = getDFS();
     Configuration dfsConf = dfs.getConf();
     URI dfsUri = dfs.getUri();
@@ -918,7 +918,7 @@ public class DFSAdmin extends FsShell {
           HAUtil.getProxiesForAllNameNodesInNameservice(dfsConf, nsId,
               ClientProtocol.class);
       for (ProxyAndInfo<ClientProtocol> proxy : proxies) {
-        if (proxy.getProxy().refreshTopology()) {
+        if (proxy.getProxy().refreshTopology(ipAddr)) {
           System.out
               .println("Refresh topology successful for " + proxy.getAddress());
         } else {
@@ -928,7 +928,7 @@ public class DFSAdmin extends FsShell {
       }
       if (!failure) exitCode = 0;
     } else {
-      if (dfs.refreshTopology()) {
+      if (dfs.refreshTopology(ipAddr)) {
         System.out.println("Refresh topology successful");
         exitCode = 0;
       } else {
@@ -2144,7 +2144,7 @@ public class DFSAdmin extends FsShell {
           + " [-triggerBlockReport [-incremental] <datanode_host:ipc_port>]");
     } else if ("-refreshTopology".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
-          + " [-refreshTopology]");
+          + " [-refreshTopology <ipAddr>]");
     } else if ("-listOpenFiles".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
           + " [-listOpenFiles [-blockingDecommission] [-path <path>]]");
@@ -2317,7 +2317,7 @@ public class DFSAdmin extends FsShell {
         return exitCode;
       }
     } else if ("-refreshTopology".equals(cmd)) {
-      if (argv.length != 1) {
+      if (argv.length != 2) {
         printUsage(cmd);
         return exitCode;
       }
@@ -2405,7 +2405,7 @@ public class DFSAdmin extends FsShell {
       } else if ("-triggerBlockReport".equals(cmd)) {
         exitCode = triggerBlockReport(argv);
       } else if ("-refreshTopology".equals(cmd)) {
-        exitCode = refreshTopology();
+        exitCode = refreshTopology(argv, i);
       } else if ("-listOpenFiles".equals(cmd)) {
         exitCode = listOpenFiles(argv);
       } else if ("-help".equals(cmd)) {

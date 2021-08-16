@@ -83,7 +83,11 @@ public class TestRefreshTopology {
     DatanodeManager dnManager = cluster.getNameNode().getNamesystem()
         .getBlockManager().getDatanodeManager();
     // refresh topology
-    Assert.assertTrue(dnManager.refreshTopology(conf));
+    Assert.assertTrue(dnManager.refreshTopology(conf, "dn1"));
+    Assert.assertTrue(dnManager.refreshTopology(conf, "dn2"));
+    Assert.assertTrue(dnManager.refreshTopology(conf, "dn3"));
+    Assert.assertTrue(dnManager.refreshTopology(conf, "dn4"));
+    Assert.assertTrue(dnManager.refreshTopology(conf, "dn5"));
 
     int match = 0;
     for (DatanodeDescriptor descriptor : dnManager.getDatanodes()) {

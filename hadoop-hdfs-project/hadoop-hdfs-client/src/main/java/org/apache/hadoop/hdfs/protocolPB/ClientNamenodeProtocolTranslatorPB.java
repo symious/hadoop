@@ -232,10 +232,6 @@ public class ClientNamenodeProtocolTranslatorPB implements
   private final static RefreshNodesRequestProto VOID_REFRESH_NODES_REQUEST =
       RefreshNodesRequestProto.newBuilder().build();
 
-  private final static RefreshTopologyRequestProto
-      VOID_REFRESH_TOPOLOGY_REQUEST = RefreshTopologyRequestProto
-      .newBuilder().build();
-
   private final static FinalizeUpgradeRequestProto
       VOID_FINALIZE_UPGRADE_REQUEST =
       FinalizeUpgradeRequestProto.newBuilder().build();
@@ -747,10 +743,13 @@ public class ClientNamenodeProtocolTranslatorPB implements
   }
 
   @Override
-  public boolean refreshTopology() throws IOException {
+  public boolean refreshTopology(String ipAddr) throws IOException {
+    RefreshTopologyRequestProto req = RefreshTopologyRequestProto
+        .newBuilder()
+        .setIpAddr(ipAddr)
+        .build();
     try {
-      return rpcProxy.refreshTopology(null, VOID_REFRESH_TOPOLOGY_REQUEST)
-          .getResult();
+      return rpcProxy.refreshTopology(null, req).getResult();
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
     }

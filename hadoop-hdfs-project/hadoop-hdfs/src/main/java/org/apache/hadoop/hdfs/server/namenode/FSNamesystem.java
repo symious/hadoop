@@ -4351,11 +4351,11 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     getBlockManager().getDatanodeManager().refreshNodes(new HdfsConfiguration());
   }
 
-  boolean refreshTopology() throws IOException {
+  boolean refreshTopology(String ipAddr) throws IOException {
     checkOperation(OperationCategory.UNCHECKED);
     checkSuperuserPrivilege();
     return getBlockManager().getDatanodeManager()
-        .refreshTopology(new HdfsConfiguration());
+        .refreshTopology(new HdfsConfiguration(), ipAddr);
   }
 
   void setBalancerBandwidth(long bandwidth) throws IOException {

@@ -826,7 +826,7 @@ public class ClientNamenodeProtocolServerSideTranslatorPB implements
   public RefreshTopologyResponseProto refreshTopology(RpcController controller,
       RefreshTopologyRequestProto request) throws ServiceException {
     try {
-      boolean result = server.refreshTopology();
+      boolean result = server.refreshTopology(request.getIpAddr());
       return RefreshTopologyResponseProto.newBuilder().setResult(result).build();
     } catch (IOException e) {
       throw new ServiceException(e);

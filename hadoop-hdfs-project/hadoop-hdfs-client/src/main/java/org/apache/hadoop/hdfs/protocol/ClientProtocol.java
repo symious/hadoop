@@ -906,10 +906,11 @@ public interface ClientProtocol {
 
   /**
    * Tells the namenode to refresh cluster's network topology.
+   * @param ipAddr the hostname/IP-address of the node to refresh
    * @throws IOException
    */
   @Idempotent
-  boolean refreshTopology() throws IOException;
+  boolean refreshTopology(String ipAddr) throws IOException;
 
   /**
    * Finalize previous upgrade.

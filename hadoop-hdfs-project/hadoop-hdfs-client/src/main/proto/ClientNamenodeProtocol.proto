@@ -404,7 +404,8 @@ message RefreshNodesRequestProto { // no parameters
 message RefreshNodesResponseProto { // void response
 }
 
-message RefreshTopologyRequestProto { // no parameters
+message RefreshTopologyRequestProto {
+  required string ipAddr = 1;
 }
 
 message RefreshTopologyResponseProto {
