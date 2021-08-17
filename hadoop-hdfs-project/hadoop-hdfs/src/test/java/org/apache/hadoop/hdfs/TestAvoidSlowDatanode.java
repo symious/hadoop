@@ -211,6 +211,71 @@ public class TestAvoidSlowDatanode {
     }
   }
 
+  @Test
+  public void testDataNodesCacheMetrics() throws Exception {
+    conf.set(DFS_CLIENT_CONTEXT, "testSlowNodeIsAvoided");
+
+    cluster = new MiniDFSCluster.Builder(conf)
+        .numDataNodes(3)
+        .format(true)
+        .build();
+    cluster.waitActive();
+
+    FileSystem fs = cluster.getFileSystem();
+    Path filePath = new Path("/testSlowNodeIsAvoided");
+    createFile(fs, filePath);
+
+    FSDataInputStream in = fs.open(filePath);
+    DFSInputStream din = (DFSInputStream) in.getWrappedStream();
+    DFSClient dfsClient = din.getDFSClient();
+    DFSSlowDatanodeCacheMetrics metrics =
+        dfsClient.getSlowDatanodeCacheMetricsMetric();
+
+    try {
+      List<LocatedBlock> blocks = DFSTestUtil.getAllBlocks(in);
+      LocatedBlock block = blocks.get(0);
+      DatanodeInfo slowDatanode = block.getLocations()[0];
+
+      long sortOpsBefore = metrics.getSortingOps();
+      long sortingOpsWinsBefore = metrics.getSortingOpsWins();
+
+      dfsClient.addSlowNode(slowDatanode);
+
+      din.avoidSlowDatanodes(block);
+      assertEquals(slowDatanode, block.getLocations()[2]);
+      assertEquals(1, metrics.getSortingOps() - sortOpsBefore);
+      assertEquals(1,
+          metrics.getSortingOpsWins() - sortingOpsWinsBefore);
+    } finally {
+      in.close();
+    }
+
+    // All nodes are slow hence not efficient sorting.
+    FSDataInputStream in2 = fs.open(filePath);
+    DFSInputStream din2 = (DFSInputStream) in2.getWrappedStream();
+    DFSClient dfsClient2 = din2.getDFSClient();
+
+    try {
+      List<LocatedBlock> blocks = DFSTestUtil.getAllBlocks(in);
+      LocatedBlock block = blocks.get(0);
+
+      for (DatanodeInfo datanode : block.getLocations()) {
+        dfsClient2.addSlowNode(datanode);
+      }
+
+      long sortOpsBefore = metrics.getSortingOps();
+      long sortingOpsWinsBefore = metrics.getSortingOpsWins();
+
+      din.avoidSlowDatanodes(block);
+      assertEquals(1,metrics.getSortingOps() - sortOpsBefore);
+      assertEquals(0,
+          metrics.getSortingOpsWins() - sortingOpsWinsBefore);
+    } finally {
+      in2.close();
+      deleteFile(fs, filePath);
+    }
+  }
+
   @Test(timeout = 30000)
   public void testTwoClientSlowNodeDetectionHedgedRead() throws Exception {
     final int slownodeThreshold = 100;

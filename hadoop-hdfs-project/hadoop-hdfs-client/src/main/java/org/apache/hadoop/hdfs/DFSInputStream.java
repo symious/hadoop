@@ -1401,6 +1401,7 @@ public class DFSInputStream extends FSInputStream
   protected void avoidSlowDatanodes(LocatedBlock blk) {
     if (this.dfsClient.isAvoidSlowDataNodeForReadEnabled()) {
       DatanodeInfo[] locs = blk.getLocations();
+      DatanodeInfo[] beforeSortLocs  = Arrays.copyOf(locs, locs.length);
 
       DatanodeInfo[] slowLocations = new DatanodeInfo[locs.length];
       DatanodeInfo[] fastLocations = new DatanodeInfo[locs.length];
@@ -1416,6 +1417,11 @@ public class DFSInputStream extends FSInputStream
         }
       }
 
+      // There is at least one node in the cache
+      if (i > 0) {
+        getDFSClient().getSlowDatanodeCacheMetricsMetric().incSortingOps();
+      }
+
       int index = 0;
 
       for(int z = 0; z < j; z++) {
@@ -1426,8 +1432,14 @@ public class DFSInputStream extends FSInputStream
         locs[index++] = slowLocations[z];
       }
 
-      // CachedStorageInfo must be updated after altering locations.
-      blk.updateCachedStorageInfo();
+      if (! Arrays.equals(beforeSortLocs, locs)) {
+        // Update efficient sorting ops.
+        getDFSClient().getSlowDatanodeCacheMetricsMetric().incSortingOpsWins();
+
+        // CachedStorageInfo must be updated after altering locations.
+        blk.updateCachedStorageInfo();
+      }
+
     }
   }
 

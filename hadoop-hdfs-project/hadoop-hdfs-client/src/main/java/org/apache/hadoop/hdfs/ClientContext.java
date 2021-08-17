@@ -126,6 +126,9 @@ public class ClientContext {
    */
   private SlowNodeCache slowNodeCache = null;
 
+  private static final DFSSlowDatanodeCacheMetrics
+      SLOW_DATANODE_CACHE_METRICS_METRIC = new DFSSlowDatanodeCacheMetrics();
+
   public interface SlowNodeCache {
     boolean isSlowNode(DatanodeInfo datanodeInfo);
     void addSlowNode(DatanodeInfo datanodeInfo);
@@ -255,6 +258,10 @@ public class ClientContext {
             ", Requested: " + requested);
       }
     }
+  }
+
+  DFSSlowDatanodeCacheMetrics getSlowDatanodeCacheMetricsMetric() {
+    return SLOW_DATANODE_CACHE_METRICS_METRIC;
   }
 
   public String getConfString() {

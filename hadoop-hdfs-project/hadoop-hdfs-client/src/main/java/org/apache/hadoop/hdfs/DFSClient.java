@@ -3193,4 +3193,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   public void addSlowNode(DatanodeInfo datanodeInfo) {
     this.clientContext.getSlowNodeCache().addSlowNode(datanodeInfo);
   }
+
+  DFSSlowDatanodeCacheMetrics getSlowDatanodeCacheMetricsMetric() {
+    return this.clientContext.getSlowDatanodeCacheMetricsMetric();
+  }
 }
