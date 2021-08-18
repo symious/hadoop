@@ -439,7 +439,7 @@ public interface HdfsClientConfigKeys {
 
   String DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_KEY =
       "dfs.client.slownodecache.expiry.ms";
-  int DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_DEFAULT = 45;
+  int DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_DEFAULT = 45000;
   String DFS_CLIENT_SLOW_NODE_CACHE_SIZE_KEY =
       "dfs.client.slownodecache.size";
   int DFS_CLIENT_SLOW_NODE_CACHE_SIZE_DEFAULT = 512;
