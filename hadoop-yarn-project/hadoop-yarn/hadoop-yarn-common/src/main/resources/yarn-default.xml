@@ -258,6 +258,11 @@
   </property>
 
   <property>
+    <name>yarn.resourcemanager.available.mem.watermark</name>
+    <value>120</value>
+  </property>
+
+  <property>
     <description>
     The Kerberos keytab file to be used for spnego filter for the RM web
     interface.

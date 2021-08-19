@@ -393,6 +393,11 @@ public class YarnConfiguration extends Configuration {
   public static final float RM_SCHEDULER_LOAD1_WATERMARK_HIGH_DEFAULT = 1.2f;
   public static final float RM_SCHEDULER_LOAD5_WATERMARK_HIGH_DEFAULT = 1.2f;
 
+  // How much mem is safe
+  public static final String RM_SCHEDULER_AVAILABLE_MEM_WATERMARK =
+      RM_PREFIX + "available.mem.watermark";
+  public static final int RM_SCHEDULER_AVAILABLE_MEM_WATERMARK_DEFAULT = 120;
+
   /** The expiry interval for application master reporting.*/
   public static final String RM_AM_EXPIRY_INTERVAL_MS = 
     YARN_PREFIX  + "am.liveness-monitor.expiry-interval-ms";

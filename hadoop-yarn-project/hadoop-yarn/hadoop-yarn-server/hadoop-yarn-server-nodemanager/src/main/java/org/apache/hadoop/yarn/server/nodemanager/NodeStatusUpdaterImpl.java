@@ -567,9 +567,13 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     Float load5 = sysInfo.getLoad5() / coreNumber;
     nodeStatus.setLoad5(load5);
 
+    int availableMem =
+        (int) (sysInfo.getAvailablePhysicalMemorySize() / 1024 / 1024 / 1024);
+    nodeStatus.setAvailableMem(availableMem);
+
     if (LOG.isDebugEnabled()) {
       LOG.debug("Info of Node, core: " + coreNumber + ", load1: " + load1 +
-          ", load5: " + load5);
+          ", load5: " + load5 + ", availableMem:" + availableMem);
     }
     return nodeStatus;
   }

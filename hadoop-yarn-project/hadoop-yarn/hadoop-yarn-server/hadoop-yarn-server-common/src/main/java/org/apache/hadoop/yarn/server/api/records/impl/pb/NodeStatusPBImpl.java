@@ -462,6 +462,18 @@ public class NodeStatusPBImpl extends NodeStatus {
     this.builder.setDiskUsage(diskUsage);
   }
 
+  @Override
+  public synchronized int getAvailableMem() {
+    NodeStatusProtoOrBuilder p = this.viaProto ? this.proto : this.builder;
+    return (p.getAvailableMem());
+  }
+
+  @Override
+  public synchronized void setAvailableMem(int availableMem) {
+    maybeInitBuilder();
+    this.builder.setAvailableMem(availableMem);
+  }
+
   private NodeIdProto convertToProtoFormat(NodeId nodeId) {
     return ((NodeIdPBImpl)nodeId).getProto();
   }

@@ -65,6 +65,7 @@ public class ClusterMetrics {
   @Metric("#Total number of high load1 skipped times") MutableGaugeLong highLoad1Skipped;
   @Metric("#Total number of high load5 skipped times") MutableGaugeLong highLoad5Skipped;
   @Metric("#Total number of high disk Usage skipped times") MutableGaugeLong highDiskUsageSkipped;
+  @Metric("#Total number of low available mem skipped times") MutableGaugeLong lowAvailableMemSkipped;
   @Metric("# of RM Events") MutableGaugeLong numRmEvents;
   @Metric("GPU Capability") MutableGaugeLong capabilityGPUs;
   @Metric("RM Event Processor CPU Usage 60 second Avg") MutableGaugeLong
@@ -348,6 +349,14 @@ public class ClusterMetrics {
 
   public void incrHighDiskUsageSkipped() {
     highDiskUsageSkipped.incr();
+  }
+
+  public long getLowAvailableMemSkipped() {
+    return lowAvailableMemSkipped.value();
+  }
+
+  public void incrLowAvailableMemSkipped() {
+    lowAvailableMemSkipped.incr();
   }
 
   // Num of RM Events

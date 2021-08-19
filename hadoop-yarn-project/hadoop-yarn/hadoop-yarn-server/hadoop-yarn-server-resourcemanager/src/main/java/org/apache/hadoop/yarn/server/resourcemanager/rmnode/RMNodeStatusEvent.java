@@ -96,4 +96,8 @@ public class RMNodeStatusEvent extends RMNodeEvent {
   public int getDiskUsage() {
     return nodeStatus.getDiskUsage();
   }
+
+  public int getAvailableMem() {
+    return nodeStatus.getAvailableMem();
+  }
 }

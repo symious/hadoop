@@ -96,6 +96,8 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.DEFAULT_RM_EVENT_BASE_NUMBER;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_AVAILABLE_MEM_WATERMARK;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_AVAILABLE_MEM_WATERMARK_DEFAULT;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD1_WATERMARK_HIGH;
@@ -1462,6 +1464,7 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       float load1 = statusEvent.getLoad1();
       float load5 = statusEvent.getLoad5();
       int diskUsed = statusEvent.getDiskUsage();
+      int availableMem = statusEvent.getAvailableMem();
 
       float load1WatermarkHigh = rmNode.context.getYarnConfiguration()
           .getFloat(RM_SCHEDULER_LOAD1_WATERMARK_HIGH,
@@ -1472,15 +1475,17 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       int diskWatermarkHigh = rmNode.context.getYarnConfiguration()
           .getInt(RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH,
               RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT);
+      int availableMemWatermark = rmNode.context.getYarnConfiguration()
+          .getInt(RM_SCHEDULER_AVAILABLE_MEM_WATERMARK,
+              RM_SCHEDULER_AVAILABLE_MEM_WATERMARK_DEFAULT);
 
       if (LOG.isDebugEnabled()) {
-        LOG.debug(
-            "CHECKING:" + " Info of NODE: " + rmNode.getHostName() +
-                ", Load1: " + load1 + ", load5: " + load5 +
-                ", disk:" + diskUsed + ", watermark: load1: " +
-                load1WatermarkHigh +
-                ", load5:" + load5WatermarkHigh + ", disk line:" +
-                diskWatermarkHigh);
+        LOG.debug("CHECKING:" + " Info of NODE: " + rmNode.getHostName() +
+            ", Load1: " + load1 + ", load5: " + load5 + ", disk:" + diskUsed +
+            ", availableMem" + availableMem + ", watermark: load1: " +
+            load1WatermarkHigh + ", load5:" + load5WatermarkHigh +
+            ", disk line:" + diskWatermarkHigh + ", availableMem:" +
+            availableMemWatermark);
       }
 
       //record metrics
@@ -1498,6 +1503,11 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
 
       if (diskUsed > diskWatermarkHigh) {
         metrics.incrHighDiskUsageSkipped();
+        return false;
+      }
+
+      if (availableMem < availableMemWatermark) {
+        metrics.incrLowAvailableMemSkipped();
         return false;
       }
     }

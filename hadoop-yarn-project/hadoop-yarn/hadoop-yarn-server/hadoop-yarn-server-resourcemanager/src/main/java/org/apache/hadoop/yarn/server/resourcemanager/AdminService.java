@@ -111,6 +111,8 @@ import org.apache.hadoop.thirdparty.protobuf.BlockingService;
 
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.DEFAULT_MULTI_LABEL_ACCESS_ENABLED;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.MULTI_LABEL_ACCESS_ENABLED;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_AVAILABLE_MEM_WATERMARK;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_AVAILABLE_MEM_WATERMARK_DEFAULT;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD1_WATERMARK_HIGH;
@@ -631,6 +633,10 @@ public class AdminService extends CompositeService implements
     rmConf.setInt(RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH,
         newConf.getInt(RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH,
             RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT));
+
+    rmConf.setInt(RM_SCHEDULER_AVAILABLE_MEM_WATERMARK,
+        newConf.getInt(RM_SCHEDULER_AVAILABLE_MEM_WATERMARK,
+            RM_SCHEDULER_AVAILABLE_MEM_WATERMARK_DEFAULT));
 
     rmConf.setBoolean(MULTI_LABEL_ACCESS_ENABLED,
         newConf.getBoolean(MULTI_LABEL_ACCESS_ENABLED,
