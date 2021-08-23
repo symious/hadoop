@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.yarn.server.router.clientrm;
 
+import org.apache.hadoop.ipc.CallerContext;
+import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -133,6 +135,9 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_KEY;
+
 /**
  * Extends the {@code AbstractRequestInterceptorClient} class and provides an
  * implementation for federation of YARN RM and scaling an application across
@@ -162,6 +167,11 @@ public class FederationClientInterceptor
   private RouterMetrics routerMetrics;
   private ThreadPoolExecutor executorService;
   private final Clock clock = new MonotonicClock();
+
+  private static final String CLIENT_IP_STR = "REAL_CLIENT_IP";
+  
+  /** Field separator of CallerContext. */
+  private String contextFieldSeparator;
 
   @Override
   public void init(String userName) {
@@ -197,6 +207,10 @@ public class FederationClientInterceptor
     clientRMProxies =
         new ConcurrentHashMap<SubClusterId, ApplicationClientProtocol>();
     routerMetrics = RouterMetrics.getMetrics();
+
+    this.contextFieldSeparator =
+        conf.get(HADOOP_CALLER_CONTEXT_SEPARATOR_KEY,
+            HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT);
   }
 
   @Override
@@ -250,6 +264,31 @@ public class FederationClientInterceptor
     return list.get(rand.nextInt(list.size()));
   }
 
+  /**
+   * For tracking which is the actual client address.
+   * It adds trace info "realClientIp:ip" to caller context if it's absent.
+   */
+  private void appendClientIpToCallerContextIfAbsent() {
+    LOG.info("Old CallerContext = " + CallerContext.getCurrent().getContext());
+    String clientIpInfo = CLIENT_IP_STR + ":" + Server.getRemoteAddress();
+    final CallerContext ctx = CallerContext.getCurrent();
+    if (isClientIpInfoAbsent(clientIpInfo, ctx)) {
+      String origContext = ctx == null ? null : ctx.getContext();
+      byte[] origSignature = ctx == null ? null : ctx.getSignature();
+      CallerContext.setCurrent(
+          new CallerContext.Builder(origContext, contextFieldSeparator)
+              .append(clientIpInfo)
+              .setSignature(origSignature)
+              .build());
+    }
+    LOG.info("New CallerContext = " + CallerContext.getCurrent().getContext());
+  }
+
+  private boolean isClientIpInfoAbsent(String clientIpInfo, CallerContext ctx){
+    return ctx == null || ctx.getContext() == null
+        || !ctx.getContext().contains(clientIpInfo);
+  }
+  
   /**
    * YARN Router forwards every getNewApplication requests to any RM. During
    * this operation there will be no communication with the State Store. The
@@ -475,6 +514,7 @@ public class FederationClientInterceptor
 
       SubmitApplicationResponse response = null;
       try {
+        appendClientIpToCallerContextIfAbsent();
         response = clientRMProxy.submitApplication(request);
       } catch (Exception e) {
         LOG.warn("Unable to submit the application " + applicationId
@@ -584,6 +624,7 @@ public class FederationClientInterceptor
     try {
       LOG.info("forceKillApplication " + applicationId + " on SubCluster "
           + subClusterId);
+      appendClientIpToCallerContextIfAbsent();
       response = clientRMProxy.forceKillApplication(request);
     } catch (Exception e) {
       routerMetrics.incrAppsFailedKilled();
