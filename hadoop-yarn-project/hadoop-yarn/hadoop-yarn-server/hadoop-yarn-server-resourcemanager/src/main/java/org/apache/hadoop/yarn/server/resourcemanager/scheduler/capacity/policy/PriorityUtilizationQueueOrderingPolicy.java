@@ -53,6 +53,7 @@ import java.util.function.Supplier;
  */
 public class PriorityUtilizationQueueOrderingPolicy
     implements QueueOrderingPolicy {
+
   private List<CSQueue> queues;
   private boolean respectPriority;
 
@@ -218,7 +219,6 @@ public class PriorityUtilizationQueueOrderingPolicy
     // copy and sort queues, so it's safe for multi-threading environment.
     PriorityUtilizationQueueOrderingPolicy.partitionToLookAt.set(partition);
     List<CSQueue> sortedQueue = new ArrayList<>(queues);
-    Collections.sort(sortedQueue, new PriorityQueueComparator());
     return sortedQueue.iterator();
   }
 
