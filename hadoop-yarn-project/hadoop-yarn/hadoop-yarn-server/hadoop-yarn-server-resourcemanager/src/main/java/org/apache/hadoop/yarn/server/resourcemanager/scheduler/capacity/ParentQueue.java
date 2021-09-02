@@ -782,12 +782,7 @@ public class ParentQueue extends AbstractCSQueue {
 
   private Iterator<CSQueue> sortAndGetChildrenAllocationIterator(
       String partition) {
-    try {
-      readLock.lock();
-      return queueOrderingPolicy.getAssignmentIterator(partition);
-    } finally {
-      readLock.unlock();
-    }
+    return queueOrderingPolicy.getAssignmentIterator(partition);
   }
 
   private CSAssignment assignContainersToChildQueues(Resource cluster,
