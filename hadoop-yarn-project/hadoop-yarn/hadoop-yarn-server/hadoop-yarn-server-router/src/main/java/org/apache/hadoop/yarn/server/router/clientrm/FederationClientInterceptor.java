@@ -269,9 +269,11 @@ public class FederationClientInterceptor
    * It adds trace info "realClientIp:ip" to caller context if it's absent.
    */
   private void appendClientIpToCallerContextIfAbsent() {
-    LOG.info("Old CallerContext = " + CallerContext.getCurrent().getContext());
     String clientIpInfo = CLIENT_IP_STR + ":" + Server.getRemoteAddress();
     final CallerContext ctx = CallerContext.getCurrent();
+    if(LOG.isDebugEnabled()){
+      LOG.debug("origCallerContext = " + ((ctx == null) ? "" : ctx.getContext()));
+    }
     if (isClientIpInfoAbsent(clientIpInfo, ctx)) {
       String origContext = ctx == null ? null : ctx.getContext();
       byte[] origSignature = ctx == null ? null : ctx.getSignature();
@@ -281,7 +283,10 @@ public class FederationClientInterceptor
               .setSignature(origSignature)
               .build());
     }
-    LOG.info("New CallerContext = " + CallerContext.getCurrent().getContext());
+    if(LOG.isDebugEnabled()){
+      LOG.debug("newCallerContext = " + ((CallerContext.getCurrent() == null) ?
+          "" : CallerContext.getCurrent().getContext()));
+    }
   }
 
   private boolean isClientIpInfoAbsent(String clientIpInfo, CallerContext ctx){
