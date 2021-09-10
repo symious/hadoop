@@ -866,4 +866,17 @@ public class TestRouterAdminCLI {
     assertEquals(dest, mountTable.getDestinations().get(0).getDest());
     assertEquals(order, mountTable.getDestOrder());
   }
+
+  @Test
+  public void testRefreshCallQueue() throws Exception {
+
+    System.setOut(new PrintStream(out));
+    String[] argv = new String[]{"-refreshCallQueue"};
+    assertEquals(0, ToolRunner.run(admin, argv));
+    assertTrue(out.toString().contains("Refresh call queue successfully"));
+
+    argv = new String[]{"-refreshCallQueue", "-reload"};
+    assertEquals(0, ToolRunner.run(admin, argv));
+    assertTrue(out.toString().contains("Refresh call queue successfully"));
+  }
 }

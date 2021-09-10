@@ -19,6 +19,9 @@ package org.apache.hadoop.hdfs.tools.federation;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,9 +64,14 @@ import org.apache.hadoop.hdfs.server.federation.store.protocol.RemoveMountTableE
 import org.apache.hadoop.hdfs.server.federation.store.protocol.UpdateMountTableEntryRequest;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.UpdateMountTableEntryResponse;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
+import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
+import org.apache.hadoop.ipc.RefreshCallQueueProtocol.RefreshCallQueueType;
 import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolClientSideTranslatorPB;
+import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolPB;
 import org.apache.hadoop.net.NetUtils;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -111,7 +119,8 @@ public class RouterAdmin extends Configured implements Tool {
         + "\t[-safemode enter | leave | get]\n"
         + "\t[-nameservice enable | disable <nameservice>]\n"
         + "\t[-getDisabledNameservices]\n"
-        + "\t[-refresh]\n";
+        + "\t[-refresh]\n"
+        + "\t[-refreshCallQueue] [-reload]\n";
 
     System.out.println(usage);
   }
@@ -234,6 +243,8 @@ public class RouterAdmin extends Configured implements Tool {
           System.out.println(
               "Successfully updated mount table cache on router " + address);
         }
+      } else if ("-refreshCallQueue".equals(cmd)) {
+        exitCode = refreshCallQueue(argv);
       } else {
         printUsage();
         return exitCode;
@@ -833,6 +844,53 @@ public class RouterAdmin extends Configured implements Tool {
         client.getMountTableManager().refreshMountTableEntries(
             RefreshMountTableEntriesRequest.newInstance());
     return response.getResult();
+  }
+
+  /**
+   * Refresh Router's call Queue.
+   *
+   * @throws IOException if the operation was not successful.
+   */
+  private int refreshCallQueue(String[] argv) throws IOException {
+    List<RefreshCallQueueType> types = new ArrayList<>();
+    if (argv != null) {
+      List<String> args = new ArrayList<>(Arrays.asList(argv));
+      if (StringUtils.popOption("-reload", args)) {
+        types.add(RefreshCallQueueType.RELOAD);
+      }
+    }
+    if (types.isEmpty()) {
+      types.add(RefreshCallQueueType.REFRESH);
+    }
+    EnumSet<RefreshCallQueueType> refreshCallQueueTypes = EnumSet.copyOf(types);
+
+    Configuration conf = getConf();
+    String hostport =  getConf().getTrimmed(
+        RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_KEY,
+        RBFConfigKeys.DFS_ROUTER_ADMIN_ADDRESS_DEFAULT);
+
+    // Create the client
+    Class<?> xface = RefreshCallQueueProtocolPB.class;
+    InetSocketAddress address = NetUtils.createSocketAddr(hostport);
+    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+
+    RPC.setProtocolEngine(conf, xface, ProtobufRpcEngine.class);
+    RefreshCallQueueProtocolPB proxy = (RefreshCallQueueProtocolPB)RPC.getProxy(
+        xface, RPC.getProtocolVersion(xface), address, ugi, conf,
+        NetUtils.getDefaultSocketFactory(conf), 0);
+
+    int returnCode = -1;
+    try (RefreshCallQueueProtocolClientSideTranslatorPB xlator =
+        new RefreshCallQueueProtocolClientSideTranslatorPB(proxy)) {
+      xlator.refreshCallQueue(refreshCallQueueTypes);
+      System.out.println("Refresh call queue " + refreshCallQueueTypes +
+          " successfully for " + hostport);
+      returnCode = 0;
+    } catch (IOException ioe){
+      System.out.println("Refresh call queue " + refreshCallQueueTypes +
+          " unsuccessfully for " + hostport);
+    }
+    return returnCode;
   }
 
   /**

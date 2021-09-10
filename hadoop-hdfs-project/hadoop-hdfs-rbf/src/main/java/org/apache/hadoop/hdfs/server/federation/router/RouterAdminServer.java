@@ -22,11 +22,13 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_ENABLED_KEY;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.EnumSet;
 import java.util.Set;
 
 import com.google.common.base.Preconditions;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.proto.RouterProtocolProtos.RouterAdminProtocolService;
@@ -65,6 +67,10 @@ import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RPC.Server;
+import org.apache.hadoop.ipc.RefreshCallQueueProtocol;
+import org.apache.hadoop.ipc.proto.RefreshCallQueueProtocolProtos;
+import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolPB;
+import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolServerSideTranslatorPB;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.AbstractService;
@@ -79,7 +85,8 @@ import com.google.protobuf.BlockingService;
  * router. It is created, started, and stopped by {@link Router}.
  */
 public class RouterAdminServer extends AbstractService
-    implements MountTableManager, RouterStateManager, NameserviceManager {
+    implements MountTableManager, RouterStateManager, NameserviceManager,
+    RefreshCallQueueProtocol {
 
   private static final Logger LOG =
       LoggerFactory.getLogger(RouterAdminServer.class);
@@ -150,6 +157,15 @@ public class RouterAdminServer extends AbstractService
     this.adminAddress = new InetSocketAddress(
         confRpcAddress.getHostName(), listenAddress.getPort());
     router.setAdminServerAddress(this.adminAddress);
+
+    RefreshCallQueueProtocolServerSideTranslatorPB refreshCallQueueXlator =
+        new RefreshCallQueueProtocolServerSideTranslatorPB(this);
+    BlockingService refreshCallQueueService =
+        RefreshCallQueueProtocolProtos.RefreshCallQueueProtocolService.
+        newReflectiveBlockingService(refreshCallQueueXlator);
+
+    DFSUtil.addPBProtocol(conf, RefreshCallQueueProtocolPB.class,
+        refreshCallQueueService, adminServer);
   }
 
   /**
@@ -421,6 +437,24 @@ public class RouterAdminServer extends AbstractService
     Set<String> nsIds =
         getDisabledNameserviceStore().getDisabledNameservices();
     return GetDisabledNameservicesResponse.newInstance(nsIds);
+  }
+
+
+  @Override
+  public void refreshCallQueue() throws IOException {
+    LOG.info("Refreshing call queue.");
+
+    Configuration configuration = new Configuration();
+    router.getRpcServer().getServer().refreshCallQueue(configuration);
+  }
+
+  @Override
+  public void refreshCallQueue(EnumSet<RefreshCallQueueType> types)
+      throws IOException {
+    LOG.info("Refreshing call queue with RefreshCallQueueType: " + types);
+
+    Configuration conf = new Configuration();
+    router.getRpcServer().getServer().refreshCallQueue(conf, types);
   }
 
   /**
