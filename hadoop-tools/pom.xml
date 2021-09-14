@@ -50,6 +50,7 @@
     <module>hadoop-azure</module>
     <module>hadoop-azure-datalake</module>
     <module>hadoop-aliyun</module>
+    <module>hadoop-fastcopy</module>
   </modules>
 
   <build>
