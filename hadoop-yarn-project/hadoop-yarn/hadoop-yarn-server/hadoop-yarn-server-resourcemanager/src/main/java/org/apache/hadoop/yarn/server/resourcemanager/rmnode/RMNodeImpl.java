@@ -1453,7 +1453,7 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       RMNodeStatusEvent statusEvent) {
     RMContext context = rmNode.context;
     // Check if scheduler is ready
-    if (null == context || !context.isSchedulerReadyForAllocatingContainers()) {
+    if (null == context || !context.isSchedulerReady()) {
       return true;
     }
 

@@ -151,6 +151,8 @@ public interface RMContext extends ApplicationMasterServiceContext {
   ReservationSystem getReservationSystem();
 
   boolean isSchedulerReadyForAllocatingContainers();
+
+  boolean isSchedulerReady();
   
   Configuration getYarnConfiguration();
   

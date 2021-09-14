@@ -567,6 +567,10 @@ public class RMContextImpl implements RMContext {
     return activeServiceContext.isSchedulerReadyForAllocatingContainers();
   }
 
+  public boolean isSchedulerReady() {
+    return activeServiceContext.isSchedulerReady();
+  }
+
   @Private
   @VisibleForTesting
   public void setSystemClock(Clock clock) {
