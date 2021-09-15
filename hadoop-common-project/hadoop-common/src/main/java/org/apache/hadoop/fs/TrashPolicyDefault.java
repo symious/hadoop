@@ -179,7 +179,7 @@ public class TrashPolicyDefault extends TrashPolicy {
   }
 
   private Path correctTrashPath(Path src, Path dst) {
-    String[] split = dst.toString().split("/");
+    String[] split = dst.toUri().getPath().split("/");
     // Old format is /user/$USER/.Trash/Current/abcxyz....
     String user = split[2];
 
