@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.datanode;
 
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -40,6 +41,7 @@ import org.apache.hadoop.test.GenericTestUtils;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.type.TypeReference;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.mortbay.util.ajax.JSON;
 
@@ -53,9 +55,16 @@ public class TestDataNodeMXBean {
 
   public static final Log LOG = LogFactory.getLog(TestDataNodeMXBean.class);
 
+  Configuration conf = new Configuration();
+
+  @Before
+  public void setup() throws IOException {
+    conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY,
+        true);
+  }
+
   @Test
   public void testDataNodeMXBean() throws Exception {
-    Configuration conf = new Configuration();
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).build();
 
     try {
@@ -100,6 +109,9 @@ public class TestDataNodeMXBean {
       int xmitsInProgress =
           (Integer) mbs.getAttribute(mxbeanName, "XmitsInProgress");
       Assert.assertEquals(datanode.getXmitsInProgress(), xmitsInProgress);
+      int xlinksInprogress =
+          (Integer) mbs.getAttribute(mxbeanName, "XlinksInprogress");
+      Assert.assertEquals(datanode.getXlinksInprogress(), xlinksInprogress);
       String bpActorInfo = (String)mbs.getAttribute(mxbeanName,
           "BPServiceActorInfo");
       Assert.assertEquals(datanode.getBPServiceActorInfo(), bpActorInfo);
@@ -118,7 +130,6 @@ public class TestDataNodeMXBean {
 
   @Test
   public void testDataNodeMXBeanBlockSize() throws Exception {
-    Configuration conf = new Configuration();
 
     try(MiniDFSCluster cluster =
         new MiniDFSCluster.Builder(conf).build()) {
@@ -160,7 +171,6 @@ public class TestDataNodeMXBean {
 
   @Test
   public void testDataNodeMXBeanBlockCount() throws Exception {
-    Configuration conf = new Configuration();
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).build();
 
     try {
@@ -215,7 +225,6 @@ public class TestDataNodeMXBean {
 
   @Test
   public void testDataNodeMXBeanSlowDisksEnabled() throws Exception {
-    Configuration conf = new Configuration();
     conf.setInt(DFSConfigKeys
         .DFS_DATANODE_FILEIO_PROFILING_SAMPLING_PERCENTAGE_KEY, 100);
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).build();

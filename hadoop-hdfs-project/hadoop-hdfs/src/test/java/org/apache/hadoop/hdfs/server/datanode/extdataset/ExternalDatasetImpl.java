@@ -455,4 +455,9 @@ public class ExternalDatasetImpl implements FsDatasetSpi<ExternalVolumeImpl> {
       throws IOException {
     return Collections.EMPTY_SET;
   }
+
+  @Override
+  public void hardLinkOneBlock(ExtendedBlock srcBlock, ExtendedBlock dstBlock)
+    throws IOException {
+  }
 }

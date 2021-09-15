@@ -34,11 +34,13 @@ import org.apache.hadoop.hdfs.client.BlockReportOptions;
 import org.apache.hadoop.hdfs.protocol.BlockLocalPathInfo;
 import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.DatanodeLocalInfo;
 import org.apache.hadoop.hdfs.protocol.DatanodeVolumeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsBlocksMetadata;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.CopyBlockRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.DeleteBlockPoolRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.EvictWritersRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.GetBalancerBandwidthRequestProto;
@@ -393,6 +395,21 @@ public class ClientDatanodeProtocolTranslatorPB implements
             PBHelperClient.convertStorageType(proto.getStorageType())));
       }
       return volumeInfoList;
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+  }
+
+  @Override
+  public void copyBlock(ExtendedBlock src, ExtendedBlock dst,
+      DatanodeInfo dstDn) throws IOException {
+    CopyBlockRequestProto request = CopyBlockRequestProto.newBuilder()
+        .setSrcBlock(PBHelperClient.convert(src))
+        .setDstBlock(PBHelperClient.convert(dst))
+        .setDstDn(PBHelperClient.convert(dstDn))
+        .build();
+    try {
+      rpcProxy.copyBlock(NULL_CONTROLLER, request);
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
     }

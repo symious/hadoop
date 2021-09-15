@@ -27,6 +27,8 @@ import org.apache.hadoop.hdfs.protocol.BlockLocalPathInfo;
 import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.HdfsBlocksMetadata;
 import org.apache.hadoop.hdfs.protocol.DatanodeVolumeInfo;
+import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.CopyBlockRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.CopyBlockResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.DeleteBlockPoolRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.DeleteBlockPoolResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.EvictWritersRequestProto;
@@ -86,6 +88,8 @@ public class ClientDatanodeProtocolServerSideTranslatorPB implements
       TriggerBlockReportResponseProto.newBuilder().build();
   private final static EvictWritersResponseProto EVICT_WRITERS_RESP =
       EvictWritersResponseProto.newBuilder().build();
+  private final static CopyBlockResponseProto COPY_BLOCK_RESP =
+      CopyBlockResponseProto.newBuilder().build();
   
   private final ClientDatanodeProtocol impl;
 
@@ -302,5 +306,18 @@ public class ClientDatanodeProtocolServerSideTranslatorPB implements
     } catch (Exception e) {
       throw new ServiceException(e);
     }
+  }
+
+  @Override
+  public CopyBlockResponseProto copyBlock(RpcController controller,
+      CopyBlockRequestProto request) throws ServiceException {
+    try {
+      impl.copyBlock(PBHelperClient.convert(request.getSrcBlock()),
+          PBHelperClient.convert(request.getDstBlock()),
+          PBHelperClient.convert(request.getDstDn()));
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
+    return COPY_BLOCK_RESP;
   }
 }

@@ -669,4 +669,16 @@ public interface FsDatasetSpi<V extends FsVolumeSpi> extends FSDatasetMBean {
    * @throws IOException
    */
   Set<? extends Replica> deepCopyReplica(String bpid) throws IOException;
+
+  /**
+   * Copies over a block from a block file
+   *
+   * @param srcBlock
+   *          the source block which needs to be copied
+   * @param dstBlock
+   *          the destination block to which the srcBlock needs to be copied to
+   * @throws IOException
+   */
+  public void hardLinkOneBlock(ExtendedBlock srcBlock, ExtendedBlock dstBlock)
+    throws IOException;
 }

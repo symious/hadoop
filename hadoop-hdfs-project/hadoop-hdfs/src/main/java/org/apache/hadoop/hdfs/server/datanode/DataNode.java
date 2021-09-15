@@ -326,6 +326,7 @@ public class DataNode extends ReconfigurableBase
   private String clusterId = null;
 
   final AtomicInteger xmitsInProgress = new AtomicInteger();
+  final AtomicInteger xlinksInprogress = new AtomicInteger();
   Daemon dataXceiverServer = null;
   DataXceiverServer xserver = null;
   Daemon localDataXceiverServer = null;
@@ -409,6 +410,8 @@ public class DataNode extends ReconfigurableBase
 
   private ScheduledThreadPoolExecutor metricsLoggerTimer;
 
+  private final ExecutorService blockCopyExecutor;
+
   /**
    * Creates a dummy DataNode for testing purpose.
    */
@@ -432,6 +435,7 @@ public class DataNode extends ReconfigurableBase
     initOOBTimeout();
     storageLocationChecker = null;
     volumeChecker = new DatasetVolumeChecker(conf, new Timer());
+    this.blockCopyExecutor = null;
   }
 
   /**
@@ -518,6 +522,7 @@ public class DataNode extends ReconfigurableBase
 
     initOOBTimeout();
     this.storageLocationChecker = storageLocationChecker;
+    this.blockCopyExecutor = Executors.newCachedThreadPool();
   }
 
   @Override  // ReconfigurableBase
@@ -2193,6 +2198,11 @@ public class DataNode extends ReconfigurableBase
     return xmitsInProgress.get();
   }
 
+  @Override //DataNodeMXBean
+  public int getXlinksInprogress() {
+    return xlinksInprogress.get();
+  }
+
   private void reportBadBlock(final BPOfferService bpos,
       final ExtendedBlock block, final String msg) {
     FsVolumeSpi volume = getFSDataset().getVolume(block);
@@ -3442,5 +3452,170 @@ public class DataNode extends ReconfigurableBase
       volumeInfoList.add(dnStorageInfo);
     }
     return volumeInfoList;
+  }
+
+  @Override
+  public void copyBlock(ExtendedBlock src, ExtendedBlock dst, DatanodeInfo dstDn)
+      throws IOException {
+    if (!data.isValidBlock(src)) {
+      // block does not exist or is under-construction
+      String errStr = "copyBlock:(" + this.getInfoPort() + ") Can't send invalid block " + src
+          + " " + data.getReplicaString(src.getBlockPoolId(), src.getBlockId());
+      LOG.error(errStr);
+      throw new IOException(errStr);
+    }
+    long onDiskLength = data.getLength(src);
+    if (src.getNumBytes() > onDiskLength) {
+      // Shorter on-disk len indicates corruption so report NN the corrupt block
+      String msg = "copyBlock: Can't replicate block " + src
+          + " because on-disk length " + onDiskLength
+          + " is shorter than provided length " + src.getNumBytes();
+      LOG.error(msg);
+      throw new IOException(msg);
+    }
+    LOG.info(getDatanodeInfo() + " copyBlock: Starting thread to transfer: " +
+        "block:"  +  src + " from " + this.getDatanodeUuid() + " to " + dstDn.getDatanodeUuid() +
+        "(" +dstDn + ")");
+    Future<?> result;
+    if (this.getDatanodeUuid().equals(dstDn.getDatanodeUuid())) {
+      result = blockCopyExecutor.submit(new LocalBlockCopy(src, dst));
+    } else {
+      result = blockCopyExecutor.submit(new DataCopy(dstDn, src, dst));
+    }
+    try {
+      // Wait for 5 minutes.
+      result.get(5 * 60, TimeUnit.SECONDS);
+    } catch (Exception e) {
+      LOG.error(e.getMessage());
+      throw new IOException(e);
+    }
+  }
+
+  private class DataCopy implements Runnable {
+    final DatanodeInfo target;
+    final ExtendedBlock src;
+    final ExtendedBlock dst;
+
+    /**
+     * Connect to the first item in the target list.  Pass along the
+     * entire target list, the block, and the data.
+     */
+    DataCopy(DatanodeInfo target, ExtendedBlock src, ExtendedBlock dst) {
+      this.target = target;
+      this.src = src;
+      this.dst = dst;
+    }
+
+    /**
+     * Do the deed, write the bytes
+     */
+    @Override
+    public void run() {
+      xmitsInProgress.getAndIncrement();
+      Socket sock = null;
+      DataOutputStream out = null;
+      DataInputStream in = null;
+      BlockSender blockSender = null;
+      CachingStrategy cachingStrategy =
+          new CachingStrategy(true, getDnConf().readaheadLength);
+      BPOfferService bpos = blockPoolManager.get(src.getBlockPoolId());
+      DatanodeRegistration bpReg = bpos.bpRegistration;
+      try {
+        final String dnAddr = target.getXferAddr(connectToDnViaHostname);
+        InetSocketAddress curTarget = NetUtils.createSocketAddr(dnAddr);
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Connecting to datanode " + dnAddr);
+        }
+        sock = newSocket();
+        NetUtils.connect(sock, curTarget, dnConf.socketTimeout);
+        sock.setSoTimeout(dnConf.socketTimeout);
+        //
+        // Header info
+        //
+        Token<BlockTokenIdentifier> accessToken = BlockTokenSecretManager.DUMMY_TOKEN;
+        if (isBlockTokenEnabled) {
+          accessToken = blockPoolTokenSecretManager.generateToken(dst,
+              EnumSet.of(BlockTokenIdentifier.AccessMode.WRITE));
+        }
+
+        long writeTimeout = dnConf.socketWriteTimeout;
+        OutputStream unbufOut = NetUtils.getOutputStream(sock, writeTimeout);
+        InputStream unbufIn = NetUtils.getInputStream(sock);
+        DataEncryptionKeyFactory keyFactory =
+            getDataEncryptionKeyFactoryForBlock(dst);
+        IOStreamPair saslStreams = saslClient.socketSend(sock, unbufOut,
+            unbufIn, keyFactory, accessToken, bpReg);
+        unbufOut = saslStreams.out;
+        unbufIn = saslStreams.in;
+
+        out = new DataOutputStream(new BufferedOutputStream(unbufOut,
+            DFSUtilClient.getSmallBufferSize(getConf())));
+        in = new DataInputStream(unbufIn);
+        blockSender = new BlockSender(src, 0, src.getNumBytes(),
+            false, false, true, DataNode.this, null, cachingStrategy);
+        DatanodeInfo srcNode = new DatanodeInfoBuilder().setNodeID(bpReg)
+            .build();
+
+        new Sender(out).writeBlock(dst, StorageType.DEFAULT, accessToken,
+            "", new DatanodeInfo[]{target}, new StorageType[]{StorageType.DEFAULT}, srcNode,
+            BlockConstructionStage.PIPELINE_SETUP_CREATE,
+            0, 0, 0, 0, blockSender.getChecksum(), cachingStrategy,
+            false, false, null);
+
+        // send data & checksum
+        blockSender.sendBlock(out, unbufOut, null);
+
+        // no response necessary
+        LOG.info(getClass().getSimpleName() + ": Copyed " + src
+            + " (numBytes=" + src.getNumBytes() + ") to " + curTarget + " " + dst);
+      } catch (IOException ie) {
+        LOG.warn(bpReg + ":Failed to transfer " + src + " to " +
+            target + " " + dst + " got ", ie);
+        // check if there are any disk problem
+        checkDiskErrorAsync(getFSDataset().getVolume(src));
+      } finally {
+        xmitsInProgress.getAndDecrement();
+        IOUtils.closeStream(blockSender);
+        IOUtils.closeStream(out);
+        IOUtils.closeStream(in);
+        IOUtils.closeSocket(sock);
+      }
+    }
+  }
+
+  class LocalBlockCopy implements Callable<Boolean> {
+    private ExtendedBlock srcBlock = null;
+    private ExtendedBlock dstBlock = null;
+
+    public LocalBlockCopy(ExtendedBlock src, ExtendedBlock dst) throws IOException {
+      this.srcBlock = src;
+      this.dstBlock = dst;
+    }
+
+    public Boolean call() throws Exception {
+      try {
+        xlinksInprogress.getAndIncrement();
+        dstBlock.setNumBytes(srcBlock.getNumBytes());
+        data.hardLinkOneBlock(srcBlock, dstBlock);
+        FsVolumeSpi v = (FsVolumeSpi)(getFSDataset().getVolume(dstBlock));
+        closeBlock(dstBlock, null, v.getStorageID(), v.isTransientStorage());
+
+        BlockLocalPathInfo srcBlpi = data.getBlockLocalPathInfo(srcBlock);
+        BlockLocalPathInfo dstBlpi = data.getBlockLocalPathInfo(dstBlock);
+        LOG.info(getClass().getSimpleName() + ": Hardlinked "
+            + srcBlock
+            + "( " + srcBlpi.getBlockPath() + " " + srcBlpi.getMetaPath() + " ) "
+            + "to "
+            + dstBlock
+            + "( " + dstBlpi.getBlockPath() + " " + dstBlpi.getMetaPath() + " ) ");
+      } catch (Exception e) {
+        LOG.warn("Local block copy for src : " + srcBlock.getBlockName()
+            + ", dst : " + dstBlock.getBlockName() + " failed", e);
+        throw e;
+      } finally {
+        xlinksInprogress.getAndDecrement();
+      }
+      return true;
+    }
   }
 }
