@@ -147,7 +147,7 @@ class Delete {
     }
 
     private boolean inTrash(PathData item) {
-      return item.path.toString().startsWith("/Trash");
+      return item.path.toUri().getPath().startsWith("/Trash");
     }
 
     private boolean moveToTrash(PathData item) throws IOException {
