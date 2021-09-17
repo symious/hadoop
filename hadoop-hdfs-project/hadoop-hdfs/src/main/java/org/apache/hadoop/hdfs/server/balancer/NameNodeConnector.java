@@ -108,8 +108,8 @@ public class NameNodeConnector implements Closeable {
   final AtomicBoolean fallbackToSimpleAuth = new AtomicBoolean(false);
 
   private final DistributedFileSystem fs;
-  private final Path idPath;
-  private final OutputStream out;
+  private Path idPath;
+  private OutputStream out;
   private final List<Path> targetPaths;
   private final AtomicLong bytesMoved = new AtomicLong();
   private final AtomicLong blocksMoved = new AtomicLong();
@@ -118,12 +118,12 @@ public class NameNodeConnector implements Closeable {
   private int notChangedIterations = 0;
   private final RateLimiter getBlocksRateLimiter;
 
-  public NameNodeConnector(String name, URI nameNodeUri, Path idPath,
-                           List<Path> targetPaths, Configuration conf,
-                           int maxNotChangedIterations)
+  //Allow several same service run at the same time, skip the id path check
+  public NameNodeConnector(URI nameNodeUri, List<Path> targetPaths,
+      Configuration conf, int maxNotChangedIterations)
       throws IOException {
     this.nameNodeUri = nameNodeUri;
-    this.idPath = idPath;
+
     this.targetPaths = targetPaths == null || targetPaths.isEmpty() ? Arrays
         .asList(new Path("/")) : targetPaths;
     this.maxNotChangedIterations = maxNotChangedIterations;
@@ -148,12 +148,20 @@ public class NameNodeConnector implements Closeable {
     final FsServerDefaults defaults = fs.getServerDefaults(new Path("/"));
     this.keyManager = new KeyManager(blockpoolID, namenode,
         defaults.getEncryptDataTransfer(), conf);
+  }
+
+  public NameNodeConnector(String name, URI nameNodeUri, Path idPath,
+      List<Path> targetPaths, Configuration conf, int maxNotChangedIterations)
+      throws IOException {
+    this(nameNodeUri, targetPaths, conf, maxNotChangedIterations);
+    this.idPath = idPath;
     // if it is for test, we do not create the id file
     out = checkAndMarkRunning();
     if (out == null) {
       // Exit if there is another one running.
       throw new IOException("Another " + name + " is running.");
     }
+
   }
 
   public DistributedFileSystem getDistributedFileSystem() {

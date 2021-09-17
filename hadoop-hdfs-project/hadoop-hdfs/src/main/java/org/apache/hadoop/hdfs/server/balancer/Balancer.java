@@ -219,9 +219,9 @@ public class Balancer {
    */
   private static void checkReplicationPolicyCompatibility(Configuration conf
       ) throws UnsupportedActionException {
-    if (conf.get(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY) ==
-      "org.apache.hadoop.hdfs.server.blockmanagement." +
-          "BlockPlacementPolicyWithDataCenter") {
+    if (conf.get(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY).equals(
+        "org.apache.hadoop.hdfs.server.blockmanagement." +
+            "BlockPlacementPolicyWithDataCenter")) {
       LOG.info("Block placement policy of Namenode is " +
           "BlockPlacementPolicyWithDataCenter, " +
           "balancer will use BlockPlacementPolicyDefault.");
