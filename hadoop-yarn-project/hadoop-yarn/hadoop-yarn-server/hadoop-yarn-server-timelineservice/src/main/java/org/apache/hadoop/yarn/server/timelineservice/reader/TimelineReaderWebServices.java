@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.timelineservice.reader;
 
+import java.io.IOException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -3544,6 +3545,38 @@ public class TimelineReaderWebServices {
     }
 
     return entities;
+  }
+
+  @GET
+  @Path("/tics/{tic}")
+  @Produces(MediaType.APPLICATION_JSON + "; " + JettyUtils.UTF_8)
+  public String getAppId(@Context HttpServletRequest req,
+      @Context HttpServletResponse res,
+      @PathParam("tic") String tic) {
+    String url = req.getRequestURI() +
+        (req.getQueryString() == null ? "" :
+            QUERY_STRING_SEP + req.getQueryString());
+    UserGroupInformation callerUGI =
+        TimelineReaderWebServicesUtils.getUser(req);
+    LOG.info("Received URL " + url + " from user " +
+        TimelineReaderWebServicesUtils.getUserName(callerUGI));
+    long startTime = Time.monotonicNow();
+    boolean succeeded = false;
+    init(res);
+    TimelineReaderManager timelineReaderManager = getTimelineReaderManager();
+    TimelineReaderContext context = TimelineReaderWebServicesUtils
+        .createTimelineReaderContext(null, null, null, null, null,
+            "TIC", null, tic);
+    TimelineEntity entity = null;
+    try {
+      entity = timelineReaderManager.getEntity(context, null);
+    } catch (IOException e) {
+      handleException(e, url, startTime, null);
+    }
+    if (entity == null) {
+      throw new NotFoundException("Tic " + tic + " not found");
+    }
+    return entity.getId();
   }
 
   static boolean isDisplayEntityPerUserFilterEnabled(Configuration config) {

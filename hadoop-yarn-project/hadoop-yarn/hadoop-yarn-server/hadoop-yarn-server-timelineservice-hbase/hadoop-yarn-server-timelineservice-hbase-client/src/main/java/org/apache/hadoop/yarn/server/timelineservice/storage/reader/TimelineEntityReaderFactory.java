@@ -51,6 +51,8 @@ public final class TimelineEntityReaderFactory {
     } else if (TimelineEntityType.
         YARN_FLOW_ACTIVITY.matches(context.getEntityType())) {
       return new FlowActivityEntityReader(context, dataToRetrieve);
+    } else if (context.getEntityType().equals("TIC")) {
+      return new TicToAppReader(context, dataToRetrieve);
     } else {
       // assume we're dealing with a generic entity read
       return new GenericEntityReader(context, dataToRetrieve);
