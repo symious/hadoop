@@ -207,8 +207,7 @@ public class ApplicationHistoryServer extends CompositeService {
         conf.get(YarnConfiguration.APPLICATION_HISTORY_STORE).length() == 0 ||
         conf.get(YarnConfiguration.APPLICATION_HISTORY_STORE).equals(
             NullApplicationHistoryStore.class.getName())) {
-      return new ApplicationHistoryManagerOnTimelineStore(
-          timelineDataManager, aclsManager);
+      return new ApplicationHistoryManagerOnHBase();
     } else {
       LOG.warn("The filesystem based application history store is deprecated.");
       return new ApplicationHistoryManagerImpl();
