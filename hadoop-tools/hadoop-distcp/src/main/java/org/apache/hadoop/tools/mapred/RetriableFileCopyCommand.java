@@ -21,7 +21,9 @@ package org.apache.hadoop.tools.mapred;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.List;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -34,12 +36,14 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Options.ChecksumOpt;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.tools.CopyListingFileStatus;
 import org.apache.hadoop.tools.DistCpConstants;
 import org.apache.hadoop.tools.DistCpOptionSwitch;
 import org.apache.hadoop.tools.DistCpOptions.FileAttribute;
+import org.apache.hadoop.tools.FastCopy;
 import org.apache.hadoop.tools.mapred.CopyMapper.FileAction;
 import org.apache.hadoop.tools.util.DistCpUtils;
 import org.apache.hadoop.tools.util.RetriableCommand;
@@ -167,22 +171,45 @@ public class RetriableFileCopyCommand extends RetriableCommand {
       CopyListingFileStatus source, long sourceOffset, Mapper.Context context,
       EnumSet<FileAttribute> fileAttributes, final FileChecksum sourceChecksum)
       throws IOException {
+    Configuration conf = context.getConfiguration();
     FsPermission permission = FsPermission.getFileDefault().applyUMask(
         FsPermission.getUMask(targetFS.getConf()));
-    int copyBufferSize = context.getConfiguration().getInt(
+    int copyBufferSize = conf.getInt(
         DistCpOptionSwitch.COPY_BUFFER_SIZE.getConfigLabel(),
         DistCpConstants.COPY_BUFFER_SIZE_DEFAULT);
     final OutputStream outStream;
+    FastCopy fcp = null;
     if (action == FileAction.OVERWRITE) {
-      final short repl = getReplicationFactor(fileAttributes, source,
-          targetFS, targetPath);
-      final long blockSize = getBlockSize(fileAttributes, source,
-          targetFS, targetPath);
-      FSDataOutputStream out = targetFS.create(targetPath, permission,
-          EnumSet.of(CreateFlag.CREATE, CreateFlag.OVERWRITE),
-          copyBufferSize, repl, blockSize, context,
-          getChecksumOpt(fileAttributes, sourceChecksum));
-      outStream = new BufferedOutputStream(out);
+      if (fastCopyEnable(conf)) {
+        try {
+          fcp = new FastCopy(conf);
+          FastCopy.CopyResult result =
+              fcp.copy(source.getPath().toString(),targetPath.toString(),
+                  (DistributedFileSystem) source.getPath().getFileSystem(conf),
+                  (DistributedFileSystem) targetFS);
+          if (result != FastCopy.CopyResult.SUCCESS) {
+            LOG.error("Failed to fast copy on file " + source.getPath());
+          }
+          return source.getLen();
+        } catch (Exception e) {
+          throw new IOException("Failed to fast copy on file " + source.getPath(), e);
+        } finally {
+          if (fcp != null) {
+            fcp.shutdown();
+          }
+        }
+      } else {
+        final short repl = getReplicationFactor(fileAttributes, source,
+            targetFS, targetPath);
+        final long blockSize = getBlockSize(fileAttributes, source,
+            targetFS, targetPath);
+        FSDataOutputStream out = targetFS.create(targetPath, permission,
+            EnumSet.of(CreateFlag.CREATE, CreateFlag.OVERWRITE),
+            copyBufferSize, repl, blockSize, context,
+            getChecksumOpt(fileAttributes, sourceChecksum));
+        outStream = new BufferedOutputStream(out);
+      }
+
     } else {
       outStream = new BufferedOutputStream(targetFS.append(targetPath,
           copyBufferSize));
@@ -191,6 +218,9 @@ public class RetriableFileCopyCommand extends RetriableCommand {
         context);
   }
 
+  private boolean fastCopyEnable(Configuration conf) {
+    return conf.getBoolean(DistCpConstants.CONF_LABEL_FAST_COPY_ENABLE, false);
+  }
   private void compareFileLengths(CopyListingFileStatus source, Path target,
                                   Configuration configuration, long targetLen)
                                   throws IOException {

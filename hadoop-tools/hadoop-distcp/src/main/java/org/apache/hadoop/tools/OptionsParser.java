@@ -192,6 +192,10 @@ public class OptionsParser {
       option.setVerboseLog(true);
     }
 
+    if (command.hasOption(DistCpOptionSwitch.FAST_COPY_ENABLE.getSwitch())) {
+      option.setFastCopyEnable(true);
+    }
+
     return option;
   }
 

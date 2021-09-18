@@ -216,7 +216,13 @@ public enum DistCpOptionSwitch {
    */
   FILTERS(DistCpConstants.CONF_LABEL_FILTERS_FILE,
       new Option("filters", true, "The path to a file containing a list of"
-          + " strings for paths to be excluded from the copy."));
+          + " strings for paths to be excluded from the copy.")),
+
+  /**
+   * Use fast copy.
+   */
+  FAST_COPY_ENABLE(DistCpConstants.CONF_LABEL_FAST_COPY_ENABLE,
+      new Option("fastCopyEnable", false, "Use fast copy if this argument set."));
 
 
   public static final String PRESERVE_STATUS_DEFAULT = "-prbugpct";

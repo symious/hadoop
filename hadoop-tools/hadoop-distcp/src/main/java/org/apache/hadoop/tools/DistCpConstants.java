@@ -135,6 +135,12 @@ public class DistCpConstants {
       = "ssl.client.keystore.location";
 
   /**
+   * Conf label for fast copy.
+   */
+  public static final String CONF_LABEL_FAST_COPY_ENABLE
+      = "distcp.fast.copy.enable";
+
+  /**
    * Constants for DistCp return code to shell / consumer of ToolRunner's run
    */
   public static final int SUCCESS = 0;

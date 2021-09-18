@@ -533,6 +533,38 @@ public class TestDistCpOptions {
   }
 
   @Test
+  public void testFastCopyEnable() {
+    DistCpOptions options = new DistCpOptions(
+        Collections.singletonList(
+            new Path("hdfs://localhost:8020/source")),
+        new Path("hdfs://localhost:8020/target/"));
+    options.setFastCopyEnable(true);
+    Assert.assertEquals(true, options.getFastCopyEnable());
+
+    try {
+      options.setSyncFolder(true);
+      options.setAppend(true);
+      fail("Couldn't use fast copy with append");
+    } catch (IllegalArgumentException e) {
+      assertExceptionContains("Couldn't use fast copy with append", e);
+    }
+
+    try {
+      options.setUseDiff("s1", "s2");
+      fail("Couldn't use fast copy with append");
+    } catch (IllegalArgumentException e) {
+      assertExceptionContains("Couldn't use fast copy with diff", e);
+    }
+
+    try {
+      options.setUseRdiff("s1", "s2");
+      fail("Couldn't use fast copy with append");
+    } catch (IllegalArgumentException e) {
+      assertExceptionContains("Couldn't use fast copy with rdiff", e);
+    }
+  }
+
+  @Test
   public void testAppendToConf() {
     final int expectedBlocksPerChunk = 999;
     final String expectedValForEmptyConfigKey = "VALUE_OF_EMPTY_CONFIG_KEY";

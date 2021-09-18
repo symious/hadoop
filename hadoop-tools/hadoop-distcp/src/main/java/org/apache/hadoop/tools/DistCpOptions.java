@@ -112,6 +112,11 @@ public class DistCpOptions {
    */
   private int copyBufferSize = DistCpConstants.COPY_BUFFER_SIZE_DEFAULT;
 
+  /**
+   * Use fast copy.
+   */
+  private boolean fastCopyEnable = false;
+
   public static enum FileAttribute{
     REPLICATION, BLOCKSIZE, USER, GROUP, PERMISSION, CHECKSUMTYPE, ACL, XATTR, TIMES;
 
@@ -184,6 +189,7 @@ public class DistCpOptions {
       this.blocksPerChunk = that.blocksPerChunk;
       this.copyBufferSize = that.copyBufferSize;
       this.verboseLog = that.verboseLog;
+      this.fastCopyEnable = that.fastCopyEnable;
     }
   }
 
@@ -669,6 +675,15 @@ public class DistCpOptions {
     return verboseLog;
   }
 
+  public void setFastCopyEnable(boolean newFastCopyEnable) {
+    validate(DistCpOptionSwitch.FAST_COPY_ENABLE, newFastCopyEnable);
+    this.fastCopyEnable = newFastCopyEnable;
+  }
+
+  public boolean getFastCopyEnable() {
+    return fastCopyEnable;
+  }
+
   public void validate(DistCpOptionSwitch option, boolean value) {
 
     boolean syncFolder = (option == DistCpOptionSwitch.SYNC_FOLDERS ?
@@ -686,6 +701,8 @@ public class DistCpOptions {
     boolean useRdiff = (option == DistCpOptionSwitch.RDIFF ? value : this.useRdiff);
     boolean shouldVerboseLog = (option == DistCpOptionSwitch.VERBOSE_LOG ?
         value : this.verboseLog);
+    boolean fastCopyEnable = (option == DistCpOptionSwitch.FAST_COPY_ENABLE) ?
+        value : this.fastCopyEnable;
 
     if (syncFolder && atomicCommit) {
       throw new IllegalArgumentException("Atomic commit can't be used with " +
@@ -735,6 +752,18 @@ public class DistCpOptions {
     if (shouldVerboseLog && logPath == null) {
       throw new IllegalArgumentException("-v is valid only with -log option");
     }
+
+    if (fastCopyEnable && append) {
+      throw new IllegalArgumentException("Couldn't use fast copy with append");
+    }
+
+    if (fastCopyEnable && useDiff) {
+      throw new IllegalArgumentException("Couldn't use fast copy with diff");
+    }
+
+    if (fastCopyEnable && useRdiff) {
+      throw new IllegalArgumentException("Couldn't use fast copy with rdiff");
+    }
   }
 
   /**
@@ -775,6 +804,8 @@ public class DistCpOptions {
         String.valueOf(copyBufferSize));
     DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.VERBOSE_LOG,
         String.valueOf(verboseLog));
+    DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.FAST_COPY_ENABLE,
+        String.valueOf(fastCopyEnable));
   }
 
   /**
@@ -814,6 +845,7 @@ public class DistCpOptions {
         ", blocksPerChunk=" + blocksPerChunk +
         ", copyBufferSize=" + copyBufferSize +
         ", verboseLog=" + verboseLog +
+        ", fastCopyEnable=" + fastCopyEnable +
         '}';
   }
 
