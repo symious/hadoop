@@ -88,6 +88,13 @@
       </includes>
     </fileSet>
     <fileSet>
+      <directory>../hadoop-fastcopy/target</directory>
+      <outputDirectory>/share/hadoop/${hadoop.component}/sources</outputDirectory>
+      <includes>
+        <include>*-sources.jar</include>
+      </includes>
+    </fileSet>
+    <fileSet>
       <directory>../hadoop-federation-balance/target</directory>
       <outputDirectory>/share/hadoop/${hadoop.component}/sources</outputDirectory>
       <includes>

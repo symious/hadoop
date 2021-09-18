@@ -564,7 +564,7 @@ public class TestDistCpSystem {
         new FileEntry(SRCDAT + "/file", false)
     };
 
-    final String testRoot = "/testdir";
+    final String testRoot = "/testFastCopyDir";
     final String testSrcRel = SRCDAT;
     final String testSrc = testRoot + "/" + testSrcRel;
     final String testDstRel = DSTDAT;
@@ -583,9 +583,9 @@ public class TestDistCpSystem {
       fs.setOwner(srcstats[i].getPath(), "u" + i, null);
     }
     String[] args = new String[] {
+        "-fastCopyEnable",
         nnUri + testSrc,
         nnUri + testDst,
-        "-fastCopyEnable"
     };
 
     ToolRunner.run(conf, new DistCp(), args);
