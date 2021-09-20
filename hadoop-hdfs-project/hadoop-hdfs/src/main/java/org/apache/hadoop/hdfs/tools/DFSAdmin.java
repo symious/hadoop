@@ -435,6 +435,7 @@ public class DFSAdmin extends FsShell {
     "\t[-rollEdits]\n" +
     "\t[-restoreFailedStorage true|false|check]\n" +
     "\t[-refreshNodes]\n" +
+    "\t[-refreshTopology <ipAddr>]\n" +
     "\t[" + SetQuotaCommand.USAGE + "]\n" +
     "\t[" + ClearQuotaCommand.USAGE +"]\n" +
     "\t[" + SetSpaceQuotaCommand.USAGE + "]\n" +
@@ -1141,6 +1142,9 @@ public class DFSAdmin extends FsShell {
       "\t\tDecommissioned nodes are not automatically shutdown and \n" +
       "\t\tare not chosen for writing new replicas.\n";
 
+    String refreshTopology = "-refreshTopology <ipAddr>: Updates the topology " +
+        "of the specific node in NameNode.\n";
+
     String finalizeUpgrade = "-finalizeUpgrade: Finalize upgrade of HDFS.\n" +
       "\t\tDatanodes delete their previous version working directories,\n" +
       "\t\tfollowed by Namenode doing the same.\n" + 
@@ -1276,6 +1280,8 @@ public class DFSAdmin extends FsShell {
       System.out.println(restoreFailedStorage);
     } else if ("refreshNodes".equals(cmd)) {
       System.out.println(refreshNodes);
+    } else if ("refreshTopology".equals(cmd)) {
+      System.out.println(refreshTopology);
     } else if ("finalizeUpgrade".equals(cmd)) {
       System.out.println(finalizeUpgrade);
     } else if (RollingUpgradeCommand.matches("-"+cmd)) {
@@ -1340,6 +1346,7 @@ public class DFSAdmin extends FsShell {
       System.out.println(rollEdits);
       System.out.println(restoreFailedStorage);
       System.out.println(refreshNodes);
+      System.out.println(refreshTopology);
       System.out.println(finalizeUpgrade);
       System.out.println(RollingUpgradeCommand.DESCRIPTION);
       System.out.println(metaSave);
