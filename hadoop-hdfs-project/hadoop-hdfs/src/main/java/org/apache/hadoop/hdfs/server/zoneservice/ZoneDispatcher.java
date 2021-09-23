@@ -280,6 +280,9 @@ public class ZoneDispatcher extends Dispatcher {
 
   @Override
   public void executePendingMove(final PendingMove p) {
+    if (!(p instanceof ZonePendingMove)) {
+      throw new IllegalArgumentException("ZonePendingMove instance is needed!");
+    }
     final ZonePendingMove zpv = (ZonePendingMove) p;
     dispatchExecutor.execute(new Runnable() {
       @Override
