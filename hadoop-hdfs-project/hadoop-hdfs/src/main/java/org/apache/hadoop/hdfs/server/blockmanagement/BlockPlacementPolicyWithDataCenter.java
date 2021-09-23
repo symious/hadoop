@@ -269,15 +269,15 @@ public class BlockPlacementPolicyWithDataCenter extends
       throws NotEnoughReplicasException {
 
     if ((base == null) || !scope.equals(NodeBase.ROOT)) {
-      if (LOG.isDebugEnabled()) {
-        if (base == null) {
-          LOG.debug("(base.loc=null" +
-              ", base.name=null" +
-              ", numOfReplicas=" + numOfReplicas +
-              ", scope=" + scope +
-              ", results.size=" + results.size() +
-              ")");
-        } else {
+      if (base == null) {
+        LOG.warn("(base.loc=null" +
+            ", base.name=null" +
+            ", numOfReplicas=" + numOfReplicas +
+            ", scope=" + scope +
+            ", results.size=" + results.size() +
+            ")");
+      } else {
+        if (LOG.isDebugEnabled()) {
           LOG.debug("(base.loc=" + base.getNetworkLocation() +
               ", base.name=" + base.getName() +
               ", numOfReplicas=" + numOfReplicas +
