@@ -141,7 +141,7 @@ public class HadoopArchiveLogs implements Tool {
     Path remoteRootLogDir = new Path(conf.get(
         YarnConfiguration.NM_REMOTE_APP_LOG_DIR,
         YarnConfiguration.DEFAULT_NM_REMOTE_APP_LOG_DIR));
-    String suffix = LogAggregationUtils.getRemoteNodeLogDirSuffix(conf);
+    String suffix = LogAggregationUtils.getBucketSuffix();
     Path workingDir = new Path(remoteRootLogDir, "archive-logs-work");
     if (verbose) {
       LOG.info("Remote Log Dir Root: " + remoteRootLogDir);
