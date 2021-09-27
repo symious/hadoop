@@ -1870,7 +1870,13 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   }
 
   private static String getClientMachine() {
-    String clientMachine = Server.getRemoteAddress();
+    String clientMachine;
+    String proxyMachine = Server.getProxyHostAddress();
+    if (proxyMachine != null) {
+      clientMachine = proxyMachine;
+      return clientMachine;
+    }
+    clientMachine = Server.getRemoteAddress();
     if (clientMachine == null) { //not a RPC client
       clientMachine = "";
     }

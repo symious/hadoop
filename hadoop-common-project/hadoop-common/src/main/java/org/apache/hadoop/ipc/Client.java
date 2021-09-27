@@ -107,6 +107,7 @@ public class Client implements AutoCloseable {
           return false;
         }
       };
+  private static final ThreadLocal<String> PROXY_HOSTNAME = new ThreadLocal<>();
 
   @SuppressWarnings("unchecked")
   @Unstable
@@ -487,7 +488,8 @@ public class Client implements AutoCloseable {
         RpcRequestHeaderProto pingHeader = ProtoUtil
             .makeRpcRequestHeader(RpcKind.RPC_PROTOCOL_BUFFER,
                 OperationProto.RPC_FINAL_PACKET, PING_CALL_ID,
-                RpcConstants.INVALID_RETRY_COUNT, clientId);
+                RpcConstants.INVALID_RETRY_COUNT, clientId,
+                PROXY_HOSTNAME.get(),null);
         pingHeader.writeDelimitedTo(buf);
         pingRequest = buf.toByteArray();
       }
@@ -1041,7 +1043,8 @@ public class Client implements AutoCloseable {
       RpcRequestHeaderProto connectionContextHeader = ProtoUtil
           .makeRpcRequestHeader(RpcKind.RPC_PROTOCOL_BUFFER,
               OperationProto.RPC_FINAL_PACKET, CONNECTION_CONTEXT_CALL_ID,
-              RpcConstants.INVALID_RETRY_COUNT, clientId);
+              RpcConstants.INVALID_RETRY_COUNT, clientId,
+              PROXY_HOSTNAME.get(), null);
       // do not flush.  the context and first ipc call request must be sent
       // together to avoid possibility of broken pipes upon authz failure.
       // see writeConnectionHeader
@@ -1152,7 +1155,7 @@ public class Client implements AutoCloseable {
       // Items '1' and '2' are prepared here. 
       RpcRequestHeaderProto header = ProtoUtil.makeRpcRequestHeader(
           call.rpcKind, OperationProto.RPC_FINAL_PACKET, call.id, call.retry,
-          clientId, call.alignmentContext);
+          clientId, PROXY_HOSTNAME.get(), call.alignmentContext);
 
       final ResponseBuffer buf = new ResponseBuffer();
       header.writeDelimitedTo(buf);
@@ -1552,6 +1555,21 @@ public class Client implements AutoCloseable {
   @VisibleForTesting
   int getAsyncCallCount() {
     return asyncCallCounter.get();
+  }
+
+  /**
+   * Set proxy hostname for RPC.
+   * @param hostname
+   */
+  public static void setProxyHostname(String hostname) {
+    PROXY_HOSTNAME.set(hostname);
+  }
+
+  /**
+   * Clear proxy hostname for RPC.
+   */
+  public static void clearProxyHostname() {
+    PROXY_HOSTNAME.set(null);
   }
 
   /** @return the rpc response or, in case of timeout, null. */

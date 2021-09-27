@@ -65,6 +65,7 @@ import org.apache.hadoop.io.retry.RetryPolicies;
 import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.io.retry.RetryPolicy.RetryAction.RetryDecision;
 import org.apache.hadoop.ipc.CallerContext;
+import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.ipc.ObserverRetryOnActiveException;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.Server;
@@ -122,6 +123,7 @@ public class RouterRpcClient {
   private final String contextFieldSeparator;
 
   private final boolean observerReadEnabled;
+  private final boolean addProxyHostname;
 
   private long autoMsyncPeriodMs;
 
@@ -196,6 +198,9 @@ public class RouterRpcClient {
           RBFConfigKeys.DFS_ROUTER_OBSERVER_AUTO_MSYNC_PERIOD_DEFAULT);
       this.lastMsyncTimes = new HashMap<>();
     }
+    this.addProxyHostname=
+        conf.getBoolean(RBFConfigKeys.DFS_ROUTER_PROXY_HOSTNAME_ENABLE,
+            RBFConfigKeys.DFS_ROUTER_PROXY_HOSTNAME_ENABLED_DEFAULT);
   }
 
   /**
@@ -393,6 +398,7 @@ public class RouterRpcClient {
     }
 
     appendClientIpToCallerContextIfAbsent();
+    appendProxyHostname();
 
     Object ret = null;
     if (rpcMonitor != null) {
@@ -511,12 +517,19 @@ public class RouterRpcClient {
               .setSignature(origSignature)
               .build());
     }
- }
+  }
 
   private boolean isClientIpInfoAbsent(String clientIpInfo, CallerContext ctx){
     return ctx == null || ctx.getContext() == null
         || !ctx.getContext().contains(clientIpInfo);
   }
+
+  private void appendProxyHostname() {
+    if (addProxyHostname) {
+      Client.setProxyHostname(Server.getRemoteAddress());
+    }
+  }
+
 
   /**
    * Invokes a method on the designated object. Catches exceptions specific to

@@ -475,6 +475,21 @@ public class TestRpcBase {
 
       return TestProtos.EmptyResponseProto.newBuilder().build();
     }
+
+    @Override
+    public TestProtos.GetProxyHostnameResponseProto getProxyHostname(
+        RpcController controller,
+        TestProtos.GetProxyHostnameRequestProto request) {
+      String proxyHostname = Server.getProxyHostAddress();
+      return newProxyHostnameResponse(proxyHostname);
+    }
+
+    private TestProtos.GetProxyHostnameResponseProto newProxyHostnameResponse(
+        String hostname) {
+      return TestProtos.GetProxyHostnameResponseProto.newBuilder()
+          .setMessage(hostname)
+          .build();
+    }
   }
 
   protected static TestProtos.EmptyRequestProto newEmptyRequest() {
@@ -524,5 +539,9 @@ public class TestRpcBase {
 
   protected static String convert(TestProtos.AuthUserResponseProto response) {
     return response.getAuthUser();
+  }
+
+  protected static TestProtos.GetProxyHostnameRequestProto newGetProxyHostnameRequest() {
+    return TestProtos.GetProxyHostnameRequestProto.newBuilder().build();
   }
 }

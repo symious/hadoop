@@ -302,4 +302,8 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
       FEDERATION_ROUTER_PREFIX + "dn-report.cache-expire";
   public static final long DN_REPORT_CACHE_EXPIRE_MS_DEFAULT =
       TimeUnit.SECONDS.toMillis(10);
+
+  public static final String DFS_ROUTER_PROXY_HOSTNAME_ENABLE =
+      FEDERATION_ROUTER_PREFIX + "proxy.hostname.enable";
+  public static final boolean DFS_ROUTER_PROXY_HOSTNAME_ENABLED_DEFAULT = false;
 }
