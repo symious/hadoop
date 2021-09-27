@@ -173,9 +173,13 @@ public class BlockPlacementPolicyWithDataCenter extends
           blocksize, maxNodesPerRack, results, avoidStaleNodes, storageTypes);
     } catch (NotEnoughReplicasException e) {
       // find the next replica and retry with its rack
+      String localDataCenter = DFSNetworkTopologyWithDataCenter.getDataCenter(
+          localMachine.getNetworkLocation());
       for(DatanodeStorageInfo resultStorage : results) {
         DatanodeDescriptor nextNode = resultStorage.getDatanodeDescriptor();
-        if (nextNode != localMachine) {
+        String nextDataCenter = DFSNetworkTopologyWithDataCenter.getDataCenter(
+            nextNode.getNetworkLocation());
+        if ((nextNode != localMachine) && (localDataCenter.equals(nextDataCenter))) {
           if (LOG.isDebugEnabled()) {
             LOG.debug("Failed to choose from local rack (location = " + localRack
                 + "), retry with the rack of the next replica (location = "
