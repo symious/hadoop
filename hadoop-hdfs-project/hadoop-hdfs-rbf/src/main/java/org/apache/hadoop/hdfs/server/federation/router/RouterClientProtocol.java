@@ -2244,6 +2244,9 @@ public class RouterClientProtocol implements ClientProtocol {
       if (locations.isEmpty()){
         return listings;
       }
+      if (locations.size() == 1) {
+        invokeType = INVOKE_TYPE_SEQUENTIAL;
+      }
       RemoteMethod method = new RemoteMethod("getListing",
         new Class<?>[]{String.class, startAfter.getClass(), boolean.class},
         new RemoteParam(), startAfter, needLocation);
