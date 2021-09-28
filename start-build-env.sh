@@ -79,6 +79,26 @@ RUN useradd -g ${GROUP_ID} -u ${USER_ID} -k /root -m ${USER_NAME} -d "${DOCKER_H
 RUN echo "${USER_NAME} ALL=NOPASSWD: ALL" > "/etc/sudoers.d/hadoop-build-${USER_ID}"
 ENV HOME "${DOCKER_HOME_DIR}"
 
+######
+# Intel ISA-L 2.29.0
+######
+# hadolint ignore=DL3003,DL3008
+RUN mkdir -p /opt/isa-l-src \
+    && apt-get -q update \
+    && apt-get install -y --no-install-recommends automake yasm \
+    && apt-get clean \
+    && curl -L -s -S \
+      https://github.com/intel/isa-l/archive/v2.29.0.tar.gz \
+      -o /opt/isa-l.tar.gz \
+    && tar xzf /opt/isa-l.tar.gz --strip-components 1 -C /opt/isa-l-src \
+    && cd /opt/isa-l-src \
+    && ./autogen.sh \
+    && ./configure \
+    && make \
+    && make install \
+    && cd /root \
+    && rm -rf /opt/isa-l-src
+
 UserSpecificDocker
 
 #If this env varible is empty, docker will be started
