@@ -382,6 +382,15 @@ public class YarnConfiguration extends Configuration {
   public static final String RM_SCHEDULER_SLOWNODE_CHECK_ENABLED =
       RM_PREFIX + "slownode.check.enabled";
   public static final boolean RM_SCHEDULER_SLOWNODE_CHECK_ENABLED_DEFAULT = false;
+
+  public static final String RM_SCHEDULER_BADNODE_CHECK_LABEL_LIST =
+      RM_PREFIX + "badnode.check.label.list";
+  public static String RM_SCHEDULER_BADNODE_CHECK_LABEL_LIST_DEFAULT = "";
+
+  public static String RM_SCHEDULER_BADNODE_CHECK_ALL_LABELS = "*";
+
+  public static String RM_SCHEDULER_BADNODE_CHECK_NO_LABEL = "no_label";
+
   public static final String RM_SCHEDULER_LOAD1_WATERMARK_HIGH =
       RM_PREFIX + "load1.watermark.high";
   public static final String RM_SCHEDULER_LOAD5_WATERMARK_HIGH =
@@ -397,6 +406,11 @@ public class YarnConfiguration extends Configuration {
   public static final String RM_SCHEDULER_AVAILABLE_MEM_WATERMARK =
       RM_PREFIX + "available.mem.watermark";
   public static final int RM_SCHEDULER_AVAILABLE_MEM_WATERMARK_DEFAULT = 120;
+
+  //Maximum number of failed Containers in the period range
+  public static final String RM_SCHEDULER_FAILED_CONTAINERS_WATERMARK =
+      RM_PREFIX + "period.failed.containers.watermark.high";
+  public static final int RM_SCHEDULER_FAILED_CONTAINERS_WATERMARK_DEFAULT = 100;
 
   /** The expiry interval for application master reporting.*/
   public static final String RM_AM_EXPIRY_INTERVAL_MS = 
@@ -1936,6 +1950,11 @@ public class YarnConfiguration extends Configuration {
   public static final String NM_RESOURCE_MON_INTERVAL_MS =
       NM_PREFIX + "resource-monitor.interval-ms";
   public static final int DEFAULT_NM_RESOURCE_MON_INTERVAL_MS = 3000;
+
+  /** How often to monitor failed containers in a node.*/
+  public static final String NM_FAILED_CONTAINERS_MON_INTERVAL_MS =
+      NM_PREFIX + "failed-containers-monitor.interval-ms";
+  public static final int DEFAULT_NM_FAILED_CONTAINERS_MON_INTERVAL_MS = -1;
 
   public static final String NM_CONTAINER_MONITOR_ENABLED =
       NM_PREFIX + "container-monitor.enabled";

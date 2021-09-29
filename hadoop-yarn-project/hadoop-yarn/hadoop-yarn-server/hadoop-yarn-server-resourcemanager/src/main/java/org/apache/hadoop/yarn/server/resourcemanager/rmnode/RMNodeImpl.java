@@ -19,6 +19,7 @@
 package org.apache.hadoop.yarn.server.resourcemanager.rmnode;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -36,6 +37,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 import org.apache.commons.collections.keyvalue.DefaultMapEntry;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.yarn.server.api.records.NodeStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,14 +100,20 @@ import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTest
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.DEFAULT_RM_EVENT_BASE_NUMBER;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_AVAILABLE_MEM_WATERMARK;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_AVAILABLE_MEM_WATERMARK_DEFAULT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_BADNODE_CHECK_ALL_LABELS;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_BADNODE_CHECK_LABEL_LIST_DEFAULT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_BADNODE_CHECK_NO_LABEL;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_FAILED_CONTAINERS_WATERMARK;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_FAILED_CONTAINERS_WATERMARK_DEFAULT;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD1_WATERMARK_HIGH;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD1_WATERMARK_HIGH_DEFAULT;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD5_WATERMARK_HIGH;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD5_WATERMARK_HIGH_DEFAULT;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_SLOWNODE_CHECK_ENABLED;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_SLOWNODE_CHECK_ENABLED_DEFAULT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_BADNODE_CHECK_LABEL_LIST;
 
 /**
  * This class is used to keep track of all the applications/containers
@@ -1452,6 +1460,8 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
   private boolean isGoodNodeManager(RMNodeImpl rmNode,
       RMNodeStatusEvent statusEvent) {
     RMContext context = rmNode.context;
+    ClusterMetrics metrics = ClusterMetrics.getMetrics();
+
     // Check if scheduler is ready
     if (null == context || !context.isSchedulerReady()) {
       return true;
@@ -1488,9 +1498,6 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
             availableMemWatermark);
       }
 
-      //record metrics
-      ClusterMetrics metrics = ClusterMetrics.getMetrics();
-
       if (load1 > load1WatermarkHigh) {
         metrics.incrHighLoad1Skipped();
         return false;
@@ -1512,7 +1519,62 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       }
     }
 
+    if (shouldCheckNodeFailContainersRate(context.getYarnConfiguration().
+            get(RM_SCHEDULER_BADNODE_CHECK_LABEL_LIST,
+                RM_SCHEDULER_BADNODE_CHECK_LABEL_LIST_DEFAULT),
+            rmNode.getNodeLabels())) {
+
+      int periodFailedContainers = statusEvent.getPeriodFailedContainers();
+
+      int failedContainersWatermarkHigh = context.getYarnConfiguration()
+          .getInt(RM_SCHEDULER_FAILED_CONTAINERS_WATERMARK,
+              RM_SCHEDULER_FAILED_CONTAINERS_WATERMARK_DEFAULT);
+
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("CHECKING:" + " Info of NODE: " + rmNode.getHostName() +
+            ", periodFailedContainers:" + periodFailedContainers);
+      }
+
+      if (periodFailedContainers > failedContainersWatermarkHigh) {
+        metrics.incrHighFailedContainersSkipped();
+        LOG.warn("Found a high fail rate node: " + rmNode.getHostName() +
+            " ,periodFailedContainers: " + periodFailedContainers + " and " +
+            "skipped to assign containers on it!");
+        return false;
+      }
+    }
+
     return true;
+  }
+
+  public boolean shouldCheckNodeFailContainersRate(String badNodeCheckLabels,
+      Set<String> nodeLabelSet){
+
+    if(StringUtils.isBlank(badNodeCheckLabels)){
+      return false;
+    }
+
+    if(badNodeCheckLabels.equals(RM_SCHEDULER_BADNODE_CHECK_ALL_LABELS)){
+      return true;
+    }
+
+    Set<String> badNodeCheckLabelSet = new HashSet<>(Arrays.asList(
+        badNodeCheckLabels.split(",")));
+
+    if(nodeLabelSet == null){
+      return false;
+    }
+
+    if(nodeLabelSet.size() == 0 &&
+        badNodeCheckLabelSet.contains(RM_SCHEDULER_BADNODE_CHECK_NO_LABEL)){
+      return true;
+    }
+
+    if(nodeLabelSet.size() > 0 && badNodeCheckLabelSet.containsAll(nodeLabelSet)){
+      return true;
+    }
+
+    return false;
   }
 
   public static class StatusUpdateWhenUnHealthyTransition implements

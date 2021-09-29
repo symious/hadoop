@@ -100,4 +100,8 @@ public class RMNodeStatusEvent extends RMNodeEvent {
   public int getAvailableMem() {
     return nodeStatus.getAvailableMem();
   }
+
+  public int getPeriodFailedContainers() {
+    return nodeStatus.getPeriodFailedContainers();
+  }
 }

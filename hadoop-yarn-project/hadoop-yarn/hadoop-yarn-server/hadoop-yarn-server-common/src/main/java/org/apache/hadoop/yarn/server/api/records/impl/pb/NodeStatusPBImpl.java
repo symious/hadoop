@@ -474,6 +474,18 @@ public class NodeStatusPBImpl extends NodeStatus {
     this.builder.setAvailableMem(availableMem);
   }
 
+  @Override
+  public synchronized int getPeriodFailedContainers() {
+    NodeStatusProtoOrBuilder p = this.viaProto ? this.proto : this.builder;
+    return (p.getPeriodFailedContainers());
+  }
+
+  @Override
+  public synchronized void setPeriodFailedContainers(int failedContainers) {
+    maybeInitBuilder();
+    this.builder.setPeriodFailedContainers(failedContainers);
+  }
+
   private NodeIdProto convertToProtoFormat(NodeId nodeId) {
     return ((NodeIdPBImpl)nodeId).getProto();
   }

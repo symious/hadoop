@@ -97,6 +97,8 @@ public interface Context {
 
   NodeResourceMonitor getNodeResourceMonitor();
 
+  NodeFailedContainersMonitor getNodeFailedContainersMonitor();
+
   LocalDirsHandlerService getLocalDirsHandler();
 
   ApplicationACLsManager getApplicationACLsManager();

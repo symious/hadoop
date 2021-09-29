@@ -138,6 +138,7 @@ public class NodeManager extends CompositeService
   private NodeStatusUpdater nodeStatusUpdater;
   private AtomicBoolean resyncingWithRM = new AtomicBoolean(false);
   private NodeResourceMonitor nodeResourceMonitor;
+  private NodeFailedContainersMonitor nodeFailedContainersMonitor;
   private static CompositeServiceShutdownHook nodeManagerShutdownHook;
   private NMStateStoreService nmStore = null;
   
@@ -243,6 +244,10 @@ public class NodeManager extends CompositeService
 
   protected NodeResourceMonitor createNodeResourceMonitor() {
     return new NodeResourceMonitorImpl(context);
+  }
+
+  protected NodeFailedContainersMonitor createNodeFailedContainersMonitor() {
+    return new NodeFailedContainersMonitorImpl(context);
   }
 
   protected ContainerManagerImpl createContainerManager(Context context,
@@ -434,6 +439,11 @@ public class NodeManager extends CompositeService
     nodeResourceMonitor = createNodeResourceMonitor();
     addService(nodeResourceMonitor);
     ((NMContext) context).setNodeResourceMonitor(nodeResourceMonitor);
+
+    nodeFailedContainersMonitor = createNodeFailedContainersMonitor();
+    addService(nodeFailedContainersMonitor);
+    ((NMContext) context).setNodeFailedContainersMonitor(
+        nodeFailedContainersMonitor);
 
     containerManager =
         createContainerManager(context, exec, del, nodeStatusUpdater,
@@ -638,6 +648,7 @@ public class NodeManager extends CompositeService
     private final NMTokenSecretManagerInNM nmTokenSecretManager;
     private ContainerManager containerManager;
     private NodeResourceMonitor nodeResourceMonitor;
+    private NodeFailedContainersMonitor nodeFailedContainersMonitor;
     private final LocalDirsHandlerService dirsHandler;
     private final ApplicationACLsManager aclsManager;
     private WebServer webServer;
@@ -744,6 +755,16 @@ public class NodeManager extends CompositeService
 
     public void setNodeResourceMonitor(NodeResourceMonitor nodeResourceMonitor) {
       this.nodeResourceMonitor = nodeResourceMonitor;
+    }
+
+    @Override
+    public NodeFailedContainersMonitor getNodeFailedContainersMonitor() {
+      return this.nodeFailedContainersMonitor;
+    }
+
+    public void setNodeFailedContainersMonitor(NodeFailedContainersMonitor
+        nodeFailedContainersMonitor) {
+      this.nodeFailedContainersMonitor = nodeFailedContainersMonitor;
     }
 
     @Override

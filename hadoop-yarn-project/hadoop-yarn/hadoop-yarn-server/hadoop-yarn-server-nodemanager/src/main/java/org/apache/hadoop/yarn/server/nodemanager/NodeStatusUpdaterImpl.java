@@ -571,9 +571,13 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
         (int) (sysInfo.getAvailablePhysicalMemorySize() / 1024 / 1024 / 1024);
     nodeStatus.setAvailableMem(availableMem);
 
+    int periodFailedContainers = getPeriodFailedContainers();
+    nodeStatus.setPeriodFailedContainers(periodFailedContainers);
+
     if (LOG.isDebugEnabled()) {
       LOG.debug("Info of Node, core: " + coreNumber + ", load1: " + load1 +
-          ", load5: " + load5 + ", availableMem:" + availableMem);
+          ", load5: " + load5 + ", availableMem:" + availableMem +
+          ", periodFailedContainers: " + periodFailedContainers);
     }
     return nodeStatus;
   }
@@ -607,6 +611,17 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
         (NodeResourceMonitorImpl) this.context.getNodeResourceMonitor();
     return nodeResourceMonitor.getUtilization();
   }
+
+  /**
+   * Get the failed containers of the node during a period.
+   * @return Resource failed containers of the node during a period.
+   */
+  private int getPeriodFailedContainers() {
+    NodeFailedContainersMonitorImpl nodeFailedContainersMonitor =
+        (NodeFailedContainersMonitorImpl) this.context.getNodeFailedContainersMonitor();
+    return nodeFailedContainersMonitor.getPeriodFailedContainers();
+  }
+
 
   /* Get the containers whose resource has been increased since last
    * NM-RM heartbeat.

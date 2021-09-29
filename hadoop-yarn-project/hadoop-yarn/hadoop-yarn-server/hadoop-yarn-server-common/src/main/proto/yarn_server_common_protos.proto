@@ -45,6 +45,7 @@ message NodeStatusProto {
   optional float load5 = 11;
   optional int32 disk_usage = 12;
   optional int32 available_mem = 13;
+  optional int32 period_failed_containers = 14;
 }
 
 message OpportunisticContainersStatusProto {

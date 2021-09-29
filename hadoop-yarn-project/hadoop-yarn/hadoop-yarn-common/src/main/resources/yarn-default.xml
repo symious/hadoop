@@ -263,6 +263,21 @@
   </property>
 
   <property>
+    <name>yarn.resourcemanager.badnode.check.label.list</name>
+    <value></value>
+  </property>
+
+  <property>
+    <name>yarn.resourcemanager.period.failed.containers.watermark.high</name>
+    <value>100</value>
+  </property>
+
+  <property>
+    <name>yarn.nodemanager.failed-containers-monitor.interval-ms</name>
+    <value>-1</value>
+  </property>
+
+  <property>
     <description>
     The Kerberos keytab file to be used for spnego filter for the RM web
     interface.

@@ -164,4 +164,12 @@ public abstract class NodeStatus {
   @Private
   @Unstable
   public abstract void setAvailableMem(int availableMem);
+
+  @Private
+  @Unstable
+  public abstract int getPeriodFailedContainers();
+
+  @Private
+  @Unstable
+  public abstract void setPeriodFailedContainers(int failedContainers);
 }

@@ -50,6 +50,7 @@ import org.apache.hadoop.yarn.server.nodemanager.ContainerStateTransitionListene
 import org.apache.hadoop.yarn.server.nodemanager.Context;
 import org.apache.hadoop.yarn.server.nodemanager.DeletionService;
 import org.apache.hadoop.yarn.server.nodemanager.LocalDirsHandlerService;
+import org.apache.hadoop.yarn.server.nodemanager.NodeFailedContainersMonitor;
 import org.apache.hadoop.yarn.server.nodemanager.NodeManager.NMContext;
 import org.apache.hadoop.yarn.server.nodemanager.NodeResourceMonitor;
 import org.apache.hadoop.yarn.server.nodemanager.NodeStatusUpdater;
@@ -774,6 +775,11 @@ public abstract class BaseAMRMProxyTest {
 
     @Override
     public NodeResourceMonitor getNodeResourceMonitor() {
+      return null;
+    }
+
+    @Override
+    public NodeFailedContainersMonitor getNodeFailedContainersMonitor() {
       return null;
     }
 
