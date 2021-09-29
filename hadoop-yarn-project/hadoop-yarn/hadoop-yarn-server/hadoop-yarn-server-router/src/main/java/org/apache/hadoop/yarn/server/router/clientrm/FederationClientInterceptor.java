@@ -353,9 +353,9 @@ public class FederationClientInterceptor
         LOG.debug("getNewApplication subClustersActive.keySet()= " +
             subClustersActive.keySet());
 
-        //If all of sub-clusters can't new a applicationId, the last sub-cluster
+        //If last try still can't new a applicationId, the last sub-cluster
         // feedback error message is thrown
-        if(subClustersActive.size() == 0){
+        if(i == (numSubmitRetries - 1)){
           routerMetrics.incrAppsFailedCreated();
           RouterAuditLogger.logFailure(user.toString(),
               RouterAuditLogger.AuditConstants.GET_NEW_APP, "UNKNOWN",
@@ -468,7 +468,7 @@ public class FederationClientInterceptor
 
       SubClusterId subClusterId = policyFacade.getHomeSubcluster(
           request.getApplicationSubmissionContext(), blacklist);
-      LOG.info("submitApplication appId" + applicationId + " try #" + i
+      LOG.info("submitApplication appId " + applicationId + " try #" + i
           + " on SubCluster " + subClusterId);
 
       ApplicationHomeSubCluster appHomeSubCluster =
@@ -539,20 +539,9 @@ public class FederationClientInterceptor
             "RouterClientRMService", applicationId, subClusterId);
         return response;
       } else {
-        // Empty response from the ResourceManager.
-        // Blacklist this subcluster for this request.
-        blacklist.add(subClusterId);
-
-        Map<SubClusterId, SubClusterInfo> subClustersActive =
-            federationFacade.getSubClusters(true);
-
-        LOG.debug("submitApplication blacklist= " + blacklist +
-            " ,subClustersActive.keySet()= " + subClustersActive.keySet());
-
-        //If all of sub-clusters can't submit, the last sub-cluster feedback
+        //If last try still can't submit, the last sub-cluster feedback
         // error message is thrown
-        if(subClustersActive.size() == 0 ||
-            blacklist.containsAll(subClustersActive.keySet())){
+        if(i == (numSubmitRetries - 1)){
           routerMetrics.incrAppsFailedSubmitted();
           RouterAuditLogger.logFailure(user.toString(),
               RouterAuditLogger.AuditConstants.SUBMIT_NEW_APP, "UNKNOWN",
