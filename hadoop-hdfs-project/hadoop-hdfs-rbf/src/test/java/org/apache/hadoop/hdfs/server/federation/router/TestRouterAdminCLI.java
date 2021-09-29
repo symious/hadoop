@@ -873,10 +873,10 @@ public class TestRouterAdminCLI {
     System.setOut(new PrintStream(out));
     String[] argv = new String[]{"-refreshCallQueue"};
     assertEquals(0, ToolRunner.run(admin, argv));
-    assertTrue(out.toString().contains("Refresh call queue successfully"));
+    assertTrue(out.toString().contains("Refresh call queue [REFRESH] successfully"));
 
     argv = new String[]{"-refreshCallQueue", "-reload"};
     assertEquals(0, ToolRunner.run(admin, argv));
-    assertTrue(out.toString().contains("Refresh call queue successfully"));
+    assertTrue(out.toString().contains("Refresh call queue [RELOAD] successfully"));
   }
 }
