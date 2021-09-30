@@ -18,10 +18,6 @@
 
 package org.apache.hadoop.hdfs.server.federation.router;
 
-import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT;
-import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_KEY;
-import static org.apache.hadoop.hdfs.server.federation.fairness.RouterRpcFairnessConstants.CONCURRENT_NS;
-
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
@@ -84,6 +80,10 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_KEY;
+import static org.apache.hadoop.hdfs.server.federation.fairness.RouterRpcFairnessConstants.CONCURRENT_NS;
 
 /**
  * A client proxy for Router -> NN communication using the NN ClientProtocol.
@@ -882,6 +882,9 @@ public class RouterRpcClient {
             e.getClass(), m.getName(), ns, e);
         lastThrownException = new IOException(
             "Unexpected exception proxying API " + e.getMessage(), e);
+        if (firstThrownException == null) {
+          firstThrownException = lastThrownException;
+        }
       } finally {
         releasePermit(ns, ugi, remoteMethod);
       }
