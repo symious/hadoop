@@ -483,8 +483,9 @@ public class FSEditLogLoader {
         // There was a bug (HDFS-2991) in hadoop < 0.23.1 where OP_CLOSE
         // could show up twice in a row. But after that version, this
         // should be fixed, so we should treat it as an error.
-        throw new IOException(
-            "File is not under construction: " + path);
+        // throw new IOException(
+        //    "File is not under construction: " + path);
+        LOG.error("File is not under construction: " + path);
       }
       // One might expect that you could use removeLease(holder, path) here,
       // but OP_CLOSE doesn't serialize the holder. So, remove the inode.
