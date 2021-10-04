@@ -144,6 +144,7 @@ public class MountTableResolver
               TimeUnit.MINUTES);
       this.locationCache = CacheBuilder.newBuilder()
           .expireAfterAccess(mountTableCacheExpireTimeMs, TimeUnit.MINUTES)
+          .initialCapacity(maxCacheSize)
           .maximumSize(maxCacheSize)
           .build();
     } else {
