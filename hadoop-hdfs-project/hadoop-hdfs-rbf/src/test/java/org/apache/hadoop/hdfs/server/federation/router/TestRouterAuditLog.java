@@ -143,7 +143,7 @@ public class TestRouterAuditLog {
     } catch (URISyntaxException e) {
       e.printStackTrace();
     }
-    String acePattern = ".*cmd=getListing.*invokeType=concurrent.*";
+    String acePattern = ".*cmd=getListing.*invokeType=sequential.*";
     verifyAuditLogs(acePattern);
   }
 
