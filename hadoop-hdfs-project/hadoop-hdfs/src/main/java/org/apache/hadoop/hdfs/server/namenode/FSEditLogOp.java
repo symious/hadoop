@@ -494,7 +494,11 @@ public abstract class FSEditLogOp {
         throw new RuntimeException("Can't have more than " + MAX_BLOCKS +
             " in an AddCloseOp.");
       }
-      this.blocks = FSEditLogOp.deepCopy(blocks);
+      if (this instanceof CloseOp) {
+        this.blocks = FSEditLogOp.deepCopy(blocks);
+      } else {
+        this.blocks = blocks;
+      }
       return (T)this;
     }
     
@@ -941,7 +945,7 @@ public abstract class FSEditLogOp {
     }
 
     AddBlockOp setPenultimateBlock(Block pBlock) {
-      this.penultimateBlock = pBlock == null ? null : new Block(pBlock);
+      this.penultimateBlock = pBlock;
       return this;
     }
     
@@ -950,7 +954,7 @@ public abstract class FSEditLogOp {
     }
     
     AddBlockOp setLastBlock(Block lastBlock) {
-      this.lastBlock = lastBlock == null ? null : new Block(lastBlock);
+      this.lastBlock = lastBlock;
       return this;
     }
     
@@ -1053,7 +1057,7 @@ public abstract class FSEditLogOp {
     }
 
     UpdateBlocksOp setBlocks(Block[] blocks) {
-      this.blocks = FSEditLogOp.deepCopy(blocks);
+      this.blocks = blocks;
       return this;
     }
     
@@ -2844,8 +2848,7 @@ public abstract class FSEditLogOp {
     }
 
     TruncateOp setTruncateBlock(Block truncateBlock) {
-      this.truncateBlock = truncateBlock == null ?
-          null : new Block(truncateBlock);
+      this.truncateBlock = truncateBlock;
       return this;
     }
 
