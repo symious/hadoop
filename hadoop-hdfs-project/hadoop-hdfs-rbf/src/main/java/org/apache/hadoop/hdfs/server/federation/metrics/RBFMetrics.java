@@ -705,7 +705,7 @@ public class RBFMetrics implements RouterMBean, FederationMBean {
       // Fetch the most recent namenode registration
       String nsId = nsInfo.getNameserviceId();
       List<? extends FederationNamenodeContext> nns =
-          namenodeResolver.getNamenodesForNameserviceId(nsId, true);
+          namenodeResolver.getNamenodesForNameserviceId(nsId, false);
       if (nns != null) {
         FederationNamenodeContext nn = nns.get(0);
         if (nn instanceof MembershipState) {

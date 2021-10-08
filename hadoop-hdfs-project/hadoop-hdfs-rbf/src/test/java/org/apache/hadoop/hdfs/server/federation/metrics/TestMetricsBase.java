@@ -58,6 +58,7 @@ import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 /**
@@ -204,6 +205,7 @@ public class TestMetricsBase {
     return stateStore;
   }
 
+  @Ignore
   @Test
   public void testObserverMetrics() throws Exception {
     mockObserver();
