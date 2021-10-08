@@ -123,7 +123,7 @@ public class Dispatcher {
 
   private final long getBlocksSize;
   private final long getBlocksMinBlockSize;
-  private final long blockMoveTimeout;
+  protected final long blockMoveTimeout;
   /**
    * If no block can be moved out of a {@link Source} after this configured
    * amount of time, the Source should give up choosing the next possible move.
@@ -408,7 +408,7 @@ public class Dispatcher {
     }
 
     /** Check whether to continue waiting for response */
-    private boolean stopWaitingForResponse(long startTime) {
+    protected boolean stopWaitingForResponse(long startTime) {
       return source.isIterationOver() ||
           (blockMoveTimeout > 0 &&
           (Time.monotonicNow() - startTime > blockMoveTimeout));

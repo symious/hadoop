@@ -15,6 +15,7 @@ import org.apache.hadoop.hdfs.server.balancer.Dispatcher.DDatanode.StorageGroup;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -138,6 +139,13 @@ public class ZoneDispatcher extends Dispatcher {
             LOG.info("Successfully moved " + this + " at round " + i);
             return;
           } catch (IOException e) {
+            // If the attempt encounters "IOException: Block move timed out",
+            // it may encounter ReplicaAlreadyExistsException when retrying
+            // if the first attempt actually succeed in the target datanode.
+            if (e.getMessage().contains("ReplicaAlreadyExistsException")) {
+              LOG.info("Ignore ReplicaAlreadyExistsException for " + this);
+              return;
+            }
             LOG.warn("Failed to move " + this, e);
             // Proxy or target may have some issues, delay before using these nodes
             // further in order to avoid a potential storm of "threads quota
@@ -207,6 +215,12 @@ public class ZoneDispatcher extends Dispatcher {
         IOUtils.closeStream(in);
         IOUtils.closeSocket(sock);
       }
+    }
+
+    @Override
+    protected boolean stopWaitingForResponse(long startTime) {
+      return (blockMoveTimeout > 0 &&
+          (Time.monotonicNow() - startTime > blockMoveTimeout));
     }
   }
 
