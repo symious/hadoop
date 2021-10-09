@@ -573,6 +573,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONEMOVER_MONITOR_CHECK_INTERVAL_KEY =
       "dfs.zonemover.monitorCheckInterval";
   public static final long    DFS_ZONEMOVER_MONITOR_CHECK_INTERVAL_DEFAULT = 1000L * 60 * 2;
+  public static final String  DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS =
+      "dfs.zonemover.exitEvenHasProgress";
+  public static final boolean DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS_DEFAULT = true;
 
   public static final String  DFS_DATANODE_ADDRESS_KEY = "dfs.datanode.address";
   public static final int     DFS_DATANODE_DEFAULT_PORT = 50010;

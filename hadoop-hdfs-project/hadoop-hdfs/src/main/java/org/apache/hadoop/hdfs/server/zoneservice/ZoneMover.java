@@ -175,6 +175,9 @@ public class ZoneMover {
     // retryCount starts from 0 and ends at retryMaxAttempts
     AtomicInteger retryCount = new AtomicInteger(0);
     final long sleepTime = calculateSleepTime(conf);
+    final boolean exitEvenHasProgress = conf.getBoolean(
+        DFSConfigKeys.DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS,
+        DFSConfigKeys.DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS_DEFAULT);
 
     try {
       // Set maxNotChangedIterations to 1 as ZoneMover does not need to loop
@@ -200,6 +203,15 @@ public class ZoneMover {
             System.err.println("ZoneMover failed. Exiting with status " + r + "... ");
           }
           // must be an error statue, return
+          return r.getExitCode();
+        } else if (exitEvenHasProgress) {
+          // If we apply a replication rule to a path with a lot of data,
+          // for example, more than 1 PB. Some replicas may encounter
+          // moving failure but most succeed. At this case, the ExitStatus will
+          // be IN_PROGRESS. It will cost a lot of time to go through all files
+          // once more. We can exit here and rerun ZoneMover or not based on the
+          // number of failing cases in the log.
+          LOG.info("ZoneMover has progress in this round. Exiting ... ");
           return r.getExitCode();
         }
         zs.resetTargetsStatus();

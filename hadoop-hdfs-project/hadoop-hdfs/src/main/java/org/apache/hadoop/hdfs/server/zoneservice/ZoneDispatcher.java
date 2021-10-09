@@ -241,8 +241,11 @@ public class ZoneDispatcher extends Dispatcher {
   public static class ZoneDDatanode extends DDatanode {
     // limit concurrent moves on each target datanode
     private final Semaphore permits;
+    private final int maxConcurrentMoves;
+
     private ZoneDDatanode(DatanodeInfo datanode, int maxConcurrentMoves) {
       super(datanode, maxConcurrentMoves);
+      this.maxConcurrentMoves = maxConcurrentMoves;
       this.permits = new Semaphore(maxConcurrentMoves, true);
     }
 
@@ -251,6 +254,16 @@ public class ZoneDispatcher extends Dispatcher {
       final ZoneSource zs = d.new ZoneSource(storageType, maxSize2Move, this);
       put(storageType, zs, sourceMap);
       return zs;
+    }
+
+    @Override
+    public synchronized boolean addPendingBlock(PendingMove pendingBlock) {
+      int MAX_WAITING_MULTIPLE = 2;
+      // avoid too many tasks waiting for the permit of this node
+      if (pendings.size() >= maxConcurrentMoves * MAX_WAITING_MULTIPLE) {
+        return false;
+      }
+      return super.addPendingBlock(pendingBlock);
     }
   }
 
