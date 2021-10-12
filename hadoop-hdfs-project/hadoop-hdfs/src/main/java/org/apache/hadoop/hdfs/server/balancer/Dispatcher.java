@@ -572,6 +572,8 @@ public class Dispatcher {
     private volatile boolean hasFailure = false;
     private volatile boolean hasSuccess = false;
     private ExecutorService moveExecutor;
+    // a datanode may go dead during the move process
+    protected volatile boolean isAlive = true;
 
     @Override
     public String toString() {
@@ -662,6 +664,12 @@ public class Dispatcher {
     public void resetStatus() {
       this.hasFailure = false;
       this.hasSuccess = false;
+    }
+
+    public void setDead() {
+      if (this.isAlive) {
+        this.isAlive = false;
+      }
     }
   }
 

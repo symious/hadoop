@@ -20,7 +20,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
+import java.net.ConnectException;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.util.*;
 import java.util.concurrent.Semaphore;
 
@@ -138,6 +140,12 @@ public class ZoneDispatcher extends Dispatcher {
             nnc.addBytesMoved(block.getNumBytes());
             LOG.info("Successfully moved " + this + " at round " + i);
             return;
+          } catch (SocketTimeoutException|ConnectException e) {
+            LOG.warn("Failed to move " + this, e);
+            LOG.warn("Found a dead datanode: " + target.getDDatanode().getDatanodeInfo());
+            target.getDDatanode().setHasFailure();
+            target.getDDatanode().setDead();
+            return;
           } catch (IOException e) {
             // If the attempt encounters "IOException: Block move timed out",
             // it may encounter ReplicaAlreadyExistsException when retrying
@@ -146,7 +154,17 @@ public class ZoneDispatcher extends Dispatcher {
               LOG.info("Ignore ReplicaAlreadyExistsException for " + this);
               return;
             }
+
             LOG.warn("Failed to move " + this, e);
+
+            if (e.getMessage().contains("SocketTimeoutException") ||
+                e.getMessage().contains("ConnectException")) {
+              LOG.warn("Found a dead datanode: " + proxySource.getDatanodeInfo());
+              target.getDDatanode().setHasFailure();
+              proxySource.setDead();
+              return;
+            }
+
             // Proxy or target may have some issues, delay before using these nodes
             // further in order to avoid a potential storm of "threads quota
             // exceeded" warnings when the dispatcher gets out of sync with work
@@ -258,6 +276,10 @@ public class ZoneDispatcher extends Dispatcher {
 
     @Override
     public synchronized boolean addPendingBlock(PendingMove pendingBlock) {
+      if (!isAlive) {
+        return false;
+      }
+
       int MAX_WAITING_MULTIPLE = 2;
       // avoid too many tasks waiting for the permit of this node
       if (pendings.size() >= maxConcurrentMoves * MAX_WAITING_MULTIPLE) {
