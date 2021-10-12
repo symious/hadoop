@@ -606,7 +606,7 @@ public class ClientRMService extends AbstractService implements
       RMAuditLogger.logFailure(user, AuditConstants.SUBMIT_APP_REQUEST,
           ie.getMessage(), "ClientRMService",
           "Exception in submitting application", applicationId, callerContext,
-          submissionContext.getQueue());
+          submissionContext.getQueue(), submissionContext.getApplicationTags());
       throw RPCUtil.getRemoteException(ie);
     }
 
@@ -632,7 +632,7 @@ public class ClientRMService extends AbstractService implements
         RMAuditLogger.logFailure(user, AuditConstants.SUBMIT_APP_REQUEST,
             e.getMessage(), "ClientRMService",
             "Exception in submitting application", applicationId,
-            submissionContext.getQueue());
+            submissionContext.getQueue(), submissionContext.getApplicationTags());
         throw RPCUtil.getRemoteException(e);
       }
     }
@@ -698,14 +698,16 @@ public class ClientRMService extends AbstractService implements
       RMAuditLogger.logSuccess(user, AuditConstants.SUBMIT_APP_REQUEST,
           "ClientRMService", applicationId, callerContext,
           submissionContext.getQueue(),
-          submissionContext.getNodeLabelExpression());
+          submissionContext.getNodeLabelExpression(),
+          submissionContext.getApplicationTags());
     } catch (YarnException e) {
       LOG.info("Exception in submitting " + applicationId, e);
       RMAuditLogger.logFailure(user, AuditConstants.SUBMIT_APP_REQUEST,
           e.getMessage(), "ClientRMService",
           "Exception in submitting application", applicationId, callerContext,
           submissionContext.getQueue(),
-          submissionContext.getNodeLabelExpression());
+          submissionContext.getNodeLabelExpression(),
+          submissionContext.getApplicationTags());
       throw e;
     }
 

@@ -19,6 +19,7 @@ package org.apache.hadoop.yarn.server.resourcemanager;
 
 import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
+import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +29,8 @@ import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.Resource;
+
+import static org.apache.hadoop.yarn.util.StringHelper.CSV_JOINER;
 
 /** 
  * Manages ResourceManager audit logs. 
@@ -41,7 +44,8 @@ public class RMAuditLogger {
   enum Keys {USER, OPERATION, TARGET, RESULT, IP, PERMISSIONS,
                     DESCRIPTION, APPID, APPATTEMPTID, CONTAINERID, 
                     CALLERCONTEXT, CALLERSIGNATURE, RESOURCE, QUEUENAME,
-                    INCLUDEAPPS, INCLUDECHILDQUEUES, RECURSIVE, NODELABEL}
+                    INCLUDEAPPS, INCLUDECHILDQUEUES, RECURSIVE, NODELABEL,
+                    APPLICATIONTAGS}
 
   public static class AuditConstants {
     static final String SUCCESS = "SUCCESS";
@@ -94,7 +98,7 @@ public class RMAuditLogger {
       ApplicationId appId, ApplicationAttemptId attemptId,
       ContainerId containerId, Resource resource) {
     return createSuccessLog(user, operation, target, appId, attemptId,
-        containerId, resource, null, Server.getRemoteIp(), null, null);
+        containerId, resource, null, Server.getRemoteIp(), null, null, null);
   }
 
   /**
@@ -120,7 +124,7 @@ public class RMAuditLogger {
   static String createSuccessLog(String user, String operation, String target,
       ApplicationId appId, ApplicationAttemptId attemptId,
       ContainerId containerId, Resource resource, CallerContext callerContext,
-      InetAddress ip, String queueName, String partition) {
+      InetAddress ip, String queueName, String partition, Set<String> appTags) {
     StringBuilder b =
         createStringBuilderForSuccessEvent(user, operation, target, ip);
     if (appId != null) {
@@ -141,6 +145,9 @@ public class RMAuditLogger {
     }
     if (partition != null) {
       add(Keys.NODELABEL, partition, b);
+    }
+    if(appTags != null && !appTags.isEmpty()) {
+      add(Keys.APPLICATIONTAGS, CSV_JOINER.join(appTags), b);
     }
     return b.toString();
   }
@@ -226,7 +233,7 @@ public class RMAuditLogger {
     if (LOG.isInfoEnabled()) {
       LOG.info(createSuccessLog(user, operation, target, appId, null,
           containerId, resource, null, Server.getRemoteIp(), queueName,
-          partition));
+          partition, null));
     }
   }
 
@@ -273,11 +280,11 @@ public class RMAuditLogger {
 
   public static void logSuccess(String user, String operation, String target,
       ApplicationId appId, CallerContext callerContext, String queueName,
-      String partition) {
+      String partition, Set<String> appTags) {
     if (LOG.isInfoEnabled()) {
       LOG.info(
           createSuccessLog(user, operation, target, appId, null, null, null,
-              callerContext, Server.getRemoteIp(), queueName, partition));
+              callerContext, Server.getRemoteIp(), queueName, partition, appTags));
     }
   }
 
@@ -306,7 +313,7 @@ public class RMAuditLogger {
       ApplicationId appId, CallerContext callerContext) {
     if (LOG.isInfoEnabled()) {
       LOG.info(createSuccessLog(user, operation, target, appId, null, null,
-          null, callerContext, Server.getRemoteIp(), null, null));
+          null, callerContext, Server.getRemoteIp(), null, null, null));
     }
   }
 
@@ -314,7 +321,7 @@ public class RMAuditLogger {
       ApplicationId appId, CallerContext callerContext, String queueName) {
     if (LOG.isInfoEnabled()) {
       LOG.info(createSuccessLog(user, operation, target, appId, null, null,
-          null, callerContext, Server.getRemoteIp(), queueName, null));
+          null, callerContext, Server.getRemoteIp(), queueName, null, null));
     }
   }
 
@@ -342,7 +349,7 @@ public class RMAuditLogger {
       ApplicationId appId, InetAddress ip) {
     if (LOG.isInfoEnabled()) {
       LOG.info(createSuccessLog(user, operation, target, appId, null, null,
-          null, null, ip, null, null));
+          null, null, ip, null, null, null));
     }
   }
 
@@ -402,7 +409,7 @@ public class RMAuditLogger {
       String target, String description, ApplicationId appId,
       ApplicationAttemptId attemptId, ContainerId containerId,
       Resource resource, CallerContext callerContext, String queueName,
-      String partition) {
+      String partition, Set<String> appTags) {
     StringBuilder b = createStringBuilderForFailureLog(user,
         operation, target, description, perm);
     if (appId != null) {
@@ -424,7 +431,9 @@ public class RMAuditLogger {
     if (partition != null) {
       add(Keys.NODELABEL, partition, b);
     }
-
+    if(appTags != null && !appTags.isEmpty()) {
+      add(Keys.APPLICATIONTAGS, CSV_JOINER.join(appTags), b);
+    }
     return b.toString();
   }
 
@@ -435,7 +444,8 @@ public class RMAuditLogger {
       String target, String description, ApplicationId appId,
       ApplicationAttemptId attemptId, ContainerId containerId, Resource resource) {
     return createFailureLog(user, operation, perm, target, description, appId,
-        attemptId, containerId, resource, null, null, null);
+        attemptId, containerId, resource, null, null,
+        null, null);
   }
 
   /**
@@ -507,16 +517,18 @@ public class RMAuditLogger {
       CallerContext callerContext) {
     if (LOG.isWarnEnabled()) {
       LOG.warn(createFailureLog(user, operation, perm, target, description,
-          appId, null, null, null, callerContext, null, null));
+          appId, null, null, null, callerContext,
+          null, null, null));
     }
   }
 
   public static void logFailure(String user, String operation, String perm,
       String target, String description, ApplicationId appId,
-      CallerContext callerContext, String queueName) {
+      CallerContext callerContext, String queueName, Set<String> appTags) {
     if (LOG.isWarnEnabled()) {
       LOG.warn(createFailureLog(user, operation, perm, target, description,
-          appId, null, null, null, callerContext, queueName, null));
+          appId, null, null, null, callerContext,
+          queueName, null, appTags));
     }
   }
 
@@ -545,10 +557,11 @@ public class RMAuditLogger {
 
   public static void logFailure(String user, String operation, String perm,
       String target, String description, ApplicationId appId,
-      String queueName) {
+      String queueName, Set<String> appTags) {
     if (LOG.isWarnEnabled()) {
       LOG.warn(createFailureLog(user, operation, perm, target, description,
-          appId, null, null, null, null, queueName, null));
+          appId, null, null, null, null,
+          queueName, null, appTags));
     }
   }
 
@@ -616,11 +629,13 @@ public class RMAuditLogger {
    */
   public static void logFailure(String user, String operation, String perm,
       String target, String description, ApplicationId appId,
-      CallerContext callerContext, String queueName, String partition) {
+      CallerContext callerContext, String queueName, String partition,
+      Set<String> appTags) {
     if (LOG.isWarnEnabled()) {
       LOG.warn(
           createFailureLog(user, operation, perm, target, description, appId,
-              null, null, null, callerContext, queueName, partition));
+              null, null, null, callerContext,
+              queueName, partition, appTags));
     }
   }
 
