@@ -18,15 +18,18 @@
 package org.apache.hadoop.security;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Charsets;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.MD5Hash;
+import org.apache.hadoop.metrics2.annotation.Metric;
+import org.apache.hadoop.metrics2.annotation.Metrics;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.metrics2.lib.MetricsRegistry;
+import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
+import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.hash.MD5FileUtils;
 import org.slf4j.Logger;
@@ -35,19 +38,13 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
 import java.io.Reader;
-import java.lang.instrument.ClassFileTransformer;
 import java.nio.charset.StandardCharsets;
-import java.security.DigestInputStream;
-import java.security.MessageDigest;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * A simple shadow file based implementation of {@link RpcPasswordMappingServiceProvider}
@@ -61,6 +58,8 @@ public class ShadowFileRpcPasswordMapping extends Configured
   protected static final Logger LOG =
       LoggerFactory.getLogger(ShadowFileRpcPasswordMapping.class);
 
+  /** Metrics to track shadow file activity */
+  static ShadowFileMetrics metrics = ShadowFileMetrics.create();
   private String shadowFile = CommonConfigurationKeys.
       HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_DEFAULT;
   private static final String EMPTY_PASSWORD = null;
@@ -75,6 +74,25 @@ public class ShadowFileRpcPasswordMapping extends Configured
 
   private AtomicReference<ConcurrentHashMap<String, RpcPasswordAndBypass>>
       cacheRef = new AtomicReference<>();
+
+  /**
+   * ShadowFileMetrics maintains shadow file related statistics.
+   */
+  @Metrics(about="shadow file related metrics", context="shadowFile")
+  static class ShadowFileMetrics {
+    final MetricsRegistry registry = new MetricsRegistry("ShadowFileMetrics");
+
+    @Metric("Rate of successful shadow file refresh and latency (milliseconds)")
+    MutableRate refreshSuccess;
+    @Metric("Rate of failed shadow file refresh and latency (milliseconds)")
+    MutableRate refreshFailure;
+    @Metric("Refresh failures since startup")
+    private MutableGaugeLong refreshFailuresTotal;
+
+    static ShadowFileMetrics create() {
+      return DefaultMetricsSystem.instance().register(new ShadowFileMetrics());
+    }
+  }
 
   @Override
   public void setConf(Configuration conf) {
@@ -146,6 +164,7 @@ public class ShadowFileRpcPasswordMapping extends Configured
 
   @Override
   public void cacheRefresh(boolean force) throws IOException {
+    long start = Time.now();
     if (!force) {
       // If not force refresh, check the timeout again
       if (!isTimeout())
@@ -161,6 +180,8 @@ public class ShadowFileRpcPasswordMapping extends Configured
       if (md5Hash == null) {
         LOG.error("First round checksum not match. Password not refreshed.");
         lastRefreshTime.set(Time.now());
+        metrics.refreshFailure.add(Time.now() - start);
+        metrics.refreshFailuresTotal.incr();
         return;
       }
     }
@@ -191,6 +212,8 @@ public class ShadowFileRpcPasswordMapping extends Configured
       if (md5Hash != null && !md5Hash.equals(fileHash)) {
         LOG.error("Second Checksum not match.");
         lastRefreshTime.set(Time.now());
+        metrics.refreshFailure.add(Time.now() - start);
+        metrics.refreshFailuresTotal.incr();
         return;
       }
     }
@@ -200,6 +223,7 @@ public class ShadowFileRpcPasswordMapping extends Configured
     if (isStartup) {
       isStartup = false;
     }
+    metrics.refreshSuccess.add(Time.now() - start);
   }
 
   private MD5Hash checksum() {
