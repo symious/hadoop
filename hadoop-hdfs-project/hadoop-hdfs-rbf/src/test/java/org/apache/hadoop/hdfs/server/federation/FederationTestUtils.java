@@ -48,6 +48,7 @@ import org.apache.hadoop.fs.UnsupportedFileSystemException;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster.NamenodeContext;
 import org.apache.hadoop.hdfs.server.federation.resolver.ActiveNamenodeResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeContext;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState;
@@ -352,5 +353,42 @@ public final class FederationTestUtils {
       }
     }).when(spyHAContext).checkOperation(any(OperationCategory.class));
     Whitebox.setInternalState(namesystem, "haContext", spyHAContext);
+  }
+
+  /**
+   * Switch namenodes of all hdfs name services to standby.
+   * @param cluster a federated HDFS cluster
+   */
+  public static void transitionClusterNSToStandby(
+      StateStoreDFSCluster cluster) {
+    // Name services of the cluster
+    List<String> nameServiceList = cluster.getNameservices();
+
+    // Change namenodes of each name service to standby
+    for (String nameService : nameServiceList) {
+      List<NamenodeContext>  nnList = cluster.getNamenodes(nameService);
+      for(NamenodeContext namenodeContext : nnList) {
+        cluster.switchToStandby(nameService, namenodeContext.getNamenodeId());
+      }
+    }
+  }
+
+  /**
+   * Switch the index namenode of all hdfs name services to active.
+   * @param cluster a federated HDFS cluster
+   * @param index the index of namenodes
+   */
+  public static void transitionClusterNSToActive(
+      StateStoreDFSCluster cluster, int index) {
+    // Name services of the cluster
+    List<String> nameServiceList = cluster.getNameservices();
+
+    // Change the index namenode of each name service to active
+    for (String nameService : nameServiceList) {
+      List<NamenodeContext> listNamenodeContext =
+          cluster.getNamenodes(nameService);
+      cluster.switchToActive(nameService,
+          listNamenodeContext.get(index).getNamenodeId());
+    }
   }
 }

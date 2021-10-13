@@ -181,6 +181,11 @@ public class FederationRPCPerformanceMonitor implements RouterRpcMonitor {
   }
 
   @Override
+  public void proxyOpNoNamenodes() {
+    metrics.incrProxyOpNoNamenodes();
+  }
+
+  @Override
   public void routerFailureStateStore() {
     metrics.incrRouterFailureStateStore();
   }

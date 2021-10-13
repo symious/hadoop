@@ -70,6 +70,7 @@ import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.ipc.ObserverRetryOnActiveException;
 import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.ipc.RetriableException;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.ipc.Server.Call;
 import org.apache.hadoop.ipc.StandbyException;
@@ -354,8 +355,8 @@ public class RouterRpcClient {
    * @param retryCount Number of retries.
    * @param nsId Nameservice ID.
    * @return Retry decision.
-   * @throws IOException Original exception if the retry policy generates one
-   *                     or IOException for no available namenodes.
+   * @throws NoNamenodesAvailableException Exception that the retry policy
+   *         generates for no available namenodes.
    */
   private RetryDecision shouldRetry(final IOException ioe, final int retryCount,
       final String nsId) throws IOException {
@@ -365,8 +366,7 @@ public class RouterRpcClient {
       if (retryCount == 0) {
         return RetryDecision.RETRY;
       } else {
-        throw new IOException("No namenode available under nameservice " + nsId,
-            ioe);
+        throw new NoNamenodesAvailableException(nsId, ioe);
       }
     }
 
@@ -424,9 +424,11 @@ public class RouterRpcClient {
         continue;
       }
       ConnectionContext connection = null;
+      String nsId = null;
+      String rpcAddress = null;
       try {
-        String nsId = namenode.getNameserviceId();
-        String rpcAddress = namenode.getRpcAddress();
+        nsId = namenode.getNameserviceId();
+        rpcAddress = namenode.getRpcAddress();
         connection = this.getConnection(ugi, nsId, rpcAddress, protocol);
         ProxyAndInfo<?> client = connection.getClient();
         final Object proxy = client.getProxy();
@@ -472,6 +474,14 @@ public class RouterRpcClient {
           }
           // RemoteException returned by NN
           throw (RemoteException) ioe;
+        } else if (ioe instanceof NoNamenodesAvailableException) {
+          if (this.rpcMonitor != null) {
+            this.rpcMonitor.proxyOpNoNamenodes();
+          }
+          LOG.error("Can not get available namenode for {} {} error: {}",
+              nsId, rpcAddress, ioe.getMessage());
+          // Throw RetriableException so that client can retry
+          throw new RetriableException(ioe);
         } else {
           // Other communication error, this is a failure
           // Communication retries are handled by the retry policy
