@@ -86,8 +86,12 @@ public class ShadowFileRpcPasswordMapping extends Configured
     MutableRate refreshSuccess;
     @Metric("Rate of failed shadow file refresh and latency (milliseconds)")
     MutableRate refreshFailure;
+    @Metric("Refresh total since startup")
+    private MutableGaugeLong refreshTotal;
     @Metric("Refresh failures since startup")
     private MutableGaugeLong refreshFailuresTotal;
+    @Metric("Process line failure since startup")
+    private MutableGaugeLong processLineFailuresTotal;
 
     static ShadowFileMetrics create() {
       return DefaultMetricsSystem.instance().register(new ShadowFileMetrics());
@@ -133,14 +137,13 @@ public class ShadowFileRpcPasswordMapping extends Configured
       if (isTimeout()) {
         cacheRefresh(false);
       }
-      if (!cacheRef.get().containsKey(userName)) {
-        return null;
-      }
-      return cacheRef.get().get(userName).getRpcPassword();
     } catch (IOException e) {
       e.printStackTrace();
     }
-    return null;
+    if (!cacheRef.get().containsKey(userName)) {
+      return null;
+    }
+    return cacheRef.get().get(userName).getRpcPassword();
   }
 
   @Override
@@ -152,14 +155,13 @@ public class ShadowFileRpcPasswordMapping extends Configured
       if (isTimeout()) {
         cacheRefresh(false);
       }
-      if (!cacheRef.get().containsKey(user)) {
-        return false;
-      }
-      return cacheRef.get().get(user).isBypass();
     } catch (IOException e) {
       e.printStackTrace();
     }
-    return false;
+    if (!cacheRef.get().containsKey(user)) {
+      return false;
+    }
+    return cacheRef.get().get(user).isBypass();
   }
 
   @Override
@@ -170,6 +172,7 @@ public class ShadowFileRpcPasswordMapping extends Configured
       if (!isTimeout())
         return;
     }
+    metrics.refreshTotal.incr();
     BufferedReader br = null;
     ConcurrentHashMap<String, RpcPasswordAndBypass> updateCache =
         new ConcurrentHashMap<>();
@@ -192,6 +195,7 @@ public class ShadowFileRpcPasswordMapping extends Configured
         try {
           processRow(updateCache, line);
         } catch (IllegalShadowLineException e) {
+          metrics.processLineFailuresTotal.incr();
           refreshFailure("unable to process shadow line: " + line, start);
         }
       }
