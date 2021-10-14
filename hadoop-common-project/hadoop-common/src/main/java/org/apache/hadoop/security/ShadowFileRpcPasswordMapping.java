@@ -196,7 +196,7 @@ public class ShadowFileRpcPasswordMapping extends Configured
           processRow(updateCache, line);
         } catch (IllegalShadowLineException e) {
           metrics.processLineFailuresTotal.incr();
-          refreshFailure("unable to process shadow line: " + line, start);
+          LOG.error("Unable to process shadow line: " + line, start);
         }
       }
     } catch (IOException e) {

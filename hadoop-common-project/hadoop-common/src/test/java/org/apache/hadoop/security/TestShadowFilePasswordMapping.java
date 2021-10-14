@@ -47,7 +47,6 @@ public class TestShadowFilePasswordMapping {
 
   private final static String TEST_SHADOW_FILE_1 = "shadow1";
   private final static String TEST_SHADOW_FILE_2 = "shadow2";
-  private final static String TEST_SHADOW_FILE_3 = "shadow3";
 
   private final static long BACKOFF_MS = 10L;
 
@@ -66,7 +65,7 @@ public class TestShadowFilePasswordMapping {
     mapping.cacheRefresh(true);
 
     assertEquals(mapping.getRpcPassword("a"), "aaaShadow1");
-    assertEquals(mapping.getRpcPassword("b"), "bbbShadow1");
+    assertNull(mapping.getRpcPassword("b"));
     assertEquals(mapping.getRpcPassword("c"), "cccShadow1");
 
     File shadowFile2 = new File(classLoader.getResource(TEST_SHADOW_FILE_2).getFile());
@@ -78,25 +77,9 @@ public class TestShadowFilePasswordMapping {
     mapping.cacheRefresh(true);
 
     assertEquals(mapping.getRpcPassword("a"), "aaaShadow2");
-    assertEquals(mapping.getRpcPassword("b"), "bbbShadow2");
+    assertNull(mapping.getRpcPassword("b"));
     assertEquals(mapping.getRpcPassword("c"), "cccShadow2");
 
-    // With illegal line, the cache won't be updated
-    File shadowFile3 = new File(classLoader.getResource(TEST_SHADOW_FILE_3).getFile());
-    conf.set(CommonConfigurationKeys.
-        HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, shadowFile3.getAbsolutePath());
-    System.out.println(shadowFile3.getAbsolutePath());
-    mapping.setConf(conf);
-
-    try {
-      mapping.cacheRefresh(true);
-    } catch (Exception e) {
-      // Ignore exception
-    }
-
-    assertEquals(mapping.getRpcPassword("a"), "aaaShadow2");
-    assertEquals(mapping.getRpcPassword("b"), "bbbShadow2");
-    assertEquals(mapping.getRpcPassword("c"), "cccShadow2");
   }
 
   @Test
@@ -147,24 +130,6 @@ public class TestShadowFilePasswordMapping {
     } finally {
       // Delete shadow1.md5
       MD5FileUtils.getDigestFileForFile(shadowFile1).delete();
-    }
-  }
-
-  @Test
-  public void testProcessRow() throws IOException {
-    ShadowFileRpcPasswordMapping mapping = new ShadowFileRpcPasswordMapping();
-    ClassLoader classLoader = getClass().getClassLoader();
-    File shadowFile3 = new File(classLoader.getResource(TEST_SHADOW_FILE_3).getFile());
-    Configuration conf = new Configuration();
-    conf.set(CommonConfigurationKeys.
-        HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, shadowFile3.getAbsolutePath());
-    mapping.setConf(conf);
-
-    try {
-      mapping.cacheRefresh(true);
-      fail("Should fail since shadow file contains illegal line.");
-    } catch (Exception e) {
-      assertTrue(e instanceof ShadowFileException);
     }
   }
 
