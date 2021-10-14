@@ -178,11 +178,7 @@ public class ShadowFileRpcPasswordMapping extends Configured
     if (checksumEnabled && !isStartup) {
       md5Hash = checksum();
       if (md5Hash == null) {
-        LOG.error("First round checksum not match. Password not refreshed.");
-        lastRefreshTime.set(Time.now());
-        metrics.refreshFailure.add(Time.now() - start);
-        metrics.refreshFailuresTotal.incr();
-        return;
+        refreshFailure("First round checksum not match.", start);
       }
     }
 
@@ -196,11 +192,11 @@ public class ShadowFileRpcPasswordMapping extends Configured
         try {
           processRow(updateCache, line);
         } catch (IllegalShadowLineException e) {
-          LOG.warn("unable to process shadow line: {}", line, e);
+          refreshFailure("unable to process shadow line: " + line, start);
         }
       }
     } catch (IOException e) {
-      e.printStackTrace();
+      throw e;
     } finally {
       if (br != null) {
         br.close();
@@ -210,12 +206,11 @@ public class ShadowFileRpcPasswordMapping extends Configured
     if (checksumEnabled && !isStartup) {
       MD5Hash fileHash = MD5FileUtils.computeMd5ForFile(new File(shadowFile));
       if (md5Hash != null && !md5Hash.equals(fileHash)) {
-        LOG.error("Second Checksum not match.");
-        lastRefreshTime.set(Time.now());
-        metrics.refreshFailure.add(Time.now() - start);
-        metrics.refreshFailuresTotal.incr();
-        return;
+        refreshFailure("Second round checksum not match", start);
       }
+    }
+    if (updateCache.isEmpty()) {
+      refreshFailure("New shadowFile is empty", start);
     }
     cacheRef.set(updateCache);
     lastRefreshTime.set(Time.now());
@@ -286,5 +281,17 @@ public class ShadowFileRpcPasswordMapping extends Configured
       sb.append(super.getMessage());
       return sb.toString();
     }
+  }
+
+  private void refreshSuccess(long start) {
+
+  }
+
+  private void refreshFailure(String reason, long start)
+      throws ShadowFileException {
+    lastRefreshTime.set(Time.now());
+    metrics.refreshFailure.add(Time.now() - start);
+    metrics.refreshFailuresTotal.incr();
+    throw new ShadowFileException(reason);
   }
 }

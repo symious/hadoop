@@ -47,6 +47,7 @@ public class TestShadowFilePasswordMapping {
 
   private final static String TEST_SHADOW_FILE_1 = "shadow1";
   private final static String TEST_SHADOW_FILE_2 = "shadow2";
+  private final static String TEST_SHADOW_FILE_3 = "shadow3";
 
   private final static long BACKOFF_MS = 10L;
 
@@ -65,7 +66,7 @@ public class TestShadowFilePasswordMapping {
     mapping.cacheRefresh(true);
 
     assertEquals(mapping.getRpcPassword("a"), "aaaShadow1");
-    assertNull(mapping.getRpcPassword("b"));
+    assertEquals(mapping.getRpcPassword("b"), "bbbShadow1");
     assertEquals(mapping.getRpcPassword("c"), "cccShadow1");
 
     File shadowFile2 = new File(classLoader.getResource(TEST_SHADOW_FILE_2).getFile());
@@ -77,7 +78,24 @@ public class TestShadowFilePasswordMapping {
     mapping.cacheRefresh(true);
 
     assertEquals(mapping.getRpcPassword("a"), "aaaShadow2");
-    assertNull(mapping.getRpcPassword("b"));
+    assertEquals(mapping.getRpcPassword("b"), "bbbShadow2");
+    assertEquals(mapping.getRpcPassword("c"), "cccShadow2");
+
+    // With illegal line, the cache won't be updated
+    File shadowFile3 = new File(classLoader.getResource(TEST_SHADOW_FILE_3).getFile());
+    conf.set(CommonConfigurationKeys.
+        HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, shadowFile3.getAbsolutePath());
+    System.out.println(shadowFile3.getAbsolutePath());
+    mapping.setConf(conf);
+
+    try {
+      mapping.cacheRefresh(true);
+    } catch (Exception e) {
+      // Ignore exception
+    }
+
+    assertEquals(mapping.getRpcPassword("a"), "aaaShadow2");
+    assertEquals(mapping.getRpcPassword("b"), "bbbShadow2");
     assertEquals(mapping.getRpcPassword("c"), "cccShadow2");
   }
 
@@ -104,27 +122,49 @@ public class TestShadowFilePasswordMapping {
       mapping.cacheRefresh(true);
 
       // shadow1.md5 not exists
-      mapping.cacheRefresh(true);
-      assertTrue(
-          shadowFileLog.getOutput().contains("MD5 File not exist"));
-      shadowFileLog.clearOutput();
+      try {
+        mapping.cacheRefresh(true);
+        fail("Should fail since md5 not exists.");
+      } catch (Exception e) {
+        assertTrue(e instanceof ShadowFileException);
+      }
+
 
       // Create shadow1.md5
       MD5Hash md5Hash = MD5FileUtils.computeMd5ForFile(shadowFile1);
       MD5FileUtils.saveMD5File(shadowFile1, md5Hash);
       mapping.cacheRefresh(true);
-      assertFalse(
-          shadowFileLog.getOutput().contains("First round checksum not match"));
 
       // Create shadow1.md5 based on shadow2
       MD5Hash md5Hash2 = MD5FileUtils.computeMd5ForFile(shadowFile2);
       MD5FileUtils.saveMD5File(shadowFile1, md5Hash2);
-      mapping.cacheRefresh(true);
-      assertTrue(
-          shadowFileLog.getOutput().contains("First round checksum not match"));
+      try {
+        mapping.cacheRefresh(true);
+        fail("Should fail since md5 not match.");
+      } catch (Exception e) {
+        assertTrue(e instanceof ShadowFileException);
+      }
     } finally {
       // Delete shadow1.md5
       MD5FileUtils.getDigestFileForFile(shadowFile1).delete();
+    }
+  }
+
+  @Test
+  public void testProcessRow() throws IOException {
+    ShadowFileRpcPasswordMapping mapping = new ShadowFileRpcPasswordMapping();
+    ClassLoader classLoader = getClass().getClassLoader();
+    File shadowFile3 = new File(classLoader.getResource(TEST_SHADOW_FILE_3).getFile());
+    Configuration conf = new Configuration();
+    conf.set(CommonConfigurationKeys.
+        HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, shadowFile3.getAbsolutePath());
+    mapping.setConf(conf);
+
+    try {
+      mapping.cacheRefresh(true);
+      fail("Should fail since shadow file contains illegal line.");
+    } catch (Exception e) {
+      assertTrue(e instanceof ShadowFileException);
     }
   }
 
