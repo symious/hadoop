@@ -4330,4 +4330,23 @@ public class BlockManager implements BlockStatsMXBean {
   public void setBlockRecoveryTimeout(long blockRecoveryTimeout) {
     pendingRecoveryBlocks.setRecoveryTimeoutInterval(blockRecoveryTimeout);
   }
+
+  public void setConsiderLoadFactor(double considerLoadFactor)
+      throws UnsupportedOperationException {
+    if (this.getBlockPlacementPolicy() instanceof BlockPlacementPolicyDefault) {
+      ((BlockPlacementPolicyDefault) this.getBlockPlacementPolicy())
+          .setConsiderLoadFactor(considerLoadFactor);
+      return;
+    }
+    throw new UnsupportedOperationException("Can setConsiderLoadFactor " +
+        "only for BlockPlacementPolicyDefault and its subclasses");
+  }
+
+  public double getConsiderLoadFactor() {
+    if(this.getBlockPlacementPolicy() instanceof BlockPlacementPolicyDefault) {
+      return ((BlockPlacementPolicyDefault) this.getBlockPlacementPolicy())
+          .getConsiderLoadFactor();
+    }
+    return 0.0;
+  }
 }

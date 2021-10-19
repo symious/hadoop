@@ -94,7 +94,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   }
 
   protected boolean considerLoad; 
-  protected double considerLoadFactor;
+  protected volatile double considerLoadFactor;
   protected boolean preferLocalNode;
   private boolean dataNodePeerStatsEnabled;
   private boolean excludeSlowNodesEnabled;
@@ -1241,6 +1241,14 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   @VisibleForTesting
   void setPreferLocalNode(boolean prefer) {
     this.preferLocalNode = prefer;
+  }
+
+  void setConsiderLoadFactor(double considerLoadFactor) {
+    this.considerLoadFactor = considerLoadFactor;
+  }
+
+  double getConsiderLoadFactor() {
+    return this.considerLoadFactor;
   }
 }
 
