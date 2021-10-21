@@ -63,6 +63,7 @@ public class ZoneMover {
   private final Map<String, Short> ruleMap;
   private final AtomicInteger retryCount;
   private final DFSClient dfs;
+  private static final long DELAY_AFTER_CHOOSE_FAIL = 2 * 1000;
 
   ZoneMover(NameNodeConnector nnc, Configuration conf, ReplicationRule rule,
       AtomicInteger retryCount) {
@@ -670,7 +671,26 @@ public class ZoneMover {
       LOG.warn("chooseTargetInDataCenter failed with block: " +
           db + ", source: " + source + ", targetDataCenter: " + targetDataCenter +
           ",targetTypes: " + targetTypes + ", excluded: " + excluded);
+      handleChooseFail(targetDataCenter, targetTypes);
       return false;
+    }
+
+    void handleChooseFail(String targetDataCenter, Set<StorageType> targetTypes) {
+      for (StorageType t: targetTypes) {
+        final List<StorageGroup> targets = storages.getTargetStorages(t, targetDataCenter);
+        int total = 0;
+        for (StorageGroup target: targets) {
+          total += target.getDDatanode().getPendingSize();
+        }
+        LOG.info("Average pending size for targetDataCenter: " + targetDataCenter +
+            ", storageType: " + t + ", datanodes.num: "+ targets.size() +
+            " is " + total / targets.size());
+      }
+      try {
+        Thread.sleep(DELAY_AFTER_CHOOSE_FAIL);
+      } catch (InterruptedException e) {
+        // ignore
+      }
     }
   }
 

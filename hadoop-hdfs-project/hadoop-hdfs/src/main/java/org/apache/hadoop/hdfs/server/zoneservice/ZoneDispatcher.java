@@ -34,7 +34,7 @@ public class ZoneDispatcher extends Dispatcher {
   private static final Logger LOG = LoggerFactory.getLogger(ZoneDispatcher.class);
   private final int blockDispatchAttempts;
   private final long blockDispatchRetryInterval;
-  private static long delayAfterConnectionErrors = 5 * 60 * 1000;
+  private static final long DELAY_AFTER_CONNECTION_ERRORS = 5 * 60 * 1000;
 
   /** Constructor called by ZoneMover. */
   public ZoneDispatcher(NameNodeConnector nnc, Set<String> includedNodes,
@@ -146,7 +146,7 @@ public class ZoneDispatcher extends Dispatcher {
             LOG.warn("Found a suspected dead datanode: " +
                 target.getDDatanode().getDatanodeInfo());
             target.getDDatanode().setHasFailure();
-            target.getDDatanode().activateDelay(delayAfterConnectionErrors);
+            target.getDDatanode().activateDelay(DELAY_AFTER_CONNECTION_ERRORS);
             return;
           } catch (IOException e) {
             // If the attempt encounters "IOException: Block move timed out",
@@ -163,7 +163,7 @@ public class ZoneDispatcher extends Dispatcher {
                 e.getMessage().contains("ConnectException")) {
               LOG.warn("Found a suspected dead datanode: " + proxySource.getDatanodeInfo());
               target.getDDatanode().setHasFailure();
-              proxySource.activateDelay(delayAfterConnectionErrors);
+              proxySource.activateDelay(DELAY_AFTER_CONNECTION_ERRORS);
               return;
             }
 
@@ -284,7 +284,7 @@ public class ZoneDispatcher extends Dispatcher {
 
       int MAX_WAITING_MULTIPLE = 2;
       // avoid too many tasks waiting for the permit of this node
-      if (pendings.size() >= maxConcurrentMoves * MAX_WAITING_MULTIPLE) {
+      if (getPendingSize() >= maxConcurrentMoves * MAX_WAITING_MULTIPLE) {
         return false;
       }
       return super.addPendingBlock(pendingBlock);

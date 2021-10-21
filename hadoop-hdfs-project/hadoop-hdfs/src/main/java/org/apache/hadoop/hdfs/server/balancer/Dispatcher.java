@@ -568,7 +568,7 @@ public class Dispatcher {
         = new EnumMap<StorageType, StorageGroup>(StorageType.class);
     protected long delayUntil = 0L;
     /** blocks being moved but not confirmed yet */
-    protected final List<PendingMove> pendings;
+    private final List<PendingMove> pendings;
     private volatile boolean hasFailure = false;
     private volatile boolean hasSuccess = false;
     private ExecutorService moveExecutor;
@@ -670,6 +670,10 @@ public class Dispatcher {
       if (this.isAlive) {
         this.isAlive = false;
       }
+    }
+
+    public int getPendingSize() {
+      return this.pendings.size();
     }
   }
 
