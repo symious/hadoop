@@ -34,6 +34,7 @@ public class ZoneDispatcher extends Dispatcher {
   private static final Logger LOG = LoggerFactory.getLogger(ZoneDispatcher.class);
   private final int blockDispatchAttempts;
   private final long blockDispatchRetryInterval;
+  private static long delayAfterConnectionErrors = 5 * 60 * 1000;
 
   /** Constructor called by ZoneMover. */
   public ZoneDispatcher(NameNodeConnector nnc, Set<String> includedNodes,
@@ -142,9 +143,10 @@ public class ZoneDispatcher extends Dispatcher {
             return;
           } catch (SocketTimeoutException|ConnectException e) {
             LOG.warn("Failed to move " + this, e);
-            LOG.warn("Found a dead datanode: " + target.getDDatanode().getDatanodeInfo());
+            LOG.warn("Found a suspected dead datanode: " +
+                target.getDDatanode().getDatanodeInfo());
             target.getDDatanode().setHasFailure();
-            target.getDDatanode().setDead();
+            target.getDDatanode().activateDelay(delayAfterConnectionErrors);
             return;
           } catch (IOException e) {
             // If the attempt encounters "IOException: Block move timed out",
@@ -159,9 +161,9 @@ public class ZoneDispatcher extends Dispatcher {
 
             if (e.getMessage().contains("SocketTimeoutException") ||
                 e.getMessage().contains("ConnectException")) {
-              LOG.warn("Found a dead datanode: " + proxySource.getDatanodeInfo());
+              LOG.warn("Found a suspected dead datanode: " + proxySource.getDatanodeInfo());
               target.getDDatanode().setHasFailure();
-              proxySource.setDead();
+              proxySource.activateDelay(delayAfterConnectionErrors);
               return;
             }
 
