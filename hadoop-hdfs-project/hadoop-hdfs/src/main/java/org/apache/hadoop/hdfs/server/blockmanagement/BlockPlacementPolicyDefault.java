@@ -100,7 +100,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   private boolean excludeSlowNodesEnabled;
   protected NetworkTopology clusterMap;
   protected Host2NodesMap host2datanodeMap;
-  private FSClusterStats stats;
+  protected FSClusterStats stats;
   protected long heartbeatInterval;   // interval for DataNode heartbeats
   private long staleInterval;   // interval used to identify stale DataNodes
   
@@ -964,8 +964,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
 
     // check the communication traffic of the target machine
     if (considerLoad) {
-      final double maxLoad = considerLoadFactor *
-          stats.getInServiceXceiverAverage();
+      final double maxLoad = maxLoad(node);
       final int nodeLoad = node.getXceiverCount();
       if (nodeLoad > maxLoad) {
         logNodeIsNotChosen(node, NodeNotChosenReason.NODE_TOO_BUSY,
@@ -1249,6 +1248,10 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
 
   double getConsiderLoadFactor() {
     return this.considerLoadFactor;
+  }
+
+  protected double maxLoad(DatanodeDescriptor node) {
+    return considerLoadFactor * stats.getInServiceXceiverAverage();
   }
 }
 

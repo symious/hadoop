@@ -321,4 +321,12 @@ public class BlockPlacementPolicyWithDataCenter extends
     return (DatanodeDescriptor) dcClusterMap
         .chooseRandomWithStorageTypeTwoTrial(scope, excludedNodes, type);
   }
+
+  @Override
+  protected double maxLoad(DatanodeDescriptor node) {
+    String dataCenter = DFSNetworkTopologyWithDataCenter
+        .getDataCenter(node.getNetworkLocation());
+    return considerLoadFactor *
+        stats.getDataCenterInServiceXceiverAverage(dataCenter);
+  }
 }

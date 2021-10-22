@@ -77,4 +77,7 @@ public interface DatanodeStatistics {
 
   /** @return Storage Tier statistics*/
   Map<StorageType, StorageTypeStats> getStorageTypeStats();
+
+  /** @return Data Center Tier statistics*/
+  Map<String, DataCenterStats> getDataCenterStats();
 }

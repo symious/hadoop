@@ -33,4 +33,11 @@ public interface BlockStatsMXBean {
    * @return get storage statistics per storage type
    */
   Map<StorageType, StorageTypeStats> getStorageTypeStats();
+
+  /**
+   * The statistics of data center.
+   *
+   * @return get storage statistics per data center
+   */
+  Map<String, DataCenterStats> getDataCenterStats();
 }

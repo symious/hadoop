@@ -19,9 +19,12 @@ package org.apache.hadoop.hdfs.server.blockmanagement;
 
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSUtilClient;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorage;
+import org.apache.hadoop.net.NetworkTopology;
 
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -32,7 +35,10 @@ import java.util.Set;
  */
 class DatanodeStats {
 
+  private NetworkTopology networkTopology;
   private final StorageTypeStatsMap statsMap = new StorageTypeStatsMap();
+  private final DataCenterStatsMap dataCenterStatsMap =
+      new DataCenterStatsMap();
   private long capacityTotal = 0L;
   private long capacityUsed = 0L;
   private long capacityUsedNonDfs = 0L;
@@ -45,6 +51,10 @@ class DatanodeStats {
   private int nodesInService = 0;
   private int nodesInServiceXceiverCount = 0;
   private int expiredHeartbeats = 0;
+
+  void setNetworkTopology(NetworkTopology networkTopology) {
+    this.networkTopology = networkTopology;
+  }
 
   synchronized void add(final DatanodeDescriptor node) {
     xceiverCount += node.getXceiverCount();
@@ -72,6 +82,9 @@ class DatanodeStats {
     }
     for (StorageType storageType : storageTypes) {
       statsMap.addNode(storageType, node);
+    }
+    if (networkTopology instanceof DFSNetworkTopologyWithDataCenter) {
+      dataCenterStatsMap.addNode(node);
     }
   }
 
@@ -102,6 +115,9 @@ class DatanodeStats {
     for (StorageType storageType : storageTypes) {
       statsMap.subtractNode(storageType, node);
     }
+    if (networkTopology instanceof DFSNetworkTopologyWithDataCenter) {
+      dataCenterStatsMap.subtractNode(node);
+    }
   }
 
   /** Increment expired heartbeat counter. */
@@ -111,6 +127,10 @@ class DatanodeStats {
 
   synchronized Map<StorageType, StorageTypeStats> getStatsMap() {
     return statsMap.get();
+  }
+
+  synchronized Map<String, DataCenterStats> getDataCenterStatsMap() {
+    return dataCenterStatsMap.get();
   }
 
   synchronized long getCapacityTotal() {
@@ -147,6 +167,21 @@ class DatanodeStats {
 
   synchronized int getNodesInServiceXceiverCount() {
     return nodesInServiceXceiverCount;
+  }
+
+  synchronized int getDataCenterNodesInService(String dataCenter) {
+    if (getDataCenterStatsMap().containsKey(dataCenter)) {
+      return getDataCenterStatsMap().get(dataCenter).getNodesInService();
+    }
+    return 0;
+  }
+
+  synchronized int getDataCenterNodesInServiceXceiverCount(String dataCenter) {
+    if (getDataCenterStatsMap().containsKey(dataCenter)) {
+      return getDataCenterStatsMap().get(dataCenter)
+          .getNodesInServiceXceiverCount();
+    }
+    return 0;
   }
 
   synchronized int getExpiredHeartbeats() {
@@ -216,6 +251,38 @@ class DatanodeStats {
         storageTypeStats.subtractNode(node);
         if (storageTypeStats.getNodesInService() == 0) {
           storageTypeStatsMap.remove(storageType);
+        }
+      }
+    }
+  }
+
+  static final class DataCenterStatsMap {
+
+    private Map<String, DataCenterStats> dataCenterStatsMap = new HashMap<>();
+
+    private Map<String, DataCenterStats> get() {
+      return  new HashMap<>(dataCenterStatsMap);
+    }
+
+    private void addNode(final DatanodeDescriptor node) {
+      String dc = DFSNetworkTopologyWithDataCenter.getDataCenter(
+          node.getNetworkLocation());
+      DataCenterStats dataCenterStats = dataCenterStatsMap.get(dc);
+      if (dataCenterStats == null) {
+        dataCenterStats = new DataCenterStats();
+        dataCenterStatsMap.put(dc, dataCenterStats);
+      }
+      dataCenterStats.addNode(node);
+    }
+
+    private void subtractNode(final DatanodeDescriptor node) {
+      String dc = DFSNetworkTopologyWithDataCenter.getDataCenter(
+          node.getNetworkLocation());
+      DataCenterStats dataCenterStats = dataCenterStatsMap.get(dc);
+      if (dataCenterStats != null) {
+        dataCenterStats.subtractNode(node);
+        if (dataCenterStats.getNodesInService() == 0) {
+          dataCenterStatsMap.remove(dc);
         }
       }
     }

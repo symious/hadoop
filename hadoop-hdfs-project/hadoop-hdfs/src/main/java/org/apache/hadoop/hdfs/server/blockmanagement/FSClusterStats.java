@@ -57,4 +57,22 @@ public interface FSClusterStats {
    *         writes that are currently occurring on the cluster.
    */
   public double getInServiceXceiverAverage();
+
+  /**
+   * Indicates number of datanodes that are in service in the specific
+   * data center.
+   * @return Number of datanodes that are both alive and not decommissioned.
+   */
+  public int getDataCenterNumDatanodesInService(String dataCenter);
+
+  /**
+   * an indication of the average load of non-decommission(ing|ed) nodes
+   * of the specific data center eligible for block placement
+   *
+   * @return average of the in service number of block transfers and block
+   *         writes that are currently occurring on the cluster.
+   */
+  public double getDataCenterInServiceXceiverAverage(String dataCenter);
+
+  ;
 }

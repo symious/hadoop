@@ -30,6 +30,7 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.namenode.Namesystem;
 import org.apache.hadoop.hdfs.server.protocol.StorageReport;
 import org.apache.hadoop.hdfs.server.protocol.VolumeFailureSummary;
+import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.StopWatch;
 import org.apache.hadoop.util.Time;
@@ -109,6 +110,8 @@ class HeartbeatManager implements DatanodeStatistics {
   }
 
   void activate() {
+    stats.setNetworkTopology(blockManager.getDatanodeManager()
+        .getNetworkTopology());
     heartbeatThread.start();
   }
 
@@ -179,7 +182,7 @@ class HeartbeatManager implements DatanodeStatistics {
   public int getNumDatanodesInService() {
     return stats.getNodesInService();
   }
-  
+
   @Override
   public long getCacheCapacity() {
     return stats.getCacheCapacity();
@@ -211,6 +214,15 @@ class HeartbeatManager implements DatanodeStatistics {
   @Override
   public Map<StorageType, StorageTypeStats> getStorageTypeStats() {
     return stats.getStatsMap();
+  }
+
+  @Override
+  public Map<String, DataCenterStats> getDataCenterStats() {
+    return stats.getDataCenterStatsMap();
+  }
+
+  public NetworkTopology getNetworkTopology() {
+    return blockManager.getDatanodeManager().getNetworkTopology();
   }
 
   synchronized void register(final DatanodeDescriptor d) {
@@ -335,6 +347,14 @@ class HeartbeatManager implements DatanodeStatistics {
   boolean shouldAbortHeartbeatCheck(long offset) {
     long elapsed = heartbeatStopWatch.now(TimeUnit.MILLISECONDS);
     return elapsed + offset > heartbeatRecheckInterval;
+  }
+
+  public int getDataCenterInServiceXceiverCount(String dataCenter) {
+    return stats.getDataCenterNodesInServiceXceiverCount(dataCenter);
+  }
+
+  public int getDataCenterNumDatanodesInService(String dataCenter) {
+    return stats.getDataCenterNodesInService(dataCenter);
   }
 
   /**
