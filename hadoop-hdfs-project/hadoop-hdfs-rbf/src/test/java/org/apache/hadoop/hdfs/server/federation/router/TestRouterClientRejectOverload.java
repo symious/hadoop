@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.federation.router;
 
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.simulateSlowNamenode;
+import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.simulateThrowExceptionRouterRpcServer;
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.transitionClusterNSToActive;
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.transitionClusterNSToStandby;
 import static org.apache.hadoop.test.GenericTestUtils.assertExceptionContains;
@@ -316,5 +317,45 @@ public class TestRouterClientRejectOverload {
     routerClient.getFileInfo("/");
     // Router 0 failures do not change
     assertEquals(originalRouter0Failures, rpcMetrics0.getProxyOpNoNamenodes());
+  }
+
+
+  @Test
+  public void testConnectionNullException() throws Exception {
+    setupCluster(false, false);
+
+    // Choose 1st router
+    RouterContext routerContext = cluster.getRouters().get(0);
+    Router router = routerContext.getRouter();
+    // This router will throw ConnectionNullException
+    simulateThrowExceptionRouterRpcServer(router.getRpcServer());
+
+    // Set dfs.client.failover.random.order false, to pick 1st router at first
+    Configuration conf = cluster.getRouterClientConf();
+    conf.setBoolean("dfs.client.failover.random.order", false);
+    // Client to access Router Cluster
+    DFSClient routerClient =
+        new DFSClient(new URI("hdfs://fed"), conf);
+
+    // Get router0 metrics
+    FederationRPCMetrics rpcMetrics0 = cluster.getRouters().get(0)
+        .getRouter().getRpcServer().getRPCMetrics();
+    // Get router1 metrics
+    FederationRPCMetrics rpcMetrics1 = cluster.getRouters().get(1)
+        .getRouter().getRpcServer().getRPCMetrics();
+
+    // Original failures
+    long originalRouter0Failures = rpcMetrics0.getProxyOpFailureCommunicate();
+    long originalRouter1Failures = rpcMetrics1.getProxyOpFailureCommunicate();
+
+    // RPC call must be successful
+    routerClient.getFileInfo("/");
+
+    // Router 0 failures will increase
+    assertEquals(originalRouter0Failures + 1,
+        rpcMetrics0.getProxyOpFailureCommunicate());
+    // Router 1 failures will not change
+    assertEquals(originalRouter1Failures,
+        rpcMetrics1.getProxyOpFailureCommunicate());
   }
 }

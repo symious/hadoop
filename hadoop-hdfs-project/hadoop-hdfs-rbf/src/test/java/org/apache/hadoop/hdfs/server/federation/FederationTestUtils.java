@@ -53,12 +53,16 @@ import org.apache.hadoop.hdfs.server.federation.resolver.ActiveNamenodeResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeContext;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState;
 import org.apache.hadoop.hdfs.server.federation.resolver.NamenodeStatusReport;
+import org.apache.hadoop.hdfs.server.federation.router.ConnectionManager;
+import org.apache.hadoop.hdfs.server.federation.router.RouterRpcClient;
+import org.apache.hadoop.hdfs.server.federation.router.RouterRpcServer;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.NameNode.OperationCategory;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAContext;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.security.AccessControlException;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.mockito.internal.util.reflection.Whitebox;
 import org.mockito.invocation.InvocationOnMock;
@@ -390,5 +394,34 @@ public final class FederationTestUtils {
       cluster.switchToActive(nameService,
           listNamenodeContext.get(index).getNamenodeId());
     }
+  }
+
+
+  /**
+   * Simulate that a RouterRpcServer, the ConnectionManager of its
+   * RouterRpcClient throws IOException when call getConnection. So the
+   * RouterRpcClient will get a null Connection.
+   * @param server RouterRpcServer
+   * @throws IOException
+   */
+  public static void simulateThrowExceptionRouterRpcServer(
+      final RouterRpcServer server) throws IOException {
+    RouterRpcClient rpcClient = server.getRPCClient();
+    ConnectionManager connectionManager =
+        new ConnectionManager(server.getConfig());
+    ConnectionManager spyConnectionManager = spy(connectionManager);
+    doAnswer(new Answer() {
+      @Override
+      public Object answer(InvocationOnMock invocation) throws Throwable {
+        LOG.info("Simulating connectionManager throw IOException {}",
+            invocation.getMock());
+        throw new IOException("Simulate connectionManager throw IOException");
+      }
+    }).when(spyConnectionManager).getConnection(
+        any(UserGroupInformation.class), any(String.class), any(Class.class),
+        any(String.class));
+
+    Whitebox.setInternalState(rpcClient, "connectionManager",
+        spyConnectionManager);
   }
 }
