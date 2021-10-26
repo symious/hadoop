@@ -8,6 +8,7 @@ import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.datatransfer.IOStreamPair;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
+import org.apache.hadoop.hdfs.security.token.block.InvalidBlockTokenException;
 import org.apache.hadoop.hdfs.server.balancer.Dispatcher;
 import org.apache.hadoop.hdfs.server.balancer.KeyManager;
 import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
@@ -34,7 +35,7 @@ public class ZoneDispatcher extends Dispatcher {
   private static final Logger LOG = LoggerFactory.getLogger(ZoneDispatcher.class);
   private final int blockDispatchAttempts;
   private final long blockDispatchRetryInterval;
-  private static final long DELAY_AFTER_CONNECTION_ERRORS = 5 * 60 * 1000;
+  private static final long DELAY_AFTER_DATANODE_ERRORS = 10 * 60 * 1000;
 
   /** Constructor called by ZoneMover. */
   public ZoneDispatcher(NameNodeConnector nnc, Set<String> includedNodes,
@@ -141,12 +142,13 @@ public class ZoneDispatcher extends Dispatcher {
             nnc.addBytesMoved(block.getNumBytes());
             LOG.info("Successfully moved " + this + " at round " + i);
             return;
-          } catch (SocketTimeoutException|ConnectException e) {
+          } catch (SocketTimeoutException|ConnectException|InvalidBlockTokenException e) {
+            // for InvalidBlockTokenException, please refer HDFS-13441
             LOG.warn("Failed to move " + this, e);
-            LOG.warn("Found a suspected dead datanode: " +
+            LOG.warn("Found a problem datanode: " +
                 target.getDDatanode().getDatanodeInfo());
             target.getDDatanode().setHasFailure();
-            target.getDDatanode().activateDelay(DELAY_AFTER_CONNECTION_ERRORS);
+            target.getDDatanode().activateDelay(DELAY_AFTER_DATANODE_ERRORS);
             return;
           } catch (IOException e) {
             // If the attempt encounters "IOException: Block move timed out",
@@ -160,10 +162,11 @@ public class ZoneDispatcher extends Dispatcher {
             LOG.warn("Failed to move " + this, e);
 
             if (e.getMessage().contains("SocketTimeoutException") ||
-                e.getMessage().contains("ConnectException")) {
-              LOG.warn("Found a suspected dead datanode: " + proxySource.getDatanodeInfo());
+                e.getMessage().contains("ConnectException") ||
+                e.getMessage().contains("InvalidBlockTokenException")) {
+              LOG.warn("Found a problem datanode: " + proxySource.getDatanodeInfo());
               target.getDDatanode().setHasFailure();
-              proxySource.activateDelay(DELAY_AFTER_CONNECTION_ERRORS);
+              proxySource.activateDelay(DELAY_AFTER_DATANODE_ERRORS);
               return;
             }
 
