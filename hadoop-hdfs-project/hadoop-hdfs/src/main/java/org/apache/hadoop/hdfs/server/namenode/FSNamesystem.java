@@ -2793,6 +2793,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       writeUnlock("completeFile");
     }
     getEditLog().logSync();
+    logAuditEvent(success, "complete", src);
     return success;
   }
 
