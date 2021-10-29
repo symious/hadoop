@@ -34,11 +34,13 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.server.blockmanagement.CombinedHostFileManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.HostConfigManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.HostFileManager;
 
 import org.apache.hadoop.hdfs.protocol.DatanodeAdminProperties;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo.AdminStates;
+import org.apache.hadoop.hdfs.server.blockmanagement.HostFileWithMaintenanceManager;
 
 import static org.junit.Assert.assertTrue;
 
@@ -47,8 +49,9 @@ public class HostsFileWriter {
   private Path fullDir;
   private Path excludeFile;
   private Path includeFile;
+  private Path hostFileWithMaintenanceFile;
   private Path combinedFile;
-  private boolean isLegacyHostsFile = false;
+  private Class<? extends HostConfigManager> clazz;
 
   public void initialize(Configuration conf, String dir) throws IOException {
     localFileSys = FileSystem.getLocal(conf);
@@ -57,19 +60,25 @@ public class HostsFileWriter {
     cleanup(); // In case there is some left over from previous run.
     assertTrue(localFileSys.mkdirs(this.fullDir));
 
-    if (conf.getClass(
+    clazz = conf.getClass(
         DFSConfigKeys.DFS_NAMENODE_HOSTS_PROVIDER_CLASSNAME_KEY,
-            HostFileManager.class, HostConfigManager.class).equals(
-                HostFileManager.class)) {
-      isLegacyHostsFile = true;
-    }
-    if (isLegacyHostsFile) {
+        HostFileManager.class, HostConfigManager.class);
+
+    if (clazz.equals(HostFileManager.class) || clazz.equals(HostFileWithMaintenanceManager.class) ||
+        clazz.equals(HostFileWithMaintenanceEnableManager.class)) {
       excludeFile = new Path(fullDir, "exclude");
       includeFile = new Path(fullDir, "include");
       DFSTestUtil.writeFile(localFileSys, excludeFile, "");
       DFSTestUtil.writeFile(localFileSys, includeFile, "");
       conf.set(DFSConfigKeys.DFS_HOSTS_EXCLUDE, excludeFile.toUri().getPath());
       conf.set(DFSConfigKeys.DFS_HOSTS, includeFile.toUri().getPath());
+
+      if (clazz.equals(HostFileWithMaintenanceManager.class) ||
+          clazz.equals(HostFileWithMaintenanceEnableManager.class)) {
+        hostFileWithMaintenanceFile = new Path(fullDir, "hostFileWithMaintenance");
+        DFSTestUtil.writeFile(localFileSys, hostFileWithMaintenanceFile, "");
+        conf.set(DFSConfigKeys.DFS_HOSTS_MAINTENANCE, hostFileWithMaintenanceFile.toString());
+      }
     } else {
       combinedFile = new Path(fullDir, "all");
       conf.set(DFSConfigKeys.DFS_HOSTS, combinedFile.toString());
@@ -90,7 +99,7 @@ public class HostsFileWriter {
   public void initOutOfServiceHosts(List<String> decommissionHostNameAndPorts,
       Map<String, Long> maintenanceHosts) throws IOException {
     StringBuilder excludeHosts = new StringBuilder();
-    if (isLegacyHostsFile) {
+    if (clazz.equals(HostFileManager.class)) {
       if (maintenanceHosts != null && maintenanceHosts.size() > 0) {
         throw new UnsupportedOperationException(
             "maintenance support isn't supported by legacy hosts file");
@@ -100,6 +109,22 @@ public class HostsFileWriter {
       }
       DFSTestUtil.writeFile(localFileSys, excludeFile,
           excludeHosts.toString());
+    } else if (clazz.equals(HostFileWithMaintenanceManager.class) ||
+        clazz.equals(HostFileWithMaintenanceEnableManager.class)) {
+      for (String hostNameAndPort : decommissionHostNameAndPorts) {
+        excludeHosts.append(hostNameAndPort).append("\n");
+      }
+      DFSTestUtil.writeFile(localFileSys, excludeFile,
+          excludeHosts.toString());
+
+      if (maintenanceHosts != null) {
+        StringBuilder maintenanceHostsStr = new StringBuilder();
+        for (String hostNameAndPort : maintenanceHosts.keySet()) {
+          maintenanceHostsStr.append(hostNameAndPort).append("\n");
+        }
+        DFSTestUtil.writeFile(localFileSys, hostFileWithMaintenanceFile,
+            maintenanceHostsStr.toString());
+      }
     } else {
       HashSet<DatanodeAdminProperties> allDNs = new HashSet<>();
       if (decommissionHostNameAndPorts != null) {
@@ -133,8 +158,9 @@ public class HostsFileWriter {
 
   public void initIncludeHosts(String[] hostNameAndPorts) throws IOException {
     StringBuilder includeHosts = new StringBuilder();
-    if (isLegacyHostsFile) {
-      for(String hostNameAndPort : hostNameAndPorts) {
+    if (clazz.equals(HostFileManager.class) || clazz.equals(HostFileWithMaintenanceManager.class) ||
+        clazz.equals(HostFileWithMaintenanceEnableManager.class)) {
+      for (String hostNameAndPort : hostNameAndPorts) {
         includeHosts.append(hostNameAndPort).append("\n");
       }
       DFSTestUtil.writeFile(localFileSys, includeFile,

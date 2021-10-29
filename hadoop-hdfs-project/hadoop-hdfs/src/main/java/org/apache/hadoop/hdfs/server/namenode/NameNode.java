@@ -45,6 +45,8 @@ import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeManager;
+import org.apache.hadoop.hdfs.server.blockmanagement.HostConfigManager;
+import org.apache.hadoop.hdfs.server.blockmanagement.HostFileWithMaintenanceManager;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.NamenodeRole;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.RollingUpgradeStartupOption;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.StartupOption;
@@ -160,8 +162,10 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SUPPORT_ALLOW_FO
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SUPPORT_ALLOW_FORMAT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMESERVICE_ID;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_SECONDARY_NAMENODE_KEYTAB_FILE_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.FS_PROTECTED_DIRECTORIES;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.HADOOP_USER_GROUP_METRICS_PERCENTILES_INTERVALS;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.FS_PROTECTED_DIRECTORIES;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT;
 import static org.apache.hadoop.util.ExitUtil.terminate;
 import static org.apache.hadoop.util.ToolRunner.confirmPrompt;
@@ -292,6 +296,7 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY,
           FS_PROTECTED_DIRECTORIES,
           HADOOP_CALLER_CONTEXT_ENABLED_KEY,
+          DFS_HOSTS_MAINTENANCE_ENABLED_KEY,
           DFS_NAMENODE_REPLICATION_CONSIDERLOAD_FACTOR));
 
   private static final String USAGE = "Usage: hdfs namenode ["
@@ -2142,9 +2147,44 @@ public class NameNode extends ReconfigurableBase implements
       return reconfConsiderLoadFactor(property, newVal);
     } else if (property.equals(ipcClientRPCBackoffEnable)) {
       return reconfigureIPCBackoffEnabled(newVal);
+    } else if (property.equals(DFS_HOSTS_MAINTENANCE_ENABLED_KEY)) {
+      return reconfMaintenanceEnabled(datanodeManager, property, newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
+    }
+  }
+
+  private String reconfMaintenanceEnabled(DatanodeManager datanodeManager, String property,
+                                          String newVal)
+      throws ReconfigurationException {
+    namesystem.writeLock();
+    try {
+      HostConfigManager configManager = datanodeManager.getHostConfigManager();
+      if (!(configManager instanceof HostFileWithMaintenanceManager)) {
+        throw new RuntimeException(
+            "please check dfs.namenode.hosts.provider.classname whether configured as HostFileWithMaintenanceManager");
+      }
+
+      HostFileWithMaintenanceManager hostFileWithMaintenanceManager =
+          (HostFileWithMaintenanceManager) configManager;
+      if (newVal == null) {
+        hostFileWithMaintenanceManager.setEnabled(
+            DFS_HOSTS_MAINTENANCE_ENABLED_DEFAULT);
+        LOG.info("RECONFIGURE* changed maintenance enabled to "
+            + hostFileWithMaintenanceManager.isEnabled());
+        return String.valueOf(DFS_HOSTS_MAINTENANCE_ENABLED_DEFAULT);
+      } else {
+        hostFileWithMaintenanceManager.setEnabled(Boolean.parseBoolean(newVal));
+        LOG.info("RECONFIGURE* changed maintenance enabled to "
+            + hostFileWithMaintenanceManager.isEnabled());
+        return String.valueOf(hostFileWithMaintenanceManager.isEnabled());
+      }
+    } catch (Exception ex) {
+      throw new ReconfigurationException(property, newVal, getConf().get(
+          property), ex);
+    } finally {
+      namesystem.writeUnlock();
     }
   }
 

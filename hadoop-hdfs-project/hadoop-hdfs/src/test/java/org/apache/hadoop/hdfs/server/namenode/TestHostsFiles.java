@@ -29,6 +29,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
@@ -39,6 +40,8 @@ import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.server.blockmanagement.CombinedHostFileManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.HostConfigManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.HostFileManager;
+import org.apache.hadoop.hdfs.server.blockmanagement.HostFileWithMaintenanceManager;
+import org.apache.hadoop.hdfs.util.HostFileWithMaintenanceEnableManager;
 import org.apache.hadoop.hdfs.util.HostsFileWriter;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -61,7 +64,9 @@ public class TestHostsFiles {
   @Parameterized.Parameters
   public static Iterable<Object[]> data() {
     return Arrays.asList(new Object[][]{
-        {HostFileManager.class}, {CombinedHostFileManager.class}});
+        {HostFileManager.class}, {HostFileWithMaintenanceManager.class}, {
+        HostFileWithMaintenanceEnableManager.class},
+        {CombinedHostFileManager.class}});
   }
 
   /*
@@ -71,6 +76,8 @@ public class TestHostsFiles {
   private Configuration getConf() {
     Configuration conf = new HdfsConfiguration();
 
+    conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY,
+        true);
     // Lower the heart beat interval so the NN quickly learns of dead
     // or decommissioned DNs and the NN issues replication and invalidation
     // commands quickly (as replies to heartbeats)
@@ -91,8 +98,16 @@ public class TestHostsFiles {
     conf.set(DFSConfigKeys.NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY, "xyz");
 
     // Host file manager
-    conf.setClass(DFSConfigKeys.DFS_NAMENODE_HOSTS_PROVIDER_CLASSNAME_KEY,
-        hostFileMgrClass, HostConfigManager.class);
+    if (hostFileMgrClass.equals(HostFileWithMaintenanceEnableManager.class)) {
+      conf.setClass(DFSConfigKeys.DFS_NAMENODE_HOSTS_PROVIDER_CLASSNAME_KEY,
+          HostFileWithMaintenanceEnableManager.class, HostConfigManager.class);
+    } else if (hostFileMgrClass.equals(HostFileWithMaintenanceManager.class)) {
+      conf.setClass(DFSConfigKeys.DFS_NAMENODE_HOSTS_PROVIDER_CLASSNAME_KEY,
+          HostFileWithMaintenanceManager.class, HostConfigManager.class);
+    } else {
+      conf.setClass(DFSConfigKeys.DFS_NAMENODE_HOSTS_PROVIDER_CLASSNAME_KEY,
+          hostFileMgrClass, HostConfigManager.class);
+    }
     return conf;
   }
 
