@@ -22,6 +22,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceLimits;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -499,6 +502,12 @@ public class RMActiveServiceContext {
       printLog = false;
     }
     if (isSchedulerReady) {
+      if(this.scheduler instanceof CapacityScheduler) {
+        CapacityScheduler capacityScheduler = (CapacityScheduler)this.scheduler;
+        Resource clusterResource = capacityScheduler.getClusterResource();
+        capacityScheduler.getRootQueue().updateClusterResource(clusterResource,
+                new ResourceLimits(clusterResource));
+      }
       LOG.info("Scheduler recovery is done. Start allocating new containers.");
     }
     return isSchedulerReady;

@@ -899,6 +899,11 @@ public class ParentQueue extends AbstractCSQueue {
   @Override
   public void updateClusterResource(Resource clusterResource,
       ResourceLimits resourceLimits) {
+    // If scheduler is still working on recovery process
+    // will skip do updateClusterResource
+    if (!this.csContext.getRMContext().isSchedulerReady()) {
+      return;
+    }
     writeLock.lock();
     try {
       // Update effective capacity in all parent queue.
