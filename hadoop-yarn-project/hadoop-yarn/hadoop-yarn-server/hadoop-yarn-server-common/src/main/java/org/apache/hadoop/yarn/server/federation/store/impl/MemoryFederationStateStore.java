@@ -260,7 +260,6 @@ public class MemoryFederationStateStore implements FederationStateStore {
           .add(ApplicationHomeSubCluster.newInstance(e.getKey(), e.getValue()));
     }
 
-    GetApplicationsHomeSubClusterResponse.newInstance(result);
     return GetApplicationsHomeSubClusterResponse.newInstance(result);
   }
 

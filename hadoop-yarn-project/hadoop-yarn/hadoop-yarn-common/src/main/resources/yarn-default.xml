@@ -4215,6 +4215,34 @@
 
   <property>
     <description>
+      The Application Cleaner implementation class for GPG to use.
+    </description>
+    <name>yarn.federation.gpg.application.cleaner.class</name>
+    <value>org.apache.hadoop.yarn.server.globalpolicygenerator.applicationcleaner.DefaultApplicationCleaner</value>
+  </property>
+
+  <property>
+    <description>
+      The interval at which the application cleaner runs, -1 means disabled.
+    </description>
+    <name>yarn.federation.gpg.application.cleaner.interval-ms</name>
+    <value>-1</value>
+  </property>
+
+  <property>
+    <description>
+      Specifications on how (many times) to contact Router for apps. We need to
+      do this because Router might return partial application list because some
+      sub-cluster RM is not responsive (e.g. failing over).
+      Should have three values separated by comma: minimal success retries,
+      maximum total retry, retry interval (ms).
+    </description>
+    <name>yarn.federation.gpg.application.cleaner.contact.router.spec</name>
+    <value>3,10,600000</value>
+  </property>
+
+  <property>
+    <description>
       The http address of the GPG web application.
       If only a host is provided as the value,
       the webapp will be served on a random port.
@@ -4229,8 +4257,24 @@
       If only a host is provided as the value,
       the webapp will be served on a random port.
     </description>
-    <name> yarn.federation.gpg.webapp.https.address</name>
+    <name>yarn.federation.gpg.webapp.https.address</name>
     <value>0.0.0.0:8070</value>
+  </property>
+
+  <property>
+    <description>
+      If an app have finished beyond this time, it will be removed by GPG
+    </description>
+    <name>yarn.federation.gpg.app-home.min.expiration-ms</name>
+    <value>300000</value>
+  </property>
+
+  <property>
+    <description>
+      timeline-service address is used by GPG to query app state
+    </description>
+    <name>yarn.federation.gpg.timeline-service.webapp.address</name>
+    <value>http://0.0.0.0:8188</value>
   </property>
 
   <property>

@@ -33,6 +33,7 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.YarnUncaughtExceptionHandler;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade;
+import org.apache.hadoop.yarn.server.globalpolicygenerator.applicationcleaner.ApplicationCleaner;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.subclustercleaner.SubClusterCleaner;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.GPGWebApp;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.RMWebAppUtil;
@@ -74,6 +75,7 @@ public class GlobalPolicyGenerator extends CompositeService {
   // Scheduler service that runs tasks periodically
   private ScheduledThreadPoolExecutor scheduledExecutorService;
   private SubClusterCleaner subClusterCleaner;
+  private ApplicationCleaner applicationCleaner;
 
   private String webAppAddress;
   private JvmPauseMonitor pauseMonitor;
@@ -98,6 +100,12 @@ public class GlobalPolicyGenerator extends CompositeService {
             YarnConfiguration.DEFAULT_GPG_SCHEDULED_EXECUTOR_THREADS));
     this.subClusterCleaner = new SubClusterCleaner(this.conf, this.gpgContext);
 
+    this.applicationCleaner = FederationStateStoreFacade.createInstance(conf,
+        YarnConfiguration.GPG_APPCLEANER_CLASS,
+        YarnConfiguration.DEFAULT_GPG_APPCLEANER_CLASS,
+        ApplicationCleaner.class);
+    this.applicationCleaner.init(conf, this.gpgContext);
+
     this.webAppAddress = WebAppUtils.getGPGWebAppURLWithoutScheme(this.conf);
 
     DefaultMetricsSystem.initialize(METRICS_NAME);
@@ -117,15 +125,26 @@ public class GlobalPolicyGenerator extends CompositeService {
   protected void serviceStart() throws Exception {
     super.serviceStart();
 
-    // Scheduler SubClusterCleaner service
+    // Schedule SubClusterCleaner service
     long scCleanerIntervalMs = getConfig().getLong(
         YarnConfiguration.GPG_SUBCLUSTER_CLEANER_INTERVAL_MS,
         YarnConfiguration.DEFAULT_GPG_SUBCLUSTER_CLEANER_INTERVAL_MS);
     if (scCleanerIntervalMs > 0) {
       this.scheduledExecutorService.scheduleAtFixedRate(this.subClusterCleaner,
           0, scCleanerIntervalMs, TimeUnit.MILLISECONDS);
-      LOG.info("Scheduled sub-cluster cleaner with interval: {}",
-          DurationFormatUtils.formatDurationISO(scCleanerIntervalMs));
+      LOG.info("Scheduled sub-cluster cleaner with interval: {} ms",
+          scCleanerIntervalMs);
+    }
+
+    // Schedule ApplicationCleaner service
+    long appCleanerIntervalMs =
+        getConfig().getLong(YarnConfiguration.GPG_APPCLEANER_INTERVAL_MS,
+            YarnConfiguration.DEFAULT_GPG_APPCLEANER_INTERVAL_MS);
+    if (appCleanerIntervalMs > 0) {
+      this.scheduledExecutorService.scheduleAtFixedRate(this.applicationCleaner,
+          0, appCleanerIntervalMs, TimeUnit.MILLISECONDS);
+      LOG.info("Scheduled application cleaner with interval: {} ms",
+          appCleanerIntervalMs);
     }
 
     startWepApp();
