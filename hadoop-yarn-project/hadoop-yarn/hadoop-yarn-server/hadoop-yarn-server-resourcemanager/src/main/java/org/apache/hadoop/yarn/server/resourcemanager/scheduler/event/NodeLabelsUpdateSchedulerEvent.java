@@ -25,13 +25,25 @@ import org.apache.hadoop.yarn.api.records.NodeId;
 
 public class NodeLabelsUpdateSchedulerEvent extends SchedulerEvent {
   private Map<NodeId, Set<String>> nodeToLabels;
+  private boolean isFromAddNode;
 
   public NodeLabelsUpdateSchedulerEvent(Map<NodeId, Set<String>> nodeToLabels) {
     super(SchedulerEventType.NODE_LABELS_UPDATE);
     this.nodeToLabels = nodeToLabels;
+    this.isFromAddNode = false;
+  }
+
+  public NodeLabelsUpdateSchedulerEvent(Map<NodeId, Set<String>> nodeToLabels, boolean isFromAddNode) {
+    super(SchedulerEventType.NODE_LABELS_UPDATE);
+    this.nodeToLabels = nodeToLabels;
+    this.isFromAddNode = isFromAddNode;
   }
   
   public Map<NodeId, Set<String>> getUpdatedNodeToLabels() {
     return nodeToLabels;
+  }
+
+  public boolean isFromAddNode() {
+    return isFromAddNode;
   }
 }

@@ -2035,9 +2035,11 @@ public class CapacityScheduler extends
         updateLabels.addAll(labels);
       }
       refreshLabelToNodeCache(updateLabels);
-      Resource clusterResource = getClusterResource();
-      getRootQueue().updateClusterResource(clusterResource,
-          new ResourceLimits(clusterResource));
+      if (!labelUpdateEvent.isFromAddNode()) {
+        Resource clusterResource = getClusterResource();
+        getRootQueue().updateClusterResource(clusterResource,
+            new ResourceLimits(clusterResource));
+      }
     } finally {
       writeLock.unlock();
     }
@@ -2065,7 +2067,7 @@ public class CapacityScheduler extends
       // update this node to node label manager
       if (labelManager != null) {
         labelManager.activateNode(nodeManager.getNodeID(),
-            schedulerNode.getTotalResource());
+            schedulerNode.getTotalResource(), true);
       }
 
       // recover attributes from store if any.

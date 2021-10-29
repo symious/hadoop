@@ -222,11 +222,14 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
     return effectiveModifiedLabels;
   }
 
+  public void activateNode(NodeId nodeId, Resource resource) {
+    activateNode(nodeId, resource, false);
+  }
   /*
    * Following methods are used for setting if a node is up and running, and it
    * will update running nodes resource
    */
-  public void activateNode(NodeId nodeId, Resource resource) {
+  public void activateNode(NodeId nodeId, Resource resource, boolean isFromAddNode) {
     writeLock.lock();
     try {
       // save if we have a node before
@@ -259,7 +262,7 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
       // get the node after edition
       Map<String, Host> after = cloneNodeMap(ImmutableSet.of(nodeId));
       
-      updateResourceMappings(before, after);
+      updateResourceMappings(before, after, isFromAddNode);
     } finally {
       writeLock.unlock();
     }
@@ -422,9 +425,14 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
     return map;
   }
 
-  @SuppressWarnings("unchecked")
   private void updateResourceMappings(Map<String, Host> before,
       Map<String, Host> after) {
+    updateResourceMappings(before, after, false);
+  }
+
+  @SuppressWarnings("unchecked")
+  private void updateResourceMappings(Map<String, Host> before,
+      Map<String, Host> after, boolean isFromAddNode) {
     // Get NMs in before only
     Set<NodeId> allNMs = new HashSet<NodeId>();
     for (Entry<String, Host> entry : before.entrySet()) {
@@ -506,9 +514,10 @@ public class RMNodeLabelsManager extends CommonNodeLabelsManager {
     }
     
     // Notify RM
-    if (rmContext != null && rmContext.getDispatcher() != null) {
+    if (rmContext != null && rmContext.getDispatcher() != null && newNodeToLabelsMap
+        .size() > 0) {
       rmContext.getDispatcher().getEventHandler().handle(
-          new NodeLabelsUpdateSchedulerEvent(newNodeToLabelsMap));
+          new NodeLabelsUpdateSchedulerEvent(newNodeToLabelsMap, isFromAddNode));
     }
   }
   
