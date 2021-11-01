@@ -680,9 +680,10 @@ public class FederationInterceptorREST extends AbstractRESTRequestInterceptor {
     AppsInfo apps = new AppsInfo();
     long startTime = clock.getTime();
 
-    Map<SubClusterId, SubClusterInfo> subClustersActive = null;
+    Map<SubClusterId, SubClusterInfo> allSubClusters = null;
     try {
-      subClustersActive = federationFacade.getSubClusters(true);
+      //return all subClusters in stateStore
+      allSubClusters = federationFacade.getSubClusters(false);
     } catch (YarnException e) {
       routerMetrics.incrMultipleAppsFailedRetrieved();
       return null;
@@ -695,7 +696,7 @@ public class FederationInterceptorREST extends AbstractRESTRequestInterceptor {
     // HttpServletRequest does not work with ExecutorCompletionService.
     // Create a duplicate hsr.
     final HttpServletRequest hsrCopy = clone(hsr);
-    for (final SubClusterInfo info : subClustersActive.values()) {
+    for (final SubClusterInfo info : allSubClusters.values()) {
       compSvc.submit(new Callable<AppsInfo>() {
         @Override
         public AppsInfo call() {
@@ -719,7 +720,7 @@ public class FederationInterceptorREST extends AbstractRESTRequestInterceptor {
     }
 
     // Collect all the responses in parallel
-    for (int i = 0; i < subClustersActive.size(); i++) {
+    for (int i = 0; i < allSubClusters.size(); i++) {
       try {
         Future<AppsInfo> future = compSvc.take();
         AppsInfo appsResponse = future.get();
@@ -732,7 +733,9 @@ public class FederationInterceptorREST extends AbstractRESTRequestInterceptor {
         }
       } catch (Throwable e) {
         routerMetrics.incrMultipleAppsFailedRetrieved();
-        LOG.warn("Failed to get application report", e);
+        //If an error occurs in a subCluster, throw Exception immediately
+        throw new YarnRuntimeException("Failed to get application report and " +
+            "return immediately!",e);
       }
     }
 
