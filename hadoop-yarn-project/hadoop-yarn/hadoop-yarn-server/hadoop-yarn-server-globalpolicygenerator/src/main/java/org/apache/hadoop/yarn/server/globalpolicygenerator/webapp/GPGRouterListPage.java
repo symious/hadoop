@@ -17,28 +17,36 @@
 */
 package org.apache.hadoop.yarn.server.globalpolicygenerator.webapp;
 
-import org.apache.hadoop.yarn.webapp.view.HtmlBlock;
+import org.apache.hadoop.yarn.webapp.SubView;
+import org.apache.hadoop.yarn.webapp.view.TwoColumnLayout;
+
+import static org.apache.hadoop.yarn.webapp.view.JQueryUI.ACCORDION;
+import static org.apache.hadoop.yarn.webapp.view.JQueryUI.ACCORDION_ID;
+import static org.apache.hadoop.yarn.webapp.view.JQueryUI.initID;
 
 /**
- * Navigation block for the GPG Web UI.
+ * GPGRouterList page for the GPG Web UI.
  */
-public class NavBlock extends HtmlBlock {
+public class GPGRouterListPage extends TwoColumnLayout {
 
   @Override
-  public void render(Block html) {
-    html.
-      div("#nav").
-        h3("GPG").
-        ul().
-          li().a(url(""), "Overview").__().
-          li().a("/ws/v1/cluster/policy/list", "Policies").__().
-          li().a(url("routers"), "Routers").__().
-        __().
-        h3("Tools").
-        ul().
-          li().a("/conf", "Configuration").__().
-          li().a("/logs", "Local logs").__().
-          li().a("/stacks", "Server stacks").__().
-          li().a("/jmx?qry=Hadoop:*", "Server metrics").__().__().__();
+  protected void preHead(Page.HTML<__> html) {
+    commonPreHead(html);
+    setTitle("Router List");
+  }
+
+  protected void commonPreHead(Page.HTML<__> html) {
+    set(ACCORDION_ID, "nav");
+    set(initID(ACCORDION, "nav"), "{autoHeight:false, active:0}");
+  }
+
+  @Override
+  protected Class<? extends SubView> nav() {
+    return NavBlock.class;
+  }
+
+  @Override
+  protected Class<? extends SubView> content() {
+    return GPGRouterListBlock.class;
   }
 }

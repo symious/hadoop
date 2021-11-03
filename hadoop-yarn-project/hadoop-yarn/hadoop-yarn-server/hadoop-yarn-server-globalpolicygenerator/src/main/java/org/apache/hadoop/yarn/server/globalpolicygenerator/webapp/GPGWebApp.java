@@ -42,5 +42,6 @@ public class GPGWebApp extends WebApp{
       bind(GlobalPolicyGenerator.class).toInstance(gpg);
     }
     route("/", GPGController.class, "overview");
+    route("/routers", GPGController.class, "routers");
   }
 }

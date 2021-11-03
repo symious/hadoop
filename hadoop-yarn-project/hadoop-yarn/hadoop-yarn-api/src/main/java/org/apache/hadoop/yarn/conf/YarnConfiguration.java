@@ -4084,6 +4084,16 @@ public class YarnConfiguration extends Configuration {
   public static final String GPG_WEBAPP_PREFIX = FEDERATION_GPG_PREFIX
       + "webapp.";
 
+  /** The managed router list by GPG. */
+  public static final String GPG_MANAGE_ROUTER_GROUP_LIST = FEDERATION_GPG_PREFIX +
+      "manage.router.group.list";
+  public static final String DEFAULT_ROUTER_GROUP_LIST = "";
+
+  /** A list of machines that a router group contains */
+  public static final String GPG_MANAGE_SPECIAL_ROUTER_GROUP_MACHINES_PREFIX =
+      FEDERATION_GPG_PREFIX + "special.router.group.machines.";
+  public static final String DEFAULT_ROUTER_GROUP_MACHINE_LIST = "";
+
   // The number of threads to use for the GPG scheduled executor service
   public static final String GPG_SCHEDULED_EXECUTOR_THREADS =
       FEDERATION_GPG_PREFIX + "scheduled.executor.threads";

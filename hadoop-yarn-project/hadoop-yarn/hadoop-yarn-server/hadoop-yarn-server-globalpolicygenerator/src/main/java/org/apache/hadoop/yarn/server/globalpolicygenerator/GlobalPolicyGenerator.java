@@ -77,6 +77,8 @@ public class GlobalPolicyGenerator extends CompositeService {
   private SubClusterCleaner subClusterCleaner;
   private ApplicationCleaner applicationCleaner;
 
+  private String manageRouterList;
+
   private String webAppAddress;
   private JvmPauseMonitor pauseMonitor;
   private WebApp webApp;
@@ -107,6 +109,10 @@ public class GlobalPolicyGenerator extends CompositeService {
     this.applicationCleaner.init(conf, this.gpgContext);
 
     this.webAppAddress = WebAppUtils.getGPGWebAppURLWithoutScheme(this.conf);
+
+    this.manageRouterList = this.conf.get(
+        YarnConfiguration.GPG_MANAGE_ROUTER_GROUP_LIST,
+        YarnConfiguration.DEFAULT_ROUTER_GROUP_LIST);
 
     DefaultMetricsSystem.initialize(METRICS_NAME);
     JvmMetrics jm = JvmMetrics.initSingleton("GPG", null);
@@ -233,6 +239,16 @@ public class GlobalPolicyGenerator extends CompositeService {
 
   public static long getGPGStartupTime() {
     return gpgStartupTime;
+  }
+
+  public String getManageRouterList(){
+    return manageRouterList;
+  }
+
+  public String getMachineListByRouterGroup(String group){
+    return this.conf.get(
+        YarnConfiguration.GPG_MANAGE_SPECIAL_ROUTER_GROUP_MACHINES_PREFIX
+            + group, YarnConfiguration.DEFAULT_ROUTER_GROUP_MACHINE_LIST);
   }
 
   public static void main(String[] argv) {

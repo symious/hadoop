@@ -41,4 +41,10 @@ public class GPGController extends Controller {
     setTitle("GPG Details");
     render(GPGOverviewPage.class);
   }
+
+  public void routers() {
+    setTitle("Router list");
+    render(GPGRouterListPage.class);
+  }
+
 }
