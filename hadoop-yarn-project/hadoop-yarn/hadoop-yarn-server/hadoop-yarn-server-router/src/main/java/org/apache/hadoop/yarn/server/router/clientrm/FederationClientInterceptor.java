@@ -547,6 +547,14 @@ public class FederationClientInterceptor
               RouterAuditLogger.AuditConstants.SUBMIT_NEW_APP, "UNKNOWN",
               "RouterClientRMService", yarnResponseException.getMessage(),
               applicationId, subClusterId);
+
+          //Router should remove the app state when submit app failed
+          try {
+            federationFacade.deleteApplicationHomeSubCluster(applicationId);
+          }catch (Exception e){
+            LOG.error("Failed to remove app state: " + applicationId, e);
+          }
+
           RouterServerUtil.logAndThrowException("Unable to submit the " +
               "application " + applicationId + " to SubCluster " +
               subClusterId.getId(), yarnResponseException);
