@@ -34,12 +34,12 @@ public class ClusterWeight {
   private String cluster;
 
   @XmlElement(name = "weight")
-  private float weight;
+  private String weight;
 
   public ClusterWeight() {
   } // JAXB needs this
 
-  public ClusterWeight(String cluster, float weight) {
+  public ClusterWeight(String cluster, String weight) {
     this.cluster = cluster;
     this.weight = weight;
   }
@@ -52,11 +52,11 @@ public class ClusterWeight {
     this.cluster = cluster;
   }
 
-  public float getWeight() {
+  public String getWeight() {
     return weight;
   }
 
-  public void setWeight(float weight) {
+  public void setWeight(String weight) {
     this.weight = weight;
   }
 

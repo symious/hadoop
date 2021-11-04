@@ -211,11 +211,41 @@ public class GPGWebServices{
       Map<SubClusterIdInfo, Float> routerWeights = new HashMap<>();
       Map<SubClusterIdInfo, Float> amRMWeights;
 
-      for(int i=0;i<clusterWeightList.size();i++){
-        routerWeights.put(new SubClusterIdInfo(
-            clusterWeightList.get(i).getCluster()),
-            clusterWeightList.get(i).getWeight());
+      for(int i = 0;i < clusterWeightList.size();i++){
+        String msg;
+        String clusterId = clusterWeightList.get(i).getCluster();
+        String weightStr = clusterWeightList.get(i).getWeight();
+
+        float weight;
+        try{
+          weight = Float.valueOf(weightStr);
+        }catch (Exception e){
+          msg = "Update policy failed, weight can only be a numerical value : "
+              + "queueName: " + queueName + " ,clusterId: " + clusterId +
+              " ,weight: " + weightStr;
+          LOG.error(msg,e);
+          return Response.status(Response.Status.BAD_REQUEST).entity(
+              new PolicyUpdateResponseInfo(msg)).build();
+        }
+
+        if(weight < 0){
+          msg = "Update policy failed, weight cannot "
+              + "be less than 0 : queueName: " + queueName + " ,clusterId: "
+              + clusterId + " ,weight: " + weightStr;
+          LOG.error(msg);
+          return Response.status(Response.Status.BAD_REQUEST).entity(
+              new PolicyUpdateResponseInfo(msg)).build();
+        }else if(weight == 0){
+          msg = "Skip to update this cluster weight , weight cannot "
+              + "be equal 0 : queueName: " + queueName + " ,clusterId: "
+              + clusterId + " ,weight: " + weightStr;
+          LOG.warn(msg);
+          continue;
+        }else{
+          routerWeights.put(new SubClusterIdInfo(clusterId), weight);
+        }
       }
+
       amRMWeights = routerWeights;
 
       WeightedLocalityPolicyManager manager =
@@ -224,15 +254,16 @@ public class GPGWebServices{
       manager.getWeightedPolicyInfo().setRouterPolicyWeights(routerWeights);
       manager.getWeightedPolicyInfo().setAMRMPolicyWeights(amRMWeights);
 
-      SubClusterPolicyConfiguration spc = null;
       // serializeConf it in a context
       try {
-        spc = manager.serializeConf();
+        SubClusterPolicyConfiguration spc = manager.serializeConf();
+        federationFacade.setPolicyConfiguration(spc);
       } catch (FederationPolicyInitializationException e) {
-        LOG.error("serializeConf error",e);
+        LOG.error("serializeConf error", e);
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(
+            new PolicyUpdateResponseInfo("Update policy failed, serializeConf " +
+                "error : " + e.getMessage())).build();
       }
-
-      federationFacade.setPolicyConfiguration(spc);
     }
 
     return Response.status(Response.Status.OK).entity(

@@ -42,7 +42,7 @@ public class TestGPGWebServices extends BaseGPGWebServicesTest {
   private String user = "test1";
   private String queue = "queue1";
   private String clusterName = "cluster1";
-  private float weight = 1.0f;
+  private String weight = "1.0";
 
   private int HttpOkCode = 200;
 

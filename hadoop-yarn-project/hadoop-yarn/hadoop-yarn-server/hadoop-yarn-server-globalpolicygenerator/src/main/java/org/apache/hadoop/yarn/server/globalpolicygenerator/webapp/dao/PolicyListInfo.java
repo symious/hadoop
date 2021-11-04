@@ -69,8 +69,8 @@ public class PolicyListInfo {
             GPGWSConsts.ENTRY_FIELD);
         String clusterName = weightsJsonObject.getJSONObject(
             GPGWSConsts.KEY_FIELD).getString(GPGWSConsts.ID_FIELD);
-        double weight = weightsJsonObject.getDouble(GPGWSConsts.VALUE_FIELD);
-        clusterWeightList.add(new ClusterWeight(clusterName, (float) weight));
+        String weight = weightsJsonObject.getString(GPGWSConsts.VALUE_FIELD);
+        clusterWeightList.add(new ClusterWeight(clusterName, weight));
       }catch (Exception e){
         LOG.error("Can't parse JsonObject entry, try to use JSONArray.",e);
         JSONArray weightsJsonArray = routerJsonObject.
@@ -79,8 +79,8 @@ public class PolicyListInfo {
           JSONObject weightPair = weightsJsonArray.getJSONObject(i);
           String clusterName = weightPair.getJSONObject(GPGWSConsts.KEY_FIELD).
               getString(GPGWSConsts.ID_FIELD);
-          double weight = weightPair.getDouble(GPGWSConsts.VALUE_FIELD);
-          clusterWeightList.add(new ClusterWeight(clusterName, (float) weight));
+          String weight = weightPair.getString(GPGWSConsts.VALUE_FIELD);
+          clusterWeightList.add(new ClusterWeight(clusterName, weight));
         }
       }
       clusterWeights.setClusterWeight(clusterWeightList);
