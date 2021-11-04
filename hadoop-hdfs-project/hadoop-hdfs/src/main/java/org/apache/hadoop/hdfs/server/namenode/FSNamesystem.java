@@ -24,12 +24,16 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_C
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_ENABLED_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_MAX_SIZE_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_MAX_SIZE_KEY;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SIGNATURE_MAX_SIZE_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SIGNATURE_MAX_SIZE_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_SIZE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_BYTES_PER_CHECKSUM_DEFAULT;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_BYTES_PER_CHECKSUM_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CHECKSUM_TYPE_DEFAULT;
@@ -349,6 +353,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
           "rollingLockWaitTimeMetrics", null, detailedLockWaitTimeMetrics);
   private static final String IS_INTER_DC_READ_STR = "isInterDCRead";
 
+  private static final String CLIENT_PORT_STR = "clientPort";
+  private final String contextFieldSeparator;
+
   boolean isAuditEnabled() {
     return (!isDefaultAuditLogger || auditLog.isInfoEnabled())
         && !auditLoggers.isEmpty();
@@ -391,12 +398,34 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     for (AuditLogger logger : auditLoggers) {
       if (logger instanceof HdfsAuditLogger) {
         HdfsAuditLogger hdfsLogger = (HdfsAuditLogger) logger;
+        if (auditLogWithRemotePort) {
+          appendClientPortToCallerContextIfAbsent();
+        }
         hdfsLogger.logAuditEvent(succeeded, ugiStr, addr, cmd, src, dst,
             status, CallerContext.getCurrent(), ugi, dtSecretManager);
       } else {
         logger.logAuditEvent(succeeded, ugiStr, addr, cmd, src, dst, status);
       }
     }
+  }
+
+  private void appendClientPortToCallerContextIfAbsent() {
+    final CallerContext ctx = CallerContext.getCurrent();
+    if (isClientPortInfoAbsent(CLIENT_PORT_STR + ":" + Server.getRemotePort(),
+        ctx)) {
+      String origContext = ctx == null ? null : ctx.getContext();
+      byte[] origSignature = ctx == null ? null : ctx.getSignature();
+      CallerContext.setCurrent(
+          new CallerContext.Builder(origContext, contextFieldSeparator)
+              .append(CLIENT_PORT_STR, String.valueOf(Server.getRemotePort()))
+              .setSignature(origSignature)
+              .build());
+    }
+  }
+
+  private boolean isClientPortInfoAbsent(String clientPortInfo, CallerContext ctx){
+    return ctx == null || ctx.getContext() == null
+        || !ctx.getContext().contains(clientPortInfo);
   }
 
   /**
@@ -444,6 +473,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   // underlying logger is disabled, and avoid some unnecessary work.
   private final boolean isDefaultAuditLogger;
   private final List<AuditLogger> auditLoggers;
+  private final boolean auditLogWithRemotePort;
 
   /** The namespace tree. */
   FSDirectory dir;
@@ -753,6 +783,12 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     }
     fsLock = new FSNamesystemLock(conf, detailedLockHoldTimeMetrics,
         detailedLockWaitTimeMetrics);
+    auditLogWithRemotePort =
+        conf.getBoolean(DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_KEY,
+            DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_DEFAULT);
+    this.contextFieldSeparator =
+        conf.get(HADOOP_CALLER_CONTEXT_SEPARATOR_KEY,
+            HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT);
     cond = fsLock.newWriteLockCondition();
     cpLock = new ReentrantLock();
 
@@ -878,7 +914,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       alwaysUseDelegationTokensForTests = conf.getBoolean(
           DFS_NAMENODE_DELEGATION_TOKEN_ALWAYS_USE_KEY,
           DFS_NAMENODE_DELEGATION_TOKEN_ALWAYS_USE_DEFAULT);
-      
+
       this.dtSecretManager = createDelegationTokenSecretManager(conf);
       this.dir = new FSDirectory(this, conf);
       this.snapshotManager = new SnapshotManager(conf, dir);
@@ -1099,7 +1135,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
     // format before starting up if requested
     if (startOpt == StartupOption.FORMAT) {
-      
+
       fsImage.format(this, fsImage.getStorage().determineClusterId());// reuse current id
 
       startOpt = StartupOption.REGULAR;
@@ -2371,7 +2407,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    */
   public HdfsFileStatus startFile(String src, PermissionStatus permissions,
       String holder, String clientMachine, EnumSet<CreateFlag> flag,
-      boolean createParent, short replication, long blockSize, 
+      boolean createParent, short replication, long blockSize,
       CryptoProtocolVersion[] supportedVersions, boolean logRetryCache)
       throws IOException {
 
@@ -3513,7 +3549,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   BlockInfo getStoredBlock(Block block) {
     return blockManager.getStoredBlock(block);
   }
-  
+
   @Override
   public boolean isInSnapshot(long blockCollectionID) {
     assert hasReadLock();
@@ -4373,9 +4409,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * Save namespace image.
    * This will save current namespace into fsimage file and empty edits file.
    * Requires superuser privilege and safe mode.
-   * 
+   *
    * @throws AccessControlException if superuser privilege is violated.
-   * @throws IOException if 
+   * @throws IOException if
    */
   void saveNamespace() throws AccessControlException, IOException {
     checkOperation(OperationCategory.UNCHECKED);
@@ -4418,10 +4454,10 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       // if it is disabled - enable it and vice versa.
       if(arg.equals("check"))
         return getFSImage().getStorage().getRestoreFailedStorage();
-      
+
       boolean val = arg.equals("true");  // false if not
       getFSImage().getStorage().setRestoreFailedStorage(val);
-      
+
       return val;
     } finally {
       writeUnlock(operationName);
@@ -4708,7 +4744,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   }
 
   /**
-   * Get the total number of objects in the system. 
+   * Get the total number of objects in the system.
    */
   @Override // FSNamesystemMBean
   public long getMaxObjects() {
@@ -5101,7 +5137,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
           NameNode.stateChangeLog.info("*DIR* reportBadBlocks for block: {} on"
               + " datanode: {}", blk, nodes[j].getXferAddr());
           blockManager.findAndMarkBlockAsCorrupt(blk, nodes[j],
-              storageIDs == null ? null: storageIDs[j], 
+              storageIDs == null ? null: storageIDs[j],
               "client machine reported it");
         }
       }
@@ -5122,7 +5158,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * @return a located block with a new generation stamp and an access token
    * @throws IOException if any error occurs
    */
-  LocatedBlock updateBlockForPipeline(ExtendedBlock block, 
+  LocatedBlock updateBlockForPipeline(ExtendedBlock block,
       String clientName) throws IOException {
     LocatedBlock locatedBlock;
     checkOperation(OperationCategory.WRITE);
@@ -5197,8 +5233,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     // check new GS & length: this is not expected
     if (newBlock.getGenerationStamp() <= blockinfo.getGenerationStamp() ||
         newBlock.getNumBytes() < blockinfo.getNumBytes()) {
-      String msg = "Update " + oldBlock + " (len = " + 
-        blockinfo.getNumBytes() + ") to an older state: " + newBlock + 
+      String msg = "Update " + oldBlock + " (len = " +
+        blockinfo.getNumBytes() + ") to an older state: " + newBlock +
         " (len = " + newBlock.getNumBytes() +")";
       LOG.warn(msg);
       throw new IOException(msg);
@@ -5232,7 +5268,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     final String operationName = "registerBackupNode";
     writeLock(operationName);
     try {
-      if(getFSImage().getStorage().getNamespaceID() 
+      if(getFSImage().getStorage().getNamespaceID()
          != bnReg.getNamespaceID())
         throw new IOException("Incompatible namespaceIDs: "
             + " Namenode namespaceID = "
@@ -6318,7 +6354,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     logAuditEvent(success, operationName, oldSnapshotRoot,
         newSnapshotRoot, null);
   }
-  
+
   /**
    * Get the list of snapshottable directories that are owned 
    * by the current user. Return all the snapshottable directories if the 
@@ -6343,20 +6379,20 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     logAuditEvent(success, operationName, null, null, null);
     return status;
   }
-  
+
   /**
    * Get the difference between two snapshots (or between a snapshot and the
    * current status) of a snapshottable directory.
-   * 
+   *
    * @param path The full path of the snapshottable directory.
    * @param fromSnapshot Name of the snapshot to calculate the diff from. Null
    *          or empty string indicates the current tree.
    * @param toSnapshot Name of the snapshot to calculated the diff to. Null or
    *          empty string indicates the current tree.
-   * @return A report about the difference between {@code fromSnapshot} and 
-   *         {@code toSnapshot}. Modified/deleted/created/renamed files and 
-   *         directories belonging to the snapshottable directories are listed 
-   *         and labeled as M/-/+/R respectively. 
+   * @return A report about the difference between {@code fromSnapshot} and
+   *         {@code toSnapshot}. Modified/deleted/created/renamed files and
+   *         directories belonging to the snapshottable directories are listed
+   *         and labeled as M/-/+/R respectively.
    * @throws IOException
    */
   SnapshotDiffReport getSnapshotDiffReport(String path,
@@ -6796,7 +6832,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       writeUnlock(operationName);
       logAuditEvent(success, operationName, poolInfoStr, null, null);
     }
-    
+
     getEditLog().logSync();
   }
 
@@ -6840,7 +6876,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       String poolNameStr = "{poolName: " + cachePoolName + "}";
       logAuditEvent(success, operationName, poolNameStr, null, null);
     }
-    
+
     getEditLog().logSync();
   }
 
