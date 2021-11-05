@@ -180,7 +180,7 @@ public final class FSImageFormatPBINode {
         dir.addAclFeature(new AclFeature(entries));
       }
       if (d.hasXAttrs()) {
-        dir.addXAttrFeature(new XAttrFeature(
+        dir.addXAttrFeature(XAttrStorage.createXAttrFeature(
             loadXAttrs(d.getXAttrs(), state.getStringTable())));
       }
       return dir;
@@ -499,7 +499,7 @@ public final class FSImageFormatPBINode {
       }
       
       if (f.hasXAttrs()) {
-        file.addXAttrFeature(new XAttrFeature(
+        file.addXAttrFeature(XAttrStorage.createXAttrFeature(
             loadXAttrs(f.getXAttrs(), state.getStringTable())));
       }
 

@@ -19,8 +19,14 @@
 package org.apache.hadoop.hdfs.server.namenode;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
+import com.google.common.base.Preconditions;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.XAttr;
 import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
@@ -30,6 +36,9 @@ import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
  */
 @InterfaceAudience.Private
 public class XAttrStorage {
+  private final static Set<String> REUSE_NAMES = Collections.singleton("replicationRule");
+  private final static ConcurrentHashMap<String, XAttrFeature> features
+      = new ConcurrentHashMap<>();
 
   /**
    * Reads the extended attribute of an inode by name with prefix.
@@ -76,6 +85,37 @@ public class XAttrStorage {
     if (xAttrs == null || xAttrs.isEmpty()) {
       return;
     }
-    inode.addXAttrFeature(new XAttrFeature(xAttrs), snapshotId);
+    inode.addXAttrFeature(createXAttrFeature(xAttrs), snapshotId);
+  }
+
+  /**
+   * Create XAttrFeature from xAttrs
+   * @param xAttrs the list of XAttrs
+   */
+  public static XAttrFeature createXAttrFeature(List<XAttr> xAttrs) {
+    Preconditions.checkArgument(
+        (xAttrs != null) && !xAttrs.isEmpty(), "Invalid xAttrs");
+    // only reuse under specific conditions
+    if (xAttrs.size() > 1) {
+      return new XAttrFeature(xAttrs);
+    }
+    XAttr xAttr = xAttrs.get(0);
+    if (!REUSE_NAMES.contains(xAttr.getName())) {
+      return new XAttrFeature(xAttrs);
+    }
+
+    // generate key from xAttr
+    String key = getXAttrKey(xAttr);
+    // As namespace, name and value are all "final" in XAttr,
+    // the key here will always be consistent with the XAttr instance
+    if (!features.containsKey(key)) {
+      features.put(key, new XAttrFeature(xAttrs));
+    }
+    return features.get(key);
+  }
+
+  private static String getXAttrKey(XAttr xAttr) {
+    return String.format("%s.%s=%s", xAttr.getNameSpace(),
+        xAttr.getName(), Arrays.toString(xAttr.getValue()));
   }
 }

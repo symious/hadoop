@@ -75,6 +75,7 @@ import org.apache.hadoop.hdfs.server.namenode.INodeReference.WithName;
 import org.apache.hadoop.hdfs.server.namenode.INodeWithAdditionalFields;
 import org.apache.hadoop.hdfs.server.namenode.QuotaByStorageTypeEntry;
 import org.apache.hadoop.hdfs.server.namenode.SaveNamespaceContext;
+import org.apache.hadoop.hdfs.server.namenode.XAttrStorage;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.DirectoryWithSnapshotFeature.DirectoryDiff;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.DirectoryWithSnapshotFeature.DirectoryDiffList;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot.Root;
@@ -230,7 +231,7 @@ public class FSImageFormatPBSnapshot {
           }
           XAttrFeature xAttrs = null;
           if (fileInPb.hasXAttrs()) {
-            xAttrs = new XAttrFeature(FSImageFormatPBINode.Loader.loadXAttrs(
+            xAttrs = XAttrStorage.createXAttrFeature(FSImageFormatPBINode.Loader.loadXAttrs(
                 fileInPb.getXAttrs(), state.getStringTable()));
           }
 
@@ -354,7 +355,7 @@ public class FSImageFormatPBSnapshot {
           }
           XAttrFeature xAttrs = null;
           if (dirCopyInPb.hasXAttrs()) {
-            xAttrs = new XAttrFeature(FSImageFormatPBINode.Loader.loadXAttrs(
+            xAttrs = XAttrStorage.createXAttrFeature(FSImageFormatPBINode.Loader.loadXAttrs(
                 dirCopyInPb.getXAttrs(), state.getStringTable()));
           }
 
