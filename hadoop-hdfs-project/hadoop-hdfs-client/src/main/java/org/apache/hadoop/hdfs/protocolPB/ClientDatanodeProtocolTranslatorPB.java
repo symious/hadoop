@@ -58,6 +58,7 @@ import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.DatanodeVolumeInfoProto;
 import org.apache.hadoop.hdfs.protocol.proto.ReconfigurationProtocolProtos.ListReconfigurablePropertiesRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ReconfigurationProtocolProtos.ListReconfigurablePropertiesResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.RefreshNamenodesRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.RefreshDatanodeTopologyRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ReconfigurationProtocolProtos.GetReconfigurationStatusRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.ShutdownDatanodeRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ReconfigurationProtocolProtos.StartReconfigurationRequestProto;
@@ -102,6 +103,8 @@ public class ClientDatanodeProtocolTranslatorPB implements
       RefreshNamenodesRequestProto.newBuilder().build();
   private final static GetDatanodeInfoRequestProto VOID_GET_DATANODE_INFO =
       GetDatanodeInfoRequestProto.newBuilder().build();
+  private final static RefreshDatanodeTopologyRequestProto VOID_REFRESH_DATANODE_TOPOLOGY =
+      RefreshDatanodeTopologyRequestProto.newBuilder().build();
   private final static GetVolumeReportRequestProto
       VOID_GET_DATANODE_STORAGE_INFO =
       GetVolumeReportRequestProto.newBuilder().build();
@@ -207,6 +210,15 @@ public class ClientDatanodeProtocolTranslatorPB implements
   public void refreshNamenodes() throws IOException {
     try {
       rpcProxy.refreshNamenodes(NULL_CONTROLLER, VOID_REFRESH_NAMENODES);
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+  }
+
+  @Override
+  public void refreshDatanodeTopology() throws IOException {
+    try {
+      rpcProxy.refreshDatanodeTopology(NULL_CONTROLLER, VOID_REFRESH_DATANODE_TOPOLOGY);
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
     }

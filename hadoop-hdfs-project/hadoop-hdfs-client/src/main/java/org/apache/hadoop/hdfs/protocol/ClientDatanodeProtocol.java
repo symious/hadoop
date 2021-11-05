@@ -74,6 +74,13 @@ public interface ClientDatanodeProtocol {
   void refreshNamenodes() throws IOException;
 
   /**
+   * Refresh topology cache in the datanode.
+   *
+   * @throws IOException on error
+   **/
+  void refreshDatanodeTopology() throws IOException;
+
+  /**
    * Delete the block pool directory. If force is false it is deleted only if
    * it is empty, otherwise it is deleted along with its contents.
    *

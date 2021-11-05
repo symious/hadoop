@@ -62,6 +62,18 @@ message RefreshNamenodesResponseProto {
 }
 
 /**
+ * void request
+ */
+message RefreshDatanodeTopologyRequestProto {
+}
+
+/**
+ * void response
+ */
+message RefreshDatanodeTopologyResponseProto {
+}
+
+/**
  * blockPool - block pool to be deleted
  * force - if false, delete the block pool only if it is empty.
  *         if true, delete the block pool even if it has blocks.
@@ -207,6 +219,12 @@ service ClientDatanodeProtocolService {
    */
   rpc refreshNamenodes(RefreshNamenodesRequestProto)
       returns(RefreshNamenodesResponseProto);
+
+  /**
+   * Refresh topology cache in the datanode.
+   */
+  rpc refreshDatanodeTopology(RefreshDatanodeTopologyRequestProto)
+      returns(RefreshDatanodeTopologyResponseProto);
 
   /**
    * Delete the block pool from the datanode.

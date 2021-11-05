@@ -52,6 +52,8 @@ import org.apache.hadoop.hdfs.protocol.proto.ReconfigurationProtocolProtos.ListR
 import org.apache.hadoop.hdfs.protocol.proto.ReconfigurationProtocolProtos.ListReconfigurablePropertiesResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.RefreshNamenodesRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.RefreshNamenodesResponseProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.RefreshDatanodeTopologyRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.RefreshDatanodeTopologyResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.ShutdownDatanodeRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.ShutdownDatanodeResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ReconfigurationProtocolProtos.StartReconfigurationRequestProto;
@@ -78,6 +80,8 @@ public class ClientDatanodeProtocolServerSideTranslatorPB implements
     ClientDatanodeProtocolPB {
   private final static RefreshNamenodesResponseProto REFRESH_NAMENODE_RESP =
       RefreshNamenodesResponseProto.newBuilder().build();
+  private final static RefreshDatanodeTopologyResponseProto REFRESH_DATANODE_TOPOLOGY_RESP =
+      RefreshDatanodeTopologyResponseProto.newBuilder().build();
   private final static DeleteBlockPoolResponseProto DELETE_BLOCKPOOL_RESP =
       DeleteBlockPoolResponseProto.newBuilder().build();
   private final static ShutdownDatanodeResponseProto SHUTDOWN_DATANODE_RESP =
@@ -122,6 +126,18 @@ public class ClientDatanodeProtocolServerSideTranslatorPB implements
       throw new ServiceException(e);
     }
     return REFRESH_NAMENODE_RESP;
+  }
+
+  @Override
+  public RefreshDatanodeTopologyResponseProto refreshDatanodeTopology(
+      RpcController unused, RefreshDatanodeTopologyRequestProto request)
+      throws ServiceException {
+    try {
+      impl.refreshDatanodeTopology();
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
+    return REFRESH_DATANODE_TOPOLOGY_RESP;
   }
 
   @Override

@@ -572,4 +572,10 @@ public class DataNodeMetrics {
   public void incrBlocksDeletedInPendingIBR() {
     blocksDeletedInPendingIBR.incr();
   }
+
+  public void clearTopologyCache() {
+    if (dnsToSwitchMapping != null) {
+      dnsToSwitchMapping.reloadCachedMappings();
+    }
+  }
 }
