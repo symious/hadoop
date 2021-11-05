@@ -581,6 +581,13 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS =
       "dfs.zonemover.exitEvenHasProgress";
   public static final boolean DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS_DEFAULT = true;
+  public static final String  DFS_ZONEMOVER_KAFKA_BOOTSTRAP_SERVERS = "dfs.zonemover.kafka.bootstrap.servers";
+  public static final String  DFS_ZONEMOVER_KAFKA_TOPIC = "dfs.zonemover.kafka.topic";
+  public static final String  DFS_ZONEMOVER_KAFKA_GROUP_ID = "dfs.zonemover.kafka.group.id";
+  public static final String  DFS_ZONEMOVER_KAFKA_USERNAME = "dfs.zonemover.kafka.username";
+  public static final String  DFS_ZONEMOVER_KAFKA_PASSWORD = "dfs.zonemover.kafka.password";
+  public static final String  DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_KEY = "dfs.zonemover.trigger.queue.size";
+  public static final int     DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_DEFAULT = 1000;
 
   public static final String  DFS_DATANODE_ADDRESS_KEY = "dfs.datanode.address";
   public static final int     DFS_DATANODE_DEFAULT_PORT = 50010;

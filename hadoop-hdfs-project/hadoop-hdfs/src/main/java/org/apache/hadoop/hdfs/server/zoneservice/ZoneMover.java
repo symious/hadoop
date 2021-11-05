@@ -64,6 +64,7 @@ public class ZoneMover {
   private final AtomicInteger retryCount;
   private final DFSClient dfs;
   private static final long DELAY_AFTER_CHOOSE_FAIL = 2 * 1000;
+  private final Processor processor = new Processor();
 
   ZoneMover(NameNodeConnector nnc, Configuration conf, ReplicationRule rule,
       AtomicInteger retryCount) {
@@ -147,6 +148,12 @@ public class ZoneMover {
     }
   }
 
+  ExitStatus run(String path) {
+    Result result = new Result();
+    processor.processPath(path, result);
+    return result.getExitStatus();
+  }
+
   /* release resources */
   void shutdown() {
     dispatcher.shutdownNow();
@@ -228,6 +235,35 @@ public class ZoneMover {
       }
     }
 
+    return ExitStatus.SUCCESS.getExitCode();
+  }
+
+  /**
+   * Run with prepared arguments for monitorByTrigger mode.
+   * @param zoneMoverTrigger trigger for ZoneMover monitor
+   * @param conf configuration
+   * @param namenode URI of the NameNode
+   * @param paths paths to apply the rule
+   * @param rule the rule to apply
+   * @return a ExitStatus code
+   */
+  static int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
+      URI namenode, List<Path> paths, ReplicationRule rule)
+      throws IOException, InterruptedException{
+    NameNodeConnector nnc = new NameNodeConnector(ZoneMover.class.getSimpleName(),
+        namenode, ZONEMOVER_ID_PATH, paths, conf, 1);
+    ZoneMover zs = new ZoneMover(nnc, conf, rule, new AtomicInteger(0));
+    zs.init();
+    while (zoneMoverTrigger.hasNext()) {
+      String curPath = zoneMoverTrigger.getNext();
+
+      // process the path
+      LOG.debug("Check path: " + curPath);
+      ExitStatus exitStatus = zs.run(curPath);
+      if (exitStatus != ExitStatus.SUCCESS) {
+        LOG.warn("Monitor process file fail: " + curPath);
+      }
+    }
     return ExitStatus.SUCCESS.getExitCode();
   }
 
@@ -700,7 +736,8 @@ public class ZoneMover {
         + "\n\t-path <path>\tthe path to apply the rule"
         + "\n\t-pathFile <pathFile>\t the file contains paths to apply the rule"
         + "\n\t-rule <rule>\tthe replication rule"
-        + "\n\t-monitor\tenable monitor mode";
+        + "\n\t-monitor\tenable monitor mode"
+        + "\n\t-monitorByTrigger\tenable monitor mode with trigger";
 
     private static Options buildCliOptions() {
       Options options = new Options();
@@ -722,6 +759,9 @@ public class ZoneMover {
       options.addOption(option);
 
       option = new Option(null, "monitor", false, "enable monitor mode");
+      options.addOption(option);
+
+      option = new Option(null, "monitorByTrigger", false, "enable monitor by trigger");
       options.addOption(option);
       return options;
     }
@@ -811,7 +851,11 @@ public class ZoneMover {
         URI namenode = getNamespaceUri(commandLine, conf);
         List<Path> paths = getPaths(commandLine);
         ReplicationRule rule = getRule(commandLine);
-        if (commandLine.hasOption("monitor")) {
+        if (commandLine.hasOption("monitorByTrigger")) {
+          ZoneMoverTrigger zoneMoverTrigger =
+              new ZoneMoverKafkaTrigger(conf, paths);
+          return run(zoneMoverTrigger, conf, namenode, paths, rule);
+        } else if (commandLine.hasOption("monitor")) {
           //noinspection InfiniteLoopStatement
           while (true) {
             startTime = Time.monotonicNow();
@@ -845,6 +889,15 @@ public class ZoneMover {
     int run(Configuration conf, URI namenode, List<Path> paths, ReplicationRule rule)
         throws IOException, InterruptedException {
       return ZoneMover.run(conf, namenode, paths, rule);
+    }
+
+    /**
+     * Run with ZoneMoverTrigger for monitorByTrigger mode
+     */
+    int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
+        URI namenode, List<Path> paths, ReplicationRule rule)
+        throws IOException, InterruptedException {
+      return ZoneMover.run(zoneMoverTrigger, conf, namenode, paths, rule);
     }
   }
 
