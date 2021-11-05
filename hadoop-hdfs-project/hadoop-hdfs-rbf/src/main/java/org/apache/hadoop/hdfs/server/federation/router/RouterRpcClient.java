@@ -40,6 +40,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -76,6 +77,7 @@ import org.apache.hadoop.ipc.Server.Call;
 import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Time;
+import org.mortbay.util.ajax.JSON;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -141,6 +143,7 @@ public class RouterRpcClient {
 
   /** Fairness manager to control handlers assigned per NS. */
   private RouterRpcFairnessPolicyController routerRpcFairnessPolicyController;
+  private Map<String, AtomicLong> rejectedPermitsPerNs = new ConcurrentHashMap<>();
 
   /**
    * Create a router RPC client to manage remote procedure calls to NNs.
@@ -289,6 +292,15 @@ public class RouterRpcClient {
    */
   public String getJSON() {
     return this.connectionManager.getJSON();
+  }
+
+  /**
+   * JSON representation of the rejected permits for each nameservice.
+   *
+   * @return String representation of the rejected permits for each nameservice.
+   */
+  public String getRejectedPermitsPerNsJSON() {
+    return JSON.toString(rejectedPermitsPerNs);
   }
 
   /**
@@ -1432,6 +1444,7 @@ public class RouterRpcClient {
       if (rpcMonitor != null) {
         rpcMonitor.getRPCMetrics().incrProxyOpPermitRejected();
       }
+      incrRejectedPermitForNs(nsId);
       LOG.debug("Permit denied for ugi: {} for method: {}",
           ugi, m.getMethodName());
       String msg =
@@ -1463,5 +1476,17 @@ public class RouterRpcClient {
       getRouterRpcFairnessPolicyController() {
     return (AbstractRouterRpcFairnessPolicyController
           )routerRpcFairnessPolicyController;
+  }
+
+  private void incrRejectedPermitForNs(String ns) {
+    if (!rejectedPermitsPerNs.containsKey(ns)) {
+      rejectedPermitsPerNs.put(ns, new AtomicLong());
+    }
+    rejectedPermitsPerNs.get(ns).getAndIncrement();
+  }
+
+  public Long getRejectedPermitForNs(String ns) {
+    return rejectedPermitsPerNs.containsKey(ns) ?
+        rejectedPermitsPerNs.get(ns).longValue() : 0L;
   }
 }
