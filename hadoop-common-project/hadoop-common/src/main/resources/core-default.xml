@@ -832,6 +832,24 @@
 </property>
 
 <property>
+  <name>fs.protected.directories.use.file.enabled</name>
+  <value>false</value>
+  <description>Whether protected directories are stored in a
+    separated file. If this is ture, the configuration
+    fs.protected.directories will be invalid.
+  </description>
+</property>
+
+<property>
+  <name>fs.protected.directories.file</name>
+  <value></value>
+  <description>The file stores protected file paths and each line of
+    the file is a path. It is used with
+    fs.protected.directories.use.file.enabled together.
+  </description>
+</property>
+
+<property>
   <name>fs.AbstractFileSystem.file.impl</name>
   <value>org.apache.hadoop.fs.local.LocalFs</value>
   <description>The AbstractFileSystem for file: uris.</description>

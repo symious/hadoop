@@ -287,7 +287,15 @@ class FSDirDeleteOp {
       FSDirectory fsd, INodesInPath iip)
           throws AccessControlException, UnresolvedLinkException,
           ParentNotDirectoryException {
-    final SortedSet<String> protectedDirs = fsd.getProtectedDirectories();
+    final SortedSet<String> protectedDirs;
+    if (ProtectedDirectoriesManager.getInstance()
+        .getProtectedDirectoriesUseFileEnabled()) {
+      protectedDirs = ProtectedDirectoriesManager.getInstance()
+          .getProtectedDirectoriesSet();
+    } else {
+      protectedDirs = fsd.getProtectedDirectories();
+    }
+
     if (protectedDirs.isEmpty()) {
       return;
     }
