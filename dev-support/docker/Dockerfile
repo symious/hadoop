@@ -214,7 +214,7 @@ ENV MAVEN_OPTS -Xms256m -Xmx1536m
 ###
 # Everything past this point is either not needed for testing or breaks Yetus.
 # So tell Yetus not to read the rest of the file:
-# YETUS CUT HERE
+# RELEASE CUT HERE
 ###
 
 ####
