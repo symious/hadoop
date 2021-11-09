@@ -86,6 +86,7 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.IdentityHashStore;
 import org.apache.hadoop.util.StopWatch;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.util.Time;
 import org.apache.htrace.core.SpanId;
 import org.apache.htrace.core.TraceScope;
 import org.apache.htrace.core.Tracer;
@@ -1220,14 +1221,26 @@ public class DFSInputStream extends FSInputStream
       // Latest block, if refreshed internally
       block = addressPair.block;
       try {
+        long startTime = Time.monotonicNow();
         actualGetFromOneDataNode(addressPair, start, end, buf,
             corruptedBlockMap);
+        long endTime = Time.monotonicNow();
+        checkReadDataNodeExceedThreshold(startTime, endTime, addressPair);
         return;
       } catch (IOException e) {
         checkInterrupted(e); // check if the read has been interrupted
         // Ignore other IOException. Already processed inside the function.
         // Loop through to try the next node.
       }
+    }
+  }
+
+  private void checkReadDataNodeExceedThreshold(long startTime, long endTime,
+      DNAddrPair addressPair){
+    final DfsClientConf conf = dfsClient.getConf();
+    if (dfsClient.isAvoidSlowDataNodeForReadEnabled() && (
+        (endTime - startTime - conf.getSlowNodeCacheThresholdMillis()) > 0)) {
+      dfsClient.addSlowNode(addressPair.info);
     }
   }
 
@@ -1430,6 +1443,9 @@ public class DFSInputStream extends FSInputStream
         // If poll timeout and the request still ongoing, don't consider it
         // again. If read data failed, don't consider it either.
         ignored.add(chosenNode.info);
+        if (dfsClient.isAvoidSlowDataNodeForReadEnabled()){
+          dfsClient.addSlowNode(chosenNode.info);
+        }
       } else {
         // We are starting up a 'hedged' read. We have a read already
         // ongoing. Call getBestNodeDNAddrPair instead of chooseDataNode.
@@ -1601,6 +1617,9 @@ public class DFSInputStream extends FSInputStream
       long targetStart = position - blk.getStartOffset();
       long bytesToRead = Math.min(remaining, blk.getBlockSize() - targetStart);
       long targetEnd = targetStart + bytesToRead - 1;
+
+      avoidSlowDatanodes(blk);
+
       try {
         if (dfsClient.isHedgedReadsEnabled()) {
           hedgedFetchBlockByteRange(blk, targetStart, targetEnd, buffer,
@@ -1621,6 +1640,51 @@ public class DFSInputStream extends FSInputStream
     }
     assert remaining == 0 : "Wrong number of bytes read.";
     return realLen;
+  }
+
+  protected void avoidSlowDatanodes(LocatedBlock blk) {
+    if (this.dfsClient.isAvoidSlowDataNodeForReadEnabled()) {
+      DatanodeInfo[] locs = blk.getLocations();
+      DatanodeInfo[] beforeSortLocs  = Arrays.copyOf(locs, locs.length);
+
+      DatanodeInfo[] slowLocations = new DatanodeInfo[locs.length];
+      DatanodeInfo[] fastLocations = new DatanodeInfo[locs.length];
+
+      int i = 0;
+      int j = 0;
+
+      for (DatanodeInfo loc : locs) {
+        if (this.dfsClient.isSlowNode(loc)) {
+          slowLocations[i++] = loc;
+        } else {
+          fastLocations[j++] = loc;
+        }
+      }
+
+      // There is at least one node in the cache
+      if (i > 0) {
+        getDFSClient().getSlowDatanodeCacheMetricsMetric().incSortingOps();
+      }
+
+      int index = 0;
+
+      for(int z = 0; z < j; z++) {
+        locs[index++] = fastLocations[z];
+      }
+
+      for(int z = 0; z < i; z++) {
+        locs[index++] = slowLocations[z];
+      }
+
+      if (! Arrays.equals(beforeSortLocs, locs)) {
+        // Update efficient sorting ops.
+        getDFSClient().getSlowDatanodeCacheMetricsMetric().incSortingOpsWins();
+
+        // CachedStorageInfo must be updated after altering locations.
+        blk.updateCachedStorageInfo();
+      }
+
+    }
   }
 
   /**

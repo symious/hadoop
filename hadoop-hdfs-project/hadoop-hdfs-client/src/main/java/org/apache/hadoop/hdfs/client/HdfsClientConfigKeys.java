@@ -174,6 +174,21 @@ public interface HdfsClientConfigKeys {
       "dfs.client.deadnode.detection.deadnode.queue.max";
   int DFS_CLIENT_DEAD_NODE_DETECTION_DEAD_NODE_QUEUE_MAX_DEFAULT = 100;
 
+  String DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_KEY =
+      "dfs.client.avoid.slow.datanodes.for.read";
+  boolean DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_DEFAULT = false;
+
+  String DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_KEY =
+      "dfs.client.slownodecache.expiry.ms";
+  int DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_DEFAULT = 45000;
+  String DFS_CLIENT_SLOW_NODE_CACHE_SIZE_KEY =
+      "dfs.client.slownodecache.size";
+  int DFS_CLIENT_SLOW_NODE_CACHE_SIZE_DEFAULT = 512;
+  String DFS_CLIENT_SLOW_NODE_CACHE_THRESHOLD_MS_KEY =
+      "dfs.client.slownodecache.threshold.ms";
+  long DFS_CLIENT_SLOW_NODE_CACHE_THRESHOLD_MS_DEFAULT =
+      HedgedRead.THRESHOLD_MILLIS_DEFAULT;
+
   String DFS_CLIENT_DEAD_NODE_DETECTION_SUSPECT_NODE_QUEUE_MAX_KEY =
       "dfs.client.deadnode.detection.suspectnode.queue.max";
   int DFS_CLIENT_DEAD_NODE_DETECTION_SUSPECT_NODE_QUEUE_MAX_DEFAULT = 1000;
