@@ -31,6 +31,7 @@ import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade
 
 import static org.apache.hadoop.yarn.server.globalpolicygenerator.GPGUtils.*;
 
+import org.apache.hadoop.yarn.server.globalpolicygenerator.GPGMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,6 +54,8 @@ public class TimeLineApplicationCleaner extends ApplicationCleaner {
 
   public static final String APPLICATION_STATE = "YARN_APPLICATION_STATE";
 
+  private GPGMetrics gpgMetrics = GPGMetrics.getMetrics();;
+
   @Override
   public void run() {
     Date now = new Date();
@@ -70,6 +73,7 @@ public class TimeLineApplicationCleaner extends ApplicationCleaner {
       List<ApplicationHomeSubCluster> applicationHomeSubClusterList =
           facade.getApplicationsHomeSubCluster();
       LOG.debug("applicationHomeSubClusterList: " + applicationHomeSubClusterList);
+      gpgMetrics.incrSumAppStateStores(applicationHomeSubClusterList.size());
 
       Client httpClient = createClient();
 
@@ -126,15 +130,18 @@ public class TimeLineApplicationCleaner extends ApplicationCleaner {
           " applications from stateStore");
       LOG.debug("Apps to delete: {}", toDelete);
 
+      int i = 0;
       for (ApplicationId appId : toDelete) {
         try {
           LOG.debug("Deleting " + appId + " from stateStore");
           facade.deleteApplicationHomeSubCluster(appId);
+          i++;
         } catch (Exception e) {
           LOG.error("deleteApplicationHomeSubCluster failed at application " +
                   appId, e);
         }
       }
+      gpgMetrics.incrDeletedAppStateStores(i);
 
     } catch (Exception e) {
       LOG.error("Application cleaner started at time " + now + " fails: ", e);
