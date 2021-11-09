@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
+import org.apache.hadoop.util.Time;
 
 @Private
 @Unstable
@@ -86,13 +87,13 @@ public class TaskRunner {
       try {
         if (nextRun == startTime) {
           firstStep();
-          nextRun += repeatInterval;
+          nextRun = Time.monotonicNow() + repeatInterval;
           if (nextRun <= endTime) {
             queue.add(this);          
           }
         } else if (nextRun < endTime) {
           middleStep();
-          nextRun += repeatInterval;
+          nextRun = Time.monotonicNow() + repeatInterval;
           queue.add(this);
         } else {
           lastStep();
