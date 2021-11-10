@@ -1680,10 +1680,18 @@ public class Client implements AutoCloseable {
     private final int pingInterval; // how often sends ping to the server in msecs
     private String saslQop; // here for testing
     private final Configuration conf; // used to get the expected kerberos principal name
+    private final AtomicBoolean fallBackSimpleAuth;
     
     ConnectionId(InetSocketAddress address, Class<?> protocol, 
                  UserGroupInformation ticket, int rpcTimeout,
                  RetryPolicy connectionRetryPolicy, Configuration conf) {
+      this(address, protocol, ticket, rpcTimeout, connectionRetryPolicy, conf, new AtomicBoolean());
+    }
+
+    ConnectionId(InetSocketAddress address, Class<?> protocol,
+        UserGroupInformation ticket, int rpcTimeout,
+        RetryPolicy connectionRetryPolicy, Configuration conf,
+        AtomicBoolean fallBackSimpleAuth) {
       this.protocol = protocol;
       this.address = address;
       this.ticket = ticket;
@@ -1711,6 +1719,7 @@ public class Client implements AutoCloseable {
           CommonConfigurationKeys.IPC_CLIENT_PING_DEFAULT);
       this.pingInterval = (doPing ? Client.getPingInterval(conf) : 0);
       this.conf = conf;
+      this.fallBackSimpleAuth = fallBackSimpleAuth;
     }
     
     InetSocketAddress getAddress() {
@@ -1778,6 +1787,22 @@ public class Client implements AutoCloseable {
     static ConnectionId getConnectionId(InetSocketAddress addr,
         Class<?> protocol, UserGroupInformation ticket, int rpcTimeout,
         RetryPolicy connectionRetryPolicy, Configuration conf) throws IOException {
+      return getConnectionId(addr, protocol, ticket, rpcTimeout, connectionRetryPolicy, conf, new AtomicBoolean());
+    }
+
+    /**
+     * Returns a ConnectionId object.
+     * @param addr Remote address for the connection.
+     * @param protocol Protocol for RPC.
+     * @param ticket UGI
+     * @param rpcTimeout timeout
+     * @param conf Configuration object
+     * @return A ConnectionId instance
+     * @throws IOException
+     */
+    static ConnectionId getConnectionId(InetSocketAddress addr,
+        Class<?> protocol, UserGroupInformation ticket, int rpcTimeout,
+        RetryPolicy connectionRetryPolicy, Configuration conf, AtomicBoolean fallBackSimpleAuth) throws IOException {
 
       if (connectionRetryPolicy == null) {
         final int max = conf.getInt(
@@ -1793,7 +1818,7 @@ public class Client implements AutoCloseable {
       }
 
       return new ConnectionId(addr, protocol, ticket, rpcTimeout,
-          connectionRetryPolicy, conf);
+          connectionRetryPolicy, conf, fallBackSimpleAuth);
     }
     
     static boolean isEqual(Object a, Object b) {
