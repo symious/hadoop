@@ -35,6 +35,7 @@ public interface YarnWebServiceParams {
   String CONTAINER_LOG_FILE_NAME = "filename";
   String RESPONSE_CONTENT_FORMAT = "format";
   String RESPONSE_CONTENT_SIZE = "size";
+  String RESPONSE_START = "start";
   String NM_ID = "nm.id";
   String REDIRECTED_FROM_NODE = "redirected_from_node";
   String CLUSTER_ID = "clusterid";

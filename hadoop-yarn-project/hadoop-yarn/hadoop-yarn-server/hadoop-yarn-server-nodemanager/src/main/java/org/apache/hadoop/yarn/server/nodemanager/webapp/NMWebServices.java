@@ -380,8 +380,10 @@ public class NMWebServices {
       @QueryParam(YarnWebServiceParams.RESPONSE_CONTENT_FORMAT)
       String format,
       @QueryParam(YarnWebServiceParams.RESPONSE_CONTENT_SIZE)
-      String size) {
-    return getLogs(containerIdStr, filename, format, size);
+      String size,
+      @QueryParam(YarnWebServiceParams.RESPONSE_START)
+          String start) {
+    return getLogs(containerIdStr, filename, format, size, start);
   }
 
   /**
@@ -415,7 +417,9 @@ public class NMWebServices {
       @QueryParam(YarnWebServiceParams.RESPONSE_CONTENT_FORMAT)
       String format,
       @QueryParam(YarnWebServiceParams.RESPONSE_CONTENT_SIZE)
-      String size) {
+      String size,
+      @QueryParam(YarnWebServiceParams.RESPONSE_START)
+      String start) {
     ContainerId tempContainerId;
     try {
       tempContainerId = ContainerId.fromString(containerIdStr);
@@ -470,6 +474,8 @@ public class NMWebServices {
           containerIdStr, logFile, nmContext);
       final long fileLength = logFile.length();
 
+      final long startIndex = parseStartIndexLongParam(start);
+
       StreamingOutput stream = new StreamingOutput() {
         @Override
         public void write(OutputStream os) throws IOException,
@@ -478,7 +484,7 @@ public class NMWebServices {
             LogToolUtils.outputContainerLogThroughZeroCopy(
                 containerId.toString(), nmContext.getNodeId().toString(),
                 outputFileName, fileLength, bytes, lastModifiedTime, fis, os,
-                ContainerLogAggregationType.LOCAL);
+                ContainerLogAggregationType.LOCAL, startIndex);
             StringBuilder sb = new StringBuilder();
             String endOfFile = "End of LogType:" + outputFileName;
             sb.append(endOfFile + ".");
@@ -632,6 +638,13 @@ public class NMWebServices {
       return Long.MAX_VALUE;
     }
     return Long.parseLong(bytes);
+  }
+
+  private long parseStartIndexLongParam(String start) {
+    if (start == null || start.isEmpty()) {
+      return 0;
+    }
+    return Long.parseLong(start);
   }
 
   private Response createRedirectResponse(HttpServletRequest httpRequest,

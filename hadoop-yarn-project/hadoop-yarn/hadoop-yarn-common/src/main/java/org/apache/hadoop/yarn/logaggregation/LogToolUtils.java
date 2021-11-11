@@ -36,6 +36,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.core.MediaType;
 
@@ -50,6 +52,9 @@ public final class LogToolUtils {
 
   public static final String CONTAINER_ON_NODE_PATTERN =
       "Container: %s on %s";
+
+  private static final Logger LOG =
+      LoggerFactory.getLogger(LogToolUtils.class);
 
   /**
    * Formats the header of an aggregated log file.
@@ -187,19 +192,40 @@ public final class LogToolUtils {
   public static void outputContainerLogThroughZeroCopy(String containerId,
       String nodeId, String fileName, long fileLength, long outputSize,
       String lastModifiedTime, FileInputStream fis, OutputStream os,
-      ContainerLogAggregationType logType) throws IOException {
+      ContainerLogAggregationType logType, long startIndex) throws IOException {
     long toSkip = 0;
     long totalBytesToRead = fileLength;
-    if (outputSize < 0) {
-      long absBytes = Math.abs(outputSize);
+
+    if (outputSize <= 0) {
+      totalBytesToRead = 0;
+      LOG.debug("outputSize is not bigger than 0, " +
+          "outputContainerLogThroughZeroCopy return nothing!");
+    } else if(startIndex < 0){
+      long absBytes = Math.abs(startIndex);
       if (absBytes < fileLength) {
         toSkip = fileLength - absBytes;
         totalBytesToRead = absBytes;
+        LOG.debug("startIndex less than 0, outputContainerLogThroughZeroCopy " +
+                "return from start to end, startIndex: {} , totalBytesToRead: {}",
+            startIndex, totalBytesToRead);
       }
-    } else {
-      if (outputSize < fileLength) {
-        totalBytesToRead = outputSize;
-      }
+    } else if(fileLength > (outputSize + startIndex)){
+      //return from start to specific size
+      toSkip = startIndex;
+      totalBytesToRead = outputSize;
+      LOG.debug("outputContainerLogThroughZeroCopy return from start to " +
+          "specific size, startIndex: {} ,totalBytesToRead: {}", startIndex,
+          totalBytesToRead);
+    } else if(fileLength < (outputSize + startIndex) && fileLength > startIndex){
+      //return from start to end
+      toSkip = startIndex;
+      totalBytesToRead = fileLength - startIndex;
+      LOG.debug("outputContainerLogThroughZeroCopy return from start to end," +
+              " startIndex: {} ,totalBytesToRead: {}", startIndex,
+          totalBytesToRead);
+    } else{
+      //return whole fileLength
+      LOG.debug("outputContainerLogThroughZeroCopy return whole fileLength");
     }
 
     // output log summary
