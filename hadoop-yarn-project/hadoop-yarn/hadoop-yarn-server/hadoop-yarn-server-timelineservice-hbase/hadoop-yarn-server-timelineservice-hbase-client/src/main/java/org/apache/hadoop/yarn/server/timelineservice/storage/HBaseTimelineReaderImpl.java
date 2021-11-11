@@ -27,10 +27,12 @@ import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.records.timeline.TimelineHealth;
 import org.apache.hadoop.yarn.api.records.timelineservice.TimelineEntity;
+import org.apache.hadoop.yarn.api.records.timelineservice.TimelineEntityType;
 import org.apache.hadoop.yarn.server.timelineservice.reader.TimelineDataToRetrieve;
 import org.apache.hadoop.yarn.server.timelineservice.reader.TimelineEntityFilters;
 import org.apache.hadoop.yarn.server.timelineservice.reader.TimelineReaderContext;
 import org.apache.hadoop.yarn.server.timelineservice.storage.common.HBaseTimelineStorageUtils;
+import org.apache.hadoop.yarn.server.timelineservice.storage.reader.AppToClusterReader;
 import org.apache.hadoop.yarn.server.timelineservice.storage.reader.EntityTypeReader;
 import org.apache.hadoop.yarn.server.timelineservice.storage.reader.TimelineEntityReader;
 import org.apache.hadoop.yarn.server.timelineservice.storage.reader.TimelineEntityReaderFactory;
@@ -103,6 +105,11 @@ public class HBaseTimelineReaderImpl
   public Set<String> getEntityTypes(TimelineReaderContext context)
       throws IOException {
     storageMonitor.checkStorageIsUp();
+    if (context.getEntityType() != null && context.getEntityType().equals(
+        TimelineEntityType.YARN_CLUSTER.toString())) {
+      AppToClusterReader appToClusterReader = new AppToClusterReader(context);
+      return appToClusterReader.readEntityTypes(hbaseConf, conn);
+    }
     EntityTypeReader reader = new EntityTypeReader(context);
     return reader.readEntityTypes(hbaseConf, conn);
   }

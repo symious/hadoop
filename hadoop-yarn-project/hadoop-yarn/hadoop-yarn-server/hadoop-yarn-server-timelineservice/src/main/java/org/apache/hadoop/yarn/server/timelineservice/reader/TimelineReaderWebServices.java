@@ -1725,7 +1725,8 @@ public class TimelineReaderWebServices {
       @QueryParam("metricslimit") String metricsLimit,
       @QueryParam("metricstimestart") String metricsTimeStart,
       @QueryParam("metricstimeend") String metricsTimeEnd) {
-    return getApp(req, res, null, appId, flowName, flowRunId, userId,
+    String cluster = getAppToCluster(appId);
+    return getApp(req, res, cluster, appId, flowName, flowRunId, userId,
         confsToRetrieve, metricsToRetrieve, fields, metricsLimit,
         metricsTimeStart, metricsTimeEnd);
   }
@@ -3545,6 +3546,36 @@ public class TimelineReaderWebServices {
     }
 
     return entities;
+  }
+
+  @GET
+  @Path("/{appid}")
+  @Produces(MediaType.APPLICATION_JSON + "; " + JettyUtils.UTF_8)
+  public String getAppToCluster(@Context HttpServletRequest req,
+      @Context HttpServletResponse res, @PathParam("appid") String appid) {
+    String result = getAppToCluster(appid);
+    if (result != null && !result.isEmpty()) {
+      return result;
+    }
+    return "";
+  }
+
+  public String getAppToCluster(String appId) {
+    TimelineReaderManager timelineReaderManager = getTimelineReaderManager();
+    Set<String> result;
+    try {
+      result = timelineReaderManager.getEntityTypes(
+          TimelineReaderWebServicesUtils
+              .createTimelineReaderContext(null, null, null, null, appId,
+                  TimelineEntityType.YARN_CLUSTER.toString(), null, null));
+    } catch (Exception e) {
+      LOG.error("getAppToCluster error for appId: " + appId, e);
+      return null;
+    }
+    if (result.size() == 0) {
+      return null;
+    }
+    return (String) result.toArray()[0];
   }
 
   @GET
