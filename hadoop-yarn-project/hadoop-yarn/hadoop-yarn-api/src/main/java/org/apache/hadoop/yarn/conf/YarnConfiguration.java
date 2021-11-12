@@ -3975,6 +3975,11 @@ public class YarnConfiguration extends Configuration {
   public static final String DEFAULT_ROUTER_CLIENTRM_ADDRESS =
       "0.0.0.0:" + DEFAULT_ROUTER_CLIENTRM_PORT;
 
+  /** The number of threads used to handle client requests.*/
+  public static final String ROUTER_CLIENT_THREAD_COUNT =
+      ROUTER_PREFIX + "client.thread-count";
+  public static final int DEFAULT_ROUTER_CLIENT_THREAD_COUNT = 200;
+
   public static final String ROUTER_CLIENTRM_INTERCEPTOR_CLASS_PIPELINE =
       ROUTER_CLIENTRM_PREFIX + "interceptor-class.pipeline";
   public static final String DEFAULT_ROUTER_CLIENTRM_INTERCEPTOR_CLASS =
@@ -3998,6 +4003,13 @@ public class YarnConfiguration extends Configuration {
   public static final String DEFAULT_ROUTER_RMADMIN_INTERCEPTOR_CLASS =
       "org.apache.hadoop.yarn.server.router.rmadmin."
           + "DefaultRMAdminRequestInterceptor";
+
+  public static final String ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX =
+      ROUTER_PREFIX + ".fairness.handler.count.";
+
+  public static final String
+      ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS =
+      ROUTER_PREFIX + "policy.controller.class";
 
   /**
    * The number of retries for GetNewApplication and SubmitApplication in

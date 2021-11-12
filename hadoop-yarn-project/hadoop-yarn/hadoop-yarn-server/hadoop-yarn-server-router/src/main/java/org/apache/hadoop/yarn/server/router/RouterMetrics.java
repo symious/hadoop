@@ -70,6 +70,9 @@ public final class RouterMetrics {
           "appAttempt reports and latency(ms)")
   private MutableRate totalSucceededAppAttemptsRetrieved;
 
+  @Metric("Number of operations to hit permit limits")
+  private MutableCounterLong proxyOpPermitRejected;
+
 
   /**
    * Provide quantile counters for all latencies.
@@ -266,6 +269,14 @@ public final class RouterMetrics {
 
   public void incrAppAttemptsFailedRetrieved() {
     numAppAttemptsFailedRetrieved.incr();
+  }
+
+  public void incrProxyOpPermitRejected() {
+    proxyOpPermitRejected.incr();
+  }
+
+  public long getProxyOpPermitRejected() {
+    return proxyOpPermitRejected.value();
   }
 
 }

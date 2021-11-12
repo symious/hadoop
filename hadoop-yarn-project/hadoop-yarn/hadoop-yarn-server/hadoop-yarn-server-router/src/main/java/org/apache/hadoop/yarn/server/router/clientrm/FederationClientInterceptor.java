@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.router.clientrm;
 
 import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.ipc.Server;
+import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -35,6 +36,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -42,6 +44,7 @@ import org.apache.commons.lang3.NotImplementedException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.CancelDelegationTokenRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.CancelDelegationTokenResponse;
@@ -128,6 +131,9 @@ import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade
 import org.apache.hadoop.yarn.server.router.RouterAuditLogger;
 import org.apache.hadoop.yarn.server.router.RouterMetrics;
 import org.apache.hadoop.yarn.server.router.RouterServerUtil;
+import org.apache.hadoop.yarn.server.router.fairness.AbstractRouterRpcFairnessPolicyController;
+import org.apache.hadoop.yarn.server.router.fairness.RouterRpcFairnessPolicyController;
+import org.apache.hadoop.yarn.server.router.utils.FederationUtil;
 import org.apache.hadoop.yarn.util.Clock;
 import org.apache.hadoop.yarn.util.MonotonicClock;
 import org.slf4j.Logger;
@@ -137,6 +143,7 @@ import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTest
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_KEY;
+import static org.apache.hadoop.yarn.server.router.fairness.RouterRpcFairnessConstants.CONCURRENT_SUBCLUSTER_ID;
 
 /**
  * Extends the {@code AbstractRequestInterceptorClient} class and provides an
@@ -172,6 +179,9 @@ public class FederationClientInterceptor
   
   /** Field separator of CallerContext. */
   private String contextFieldSeparator;
+
+  /** Fairness manager to control handlers assigned per NS. */
+  private RouterRpcFairnessPolicyController routerRpcFairnessPolicyController;
 
   @Override
   public void init(String userName) {
@@ -211,6 +221,62 @@ public class FederationClientInterceptor
     this.contextFieldSeparator =
         conf.get(HADOOP_CALLER_CONTEXT_SEPARATOR_KEY,
             HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT);
+
+    this.routerRpcFairnessPolicyController =
+        FederationUtil.newFairnessPolicyController(conf);
+  }
+
+  /**
+   * Acquire permit to continue processing the request for specific subClusterId.
+   *
+   * @param subClusterId Identifier of the Yarn SubCluster.
+   * @throws IOException If permit could not be acquired for the subClusterId.
+   */
+  public void acquirePermit(final String subClusterId)
+      throws IOException {
+    long startTimeStamp = Time.monotonicNow();
+    Map<String, Semaphore> permits = routerRpcFairnessPolicyController.getPermits();
+    LOG.debug("Before acquirePermit ALL permits: " + permits);
+    if (routerRpcFairnessPolicyController != null
+        && !routerRpcFairnessPolicyController.acquirePermit(subClusterId)) {
+      // Throw StandByException,
+      // Clients could fail over and try another router.
+      routerMetrics.incrProxyOpPermitRejected();
+      LOG.error("Permit denied for subCluster: {} ", subClusterId);
+      String msg =
+          "Router is overloaded for subCluster: " + subClusterId;
+      throw new StandbyException(msg);
+    }else{
+      LOG.info("Permit accepted for subCluster: {} ", subClusterId);
+    }
+    long endTimeStamp = Time.monotonicNow();
+    LOG.debug("After acquirePermit ALL permits: " + permits + " ,cost time: "
+        + (endTimeStamp - startTimeStamp) + " ms");
+  }
+
+  /**
+   * Release permit for specific subClusterId after processing against downstream
+   * subClusterId is completed.
+   *
+   * @param subClusterId Identifier of the Yarn SubCluster.
+   */
+  public void releasePermit(final String subClusterId) {
+    if (routerRpcFairnessPolicyController != null) {
+      long startTimeStamp = Time.monotonicNow();
+      routerRpcFairnessPolicyController.releasePermit(subClusterId);
+      LOG.info("Permit released successfully for subCluster: {} ", subClusterId);
+      Map<String, Semaphore> permits = routerRpcFairnessPolicyController.getPermits();
+      long endTimeStamp = Time.monotonicNow();
+      LOG.debug("After releasePermit ALL permits: " + permits + " ,cost time: "
+          + (endTimeStamp - startTimeStamp) + " ms");
+    }
+  }
+
+  @VisibleForTesting
+  public AbstractRouterRpcFairnessPolicyController
+  getRouterRpcFairnessPolicyController() {
+    return (AbstractRouterRpcFairnessPolicyController
+        )routerRpcFairnessPolicyController;
   }
 
   @Override
@@ -330,12 +396,15 @@ public class FederationClientInterceptor
           getClientRMProxyForSubCluster(subClusterId);
       GetNewApplicationResponse response = null;
       try {
+        acquirePermit(subClusterId.getId());
         response = clientRMProxy.getNewApplication(request);
       } catch (Exception e) {
         LOG.warn("Unable to create a new ApplicationId in SubCluster "
             + subClusterId.getId(), e);
         //Record yarn feedback error
         yarnResponseException = e;
+      }finally {
+        releasePermit(subClusterId.getId());
       }
 
       if (response != null) {
@@ -519,6 +588,7 @@ public class FederationClientInterceptor
 
       SubmitApplicationResponse response = null;
       try {
+        acquirePermit(subClusterId.getId());
         appendClientIpToCallerContextIfAbsent();
         response = clientRMProxy.submitApplication(request);
       } catch (Exception e) {
@@ -526,6 +596,8 @@ public class FederationClientInterceptor
             + " to SubCluster " + subClusterId.getId(), e);
         //Record yarn feedback error
         yarnResponseException = e;
+      }finally {
+        releasePermit(subClusterId.getId());
       }
 
       if (response != null) {
@@ -624,6 +696,7 @@ public class FederationClientInterceptor
 
     KillApplicationResponse response = null;
     try {
+      acquirePermit(subClusterId.getId());
       LOG.info("forceKillApplication " + applicationId + " on SubCluster "
           + subClusterId);
       appendClientIpToCallerContextIfAbsent();
@@ -636,6 +709,8 @@ public class FederationClientInterceptor
           "Unable to kill the application report", applicationId,
           subClusterId);
       throw e;
+    }finally {
+      releasePermit(subClusterId.getId());
     }
 
     if (response == null) {
@@ -704,6 +779,7 @@ public class FederationClientInterceptor
 
     GetApplicationReportResponse response = null;
     try {
+      acquirePermit(subClusterId.getId());
       response = clientRMProxy.getApplicationReport(request);
     } catch (Exception e) {
       routerMetrics.incrAppsFailedRetrieved();
@@ -712,6 +788,8 @@ public class FederationClientInterceptor
           "RouterClientRMService", "unable to get the " +
               "application report", request.getApplicationId(), subClusterId);
       throw e;
+    }finally {
+      releasePermit(subClusterId.getId());
     }
 
     if (response == null) {
@@ -752,6 +830,7 @@ public class FederationClientInterceptor
       ClientMethod request, Class<R> clazz) throws YarnException, IOException {
     List<Callable<Object>> callables = new ArrayList<>();
     List<Future<Object>> futures = new ArrayList<>();
+    acquirePermit(CONCURRENT_SUBCLUSTER_ID);
     Map<SubClusterId, IOException> exceptions = new TreeMap<>();
     for (SubClusterId subClusterId : clusterIds) {
       callables.add(new Callable<Object>() {
@@ -801,6 +880,8 @@ public class FederationClientInterceptor
       }
     } catch (InterruptedException e) {
       throw new YarnException(e);
+    }finally {
+      releasePermit(CONCURRENT_SUBCLUSTER_ID);
     }
     return results;
   }
@@ -932,6 +1013,7 @@ public class FederationClientInterceptor
 
     GetApplicationAttemptReportResponse response = null;
     try {
+      acquirePermit(subClusterId.getId());
       response = clientRMProxy.getApplicationAttemptReport(request);
     } catch (Exception e) {
       routerMetrics.incrAppAttemptsFailedRetrieved();
@@ -939,6 +1021,8 @@ public class FederationClientInterceptor
               + request.getApplicationAttemptId() + "to SubCluster "
               + subClusterId.getId(), e);
       throw e;
+    }finally {
+      releasePermit(subClusterId.getId());
     }
 
     if (response == null) {
@@ -1036,6 +1120,9 @@ public class FederationClientInterceptor
   @Override
   public void shutdown() {
     executorService.shutdown();
+    if (this.routerRpcFairnessPolicyController != null) {
+      this.routerRpcFairnessPolicyController.shutdown();
+    }
     super.shutdown();
   }
 

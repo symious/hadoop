@@ -169,8 +169,8 @@ public class RouterClientRMService extends AbstractService
     Configuration serverConf = new Configuration(conf);
 
     int numWorkerThreads =
-        serverConf.getInt(YarnConfiguration.RM_CLIENT_THREAD_COUNT,
-            YarnConfiguration.DEFAULT_RM_CLIENT_THREAD_COUNT);
+        serverConf.getInt(YarnConfiguration.ROUTER_CLIENT_THREAD_COUNT,
+            YarnConfiguration.DEFAULT_ROUTER_CLIENT_THREAD_COUNT);
 
     this.server = rpc.getServer(ApplicationClientProtocol.class, this,
         listenerEndpoint, serverConf, null, numWorkerThreads);

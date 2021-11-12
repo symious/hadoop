@@ -138,12 +138,15 @@ public class EnhancedFederationClientInterceptor
 
     GetContainerReportResponse response = null;
     try {
+      acquirePermit(subClusterId.getId());
       response = clientRMProxy.getContainerReport(request);
     } catch (Exception e) {
       LOG.error("Unable to get the container report for "
           + applicationId + "to SubCluster "
           + subClusterId.getId(), e);
       throw e;
+    }finally {
+      releasePermit(subClusterId.getId());
     }
 
     if (response == null) {
@@ -209,10 +212,13 @@ public class EnhancedFederationClientInterceptor
           getClientRMProxyForSubCluster(subClusterId);
       GetQueueInfoResponse response = null;
       try {
+        acquirePermit(subClusterId.getId());
         response = clientRMProxy.getQueueInfo(request);
       } catch (Exception e) {
         LOG.warn("Unable to getQueueInfo in SubCluster "
             + subClusterId.getId(), e);
+      }finally {
+        releasePermit(subClusterId.getId());
       }
 
       if (response != null) {
