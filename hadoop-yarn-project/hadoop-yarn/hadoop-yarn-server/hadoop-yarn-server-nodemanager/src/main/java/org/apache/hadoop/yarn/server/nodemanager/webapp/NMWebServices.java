@@ -382,8 +382,10 @@ public class NMWebServices {
       @QueryParam(YarnWebServiceParams.RESPONSE_CONTENT_SIZE)
       String size,
       @QueryParam(YarnWebServiceParams.RESPONSE_START)
-          String start) {
-    return getLogs(containerIdStr, filename, format, size, start);
+          String start,
+      @QueryParam(YarnWebServiceParams.IS_INCREMENTAL)
+      boolean isIncremental) {
+    return getLogs(containerIdStr, filename, format, size, start, isIncremental);
   }
 
   /**
@@ -419,7 +421,9 @@ public class NMWebServices {
       @QueryParam(YarnWebServiceParams.RESPONSE_CONTENT_SIZE)
       String size,
       @QueryParam(YarnWebServiceParams.RESPONSE_START)
-      String start) {
+      String start,
+      @QueryParam(YarnWebServiceParams.IS_INCREMENTAL)
+          boolean isIncremental) {
     ContainerId tempContainerId;
     try {
       tempContainerId = ContainerId.fromString(containerIdStr);
@@ -476,6 +480,7 @@ public class NMWebServices {
 
       final long startIndex = parseStartIndexLongParam(start);
 
+      boolean isIncrementalFlag = isIncremental;
       StreamingOutput stream = new StreamingOutput() {
         @Override
         public void write(OutputStream os) throws IOException,
@@ -484,19 +489,26 @@ public class NMWebServices {
             LogToolUtils.outputContainerLogThroughZeroCopy(
                 containerId.toString(), nmContext.getNodeId().toString(),
                 outputFileName, fileLength, bytes, lastModifiedTime, fis, os,
-                ContainerLogAggregationType.LOCAL, startIndex);
+                ContainerLogAggregationType.LOCAL, startIndex,
+                isIncrementalFlag);
+
             StringBuilder sb = new StringBuilder();
-            String endOfFile = "End of LogType:" + outputFileName;
-            sb.append(endOfFile + ".");
-            if (isRunning) {
-              sb.append("This log file belongs to a running container ("
-                  + containerIdStr + ") and so may not be complete." + "\n");
+            if (!isIncrementalFlag) {
+              String endOfFile = "End of LogType:" + outputFileName;
+              sb.append(endOfFile + ".");
+              if (isRunning) {
+                sb.append("This log file belongs to a running container ("
+                    + containerIdStr + ") and so may not be complete." + "\n");
+              } else {
+                sb.append("\n");
+              }
+              sb.append(StringUtils.repeat("*", endOfFile.length() + 50)
+                  + "\n\n");
             } else {
               sb.append("\n");
             }
-            sb.append(StringUtils.repeat("*", endOfFile.length() + 50)
-                + "\n\n");
             os.write(sb.toString().getBytes(Charset.forName("UTF-8")));
+
             // If we have aggregated logs for this container,
             // output the aggregation logs as well.
             ApplicationId appId = containerId.getApplicationAttemptId()

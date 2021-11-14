@@ -40,4 +40,5 @@ public interface YarnWebServiceParams {
   String REDIRECTED_FROM_NODE = "redirected_from_node";
   String CLUSTER_ID = "clusterid";
   String MANUAL_REDIRECTION = "manual_redirection";
+  String IS_INCREMENTAL = "isIncremental";
 }

@@ -192,7 +192,8 @@ public final class LogToolUtils {
   public static void outputContainerLogThroughZeroCopy(String containerId,
       String nodeId, String fileName, long fileLength, long outputSize,
       String lastModifiedTime, FileInputStream fis, OutputStream os,
-      ContainerLogAggregationType logType, long startIndex) throws IOException {
+      ContainerLogAggregationType logType, long startIndex,
+      boolean isIncrementalFlag) throws IOException {
     long toSkip = 0;
     long totalBytesToRead = fileLength;
 
@@ -229,9 +230,11 @@ public final class LogToolUtils {
     }
 
     // output log summary
-    byte[] b = formatContainerLogHeader(containerId, nodeId, logType, fileName,
-        lastModifiedTime, fileLength);
-    os.write(b, 0, b.length);
+    if (!isIncrementalFlag) {
+      byte[] b = formatContainerLogHeader(containerId, nodeId, logType, fileName,
+          lastModifiedTime, fileLength);
+      os.write(b, 0, b.length);
+    }
 
     if (totalBytesToRead > 0) {
       // output log content
