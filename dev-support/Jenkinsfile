@@ -275,10 +275,10 @@ pipeline {
                 always {
                     script {
                         // Publish status if it was missed (YETUS-1059)
-                        withCredentials(
-                            [usernamePassword(credentialsId: '683f5dcf-5552-4b28-9fb1-6a6b77cf53dd',
-                                              passwordVariable: 'GITHUB_TOKEN',
-                                              usernameVariable: 'GITHUB_USER')]) {
+//                         withCredentials(
+//                             [usernamePassword(credentialsId: '683f5dcf-5552-4b28-9fb1-6a6b77cf53dd',
+//                                               passwordVariable: 'GITHUB_TOKEN',
+//                                               usernameVariable: 'GITHUB_USER')]) {
                             sh '''#!/usr/bin/env bash
 
                             # Copy the artifacts of Ubuntu focal build to workspace
@@ -288,7 +288,7 @@ pipeline {
                             chmod u+x "${SOURCEDIR}/dev-support/jenkins.sh"
                             "${SOURCEDIR}/dev-support/jenkins.sh" github_status_recovery
                             '''
-                        }
+//                         }
 
                         // YETUS output
                         archiveArtifacts "out/**"
