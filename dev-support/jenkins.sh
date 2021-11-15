@@ -90,6 +90,7 @@ is_c_cpp_change() {
 function check_ci_run() {
   # Get the first commit of this PR relative to the trunk branch
   echo firstCommitOfThisPr=$(git --git-dir "${SOURCEDIR}/.git" rev-parse origin/trunk)
+  echo git --git-dir "${SOURCEDIR}/.git" rev-parse origin/trunk
   firstCommitOfThisPr=$(git --git-dir "${SOURCEDIR}/.git" rev-parse origin/trunk)
 
   # Loop over the paths of all the changed files and check if the criteria
