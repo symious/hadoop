@@ -127,13 +127,13 @@ pipeline {
             }
 
             steps {
-                withCredentials(getGithubCreds()) {
+//                 withCredentials(getGithubCreds()) {
                     sh '''#!/usr/bin/env bash
 
                     chmod u+x "${SOURCEDIR}/dev-support/jenkins.sh"
                     "${SOURCEDIR}/dev-support/jenkins.sh" run_ci
                     '''
-                }
+//                 }
             }
 
             post {
@@ -173,13 +173,13 @@ pipeline {
             }
 
             steps {
-                withCredentials(getGithubCreds()) {
+//                 withCredentials(getGithubCreds()) {
                         sh '''#!/usr/bin/env bash
 
                         chmod u+x "${SOURCEDIR}/dev-support/jenkins.sh"
                         "${SOURCEDIR}/dev-support/jenkins.sh" run_ci
                         '''
-                }
+//                 }
             }
 
             post {
@@ -219,13 +219,13 @@ pipeline {
             }
 
             steps {
-                withCredentials(getGithubCreds()) {
+//                 withCredentials(getGithubCreds()) {
                     sh '''#!/usr/bin/env bash
 
                     chmod u+x "${SOURCEDIR}/dev-support/jenkins.sh"
                     "${SOURCEDIR}/dev-support/jenkins.sh" run_ci
                     '''
-                }
+//                 }
             }
 
             post {
@@ -262,13 +262,13 @@ pipeline {
             }
 
             steps {
-                withCredentials(getGithubCreds()) {
+//                 withCredentials(getGithubCreds()) {
                     sh '''#!/usr/bin/env bash
 
                     chmod u+x "${SOURCEDIR}/dev-support/jenkins.sh"
                     "${SOURCEDIR}/dev-support/jenkins.sh" run_ci
                     '''
-                }
+//                 }
             }
 
             post {
