@@ -473,15 +473,16 @@ public class ResourceManager extends CompositeService
     return dispatcher;
   }
 
-  protected Dispatcher createDispatcher() {
-    AsyncDispatcher dispatcher = new AsyncDispatcher("RM Event dispatcher");
-    GenericEventTypeMetrics genericEventTypeMetrics =
-        GenericEventTypeMetricsManager.
-        create(dispatcher.getName(), NodesListManagerEventType.class);
-    // We can add more
-    dispatcher.addMetrics(genericEventTypeMetrics,
-        genericEventTypeMetrics.getEnumClass());
+  protected EventHandler<NodesListManagerEvent> createNodesListManagerEventDispatcher() {
+    String dispatcherName = "NodesListManagerEventDispatcher";
+    EventDispatcher dispatcher = new EventDispatcher(this.nodesListManager, dispatcherName);
+    dispatcher.setMetrics(GenericEventTypeMetricsManager.
+        create(dispatcher.getName(), NodesListManagerEventType.class));
     return dispatcher;
+  }
+
+  protected Dispatcher createDispatcher() {
+    return new AsyncDispatcher("RM Event dispatcher");
   }
 
   protected ResourceScheduler createScheduler() {
@@ -681,6 +682,7 @@ public class ResourceManager extends CompositeService
 
     private DelegationTokenRenewer delegationTokenRenewer;
     private EventHandler<SchedulerEvent> schedulerDispatcher;
+    private EventHandler<NodesListManagerEvent> nodesListManagerDispatcher;
     private ApplicationMasterLauncher applicationMasterLauncher;
     private ContainerAllocationExpirer containerAllocationExpirer;
     private ResourceManager rm;
@@ -788,9 +790,12 @@ public class ResourceManager extends CompositeService
 
       // Register event handler for NodesListManager
       nodesListManager = new NodesListManager(rmContext);
-      rmDispatcher.register(NodesListManagerEventType.class, nodesListManager);
       addService(nodesListManager);
       rmContext.setNodesListManager(nodesListManager);
+
+      nodesListManagerDispatcher = createNodesListManagerEventDispatcher();
+      addIfService(nodesListManagerDispatcher);
+      rmDispatcher.register(NodesListManagerEventType.class, nodesListManagerDispatcher);
 
       // Initialize the scheduler
       scheduler = createScheduler();
