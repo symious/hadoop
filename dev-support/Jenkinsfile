@@ -314,7 +314,7 @@ pipeline {
                         sh '''#!/usr/bin/env bash
 
                         chmod u+x "${SOURCEDIR}/dev-support/jenkins.sh"
-//                         "${SOURCEDIR}/dev-support/jenkins.sh" cleanup_ci_proc
+                        "${SOURCEDIR}/dev-support/jenkins.sh" cleanup_ci_proc
                         '''
                     }
                 }
@@ -331,7 +331,7 @@ pipeline {
                 # See HADOOP-13951
                 chmod -R u+rxw "${WORKSPACE}"
                 '''
-//                 deleteDir()
+                deleteDir()
             }
         }
     }
