@@ -89,7 +89,7 @@ is_c_cpp_change() {
 ## @return       1 if no
 function check_ci_run() {
   # Get the first commit of this PR relative to the trunk branch
-  echo remote = $(git remote -v)
+  echo remote = $(git --git-dir "${SOURCEDIR}/.git" remote -v)
   echo firstCommitOfThisPr=$(git --git-dir "${SOURCEDIR}/.git" rev-parse origin/trunk)
   echo git --git-dir "${SOURCEDIR}/.git" rev-parse origin/trunk
   firstCommitOfThisPr=$(git --git-dir "${SOURCEDIR}/.git" rev-parse origin/trunk)
