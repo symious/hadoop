@@ -127,13 +127,13 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
     JSONObject jsonObject = new JSONObject();
     try {
       List<String> listString = Arrays
-          .asList(rawMessage.split("[ ,\t]"));
+          .asList(rawMessage.split("[ \t]"));
       for (int i = 0; i < listString.size(); i++) {
         listString.set(i,listString.get(i).replace(':','/'));
         listString.set(i,listString.get(i).replaceFirst("=", "\":\""));
       }
       String[] partString =
-          listString.subList(5, listString.size() - 1).toArray(new String[0]);
+          listString.subList(4, listString.size() - 1).toArray(new String[0]);
       String message = "\"" + StringUtils
           .join("\",\"",partString) + "\"";
       message = message.replace("auth/","auth\":\"");
