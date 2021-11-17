@@ -3625,4 +3625,17 @@ public class DataNode extends ReconfigurableBase
       return true;
     }
   }
+
+
+  boolean isSlownodeByNameserviceId(String nsId) {
+    return blockPoolManager.isSlownodeByNameserviceId(nsId);
+  }
+
+  boolean isSlownodeByBlockPoolId(String bpId) {
+    return blockPoolManager.isSlownodeByBlockPoolId(bpId);
+  }
+
+  boolean isSlownode() {
+    return blockPoolManager.isSlownode();
+  }
 }

@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.datanode;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DATA_DIR_KEY;
 import org.apache.hadoop.hdfs.server.protocol.SlowDiskReports;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
@@ -63,8 +64,6 @@ import org.apache.hadoop.hdfs.server.protocol.StorageBlockReport;
 import org.apache.hadoop.hdfs.server.protocol.StorageReceivedDeletedBlocks;
 import org.apache.hadoop.hdfs.server.protocol.StorageReport;
 import org.apache.hadoop.hdfs.server.protocol.VolumeFailureSummary;
-import org.apache.hadoop.hdfs.server.protocol.StorageBlockReport;
-import org.apache.hadoop.hdfs.server.protocol.BlockReportContext;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcResponseHeaderProto.RpcErrorCodeProto;
@@ -111,7 +110,8 @@ public class TestBPOfferService {
   private final int[] heartbeatCounts = new int[3];
   private DataNode mockDn;
   private FsDatasetSpi<?> mockFSDataset;
-  
+  private boolean isSlownode;
+
   @Before
   public void setupMocks() throws Exception {
     mockNN1 = setupNNMock(0);
@@ -200,6 +200,23 @@ public class TestBPOfferService {
     }
   }
 
+  private class HeartbeatIsSlownodeAnswer implements Answer<HeartbeatResponse> {
+    private final int nnIdx;
+
+    HeartbeatIsSlownodeAnswer(int nnIdx) {
+      this.nnIdx = nnIdx;
+    }
+
+    @Override
+    public HeartbeatResponse answer(InvocationOnMock invocation)
+        throws Throwable {
+      HeartbeatResponse heartbeatResponse = new HeartbeatResponse(
+          datanodeCommands[nnIdx], mockHaStatuses[nnIdx], null,
+          0, isSlownode);
+
+      return heartbeatResponse;
+    }
+  }
 
   private class HeartbeatRegisterAnswer implements Answer<HeartbeatResponse> {
     private final int nnIdx;
@@ -1050,4 +1067,43 @@ public class TestBPOfferService {
       bpos.stop();
     }
   }
+
+  @Test(timeout = 15000)
+  public void testSetIsSlownode() throws Exception {
+    assertEquals(mockDn.isSlownode(), false);
+    Mockito.when(mockNN1.sendHeartbeat(
+            Mockito.any(DatanodeRegistration.class),
+            Mockito.any(StorageReport[].class),
+            Mockito.anyLong(),
+            Mockito.anyLong(),
+            Mockito.anyInt(),
+            Mockito.anyInt(),
+            Mockito.anyInt(),
+            Mockito.any(VolumeFailureSummary.class),
+            Mockito.anyBoolean(),
+            Mockito.any(SlowPeerReports.class),
+            Mockito.any(SlowDiskReports.class)))
+        .thenAnswer(new HeartbeatIsSlownodeAnswer(0));
+
+    BPOfferService bpos = setupBPOSForNNs(mockNN1);
+    bpos.start();
+
+    try {
+      waitForInitialization(bpos);
+
+      bpos.triggerHeartbeatForTests();
+      assertFalse(bpos.isSlownode());
+
+      isSlownode = true;
+      bpos.triggerHeartbeatForTests();
+      assertTrue(bpos.isSlownode());
+
+      isSlownode = false;
+      bpos.triggerHeartbeatForTests();
+      assertFalse(bpos.isSlownode());
+    } finally {
+      bpos.stop();
+    }
+  }
+
 }

@@ -102,6 +102,7 @@ class BPServiceActor implements Runnable {
 
   private volatile RunningState runningState = RunningState.CONNECTING;
   private volatile boolean shouldServiceRun = true;
+  private volatile boolean isSlownode = false;
   private final DataNode dn;
   private final DNConf dnConf;
   private long prevBlockReportId;
@@ -182,6 +183,7 @@ class BPServiceActor implements Runnable {
         String.valueOf(getScheduler().getLastBlockReportTime()));
     info.put("maxBlockReportSize", String.valueOf(getMaxBlockReportSize()));
     info.put("maxDataLength", String.valueOf(maxDataLength));
+    info.put("isSlownode", String.valueOf(isSlownode));
     return info;
   }
 
@@ -671,6 +673,7 @@ class BPServiceActor implements Runnable {
             if (state == HAServiceState.ACTIVE) {
               handleRollingUpgradeStatus(resp);
             }
+            isSlownode = resp.getIsSlownode();
 
             long startProcessCommands = monotonicNow();
             if (!processCommand(resp.getCommands()))
@@ -1274,5 +1277,9 @@ class BPServiceActor implements Runnable {
     public long monotonicNow() {
       return Time.monotonicNow();
     }
+  }
+
+  boolean isSlownode() {
+    return isSlownode;
   }
 }

@@ -280,4 +280,27 @@ class BlockPoolManager {
       List<InetSocketAddress> lifelineNnAddrs) {
     return new BPOfferService(nameserviceId, nnAddrs, lifelineNnAddrs, dn);
   }
+
+  boolean isSlownodeByNameserviceId(String nsId) {
+    if (bpByNameserviceId.containsKey(nsId)) {
+      return bpByNameserviceId.get(nsId).isSlownode();
+    }
+    return false;
+  }
+
+  boolean isSlownodeByBlockPoolId(String bpId) {
+    if (bpByBlockPoolId.containsKey(bpId)) {
+      return bpByBlockPoolId.get(bpId).isSlownode();
+    }
+    return false;
+  }
+
+  boolean isSlownode() {
+    for (BPOfferService bpOfferService : bpByBlockPoolId.values()) {
+      if (bpOfferService.isSlownode()) {
+        return true;
+      }
+    }
+    return false;
+  }
 }
