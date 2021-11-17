@@ -739,9 +739,13 @@ public class ZoneMover {
         for (StorageGroup target: targets) {
           total += target.getDDatanode().getPendingSize();
         }
-        LOG.info("Average pending size for targetDataCenter: " + targetDataCenter +
-            ", storageType: " + t + ", datanodes.num: "+ targets.size() +
-            " is " + total / targets.size());
+        if (targets.size() > 0) {
+          LOG.info("Average pending size for targetDataCenter: " + targetDataCenter +
+              ", storageType: " + t + ", datanodes.num: "+ targets.size() +
+              " is " + total / targets.size());
+        } else {
+          LOG.warn("targets.size = 0 !");
+        }
       }
       try {
         Thread.sleep(DELAY_AFTER_CHOOSE_FAIL);

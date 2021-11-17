@@ -27,9 +27,9 @@ import java.util.*;
 public class ReplicationRule {
   private final Set<ReplicationRuleSection> sections;
   // Characters to strip
-  private final static String[] STRIP_CHARACTERS = {"[", "]"};
-  // ")," is the separator of pattern "[(dc1, replica1), (dc2, replica2)]"
-  private final static String SECTION_SEPARATOR = "),";
+  private final static String[] STRIP_CHARACTERS = {" "};
+  // "," is the separator of pattern "/dc1:replica1,/dc2:replica2"
+  private final static String SECTION_SEPARATOR = ",";
   
   ReplicationRule() {
     this.sections = new HashSet<>();
@@ -38,7 +38,7 @@ public class ReplicationRule {
   /**
    * Construct the ReplicationRule instance from a string format rule.
    * @param rule a string follows the pattern
-   *             "[(dc1, replica1), (dc2, replica2)]"
+   *             "/dc1:replica1,/dc2:replica2"
    * @return the constructed ReplicationRule
    */
   public static ReplicationRule parseFromString(final String rule)
@@ -56,16 +56,11 @@ public class ReplicationRule {
     }
     
     // Split
-    int index = strip.indexOf(SECTION_SEPARATOR);
-    while (index > 0) {
-      String section = strip.substring(0, index + 1);
+    String[] sections = strip.split(SECTION_SEPARATOR);
+    for (String section: sections) {
       replicationRule.addSection(
           ReplicationRuleSection.parseFromString(section));
-      strip = strip.substring(index + 2);
-      index = strip.indexOf(SECTION_SEPARATOR);
     }
-    replicationRule.addSection(
-        ReplicationRuleSection.parseFromString(strip));
     return replicationRule;
   }
 

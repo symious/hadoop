@@ -70,7 +70,7 @@ public class TestZoneMover {
 
     // Wrong block placement policy
     String[] args = {"-namespace", "dev",
-        "-path", "/test", "-rule", "[(/sg_dc, 3)]"};
+        "-path", "/test", "-rule", "/sg_dc:3"};
     assertEquals(ExitStatus.IO_EXCEPTION.getExitCode(), tool.run(args));
     
     // Unable to match namespace
@@ -79,11 +79,11 @@ public class TestZoneMover {
     assertEquals(ExitStatus.ILLEGAL_ARGUMENTS.getExitCode(), tool.run(args));
     
     // Use the default namespace
-    String[] args2 = {"-path", "/test", "-rule", "[(/sg_dc, 3)]"};
+    String[] args2 = {"-path", "/test", "-rule", "/sg_dc:3"};
     assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args2));
 
     // Invalid path
-    String[] args3 = {"-path", "test", "-rule", "[(/sg_dc, 3)]"};
+    String[] args3 = {"-path", "test", "-rule", "/sg_dc:3"};
     assertEquals(ExitStatus.ILLEGAL_ARGUMENTS.getExitCode(), tool.run(args3));
   }
 
@@ -107,16 +107,16 @@ public class TestZoneMover {
     tool.setConf(conf);
     
     String[] args = {"-namespace", "dev",
-        "-path", "/test", "-rule", "[(/sg_dc, 3)]"};
+        "-path", "/test", "-rule", "/sg_dc:3"};
     assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args));
 
     // Unable to match namespace
     String[] args2 = {"-namespace", "dev2",
-        "-path", "/test", "-rule", "[(/sg_dc, 3)]"};
+        "-path", "/test", "-rule", "/sg_dc:3"};
     assertEquals(ExitStatus.ILLEGAL_ARGUMENTS.getExitCode(), tool.run(args2));
     
     // Use the default namespace 
-    String[] args3 = {"-path", "/test", "-rule", "[(/sg_dc, 3)]"};
+    String[] args3 = {"-path", "/test", "-rule", "/sg_dc:3"};
     assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args3));
   }
 
@@ -142,7 +142,7 @@ public class TestZoneMover {
 
     // No block moved as the file is empty
     String[] args = {"-namespace", "dev",
-        "-path", "/test", "-rule", "[(/sg_dc, 3)]"};
+        "-path", "/test", "-rule", "/sg_dc:3"};
     assertEquals(ExitStatus.NO_MOVE_BLOCK.getExitCode(), tool.run(args));
   }
 
@@ -313,7 +313,7 @@ public class TestZoneMover {
     // do block move
     Tool tool = new ZoneMover.Cli();
     tool.setConf(conf);
-    final String[] args = {"-path", "/test", "-rule", "[(/dc1, 3)]"};
+    final String[] args = {"-path", "/test", "-rule", "/dc1:3"};
     LOG.info("Try to do block move for path: /test ...");
     assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args));
     // sleep some time to wait datanode delete replicas
