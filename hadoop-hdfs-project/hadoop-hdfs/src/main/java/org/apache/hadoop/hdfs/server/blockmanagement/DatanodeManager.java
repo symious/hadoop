@@ -30,6 +30,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.curator.shaded.com.google.common.collect.Sets;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -137,6 +138,9 @@ public class DatanodeManager {
   /** Whether or not to avoid using stale DataNodes for reading */
   private final boolean avoidStaleDataNodesForRead;
 
+  /** Whether or not to avoid using slow DataNodes for reading. */
+  private final boolean avoidSlowDataNodesForRead;
+
   /** Whether or not to avoid using DataNodes having high XceiverCount for reading*/
   private final boolean avoidHighLoadDataNodesForRead;
 
@@ -204,8 +208,7 @@ public class DatanodeManager {
 
   @Nullable
   private final SlowPeerTracker slowPeerTracker;
-  private static Set<Node> slowNodesSet =
-    Collections.newSetFromMap(new ConcurrentHashMap<Node, Boolean>());
+  private static Set<String> slowNodesUuidSet = Sets.newConcurrentHashSet();
   private Daemon slowPeerCollectorDaemon;
   private final long slowPeerCollectionInterval;
   private final int maxSlowPeerReportNodes;
@@ -342,6 +345,9 @@ public class DatanodeManager {
     this.avoidStaleDataNodesForRead = conf.getBoolean(
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_READ_KEY,
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_READ_DEFAULT);
+    this.avoidSlowDataNodesForRead = conf.getBoolean(
+        DFSConfigKeys.DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY,
+        DFSConfigKeys.DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_DEFAULT);
 
     this.avoidHighLoadDataNodesForRead = conf.getBoolean(
         DFSConfigKeys.DFS_NAMENODE_AVOID_HIGH_LOAD_FOR_READ_KEY,
@@ -377,7 +383,7 @@ public class DatanodeManager {
       public void run() {
         while (true) {
           try {
-            slowNodesSet = getSlowPeers();
+            slowNodesUuidSet = getSlowPeersUuidSet();
           } catch (Exception e) {
             LOG.error("Failed to collect slow peers", e);
           }
@@ -498,7 +504,11 @@ public class DatanodeManager {
         (avoidStaleDataNodesForRead && datanode.isStale(staleInterval));
 
   }
-  
+
+  private boolean isSlowNode(String dnUuid) {
+    return avoidSlowDataNodesForRead && slowNodesUuidSet.contains(dnUuid);
+  }
+
   /** Sort the located blocks by the distance to the target host. */
   public void sortLocatedBlocks(final String targethost,
       final List<LocatedBlock> locatedblocks) {
@@ -524,18 +534,22 @@ public class DatanodeManager {
       }
     }
     
-    Comparator<DatanodeInfo> comparator = avoidStaleDataNodesForRead ?
-        new DFSUtil.ServiceAndStaleComparator(staleInterval) :
-        new DFSUtil.ServiceComparator();
-        
+    Comparator<DatanodeInfo> comparator =
+        avoidStaleDataNodesForRead || avoidSlowDataNodesForRead ?
+            new DFSUtil.StaleAndSlowComparator(
+                avoidStaleDataNodesForRead, staleInterval,
+                avoidSlowDataNodesForRead, slowNodesUuidSet) :
+            new DFSUtil.ServiceComparator();
+
     for (LocatedBlock b : locatedblocks) {
       DatanodeInfo[] di = b.getLocations();
-      // Move decommissioned/stale datanodes to the bottom
+      // Move decommissioned/stale/slow datanodes to the bottom
       Arrays.sort(di, comparator);
       
       int lastActiveIndex = di.length - 1;
-      while (lastActiveIndex > 0 && isInactive(di[lastActiveIndex])) {
-          --lastActiveIndex;
+      while (lastActiveIndex > 0 && (
+          isSlowNode(di[lastActiveIndex].getDatanodeUuid()) ||
+              isInactive(di[lastActiveIndex]))) {
       }
       int activeLen = lastActiveIndex + 1;
 
@@ -2048,11 +2062,10 @@ public class DatanodeManager {
    * Returns all tracking slow peers.
    * @return
    */
-  public Set<Node> getSlowPeers() {
-    Set<Node> slowPeersSet =
-        Collections.newSetFromMap(new ConcurrentHashMap<Node, Boolean>());
+  public Set<String> getSlowPeersUuidSet() {
+    Set<String> slowPeersUuidSet = Sets.newConcurrentHashSet();
     if (slowPeerTracker == null) {
-      return slowPeersSet;
+      return slowPeersUuidSet;
     }
     ArrayList<String> slowNodes =
         slowPeerTracker.getSlowNodes(maxSlowPeerReportNodes);
@@ -2065,18 +2078,18 @@ public class DatanodeManager {
       DatanodeDescriptor datanodeByHost =
           host2DatanodeMap.getDatanodeByHost(ipAddr);
       if (datanodeByHost != null) {
-        slowPeersSet.add(datanodeByHost);
+        slowPeersUuidSet.add(datanodeByHost.getDatanodeUuid());
       }
     }
-    return slowPeersSet;
+    return slowPeersUuidSet;
   }
 
   /**
    * Returns all tracking slow peers.
    * @return
    */
-  public static Set<Node> getSlowNodes() {
-    return slowNodesSet;
+  public static Set<String> getSlowNodesUuidSet() {
+    return slowNodesUuidSet;
   }
 
   /**
@@ -2094,6 +2107,12 @@ public class DatanodeManager {
   public SlowDiskTracker getSlowDiskTracker() {
     return slowDiskTracker;
   }
+
+  @VisibleForTesting
+  public void addSlowPeers(String dnUuid) {
+    slowNodesUuidSet.add(dnUuid);
+  }
+
   /**
    * Retrieve information about slow disks as a JSON.
    * Returns null if we are not tracking slow disks.
