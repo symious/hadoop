@@ -68,6 +68,8 @@ public class ClusterMetrics {
   @Metric("#Total number of low available mem skipped times") MutableGaugeLong lowAvailableMemSkipped;
   @Metric("#Total number of failed containers skipped times") MutableGaugeLong
       highFailedContainersSkipped;
+  @Metric("#Total number of failures for refresh queue") MutableGaugeLong
+      refreshQueueFailures;
   @Metric("# of RM Events") MutableGaugeLong numRmEvents;
   @Metric("GPU Capability") MutableGaugeLong capabilityGPUs;
   @Metric("RM Event Processor CPU Usage 60 second Avg") MutableGaugeLong
@@ -367,6 +369,14 @@ public class ClusterMetrics {
 
   public void incrHighFailedContainersSkipped() {
     highFailedContainersSkipped.incr();
+  }
+
+  public long getRefreshQueueFailures() {
+    return refreshQueueFailures.value();
+  }
+
+  public void incrRefreshQueueFailures() {
+    refreshQueueFailures.incr();
   }
 
   // Num of RM Events

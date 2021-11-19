@@ -35,6 +35,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.yarn.server.resourcemanager.ClusterMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Marker;
@@ -244,6 +245,8 @@ public class CapacityScheduler extends
   private long asyncMaxPendingBacklogs;
 
   private CSMaxRunningAppsEnforcer maxRunningEnforcer;
+
+  private ClusterMetrics metrics = ClusterMetrics.getMetrics();
 
   public CapacityScheduler() {
     super(CapacityScheduler.class.getName());
@@ -474,6 +477,7 @@ public class CapacityScheduler extends
         this.conf = oldConf;
         refreshMaximumAllocation(
             ResourceUtils.fetchMaximumAllocationFromConfig(this.conf));
+        metrics.incrRefreshQueueFailures();
         throw new IOException("Failed to re-init queues : " + t.getMessage(),
             t);
       }
