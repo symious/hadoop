@@ -4811,4 +4811,22 @@
       Determines the namenode automatic lease recovery interval in seconds.
     </description>
   </property>
+
+  <property>
+    <name>dfs.client.treat.slownode.as.badnode</name>
+    <value>false</value>
+    <description>
+      Whether clients should treat slownode as badnode to rebuild the pipeline.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.client.treat.slownode.as.badnode.threshold</name>
+    <value>10</value>
+    <description>
+      The threshold to treat a slownode as a badnode. If we get PipelineAck from
+      a slownode continuously for ${dfs.client.treat.slownode.as.badnode.threshold}
+      times, we should treat it as a badnode.
+    </description>
+  </property>
 </configuration>

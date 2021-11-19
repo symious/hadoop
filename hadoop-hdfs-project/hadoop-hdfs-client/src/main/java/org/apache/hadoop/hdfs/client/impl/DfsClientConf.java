@@ -68,6 +68,10 @@ import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SOCK
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SOCKET_CACHE_EXPIRY_MSEC_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SOCKET_SEND_BUFFER_SIZE_DEFAULT;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SOCKET_SEND_BUFFER_SIZE_KEY;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_TREAT_SLOWNODE_AS_BADNODE_DEFAULT;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_TREAT_SLOWNODE_AS_BADNODE_KEY;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_TREAT_SLOWNODE_AS_BADNODE_THRESHOLD_DEFAULT;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_TREAT_SLOWNODE_AS_BADNODE_THRESHOLD_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_DATA_TRANSFER_CLIENT_TCPNODELAY_DEFAULT;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_DATA_TRANSFER_CLIENT_TCPNODELAY_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SOCKET_TIMEOUT_KEY;
@@ -142,6 +146,8 @@ public class DfsClientConf {
   private final int retryIntervalForGetLastBlockLength;
   private final long datanodeRestartTimeout;
   private final long slowIoWarningThresholdMs;
+  private final boolean treatSlowNodeAsBadNode;
+  private final int treatSlowNodeAsBadNodeThreshold;
 
   private final ShortCircuitConf shortCircuitConf;
 
@@ -272,6 +278,12 @@ public class DfsClientConf {
         DFS_CLIENT_SLOW_IO_WARNING_THRESHOLD_KEY,
         DFS_CLIENT_SLOW_IO_WARNING_THRESHOLD_DEFAULT);
 
+    treatSlowNodeAsBadNode = conf.getBoolean(
+        DFS_CLIENT_TREAT_SLOWNODE_AS_BADNODE_KEY,
+        DFS_CLIENT_TREAT_SLOWNODE_AS_BADNODE_DEFAULT);
+    treatSlowNodeAsBadNodeThreshold = conf.getInt(
+        DFS_CLIENT_TREAT_SLOWNODE_AS_BADNODE_THRESHOLD_KEY,
+        DFS_CLIENT_TREAT_SLOWNODE_AS_BADNODE_THRESHOLD_DEFAULT);
     shortCircuitConf = new ShortCircuitConf(conf);
 
     hedgedReadThresholdMillis = conf.getLong(
@@ -603,6 +615,19 @@ public class DfsClientConf {
     return slowIoWarningThresholdMs;
   }
 
+  /**
+   * @return if should treat slowNode as badNode
+   */
+  public boolean getTreatSlowNodeAsBadNode() {
+    return treatSlowNodeAsBadNode;
+  }
+
+  /**
+   * @return the threshold to treat slowNode as badNode
+   */
+  public int getTreatSlowNodeAsBadNodeThreshold() {
+    return treatSlowNodeAsBadNodeThreshold;
+  }
   /**
    * @return the hedgedReadThresholdMillis
    */

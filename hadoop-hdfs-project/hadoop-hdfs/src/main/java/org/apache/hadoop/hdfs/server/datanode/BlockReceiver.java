@@ -1304,7 +1304,8 @@ class BlockReceiver implements Closeable {
       LOG.info("Sending an out of band ack of type " + ackStatus);
       try {
         sendAckUpstreamUnprotected(null, PipelineAck.UNKOWN_SEQNO, 0L, 0L,
-            PipelineAck.combineHeader(datanode.getECN(), ackStatus));
+            PipelineAck.combineHeader(datanode.getECN(), ackStatus,
+                datanode.getSLOWByBlockPoolId(block.getBlockPoolId())));
       } finally {
         // Let others send ack. Unless there are miltiple OOB send
         // calls, there can be only one waiter, the responder thread.
@@ -1389,7 +1390,8 @@ class BlockReceiver implements Closeable {
                 LOG.info("Relaying an out of band ack of type " + oobStatus);
                 sendAckUpstream(ack, PipelineAck.UNKOWN_SEQNO, 0L, 0L,
                     PipelineAck.combineHeader(datanode.getECN(),
-                      Status.SUCCESS));
+                      Status.SUCCESS,
+                      datanode.getSLOWByBlockPoolId(block.getBlockPoolId())));
                 continue;
               }
               seqno = ack.getSeqno();
@@ -1477,7 +1479,8 @@ class BlockReceiver implements Closeable {
           Status myStatus = pkt != null ? pkt.ackStatus : Status.SUCCESS;
           sendAckUpstream(ack, expected, totalAckTimeNanos,
             (pkt != null ? pkt.offsetInBlock : 0),
-            PipelineAck.combineHeader(datanode.getECN(), myStatus));
+            PipelineAck.combineHeader(datanode.getECN(), myStatus,
+                datanode.getSLOWByBlockPoolId(block.getBlockPoolId())));
           if (pkt != null) {
             // remove the packet from the ack queue
             removeAckHead();
