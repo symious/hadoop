@@ -19,12 +19,16 @@
 package org.apache.hadoop.yarn.server.router.clientrm;
 
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
+import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptsRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptsResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationsRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationsResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetClusterNodesRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetClusterNodesResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainerReportRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainerReportResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.GetContainersRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.GetContainersResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetQueueInfoRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetQueueInfoResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
@@ -47,6 +51,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -95,7 +100,7 @@ public class EnhancedFederationClientInterceptor
             GetApplicationsResponse.class);
 
     long stopTime = clock.getTime();
-    if(clusterApps.size()>0){
+    if (clusterApps.size() > 0) {
       routerMetrics.succeededMultipleAppsRetrieved(stopTime - startTime);
     }
     LOG.info("GetApplications cost time: " + (stopTime - startTime) + "ms");
@@ -145,7 +150,7 @@ public class EnhancedFederationClientInterceptor
           + applicationId + "to SubCluster "
           + subClusterId.getId(), e);
       throw e;
-    }finally {
+    } finally {
       releasePermit(subClusterId.getId());
     }
 
@@ -153,11 +158,12 @@ public class EnhancedFederationClientInterceptor
       LOG.error("No response when attempting to retrieve the report of "
           + "the containerId " + containerId + " to SubCluster "
           + subClusterId.getId());
-    }else{
+    } else {
       ContainerReport containerReport = response.getContainerReport();
       ContainerState containerState = containerReport.getContainerState();
-      LOG.debug("ContainerId: " + containerId.toString() + ", ContainerState: " +
-          containerState);
+      LOG.debug(
+          "ContainerId: " + containerId.toString() + ", ContainerState: " +
+              containerState);
     }
 
     long stopTime = clock.getTime();
@@ -217,7 +223,7 @@ public class EnhancedFederationClientInterceptor
       } catch (Exception e) {
         LOG.warn("Unable to getQueueInfo in SubCluster "
             + subClusterId.getId(), e);
-      }finally {
+      } finally {
         releasePermit(subClusterId.getId());
       }
 
@@ -225,12 +231,13 @@ public class EnhancedFederationClientInterceptor
         QueueInfo tmpQueueInfo = response.getQueueInfo();
         LOG.info("GetQueueInfo response info -> QueueName: " +
             tmpQueueInfo.getQueueName());
-        if(tmpQueueInfo.getQueueName() != null &&
-            request.getQueueName().equals(tmpQueueInfo.getQueueName())){
+        if (tmpQueueInfo.getQueueName() != null &&
+            request.getQueueName().equals(tmpQueueInfo.getQueueName())) {
           queueInfo = tmpQueueInfo;
           long stopTime = clock.getTime();
-          LOG.info("Get cluster queueInfo from cluster [" + subClusterId + "]," +
-              "cost time: " + (stopTime - startTime) + "ms");
+          LOG.info(
+              "Get cluster queueInfo from cluster [" + subClusterId + "]," +
+                  "cost time: " + (stopTime - startTime) + "ms");
           break;
         }
       }
@@ -242,4 +249,114 @@ public class EnhancedFederationClientInterceptor
     return response;
   }
 
+  @Override
+  public GetApplicationAttemptsResponse getApplicationAttempts(
+      GetApplicationAttemptsRequest request) throws YarnException, IOException {
+
+    long startTime = clock.getTime();
+
+    if (request == null || request.getApplicationId() == null) {
+      routerMetrics.incrAppAttemptsFailedRetrieved();
+      RouterServerUtil.logAndThrowException(
+          "Missing getApplicationAttempts request or applicationId or " +
+              "information.", null);
+    }
+
+    SubClusterId subClusterId = null;
+
+    try {
+      subClusterId = federationFacade
+          .getApplicationHomeSubCluster(request.getApplicationId());
+    } catch (YarnException e) {
+      routerMetrics.incrAppAttemptsFailedRetrieved();
+      RouterServerUtil
+          .logAndThrowException("Application " + request.getApplicationId() +
+              " does not exist in FederationStateStore", e);
+    }
+
+    ApplicationClientProtocol clientRMProxy =
+        getClientRMProxyForSubCluster(subClusterId);
+
+    GetApplicationAttemptsResponse response = null;
+    try {
+      acquirePermit(subClusterId.getId());
+      response = clientRMProxy.getApplicationAttempts(request);
+    } catch (Exception e) {
+      routerMetrics.incrAppAttemptsFailedRetrieved();
+      LOG.error("Unable to getApplicationAttempts for " +
+          request.getApplicationId() + "to SubCluster " + subClusterId.getId(), e);
+      throw e;
+    } finally {
+      releasePermit(subClusterId.getId());
+    }
+
+    if (response == null) {
+      LOG.error("No response when attempting to retrieve applicationAttempts "
+          + request.getApplicationId() + " to SubCluster "
+          + subClusterId.getId());
+    }
+
+    long stopTime = clock.getTime();
+    routerMetrics.succeededAppAttemptsRetrieved(stopTime - startTime);
+    return response;
+  }
+
+  @Override
+  public GetContainersResponse getContainers(GetContainersRequest request)
+      throws YarnException, IOException {
+    long startTime = clock.getTime();
+
+    if (request == null) {
+      RouterServerUtil.logAndThrowException("Missing getContainers request.",
+          null);
+    }
+
+    ApplicationAttemptId applicationAttemptId =
+        request.getApplicationAttemptId();
+    ApplicationId applicationId = applicationAttemptId.getApplicationId();
+
+    SubClusterId subClusterId = null;
+
+    try {
+      subClusterId = federationFacade
+          .getApplicationHomeSubCluster(applicationId);
+    } catch (YarnException e) {
+      RouterServerUtil
+          .logAndThrowException("Application " + applicationId
+              + " does not exist in FederationStateStore", e);
+    }
+
+    ApplicationClientProtocol clientRMProxy =
+        getClientRMProxyForSubCluster(subClusterId);
+
+    GetContainersResponse response = null;
+    try {
+      acquirePermit(subClusterId.getId());
+      response = clientRMProxy.getContainers(request);
+    } catch (Exception e) {
+      LOG.error("Unable to getContainers for " + applicationId + "to " +
+          "SubCluster " + subClusterId.getId(), e);
+      throw e;
+    } finally {
+      releasePermit(subClusterId.getId());
+    }
+
+    if (response == null) {
+      LOG.error("No response when attempting to retrieve containers of "
+          + "the applicationId " + applicationId + " to SubCluster "
+          + subClusterId.getId());
+    } else {
+      List<ContainerReport> containerReportList = response.getContainerList();
+      if (LOG.isDebugEnabled()) {
+        for (ContainerReport containerReport : containerReportList) {
+          LOG.debug("ContainerId: " + containerReport.getContainerId() +
+              ", ContainerState: " + containerReport.getContainerState());
+        }
+      }
+    }
+
+    long stopTime = clock.getTime();
+    LOG.debug("getContainers cost time: " + (stopTime - startTime) + "ms");
+    return response;
+  }
 }
