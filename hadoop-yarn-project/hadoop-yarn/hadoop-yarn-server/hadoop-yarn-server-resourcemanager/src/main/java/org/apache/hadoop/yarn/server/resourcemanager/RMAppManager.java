@@ -17,15 +17,11 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager;
 
-import java.util.Calendar;
-import java.util.Collections;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.yarn.api.records.Container;
@@ -705,15 +701,66 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
 
     int count = 0;
 
-    try {
+    if (conf.getBoolean(YarnConfiguration.FAST_RECOVERY_ENABLED,
+        YarnConfiguration.DEFAULT_RM_FAST_RECOVERY_ENABLED)) {
+      count = recoverApplicationByMultiThread(appStates, state);
+    } else {
       for (ApplicationStateData appState : appStates.values()) {
         recoverApplication(appState, state);
         count += 1;
       }
-    } finally {
-      LOG.info("Successfully recovered " + count  + " out of "
-          + appStates.size() + " applications");
     }
+    LOG.info("Successfully recovered " + count  + " out of "
+        + appStates.size() + " applications");
+  }
+
+  /**
+   * we don't use threadPool to avoid thread contention.
+   * Each worker thread fetch item according to it's index.
+   *
+   * appStateList: 0 1 2 3 4 5 6 7 8 9
+   * thread1:      *     *     *     *
+   * thread2:        *     *     *
+   * thread3:          *     *     *
+   * "*" means take this item.
+   */
+
+  public int recoverApplicationByMultiThread(
+      Map<ApplicationId, ApplicationStateData> appStates, RMState state)
+      throws Exception {
+    List<ApplicationStateData> list = new ArrayList<>(appStates.values());
+    List<FutureTask<Integer>> tasks = new ArrayList<>();
+    int count = 0;
+    int threadNum = conf.getInt(YarnConfiguration.FAST_RECOVERY_THREAD_COUNT,
+        YarnConfiguration.DEFAULT_FAST_RECOVERY_THREAD_COUNT);
+    if (threadNum <= 0) {
+      throw new YarnException(
+          "yarn.resourcemanager.fast-recovery.thread-count must greater 0");
+    }
+    for (int index = 0; index < threadNum; index++) {
+      int finalIndex = index;
+      FutureTask<Integer> task = new FutureTask<>(new Callable<Integer>() {
+        @Override
+        public Integer call() throws Exception {
+          int count = 0;
+          for (int i = finalIndex; i < list.size(); i = i + threadNum, count++) {
+            recoverApplication(list.get(i), state);
+          }
+          LOG.info(Thread.currentThread().getName()
+              + " successfully recovered " + count + " applications");
+          return count;
+        }
+      });
+      Thread thread = new Thread(task);
+      thread.setName("RecoverThread" + finalIndex);
+      thread.start();
+      tasks.add(task);
+    }
+    LOG.info("Waiting RecoverThread finish...");
+    for (FutureTask<Integer> t : tasks) {
+      count = count + t.get();
+    }
+    return count;
   }
 
   @Override

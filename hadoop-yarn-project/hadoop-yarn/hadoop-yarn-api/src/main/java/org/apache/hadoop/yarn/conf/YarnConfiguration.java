@@ -829,6 +829,14 @@ public class YarnConfiguration extends Configuration {
   public static final String RECOVERY_ENABLED = RM_PREFIX + "recovery.enabled";
   public static final boolean DEFAULT_RM_RECOVERY_ENABLED = false;
 
+  public static final String FAST_RECOVERY_ENABLED =
+      RM_PREFIX + "fast-recovery.enabled";
+  public static final boolean DEFAULT_RM_FAST_RECOVERY_ENABLED = false;
+
+  public static final String FAST_RECOVERY_THREAD_COUNT =
+      RM_PREFIX + "fast-recovery.thread-count";
+  public static final int DEFAULT_FAST_RECOVERY_THREAD_COUNT = 1;
+
   public static final String YARN_FAIL_FAST = YARN_PREFIX + "fail-fast";
   public static final boolean DEFAULT_YARN_FAIL_FAST = false;
 
