@@ -88,10 +88,7 @@ public class ReplicationRuleSection {
 
   @Override
   public String toString() {
-    return "ReplicationRuleSection{" +
-        "dataCenter='" + dataCenter + '\'' +
-        ", replica=" + replica +
-        '}';
+    return dataCenter + ":" + replica;
   }
 
   @Override

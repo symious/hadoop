@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.fs.XAttr;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
@@ -614,6 +615,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   //ZoneService related keys
   public static final String  DFS_ZONESERVICE_STORE_DRIVER_CLASS = "dfs.zoneservice.store.driver.class";
   public static final Class<? extends StoreDriver> DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT = StoreDriverZooKeeperImpl.class;
+  public static final XAttr.NameSpace  DFS_ZONE_REPLICATION_RULE_XATTR_NAMESPACE =
+      XAttr.NameSpace.USER;
+  public static final String  DFS_ZONE_REPLICATION_RULE_XATTR_NAME = "replicationRule";
 
   public static final String  DFS_DATANODE_ADDRESS_KEY = "dfs.datanode.address";
   public static final int     DFS_DATANODE_DEFAULT_PORT = 50010;

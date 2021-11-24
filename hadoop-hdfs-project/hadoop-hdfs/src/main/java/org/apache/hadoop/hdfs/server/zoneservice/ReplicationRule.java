@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice;
 
+import com.google.common.base.Joiner;
+
 import javax.annotation.Nonnull;
 import java.util.*;
 
@@ -116,9 +118,7 @@ public class ReplicationRule {
 
   @Override
   public String toString() {
-    return "ReplicationRule{" +
-        "sections=" + sections +
-        '}';
+    return Joiner.on(",").join(sections);
   }
 
   @Override
