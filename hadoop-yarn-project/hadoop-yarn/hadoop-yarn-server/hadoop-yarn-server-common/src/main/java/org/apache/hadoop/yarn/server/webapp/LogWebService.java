@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.webapp;
 
+import com.sun.jersey.api.client.GenericType;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
 import com.google.inject.Singleton;
@@ -40,6 +41,7 @@ import org.apache.hadoop.yarn.api.records.timelineservice.TimelineEntity;
 import org.apache.hadoop.yarn.api.records.timelineservice.TimelineEntityType;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.logaggregation.filecontroller.LogAggregationFileControllerFactory;
+import org.apache.hadoop.yarn.server.metrics.AppAttemptMetricsConstants;
 import org.apache.hadoop.yarn.server.metrics.ApplicationMetricsConstants;
 import org.apache.hadoop.yarn.server.metrics.ContainerMetricsConstants;
 import org.apache.hadoop.yarn.webapp.YarnJacksonJaxbJsonProvider;
@@ -63,6 +65,7 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.security.PrivilegedExceptionAction;
+import java.util.Set;
 
 /**
  * Support only ATSv2 client only.
@@ -130,6 +133,88 @@ public class LogWebService implements AppInfoProvider {
     response.setContentType(null);
   }
 
+  @GET
+  @Path("/apps/{appid}/amlogs")
+  @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+  public Response getAMContainerLogsInfo(@Context HttpServletRequest req,
+      @Context HttpServletResponse res,
+      @PathParam(YarnWebServiceParams.APP_ID) String appId,
+      @QueryParam(YarnWebServiceParams.NM_ID) String nmId,
+      @QueryParam(YarnWebServiceParams.REDIRECTED_FROM_NODE)
+      @DefaultValue("false") boolean redirectedFromNode,
+      @QueryParam(YarnWebServiceParams.CLUSTER_ID) String clusterId,
+      @QueryParam(YarnWebServiceParams.MANUAL_REDIRECTION)
+      @DefaultValue("false") boolean manualRedirection) {
+    if (clusterId == null || clusterId.isEmpty()) {
+      clusterId = getAppToCluster(appId);
+    }
+
+    Set<TimelineEntity> appAttemptEntities = getAppAttempts(appId, clusterId);
+    TimelineEntity latestAttemptEntity = getLatestId(appAttemptEntities);
+    if (latestAttemptEntity == null) {
+      Response.ResponseBuilder response = Response.noContent();
+      return response.build();
+    }
+    String amContainerId = (String) latestAttemptEntity.getInfo().
+        get(AppAttemptMetricsConstants.MASTER_CONTAINER_INFO);
+    LOG.debug("amContainerId: " + amContainerId);
+
+    return getContainerLogsInfo(req, res, amContainerId, nmId, redirectedFromNode, clusterId,
+        manualRedirection);
+  }
+
+  @GET
+  @Path("/apps/{appid}/amlogs/{filename}")
+  @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+  public Response getAMContainerLogFile(@Context HttpServletRequest req,
+      @Context HttpServletResponse res,
+      @PathParam(YarnWebServiceParams.APP_ID) String appId,
+      @PathParam(YarnWebServiceParams.CONTAINER_LOG_FILE_NAME) String filename,
+      @QueryParam(YarnWebServiceParams.RESPONSE_CONTENT_FORMAT) String format,
+      @QueryParam(YarnWebServiceParams.RESPONSE_START)
+      @DefaultValue("0") String start,
+      @QueryParam(YarnWebServiceParams.RESPONSE_CONTENT_SIZE) String size,
+      @QueryParam(YarnWebServiceParams.NM_ID) String nmId,
+      @QueryParam(YarnWebServiceParams.REDIRECTED_FROM_NODE)
+      @DefaultValue("false") boolean redirectedFromNode,
+      @QueryParam(YarnWebServiceParams.CLUSTER_ID) String clusterId,
+      @QueryParam(YarnWebServiceParams.MANUAL_REDIRECTION)
+      @DefaultValue("false") boolean manualRedirection) {
+    if (clusterId == null || clusterId.isEmpty()) {
+      clusterId = getAppToCluster(appId);
+    }
+
+    Set<TimelineEntity> appAttemptEntities = getAppAttempts(appId, clusterId);
+    TimelineEntity latestAttemptEntity = getLatestId(appAttemptEntities);
+    if (latestAttemptEntity == null) {
+      Response.ResponseBuilder response = Response.noContent();
+      return response.build();
+    }
+    String amContainerId = (String) latestAttemptEntity.getInfo().
+        get(AppAttemptMetricsConstants.MASTER_CONTAINER_INFO);
+    LOG.debug("amContainerId: " + amContainerId);
+
+    return getLogs(req, res, amContainerId, filename, format, start, size,
+        nmId, redirectedFromNode, clusterId, manualRedirection);
+  }
+
+  protected TimelineEntity getLatestId(Set<TimelineEntity> entities) {
+    if (entities.size() == 0) {
+      return null;
+    }
+    TimelineEntity tmp = null;
+    for (TimelineEntity entity : entities) {
+      if (tmp == null) {
+        tmp = entity;
+        continue;
+      }
+      if (tmp.compareTo(entity) < 0) {
+        tmp = entity;
+      }
+    }
+    return tmp;
+  }
+
   /**
    * Returns log file's name as well as current file size for a container.
    *
@@ -193,6 +278,31 @@ public class LogWebService implements AppInfoProvider {
         .get(ContainerMetricsConstants.ALLOCATED_HOST_HTTP_ADDRESS_INFO);
   }
 
+  public String getAppToCluster(String appId) {
+    String res = null;
+    try {
+      res = getString(appId, new MultivaluedMapImpl());
+    } catch (IOException e) {
+      LogWebServiceUtils.rewrapAndThrowException(e);
+    }
+    return res;
+  }
+
+  public Set<TimelineEntity> getAppAttempts(String appId, String clusterId) {
+    String cId = clusterId != null ? clusterId : defaultClusterid;
+    MultivaluedMap<String, String> params = new MultivaluedMapImpl();
+    params.add("fields", "INFO");
+    String path = JOINER.join("clusters/", cId, "/apps/", appId,
+        "/entities/YARN_APPLICATION_ATTEMPT");
+    Set<TimelineEntity> appAttemptEntities = null;
+    try {
+      appAttemptEntities = getEntities(path, params);
+    } catch (Exception e) {
+      LogWebServiceUtils.rewrapAndThrowException(e);
+    }
+    return appAttemptEntities;
+  }
+
   @Override
   public BasicAppInfo getApp(HttpServletRequest req, String appId,
       String clusterId) {
@@ -254,6 +364,8 @@ public class LogWebService implements AppInfoProvider {
       @PathParam(YarnWebServiceParams.CONTAINER_ID) String containerIdStr,
       @PathParam(YarnWebServiceParams.CONTAINER_LOG_FILE_NAME) String filename,
       @QueryParam(YarnWebServiceParams.RESPONSE_CONTENT_FORMAT) String format,
+      @QueryParam(YarnWebServiceParams.RESPONSE_START)
+      @DefaultValue("0") String start,
       @QueryParam(YarnWebServiceParams.RESPONSE_CONTENT_SIZE) String size,
       @QueryParam(YarnWebServiceParams.NM_ID) String nmId,
       @QueryParam(YarnWebServiceParams.REDIRECTED_FROM_NODE)
@@ -261,8 +373,8 @@ public class LogWebService implements AppInfoProvider {
       @QueryParam(YarnWebServiceParams.CLUSTER_ID) String clusterId,
       @QueryParam(YarnWebServiceParams.MANUAL_REDIRECTION)
       @DefaultValue("false") boolean manualRedirection) {
-    return getLogs(req, res, containerIdStr, filename, format, size, nmId,
-        redirectedFromNode, clusterId, manualRedirection);
+    return getLogs(req, res, containerIdStr, filename, format, start, size,
+        nmId, redirectedFromNode, clusterId, manualRedirection);
   }
 
   //TODO: YARN-4993: Refactory ContainersLogsBlock, AggregatedLogsBlock and
@@ -278,6 +390,8 @@ public class LogWebService implements AppInfoProvider {
       @PathParam(YarnWebServiceParams.CONTAINER_ID) String containerIdStr,
       @PathParam(YarnWebServiceParams.CONTAINER_LOG_FILE_NAME) String filename,
       @QueryParam(YarnWebServiceParams.RESPONSE_CONTENT_FORMAT) String format,
+      @QueryParam(YarnWebServiceParams.RESPONSE_START)
+      @DefaultValue("0") String start,
       @QueryParam(YarnWebServiceParams.RESPONSE_CONTENT_SIZE) String size,
       @QueryParam(YarnWebServiceParams.NM_ID) String nmId,
       @QueryParam(YarnWebServiceParams.REDIRECTED_FROM_NODE)
@@ -286,8 +400,29 @@ public class LogWebService implements AppInfoProvider {
       @QueryParam(YarnWebServiceParams.MANUAL_REDIRECTION)
       @DefaultValue("false") boolean manualRedirection) {
     initForReadableEndpoints(res);
-    return logServlet.getLogFile(req, containerIdStr, filename, format, size,
-        nmId, redirectedFromNode, clusterId, manualRedirection);
+    return logServlet.getLogFile(req, containerIdStr, filename, format, start,
+        size, nmId, redirectedFromNode, clusterId, manualRedirection);
+  }
+
+  @VisibleForTesting protected Set<TimelineEntity> getEntities(String path,
+      MultivaluedMap<String, String> params) throws IOException {
+    ClientResponse resp =
+        getClient().resource(base).path(path).queryParams(params)
+            .accept(MediaType.APPLICATION_JSON).type(MediaType.APPLICATION_JSON)
+            .get(ClientResponse.class);
+    if (resp == null
+        || resp.getStatusInfo().getStatusCode() != ClientResponse.Status.OK
+        .getStatusCode()) {
+      String msg =
+          "Response from the timeline reader server is " + ((resp == null) ?
+              "null" :
+              "not successful," + " HTTP error code: " + resp.getStatus()
+                  + ", Server response:\n" + resp.getEntity(String.class));
+      LOG.error(msg);
+      throw new IOException(msg);
+    }
+    Set<TimelineEntity> entities = resp.getEntity(new GenericType<Set<TimelineEntity>>(){});
+    return entities;
   }
 
   @VisibleForTesting protected TimelineEntity getEntity(String path,
@@ -309,6 +444,27 @@ public class LogWebService implements AppInfoProvider {
     }
     TimelineEntity entity = resp.getEntity(TimelineEntity.class);
     return entity;
+  }
+
+  @VisibleForTesting protected String getString(String path,
+      MultivaluedMap<String, String> params) throws IOException {
+    ClientResponse resp =
+        getClient().resource(base).path(path)
+            .accept(MediaType.APPLICATION_JSON).type(MediaType.APPLICATION_JSON)
+            .get(ClientResponse.class);
+    if (resp == null
+        || resp.getStatusInfo().getStatusCode() != ClientResponse.Status.OK
+        .getStatusCode()) {
+      String msg =
+          "Response from the timeline reader server is " + ((resp == null) ?
+              "null" :
+              "not successful," + " HTTP error code: " + resp.getStatus()
+                  + ", Server response:\n" + resp.getEntity(String.class));
+      LOG.error(msg);
+      throw new IOException(msg);
+    }
+    String res = resp.getEntity(String.class);
+    return res;
   }
 
   private Client getClient() {

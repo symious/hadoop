@@ -343,6 +343,13 @@ public class LogServlet extends Configured {
         "".getBytes(Charset.defaultCharset()));
   }
 
+  public Response getLogFile(HttpServletRequest req, String containerIdStr,
+      String filename, String format, String size, String nmId,
+      boolean redirectedFromNode, String clusterId, boolean manualRedirection) {
+    return getLogFile(req, containerIdStr, filename, format, "0", size, nmId,
+        redirectedFromNode, clusterId, manualRedirection);
+  }
+
   /**
    * Returns an aggregated log file belonging to a container.
    *
@@ -359,7 +366,7 @@ public class LogServlet extends Configured {
    * @return {@link Response} object containing information about the logs
    */
   public Response getLogFile(HttpServletRequest req, String containerIdStr,
-      String filename, String format, String size, String nmId,
+      String filename, String format, String start, String size, String nmId,
       boolean redirectedFromNode, String clusterId, boolean manualRedirection) {
     ContainerId containerId;
     try {
@@ -372,6 +379,7 @@ public class LogServlet extends Configured {
     LogAggregationFileControllerFactory factory = getOrCreateFactory();
 
     final long length = LogWebServiceUtils.parseLongParam(size);
+    final long startIndex = LogWebServiceUtils.parseLongParam(start);
 
     ApplicationId appId = containerId.getApplicationAttemptId()
         .getApplicationId();
@@ -382,14 +390,14 @@ public class LogServlet extends Configured {
       LOG.warn("Could not obtain appInfo object from provider.", ex);
       return LogWebServiceUtils
           .sendStreamOutputResponse(factory, appId, null, null, containerIdStr,
-              filename, format, length, false);
+              filename, format, startIndex, length, false);
     }
     String appOwner = appInfo.getUser();
     if (Apps.isApplicationFinalState(appInfo.getAppState())) {
       // directly find logs from HDFS.
       return LogWebServiceUtils
           .sendStreamOutputResponse(factory, appId, appOwner, null,
-              containerIdStr, filename, format, length, false);
+              containerIdStr, filename, format, startIndex, length, false);
     }
 
     if (LogWebServiceUtils.isRunningState(appInfo.getAppState())) {
@@ -413,7 +421,7 @@ public class LogServlet extends Configured {
           // output the aggregated logs
           return LogWebServiceUtils
               .sendStreamOutputResponse(factory, appId, appOwner, null,
-                  containerIdStr, filename, format, length, true);
+                  containerIdStr, filename, format, startIndex, length, true);
         }
         // make sure nodeHttpAddress is not null and not empty. Otherwise,
         // we would only get aggregated logs instead of re-directing the
@@ -425,7 +433,7 @@ public class LogServlet extends Configured {
           // output the aggregated logs
           return LogWebServiceUtils
               .sendStreamOutputResponse(factory, appId, appOwner, null,
-                  containerIdStr, filename, format, length, true);
+                  containerIdStr, filename, format, startIndex, length, true);
         }
       }
       String uri = "/" + containerId.toString() + "/logs/" + filename;

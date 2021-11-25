@@ -67,7 +67,7 @@ public final class LogWebServiceUtils {
   public static Response sendStreamOutputResponse(
       LogAggregationFileControllerFactory factory, ApplicationId appId,
       String appOwner, String nodeId, String containerIdStr, String fileName,
-      String format, long bytes, boolean printEmptyLocalContainerLog) {
+      String format, long startIndex, long bytes, boolean printEmptyLocalContainerLog) {
     String contentType = WebAppUtils.getDefaultLogContentType();
     if (format != null && !format.isEmpty()) {
       contentType = WebAppUtils.getSupportedLogContentType(format);
@@ -83,7 +83,7 @@ public final class LogWebServiceUtils {
     try {
       stream =
           getStreamingOutput(factory, appId, appOwner, nodeId, containerIdStr,
-              fileName, bytes, printEmptyLocalContainerLog);
+              fileName, startIndex, bytes, printEmptyLocalContainerLog);
     } catch (Exception ex) {
       LOG.debug("Exception", ex);
       return createBadResponse(Response.Status.INTERNAL_SERVER_ERROR,
@@ -101,8 +101,8 @@ public final class LogWebServiceUtils {
   private static StreamingOutput getStreamingOutput(
       final LogAggregationFileControllerFactory factory,
       final ApplicationId appId, final String appOwner, final String nodeId,
-      final String containerIdStr, final String logFile, final long bytes,
-      final boolean printEmptyLocalContainerLog) throws IOException {
+      final String containerIdStr, final String logFile, final long startIndex,
+      final long bytes, final boolean printEmptyLocalContainerLog) throws IOException {
     StreamingOutput stream = new StreamingOutput() {
 
       @Override public void write(OutputStream os)
@@ -111,6 +111,7 @@ public final class LogWebServiceUtils {
         request.setAppId(appId);
         request.setAppOwner(appOwner);
         request.setContainerId(containerIdStr);
+        request.setStartIndex(startIndex);
         request.setBytes(bytes);
         request.setNodeId(nodeId);
         Set<String> logTypes = new HashSet<>();
