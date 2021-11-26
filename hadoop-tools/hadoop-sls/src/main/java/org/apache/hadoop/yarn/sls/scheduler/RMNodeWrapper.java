@@ -49,6 +49,7 @@ public class RMNodeWrapper implements RMNode {
   private List<UpdatedContainerInfo> updates;
   private boolean pulled = false;
   private boolean isGoodTarget = true;
+  private boolean isCoLocate = false;
 
   public RMNodeWrapper(RMNode node) {
     this.node = node;
@@ -227,6 +228,16 @@ public class RMNodeWrapper implements RMNode {
   @Override
   public void setGoodTarget(boolean isGoodTarget) {
     this.isGoodTarget = isGoodTarget;
+  }
+
+  @Override
+  public boolean isCoLocate() {
+    return isCoLocate;
+  }
+
+  @Override
+  public void setCoLocate(boolean isCoLocate) {
+    this.isCoLocate = isCoLocate;
   }
 
   @Override

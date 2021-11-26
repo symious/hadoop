@@ -71,6 +71,7 @@ public class NodeInfo {
     private List<ApplicationId> toCleanUpApplications;
     private List<ApplicationId> runningApplications;
     private boolean isGoodTarget = true;
+    private boolean isCoLocate = false;
 
     public FakeRMNodeImpl(NodeId nodeId, String nodeAddr, String httpAddress,
         Resource perNode, String rackName, String healthReport,
@@ -242,6 +243,16 @@ public class NodeInfo {
     @Override
     public void setGoodTarget(boolean isGoodTarget) {
       this.isGoodTarget = isGoodTarget;
+    }
+
+    @Override
+    public boolean isCoLocate() {
+      return isCoLocate;
+    }
+
+    @Override
+    public void setCoLocate(boolean isCoLocate) {
+      this.isCoLocate = isCoLocate;
     }
 
     @Override

@@ -19,18 +19,12 @@
 package org.apache.hadoop.yarn.server.resourcemanager;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
+import java.io.InputStream;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Objects;
-import java.util.Set;
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -80,6 +74,8 @@ public class NodesListManager extends CompositeService implements
 
   private String includesFile;
   private String excludesFile;
+  private String coLocateFile;
+  private Set<String> coLocate;
 
   private Resolver resolver;
   private Timer removalTimer;
@@ -116,6 +112,9 @@ public class NodesListManager extends CompositeService implements
           YarnConfiguration.DEFAULT_RM_NODES_EXCLUDE_FILE_PATH);
       this.hostsReader =
           createHostsFileReader(this.includesFile, this.excludesFile);
+      this.coLocateFile = conf.get(YarnConfiguration.RM_NODES_COLOCATE_FILE_PATH,
+          YarnConfiguration.DEFAULT_RM_NODES_COLOCATE_FILE_PATH);
+      loadCoLocate();
       setDecommissionedNMs();
       printConfiguredHosts(false);
     } catch (YarnException ex) {
@@ -162,6 +161,26 @@ public class NodesListManager extends CompositeService implements
     }, nodeRemovalCheckInterval, nodeRemovalCheckInterval);
 
     super.serviceInit(conf);
+  }
+
+  public void loadCoLocate() throws IOException, YarnException {
+    // If no config or file not existed
+    if (StringUtils.isNullOrEmpty(this.coLocateFile) || !FileUtils.getFile(this.coLocateFile).exists()) {
+      this.coLocate = null;
+      return;
+    }
+
+    InputStream coInputStream = this.rmContext.getConfigurationProvider()
+        .getConfigurationInputStream(this.conf, this.coLocateFile);
+    Set<String> newColocate = new HashSet<>();
+    HostsFileReader.readFileToSetWithFileInputStream("coLocate", coLocateFile,
+        coInputStream, newColocate);
+    newColocate = Collections.unmodifiableSet(newColocate);
+    this.coLocate = newColocate;
+  }
+
+  public Set<String> getCoLocate() {
+    return this.coLocate;
   }
 
   private void decrInactiveNMMetrics(RMNode rmNode) {
@@ -491,6 +510,13 @@ public class NodesListManager extends CompositeService implements
     HostDetails hostDetails = hostsReader.getHostDetails();
     return isValidNode(hostName, hostDetails.getIncludedHosts(),
         hostDetails.getExcludedHosts());
+  }
+
+  public boolean isCoLocateHost(String hostName) {
+    if (null == this.coLocate || this.coLocate.isEmpty()) {
+      return false;
+    }
+    return coLocate.contains(hostName);
   }
 
   boolean isGracefullyDecommissionableNode(RMNode node) {

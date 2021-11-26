@@ -618,11 +618,21 @@ public class YarnConfiguration extends Configuration {
       RM_PREFIX + "submission-preprocessor.file-refresh-interval-ms";
   public static final int
       DEFAULT_RM_SUBMISSION_PREPROCESSOR_REFRESH_INTERVAL_MS = 0;
-  
+
   /** Path to file with nodes to exclude.*/
-  public static final String RM_NODES_EXCLUDE_FILE_PATH = 
-    RM_PREFIX + "nodes.exclude-path";
+  public static final String RM_NODES_EXCLUDE_FILE_PATH =
+      RM_PREFIX + "nodes.exclude-path";
   public static final String DEFAULT_RM_NODES_EXCLUDE_FILE_PATH = "";
+
+  // CoLocate
+  public static final String RM_NODES_COLOCATE_ENABLED =
+      RM_PREFIX + "colocate.enabled";
+  public static final boolean DEFAULT_RM_NODES_COLOCATE_ENABLED = false;
+
+  // Path to file with nodes to colocation.
+  public static final String RM_NODES_COLOCATE_FILE_PATH =
+      RM_PREFIX + "nodes.colocate-path";
+  public static final String DEFAULT_RM_NODES_COLOCATE_FILE_PATH = "";
   
   /** Number of threads to handle resource tracker calls.*/
   public static final String RM_RESOURCE_TRACKER_CLIENT_THREAD_COUNT =

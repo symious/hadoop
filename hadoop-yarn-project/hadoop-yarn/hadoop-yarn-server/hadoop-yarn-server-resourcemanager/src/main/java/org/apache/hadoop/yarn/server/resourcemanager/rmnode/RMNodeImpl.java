@@ -153,6 +153,9 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
   //Record status of Node
   private boolean isGoodTarget = Boolean.TRUE;
 
+  //Record status of Co-locate
+  private boolean isCoLocate =  Boolean.FALSE;
+
   private String healthReport;
   private long lastHealthReportTime;
   private String nodeManagerVersion;
@@ -525,6 +528,16 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
   @Override
   public void setGoodTarget(boolean isGoodTarget) {
     this.isGoodTarget = isGoodTarget;
+  }
+
+  @Override
+  public boolean isCoLocate() {
+    return isCoLocate;
+  }
+
+  @Override
+  public void setCoLocate(boolean isCoLocate) {
+    this.isCoLocate = isCoLocate;
   }
 
   public void setHealthReport(String healthReport) {

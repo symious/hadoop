@@ -121,6 +121,7 @@ public class ResourceTrackerService extends AbstractService implements
   private float heartBeatIntervalSpeedupFactor;
   private float heartBeatIntervalSlowdownFactor;
 
+  private boolean isCoLocateEnabled;
 
   private Server server;
   private InetSocketAddress resourceTrackerAddress;
@@ -189,6 +190,7 @@ public class ResourceTrackerService extends AbstractService implements
           YarnConfiguration.isDelegatedCentralizedNodeLabelConfiguration(conf);
     }
     updateHeartBeatConfiguration(conf);
+    updateCoLocateConfiguration(conf);
     loadDynamicResourceConfiguration(conf);
     decommissioningWatcher.init(conf);
     super.serviceInit(conf);
@@ -306,6 +308,20 @@ public class ResourceTrackerService extends AbstractService implements
             + " speedupFactor:" + heartBeatIntervalSpeedupFactor
             + " slowdownFactor:" + heartBeatIntervalSlowdownFactor);
       }
+    } finally {
+      this.writeLock.unlock();
+    }
+  }
+
+  /**
+   * Update CoLocate with new configuration.
+   * @param conf Yarn Configuration
+   */
+  public void updateCoLocateConfiguration(Configuration conf) {
+    this.writeLock.lock();
+    try {
+      this.isCoLocateEnabled = conf.getBoolean(YarnConfiguration.RM_NODES_COLOCATE_ENABLED,
+          YarnConfiguration.DEFAULT_RM_NODES_COLOCATE_ENABLED);
     } finally {
       this.writeLock.unlock();
     }
@@ -500,6 +516,8 @@ public class ResourceTrackerService extends AbstractService implements
 
     RMNode rmNode = new RMNodeImpl(nodeId, rmContext, host, cmPort, httpPort,
         resolve(host), capability, nodeManagerVersion, physicalResource);
+    // Update co-locate status
+    updateCoLocateStatus(rmNode);
 
     RMNode oldNode = this.rmContext.getRMNodes().putIfAbsent(nodeId, rmNode);
     if (oldNode == null) {
@@ -670,6 +688,9 @@ public class ResourceTrackerService extends AbstractService implements
           message);
     }
 
+    // Update co-locate status
+    updateCoLocateStatus(rmNode);
+
     // Send ping
     this.nmLivelinessMonitor.receivedPing(nodeId);
     this.decommissioningWatcher.update(rmNode, remoteNodeStatus);
@@ -812,6 +833,13 @@ public class ResourceTrackerService extends AbstractService implements
     return nodeHeartBeatResponse;
   }
 
+  private void updateCoLocateStatus(RMNode rmNode) {
+    if (!this.isCoLocateEnabled) {
+      rmNode.setCoLocate(false);
+      return;
+    }
+    rmNode.setCoLocate(this.nodesListManager.isCoLocateHost(rmNode.getHostName()));
+  }
   /**
    * Update node attributes if necessary.
    * @param nodeId - node id

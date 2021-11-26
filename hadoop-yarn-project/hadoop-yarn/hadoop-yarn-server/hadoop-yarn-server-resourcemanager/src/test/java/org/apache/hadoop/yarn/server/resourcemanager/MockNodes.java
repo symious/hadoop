@@ -128,6 +128,7 @@ public class MockNodes {
     private Resource physicalResource;
     private RMContext rmContext;
     private boolean isGoodTarget = true;
+    private boolean isCoLocate = false;
 
 
     MockRMNodeImpl(NodeId nodeId, String nodeAddr, String httpAddress,
@@ -341,6 +342,16 @@ public class MockNodes {
     @Override
     public void setGoodTarget(boolean isGoodTarget) {
       this.isGoodTarget = isGoodTarget;
+    }
+
+    @Override
+    public boolean isCoLocate() {
+      return isCoLocate;
+    }
+
+    @Override
+    public void setCoLocate(boolean isCoLocate) {
+      this.isCoLocate = isCoLocate;
     }
 
     @Override

@@ -23,6 +23,7 @@ import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -109,22 +110,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.security.authorize.RMPolicy
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.protobuf.BlockingService;
 
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.DEFAULT_MULTI_LABEL_ACCESS_ENABLED;
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.MULTI_LABEL_ACCESS_ENABLED;
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_AVAILABLE_MEM_WATERMARK;
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_AVAILABLE_MEM_WATERMARK_DEFAULT;
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_BADNODE_CHECK_LABEL_LIST;
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_BADNODE_CHECK_LABEL_LIST_DEFAULT;
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT;
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH;
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_FAILED_CONTAINERS_WATERMARK;
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_FAILED_CONTAINERS_WATERMARK_DEFAULT;
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD1_WATERMARK_HIGH;
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD1_WATERMARK_HIGH_DEFAULT;
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD5_WATERMARK_HIGH;
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD5_WATERMARK_HIGH_DEFAULT;
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_SLOWNODE_CHECK_ENABLED;
-import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_SLOWNODE_CHECK_ENABLED_DEFAULT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.*;
 
 public class AdminService extends CompositeService implements
     HAServiceProtocol, ResourceManagerAdministrationProtocol {
@@ -654,8 +640,25 @@ public class AdminService extends CompositeService implements
         newConf.getInt(RM_SCHEDULER_FAILED_CONTAINERS_WATERMARK,
             RM_SCHEDULER_FAILED_CONTAINERS_WATERMARK_DEFAULT));
 
-    RMAuditLogger.logSuccess(user.getShortUserName(), operation,
-          "AdminService");
+    // Update CoLocate Config
+    rmConf.setBoolean(RM_NODES_COLOCATE_ENABLED,
+        newConf.getBoolean(RM_NODES_COLOCATE_ENABLED, DEFAULT_RM_NODES_COLOCATE_ENABLED));
+    LOG.info("CoLocate Switch:" +
+        rmConf.getBoolean(RM_NODES_COLOCATE_ENABLED, DEFAULT_RM_NODES_COLOCATE_ENABLED));
+
+    rm.getRMContext().getResourceTrackerService().updateCoLocateConfiguration(rmConf);
+    LOG.info("CoLocate Hosts Path:" +
+        rmConf.get(RM_NODES_COLOCATE_FILE_PATH, DEFAULT_RM_NODES_COLOCATE_FILE_PATH));
+
+    Set<String> coLocate = rm.getRMContext().getNodesListManager().getCoLocate();
+    if (null != coLocate && !coLocate.isEmpty()) {
+      LOG.info("CoLocate Hosts:" + coLocate);
+    }
+
+    // Update CoLocate Hosts
+    rm.getRMContext().getNodesListManager().loadCoLocate();
+
+    RMAuditLogger.logSuccess(user.getShortUserName(), operation, "AdminService");
 
     UpdateRMConfigResponse response =
         UpdateRMConfigResponse.newInstance();

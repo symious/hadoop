@@ -201,6 +201,10 @@ public interface RMNode {
 
   void setGoodTarget(boolean isGoodTarget);
 
+  boolean isCoLocate();
+
+  void setCoLocate(boolean isCoLocate);
+
   /**
    * Get the allocation tags and their counts associated with this node.
    * @return a map of each allocation tag and its count.
