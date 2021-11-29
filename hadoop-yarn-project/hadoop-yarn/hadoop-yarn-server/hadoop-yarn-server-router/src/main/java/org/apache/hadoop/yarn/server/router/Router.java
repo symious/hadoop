@@ -29,7 +29,6 @@ import org.apache.hadoop.service.CompositeService;
 import org.apache.hadoop.util.JvmPauseMonitor;
 import org.apache.hadoop.util.ShutdownHookManager;
 import org.apache.hadoop.util.StringUtils;
-import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.YarnUncaughtExceptionHandler;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
@@ -91,7 +90,7 @@ public class Router extends CompositeService {
 
   private static final String METRICS_NAME = "Router";
 
-  private static long routerStartupTime = Time.monotonicNow();
+  private static long routerStartupTime = System.currentTimeMillis();
 
   public Router() {
     super(Router.class.getName());
