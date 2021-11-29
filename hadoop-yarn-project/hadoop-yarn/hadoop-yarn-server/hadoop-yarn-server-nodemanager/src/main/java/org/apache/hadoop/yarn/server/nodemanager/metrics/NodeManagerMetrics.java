@@ -126,6 +126,9 @@ public class NodeManagerMetrics {
   private long availableMB;
   private long allocatedOpportunisticMB;
 
+  @Metric("Total failed operation of resource data persistence")
+  MutableGaugeLong resourceDataPersistenceFailed;
+
   private NodeManagerMetrics(JvmMetrics jvmMetrics) {
     this.jvmMetrics = jvmMetrics;
   }
@@ -480,5 +483,13 @@ public class NodeManagerMetrics {
 
   public void localizationComplete(long downloadMillis) {
     localizationDurationMillis.add(downloadMillis);
+  }
+
+  public void incrResourceDataPersistenceFailed() {
+    this.resourceDataPersistenceFailed.incr();
+  }
+
+  public long getResourceDataPersistenceFailed() {
+    return this.resourceDataPersistenceFailed.value();
   }
 }

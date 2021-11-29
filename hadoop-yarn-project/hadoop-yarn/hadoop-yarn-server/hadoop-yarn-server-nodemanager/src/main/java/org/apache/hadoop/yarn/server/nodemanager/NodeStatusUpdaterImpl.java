@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -36,6 +37,8 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
+
+import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ContainerLocalizer;
 
@@ -172,6 +175,8 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
 
   private static boolean cleaned = false;
 
+  private String yarnAllocation;
+
   public NodeStatusUpdaterImpl(Context context, Dispatcher dispatcher,
       NodeHealthCheckerService healthChecker, NodeManagerMetrics metrics) {
     super(NodeStatusUpdaterImpl.class.getName());
@@ -196,9 +201,64 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     this.nodeLabelsProvider = provider;
   }
 
+
+  // Read 'yarn.allocation' file to overwrite resource config from yarn-site
+  private Resource getNodeResourceFromAllocationFile() {
+    if (StringUtils.isNullOrEmpty(this.yarnAllocation)) {
+      return null;
+    }
+    File yarnAllocation = FileUtils.getFile(this.yarnAllocation);
+    if (!yarnAllocation.exists()) {
+      return null;
+    }
+    Resource recordResource = null;
+    try {
+      String[] resourceRecord =
+          FileUtils.readFileToString(yarnAllocation, Charset.defaultCharset()).split(",");
+      long mem = Long.parseLong(resourceRecord[0]);
+      int vcore = Integer.parseInt(resourceRecord[1]);
+      recordResource = Resource.newInstance(mem, vcore);
+    } catch (IOException e) {
+      String errorMessage = "Unexpected error starting getNodeResourceFromAllocationFile";
+      LOG.error(errorMessage, e);
+    } finally {
+      return recordResource;
+    }
+  }
+
+  /**
+   * Update Resource params to 'yarn.allocation' file
+   */
+  private void updateNodeResourceAllocationFile() {
+    if (StringUtils.isNullOrEmpty(this.yarnAllocation)) {
+      return;
+    }
+    try {
+      File yarnAllocationFile = FileUtils.getFile(this.yarnAllocation);
+      if (!yarnAllocationFile.exists()) {
+        yarnAllocationFile.createNewFile();
+      }
+      FileUtils.writeStringToFile(yarnAllocationFile,
+          this.totalResource.getMemorySize() + "," + this.totalResource.getVirtualCores(),
+          Charset.defaultCharset(), false);
+    } catch (IOException e) {
+      metrics.incrResourceDataPersistenceFailed();
+      String errorMessage = "Unexpected error during updateNodeResourceAllocationFile";
+      LOG.error(errorMessage, e);
+    } finally {
+      return;
+    }
+  }
+
   @Override
   protected void serviceInit(Configuration conf) throws Exception {
-    this.totalResource = NodeManagerHardwareUtils.getNodeResources(conf);
+    this.yarnAllocation = conf.get(YarnConfiguration.NM_RESOURCE_ALLOCATION_FILE_PATH,
+        YarnConfiguration.DEFAULT_NM_RESOURCE_ALLOCATION_FILE_PATH);
+    Resource yarnAllocationResource = getNodeResourceFromAllocationFile();
+    if (yarnAllocationResource == null) {
+      yarnAllocationResource = NodeManagerHardwareUtils.getNodeResources(conf);
+    }
+    this.totalResource = yarnAllocationResource;
     long memoryMb = totalResource.getMemorySize();
     float vMemToPMem =
         conf.getFloat(
@@ -647,6 +707,9 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     ContainersMonitor containersMonitor =
         this.context.getContainerManager().getContainersMonitor();
     containersMonitor.setAllocatedResourcesForContainers(totalResource);
+
+    // Update Resource data
+    updateNodeResourceAllocationFile();
   }
 
   // Iterate through the NMContext and clone and get all the containers'

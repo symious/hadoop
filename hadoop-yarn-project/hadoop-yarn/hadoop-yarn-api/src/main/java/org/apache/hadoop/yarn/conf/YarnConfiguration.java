@@ -1633,6 +1633,12 @@ public class YarnConfiguration extends Configuration {
   public static final String NM_PMEM_MB = NM_PREFIX + "resource.memory-mb";
   public static final int DEFAULT_NM_PMEM_MB = 8 * 1024;
 
+  // Record the resource of the NM
+  public static final String NM_RESOURCE_ALLOCATION_FILE_PATH =
+      NM_PREFIX + "resource.allocation.path";
+  public static final String DEFAULT_NM_RESOURCE_ALLOCATION_FILE_PATH =
+      "/home/yarn/yarn.allocation";
+
   /** Amount of memory in MB that has been reserved for non-yarn use. */
   public static final String NM_SYSTEM_RESERVED_PMEM_MB = NM_PREFIX
       + "resource.system-reserved-memory-mb";
