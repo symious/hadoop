@@ -34,4 +34,6 @@ public interface CSAMContainerLaunchDiagnosticsConstants {
       " Last Node which was processed for the application : ";
   String CLUSTER_RESOURCE_EMPTY =
       "Skipping AM assignment as cluster resource is empty. ";
+  String SKIP_AM_ALLOCATION_IN_CO_LOCATE_NODE =
+      "Skipped scheduling for this Node as its co locate node. ";
 }

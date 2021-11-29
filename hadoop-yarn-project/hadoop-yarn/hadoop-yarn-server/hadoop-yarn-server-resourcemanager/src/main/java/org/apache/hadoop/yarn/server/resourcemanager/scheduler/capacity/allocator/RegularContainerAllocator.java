@@ -247,6 +247,21 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
     return null;
   }
 
+  private ContainerAllocation checkIfCanAssignForApp(FiCaSchedulerNode node,
+      SchedulerRequestKey schedulerKey) {
+    if (this.application.isWaitingForAMContainer() && node.getRMNode().isCoLocate()) {
+      application.updateAppSkipNodeDiagnostics(
+          CSAMContainerLaunchDiagnosticsConstants.SKIP_AM_ALLOCATION_IN_CO_LOCATE_NODE);
+      ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
+          activitiesManager, node, application, schedulerKey,
+          ActivityDiagnosticConstant.NODE_IS_CO_LOCATED,
+          ActivityLevel.NODE);
+      return ContainerAllocation.APP_SKIPPED;
+    }
+
+    return null;
+  }
+
   ContainerAllocation tryAllocateOnNode(Resource clusterResource,
       FiCaSchedulerNode node, SchedulingMode schedulingMode,
       ResourceLimits resourceLimits, SchedulerRequestKey schedulerKey,
@@ -255,6 +270,11 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
 
     // Sanity checks before assigning to this node
     result = checkIfNodeBlackListed(node, schedulerKey);
+    if (null != result) {
+      return result;
+    }
+    // Co-Locate Check
+    result = checkIfCanAssignForApp(node,schedulerKey);
     if (null != result) {
       return result;
     }
