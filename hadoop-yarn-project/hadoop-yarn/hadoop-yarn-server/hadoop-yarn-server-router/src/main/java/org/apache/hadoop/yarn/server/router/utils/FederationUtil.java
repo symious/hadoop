@@ -38,6 +38,8 @@ public final class FederationUtil {
   private static final Logger LOG =
       LoggerFactory.getLogger(FederationUtil.class);
 
+  private static RouterRpcFairnessPolicyController routerRpcFairnessPolicyController;
+
   private FederationUtil() {
     // Utility Class
   }
@@ -45,17 +47,27 @@ public final class FederationUtil {
   /**
    * Creates an instance of an RouterRpcFairnessPolicyController
    * from the configuration.
+   * Use a singleton pattern with dual monitoring
    *
    * @param conf Configuration that defines the fairness controller class.
    * @return Fairness policy controller.
    */
-  public static RouterRpcFairnessPolicyController newFairnessPolicyController(
+  public static RouterRpcFairnessPolicyController getFairnessPolicyController(
       Configuration conf) {
-    Class<? extends RouterRpcFairnessPolicyController> clazz = conf.getClass(
-        YarnConfiguration.ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
-        ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS_DEFAULT,
-        RouterRpcFairnessPolicyController.class);
-    return newInstance(conf, null, null, clazz);
+    if (routerRpcFairnessPolicyController == null) {
+      synchronized (FederationUtil.class) {
+        if (routerRpcFairnessPolicyController == null) {
+          Class<? extends RouterRpcFairnessPolicyController> clazz =
+              conf.getClass(
+                  YarnConfiguration.ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
+                  ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS_DEFAULT,
+                  RouterRpcFairnessPolicyController.class);
+          routerRpcFairnessPolicyController =
+              newInstance(conf, null, null, clazz);
+        }
+      }
+    }
+    return routerRpcFairnessPolicyController;
   }
 
   /**

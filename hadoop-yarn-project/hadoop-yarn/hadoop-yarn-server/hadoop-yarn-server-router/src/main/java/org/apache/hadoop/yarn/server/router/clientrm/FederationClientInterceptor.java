@@ -223,7 +223,7 @@ public class FederationClientInterceptor
             HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT);
 
     this.routerRpcFairnessPolicyController =
-        FederationUtil.newFairnessPolicyController(conf);
+        FederationUtil.getFairnessPolicyController(conf);
   }
 
   /**
