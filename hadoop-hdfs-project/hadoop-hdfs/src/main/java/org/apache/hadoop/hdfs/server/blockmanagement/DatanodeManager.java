@@ -1260,6 +1260,7 @@ public class DatanodeManager {
       checkTopologySwitchMappingImpl(conf);
 
       // 2. Reload DNS to switch mapping.
+      LOG.info("refreshTopology: " + ipAddr + " ...");
       dnsToSwitchMapping.reloadCachedMappings(
           Collections.singletonList(ipAddr));
 

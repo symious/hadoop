@@ -908,7 +908,10 @@ public class DFSAdmin extends FsShell {
    */
   public int refreshTopology(String[] argv, int i) throws IOException {
     int exitCode = -1;
-    String ipAddr = argv[i];
+    String ipAddr = argv[i].trim();
+    if (ipAddr.isEmpty()) {
+      throw new IllegalArgumentException("ipAddr cannot be empty!");
+    }
     DistributedFileSystem dfs = getDFS();
     Configuration dfsConf = dfs.getConf();
     URI dfsUri = dfs.getUri();
@@ -921,20 +924,21 @@ public class DFSAdmin extends FsShell {
               ClientProtocol.class);
       for (ProxyAndInfo<ClientProtocol> proxy : proxies) {
         if (proxy.getProxy().refreshTopology(ipAddr)) {
-          System.out
-              .println("Refresh topology successful for " + proxy.getAddress());
+          System.out.println("Refresh topology successful at " +
+              proxy.getAddress() + " for " + ipAddr);
         } else {
-          System.out.println("Refresh topology fails at " + proxy.getAddress());
+          System.out.println("Refresh topology fails at " +
+              proxy.getAddress() + " for " + ipAddr);
           failure = true;
         }
       }
       if (!failure) exitCode = 0;
     } else {
       if (dfs.refreshTopology(ipAddr)) {
-        System.out.println("Refresh topology successful");
+        System.out.println("Refresh topology successful for " + ipAddr);
         exitCode = 0;
       } else {
-        System.out.println("Refresh topology fails.");
+        System.out.println("Refresh topology fails for " + ipAddr);
       }
     }
     return exitCode;
