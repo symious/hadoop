@@ -40,6 +40,9 @@ public abstract class SysInfo {
     if (Shell.WINDOWS) {
       return new SysInfoWindows();
     }
+    if (Shell.MAC) {
+      return new SysInfoMac();
+    }
     throw new UnsupportedOperationException("Could not determine OS");
   }
 
