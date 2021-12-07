@@ -246,8 +246,7 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
           setupLimitsInternal(containerVCores, cgroupId);
         } else if (strictResourceUsageModeWithSoftLimit) {
           // Get STRICT CORE NUMBER from Env
-          int strictCoreNumber =
-              YarnConfiguration.DEFAULT_NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_STRICT_CORE_NUMBER;
+          int strictCoreNumber = 0;
           String strictCoreString =
               container.getLaunchContext().getEnvironment()
                   .get(STRICT_CORE_NUMBER);
