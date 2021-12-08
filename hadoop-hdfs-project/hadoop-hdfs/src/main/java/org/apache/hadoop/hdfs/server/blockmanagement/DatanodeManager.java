@@ -550,6 +550,7 @@ public class DatanodeManager {
       while (lastActiveIndex > 0 && (
           isSlowNode(di[lastActiveIndex].getDatanodeUuid()) ||
               isInactive(di[lastActiveIndex]))) {
+        --lastActiveIndex;
       }
       int activeLen = lastActiveIndex + 1;
 
