@@ -98,10 +98,17 @@ public class TestSysInfoMac {
             "Networks: packets: 7675420/27G in, 8143149/25G out.\n",
             "Disks: 10461906/517G read, 5668540/542G written.\n");
 
+    List<String> mockSysctl = Arrays
+        .asList("machdep.cpu.core_count: 8\n", "hw.cpufrequency: 2300000000\n",
+            "machdep.cpu.thermal.sensor: 1\n",
+            "vm.swapusage: total = 7168.00M  used = 6178.25M  free = 989.75M  (encrypted)\n",
+            "hw.memsize: 17179869184\n");
+
     when(mockSysInfoMac.execCommand("top -l 1")).thenReturn(mockTop);
     when(mockSysInfoMac.execCommand("uptime")).thenReturn(Collections
         .singletonList(
             "20:03  up 5 days, 23:56, 12 users, load averages: 3.34 2.80 2.89\n"));
+    when(mockSysInfoMac.execCommand("sysctl -a")).thenReturn(mockSysctl);
 
     long uptime = 5 * 24L * 3600 * 1000 + 23 * 3600L * 1000 + 56 * 60L * 1000;
     assertEquals(mockSysInfoMac.getCumulativeCpuTime(),
@@ -169,11 +176,19 @@ public class TestSysInfoMac {
             "Networks: packets: 7675420/27G in, 8143149/25G out.\n",
             "Disks: 10461906/517G read, 5668540/542G written.\n");
 
+    List<String> mockSysctl = Arrays
+        .asList("machdep.cpu.core_count: 8\n", "hw.cpufrequency: 2300000000\n",
+            "machdep.cpu.thermal.sensor: 1\n",
+            "vm.swapusage: total = 7168.00M  used = 6178.25M  free = 989.75M  (encrypted)\n",
+            "hw.memsize: 17179869184\n");
+
     when(mockSysInfoMac.execCommand("uptime")).thenReturn(Collections
         .singletonList(
             "10:29  up 2 mins, 2 users, load averages: 4.89 2.58 1.07\n"));
 
     when(mockSysInfoMac.execCommand("top -l 1")).thenReturn(mockTop);
+
+    when(mockSysInfoMac.execCommand("sysctl -a")).thenReturn(mockSysctl);
 
     long uptime = 2 * 60L * 1000;
     assertEquals(mockSysInfoMac.getCumulativeCpuTime(),
@@ -197,10 +212,18 @@ public class TestSysInfoMac {
             "Networks: packets: 7675420/27G in, 8143149/25G out.\n",
             "Disks: 10461906/517G read, 5668540/542G written.\n");
 
+    List<String> mockSysctl = Arrays
+        .asList("machdep.cpu.core_count: 8\n", "hw.cpufrequency: 2300000000\n",
+            "machdep.cpu.thermal.sensor: 1\n",
+            "vm.swapusage: total = 7168.00M  used = 6178.25M  free = 989.75M  (encrypted)\n",
+            "hw.memsize: 17179869184\n");
+
     when(mockSysInfoMac.execCommand("uptime")).thenReturn(Collections
         .singletonList(
             "11:27  up  1:01, 3 users, load averages: 2.18 2.35 2.38\n"));
     when(mockSysInfoMac.execCommand("top -l 1")).thenReturn(mockTop);
+
+    when(mockSysInfoMac.execCommand("sysctl -a")).thenReturn(mockSysctl);
 
     long uptime = 3600L * 1000 + 60L * 1000;
     assertEquals(mockSysInfoMac.getCumulativeCpuTime(),
