@@ -237,7 +237,7 @@ public class TestBlockPlacementPolicyWithDataCenter {
   @Test
   public void testDatacenterOffPlacement() {
     String clientMachine = "client.foo.com";
-    String clientRack = "/datacenter2/rack0";
+    String clientRack = "/datacenter9/rack0";
     StaticMapping.addNodeToRack(clientMachine, clientRack);
     for (int i = 0; i < times; i++) {
       LOG.info("Start round " + i + " ...");
