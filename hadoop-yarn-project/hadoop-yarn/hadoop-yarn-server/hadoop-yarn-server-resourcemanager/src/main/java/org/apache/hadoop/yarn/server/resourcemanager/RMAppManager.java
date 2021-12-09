@@ -442,7 +442,7 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
 
     Set<String> labels = queue.getAccessibleNodeLabels();
     String nodeLabel = queue.getDefaultNodeLabelExpression();
-    long avaMb = queue.getMetrics().getAvailableMB();
+    long avaMb = queue.getMetrics().getGuaranteedMB() - queue.getMetrics().getAllocatedMB();
     LOG.debug("Default Partition: " + nodeLabel + " AvaMB " + avaMb);
     //Got the max one
     if (CollectionUtils.isNotEmpty(labels)) {
