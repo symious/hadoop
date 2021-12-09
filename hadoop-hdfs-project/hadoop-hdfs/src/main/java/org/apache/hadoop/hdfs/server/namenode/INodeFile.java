@@ -31,6 +31,8 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.fs.XAttr;
+import org.apache.hadoop.fs.XAttrCodec;
 import org.apache.hadoop.fs.permission.PermissionStatus;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.protocol.Block;
@@ -46,6 +48,8 @@ import org.apache.hadoop.hdfs.server.namenode.snapshot.FileDiff;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.FileDiffList;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.FileWithSnapshotFeature;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRuleUtil;
 import org.apache.hadoop.hdfs.util.LongBitFormat;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -428,6 +432,12 @@ public class INodeFile extends INodeWithAdditionalFields
           this.getParent().getStoragePolicyID() : id;
     }
     return id;
+  }
+
+  @Override
+  public ReplicationRule getReplicationRule(FSDirectory fsd) {
+    return FSDirXAttrReplicationRuleOp.getRuleFromInodeFile(
+        fsd, this);
   }
 
   private void setStoragePolicyID(byte storagePolicyId) {

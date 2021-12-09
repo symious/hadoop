@@ -21,6 +21,8 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRuleSection;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.net.NodeBase;
@@ -320,6 +322,120 @@ public class BlockPlacementPolicyWithDataCenter extends
       final Collection<Node> excludedNodes, StorageType type) {
     return (DatanodeDescriptor) dcClusterMap
         .chooseRandomWithStorageTypeTwoTrial(scope, excludedNodes, type);
+  }
+
+  /**
+   * Replicas in DataCenter included in the rule have higher priority
+   * because we use them.
+   */
+  public List<DatanodeStorageInfo> chooseReplicasToDelete(
+      Collection<DatanodeStorageInfo> candidates,
+      int expectedNumOfReplicas,
+      ReplicationRule rule,
+      List<StorageType> excessTypes,
+      DatanodeDescriptor addedNode,
+      DatanodeDescriptor delNodeHint) {
+
+    // Replicas are in one datacenter.
+    if (rule.getSections().size() == 1) {
+      return super.chooseReplicasToDelete(candidates, expectedNumOfReplicas,
+          excessTypes, addedNode, delNodeHint);
+    }
+
+    List<DatanodeStorageInfo> excessReplicas = new ArrayList<>();
+    final Map<String, List<DatanodeStorageInfo>> dcMap = new HashMap<>();
+
+    splitNodesWithDataCenter(candidates, dcMap);
+
+    // Handle the replicas which are not included in the rule.
+    Iterator it = dcMap.keySet().iterator();
+    while(it.hasNext()) {
+      String dcName = (String)it.next();
+      if (!rule.getDatacenters().contains(dcName)) {
+        List<DatanodeStorageInfo> storageInfos = dcMap.get(dcName);
+        boolean full = addExcessReplicas(candidates, expectedNumOfReplicas,
+            storageInfos, excessReplicas, delNodeHint);
+        if (full) {
+          break;
+        }
+      }
+    }
+
+    // Handle the excess replicas in the rule.
+    if (excessReplicas.size() < candidates.size() - expectedNumOfReplicas) {
+      // Remove the excess replicas for every datacenter.
+      for (ReplicationRuleSection section: rule.getSections()) {
+        String dcName = section.getDataCenter();
+        if (dcMap.get(dcName) != null
+            && dcMap.get(dcName).size() > section.getReplica()) {
+          List <DatanodeStorageInfo> dcExcessReplicas =
+              super.chooseReplicasToDelete(dcMap.get(dcName), section.getReplica(),
+                  excessTypes, addedNode, delNodeHint);
+          boolean full = addExcessReplicas(candidates, expectedNumOfReplicas,
+              dcExcessReplicas, excessReplicas, delNodeHint);
+          if (full) {
+            break;
+          }
+        }
+      }
+    }
+
+    return excessReplicas;
+  }
+
+  /**
+   * Add replicas to excessReplicas list.
+   */
+  private boolean addExcessReplicas(
+      Collection<DatanodeStorageInfo> candidates,
+      int expectedNumOfReplicas,
+      List <DatanodeStorageInfo> toAddReplicas,
+      List<DatanodeStorageInfo> excessReplicas,
+      DatanodeDescriptor delNodeHint) {
+    int left = candidates.size() - expectedNumOfReplicas
+        - excessReplicas.size();
+    if (toAddReplicas.size() > left) {
+      // Add delHint to excessReplicas if it exists in toAddReplicas.
+      Iterator it = toAddReplicas.iterator();
+      while (delNodeHint != null && it.hasNext()) {
+        DatanodeStorageInfo storageInfo = (DatanodeStorageInfo) it.next();
+        if (storageInfo.getDatanodeDescriptor().equals(delNodeHint)) {
+          excessReplicas.add(storageInfo);
+          toAddReplicas.remove(storageInfo);
+          left = left - 1;
+          break;
+        }
+      }
+      for (int i = 0; i < left; ++i) {
+        excessReplicas.add(toAddReplicas.get(i));
+      }
+    } else {
+      excessReplicas.addAll(toAddReplicas);
+    }
+    boolean full =
+        candidates.size() - expectedNumOfReplicas == excessReplicas.size();
+    return full;
+  }
+
+  /**
+   * Split data nodes into datacenter sets.
+   *
+   * @param storageInfos DatanodeStorageInfo to be split
+   * @param dcMap a map from datacenter to datanodes
+   */
+  public void splitNodesWithDataCenter(
+      final Collection<DatanodeStorageInfo> storageInfos,
+      final Map<String, List<DatanodeStorageInfo>> dcMap) {
+    for(DatanodeStorageInfo s: storageInfos) {
+      final String dcName = DFSNetworkTopologyWithDataCenter.getDataCenter(
+          s.getDatanodeDescriptor().getNetworkLocation());
+      List<DatanodeStorageInfo> storageList = dcMap.get(dcName);
+      if (storageList == null) {
+        storageList = new ArrayList<DatanodeStorageInfo>();
+        dcMap.put(dcName, storageList);
+      }
+      storageList.add(s);
+    }
   }
 
   @Override

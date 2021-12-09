@@ -97,6 +97,7 @@ import org.apache.hadoop.hdfs.server.protocol.DatanodeStorage.State;
 import org.apache.hadoop.hdfs.server.protocol.KeyUpdateCommand;
 import org.apache.hadoop.hdfs.server.protocol.ReceivedDeletedBlockInfo;
 import org.apache.hadoop.hdfs.server.protocol.StorageReceivedDeletedBlocks;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.hdfs.util.LightWeightHashSet;
 import org.apache.hadoop.hdfs.server.namenode.CacheManager;
 import org.apache.hadoop.metrics2.util.MBeans;
@@ -3266,13 +3267,24 @@ public class BlockManager implements BlockStatsMXBean {
     assert namesystem.hasWriteLock();
     // first form a rack to datanodes map and
     BlockCollection bc = getBlockCollection(storedBlock);
+    ReplicationRule rule = bc.getReplicationRule(namesystem.getFSDirectory());
+
+
     final BlockStoragePolicy storagePolicy = storagePolicySuite.getPolicy(
         bc.getStoragePolicyID());
     final List<StorageType> excessTypes = storagePolicy.chooseExcess(
         replication, DatanodeStorageInfo.toStorageTypes(nonExcess));
-    List<DatanodeStorageInfo> replicasToDelete = blockplacement
-        .chooseReplicasToDelete(nonExcess, replication, excessTypes,
-            addedNode, delNodeHint);
+    List<DatanodeStorageInfo> replicasToDelete = null;
+    if (rule != null && rule.getReplica() == replication
+        && blockplacement instanceof BlockPlacementPolicyWithDataCenter) {
+      replicasToDelete = ((BlockPlacementPolicyWithDataCenter)blockplacement)
+          .chooseReplicasToDelete(nonExcess, replication, rule, excessTypes,
+              addedNode, delNodeHint);
+    } else {
+      replicasToDelete = blockplacement
+          .chooseReplicasToDelete(nonExcess, replication, excessTypes,
+              addedNode, delNodeHint);
+    }
     for (DatanodeStorageInfo choosenReplica : replicasToDelete) {
       processChosenExcessReplica(nonExcess, choosenReplica, storedBlock);
     }

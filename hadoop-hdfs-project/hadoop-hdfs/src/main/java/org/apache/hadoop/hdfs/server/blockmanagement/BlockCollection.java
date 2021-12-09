@@ -21,6 +21,8 @@ import java.io.IOException;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.ContentSummary;
+import org.apache.hadoop.hdfs.server.namenode.FSDirectory;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.security.AccessControlException;
 
 /** 
@@ -60,6 +62,11 @@ public interface BlockCollection {
    * @return the storage policy ID.
    */
   byte getStoragePolicyID();
+
+  /**
+   * @return the replication rule.
+   */
+  ReplicationRule getReplicationRule(FSDirectory fsd);
 
   /**
    * Get the name of the collection.

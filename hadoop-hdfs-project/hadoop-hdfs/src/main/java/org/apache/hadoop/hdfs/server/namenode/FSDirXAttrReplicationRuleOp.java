@@ -49,9 +49,9 @@ public class FSDirXAttrReplicationRuleOp {
    *
    * @param fsd FSDirectory to lock
    * @param iNodeFile iNodeFile to get
-   * @return ReplicationRule or null if (no rule exist)/(encounters exception)
+   * @return ReplicationRule or null
    */
-  public static ReplicationRule getRuleFromXAttr(FSDirectory fsd, INodeFile iNodeFile) {
+  public static ReplicationRule getRuleFromInodeFile(FSDirectory fsd, INodeFile iNodeFile) {
     List<XAttr> xAttrs;
     fsd.readLock();
     try {
@@ -59,7 +59,15 @@ public class FSDirXAttrReplicationRuleOp {
     } finally {
       fsd.readUnlock();
     }
+    return getRuleFromXAttrs(xAttrs);
+  }
 
+  /**
+   * Get the replicationRule from the list of XAttr.
+   * @param xAttrs the list of XAttr
+   * @return ReplicationRule or null if (no rule exist)/(encounters exception)
+   */
+  public static ReplicationRule getRuleFromXAttrs(List<XAttr> xAttrs) {
     if (xAttrs == null) {
       // Reasons to return "null" here:
       // 1. If we throw IOException here, then NameNode prefers to call
@@ -79,8 +87,7 @@ public class FSDirXAttrReplicationRuleOp {
           }
           return rules.get(value);
         } catch (IOException e) {
-          LOG.warn(String.format("Failed to encode name=%s of inode=%s",
-              ATTR_KEY, iNodeFile.getId()));
+          LOG.warn(String.format("Failed to encode name=%s", ATTR_KEY));
           return null;
         }
       }

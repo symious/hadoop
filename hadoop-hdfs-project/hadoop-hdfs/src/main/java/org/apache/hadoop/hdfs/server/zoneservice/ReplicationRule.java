@@ -28,6 +28,7 @@ import java.util.*;
  */
 public class ReplicationRule {
   private final Set<ReplicationRuleSection> sections;
+  private final Set<String> datacenters;
   // Characters to strip
   private final static String[] STRIP_CHARACTERS = {" "};
   // "," is the separator of pattern "/dc1:replica1,/dc2:replica2"
@@ -35,6 +36,7 @@ public class ReplicationRule {
   
   ReplicationRule() {
     this.sections = new HashSet<>();
+    this.datacenters = new HashSet<>();
   }
 
   /**
@@ -98,10 +100,15 @@ public class ReplicationRule {
    */
   private void addSection(final ReplicationRuleSection section) {
     this.sections.add(section);
+    this.datacenters.add(section.getDataCenter());
   }
 
   public Set<ReplicationRuleSection> getSections() {
     return sections;
+  }
+
+  public Set<String> getDatacenters() {
+    return datacenters;
   }
 
   /**

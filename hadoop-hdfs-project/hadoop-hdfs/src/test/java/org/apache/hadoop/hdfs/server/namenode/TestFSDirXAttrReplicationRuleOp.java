@@ -72,10 +72,10 @@ public class TestFSDirXAttrReplicationRuleOp {
         (short) 1, 128L, (byte)0);
     cluster = new MiniDFSCluster.Builder(getConf()).numDataNodes(1).build();
     FSDirectory fsd = new FSDirectory(cluster.getNamesystem(), getConf());
-    Assert.assertNull(FSDirXAttrReplicationRuleOp.getRuleFromXAttr(fsd, iNodeFile));
+    Assert.assertNull(FSDirXAttrReplicationRuleOp.getRuleFromInodeFile(fsd, iNodeFile));
 
     iNodeFile.addXAttrFeature(getFeature());
-    Assert.assertEquals(rule, FSDirXAttrReplicationRuleOp.getRuleFromXAttr(fsd, iNodeFile));
+    Assert.assertEquals(rule, FSDirXAttrReplicationRuleOp.getRuleFromInodeFile(fsd, iNodeFile));
 
   }
 
