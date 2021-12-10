@@ -1113,5 +1113,14 @@ public class CommonConfigurationKeysPublic {
   /** Default shutdown hook timeout: {@value} seconds. */
   public static final long SERVICE_SHUTDOWN_TIMEOUT_DEFAULT = 30;
 
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String HADOOP_DISTRIBUTED_CONFIG_BASE_PATH =
+      "hadoop.distributed.config.base.path";
+  public static final String HADOOP_DISTRIBUTED_CONFIG_BASE_PATH_DEFAULT =
+      "/hadoop-distributed-config";
 }
 

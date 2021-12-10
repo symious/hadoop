@@ -32,6 +32,7 @@ import java.util.NoSuchElementException;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.DistributedConfigHelper;
 import org.apache.hadoop.fs.permission.AclEntry;
 import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsAction;
@@ -88,7 +89,11 @@ public class Hdfs extends AbstractFileSystem {
       throw new IOException("Incomplete HDFS URI, no host: " + theUri);
     }
 
-    this.dfs = new DFSClient(theUri, conf, getStatistics());
+    // loaded distributed conf
+    Configuration tmpConf = new Configuration(conf);
+    Configuration distributedConf = DistributedConfigHelper.get()
+        .build(theUri, tmpConf);
+    this.dfs = new DFSClient(theUri, distributedConf, getStatistics());
   }
 
   @Override

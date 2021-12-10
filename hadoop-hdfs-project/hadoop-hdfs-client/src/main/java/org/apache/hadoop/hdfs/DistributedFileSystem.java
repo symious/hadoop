@@ -33,6 +33,7 @@ import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.DistributedConfigHelper;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.BlockStorageLocation;
 import org.apache.hadoop.fs.BlockStoragePolicySpi;
@@ -151,6 +152,9 @@ public class DistributedFileSystem extends FileSystem
 
   @Override
   public void initialize(URI uri, Configuration conf) throws IOException {
+    // loaded distributed conf
+    Configuration distributedCfg = new Configuration(conf);
+    conf = DistributedConfigHelper.get().build(uri, distributedCfg);
     super.initialize(uri, conf);
     setConf(conf);
 
