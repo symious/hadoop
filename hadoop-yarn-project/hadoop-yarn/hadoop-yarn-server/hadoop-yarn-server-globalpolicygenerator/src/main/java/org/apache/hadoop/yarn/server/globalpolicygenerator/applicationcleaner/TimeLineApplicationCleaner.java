@@ -112,7 +112,7 @@ public class TimeLineApplicationCleaner extends ApplicationCleaner {
           if((applicationState.equals(YarnApplicationState.FINISHED.toString()) ||
               applicationState.equals(YarnApplicationState.FAILED.toString()) ||
               applicationState.equals(YarnApplicationState.KILLED.toString())) &&
-              (Time.monotonicNow() - appFinishedStamp) >
+              (System.currentTimeMillis() - appFinishedStamp) >
                   getAppHomeExpireMinTime()){
             if(LOG.isDebugEnabled()){
               LOG.debug("Add applicationID: " + applicationId + " to deleteList!");
