@@ -224,7 +224,7 @@ public class DatanodeManager {
   private static Set<String> slowNodesUuidSet = Sets.newConcurrentHashSet();
   private Daemon slowPeerCollectorDaemon;
   private final long slowPeerCollectionInterval;
-  private final int maxSlowPeerReportNodes;
+  private volatile int maxSlowPeerReportNodes;
 
   @Nullable
   private final SlowDiskTracker slowDiskTracker;
@@ -657,6 +657,15 @@ public class DatanodeManager {
             .build());
   }
   
+  public void setMaxSlowpeerCollectNodes(int maxNodes) {
+    this.maxSlowPeerReportNodes = maxNodes;
+  }
+
+  @VisibleForTesting
+  public int getMaxSlowpeerCollectNodes() {
+    return this.maxSlowPeerReportNodes;
+  }
+
   /**
    * Sort the non-striped located blocks by the distance to the target host.
    *

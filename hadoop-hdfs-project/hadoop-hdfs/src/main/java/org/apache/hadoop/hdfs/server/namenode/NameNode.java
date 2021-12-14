@@ -240,6 +240,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AVOID_SLOW_DATAN
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_DEFAULT;
 
 import static org.apache.hadoop.util.ExitUtil.terminate;
 import static org.apache.hadoop.util.ToolRunner.confirmPrompt;
@@ -405,7 +406,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_QUOTA_INIT_THREADS_KEY,
           DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY,
           DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
-          DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_KEY));
+          DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_KEY,
+          DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2954,6 +2956,14 @@ public class NameNode extends ReconfigurableBase implements
             Boolean.parseBoolean(newVal));
         result = Boolean.toString(enable);
         bm.setExcludeSlowNodesEnabled(enable);
+        break;
+      }
+      case DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY: {
+        int maxSlowpeerCollectNodes = (newVal == null ?
+            DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_DEFAULT :
+            Integer.parseInt(newVal));
+        result = Integer.toString(maxSlowpeerCollectNodes);
+        datanodeManager.setMaxSlowpeerCollectNodes(maxSlowpeerCollectNodes);
         break;
       }
       case DFS_DATANODE_PEER_STATS_ENABLED_KEY: {

@@ -66,6 +66,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHEC
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_SATISFIER_MODE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_SATISFIER_MODE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_INVALIDATE_LIMIT_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_BACKOFF_ENABLE_DEFAULT;
 
 public class TestNameNodeReconfigure {
@@ -498,6 +499,24 @@ public class TestNameNodeReconfigure {
     assertFalse("SlowNode tracker is still enabled. Reconfiguration could not be successful",
         datanodeManager.getSlowPeerTracker().isSlowPeerTrackerEnabled());
 
+  }
+
+  @Test
+  public void testReconfigureMaxSlowpeerCollectNodes()
+      throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode();
+    final DatanodeManager datanodeManager = nameNode.namesystem
+        .getBlockManager().getDatanodeManager();
+
+    // By default, DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY is 5.
+    assertEquals(5, datanodeManager.getMaxSlowpeerCollectNodes());
+
+    // Reconfigure.
+    nameNode.reconfigureProperty(
+        DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY, Integer.toString(10));
+
+    // Assert DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY is 10.
+    assertEquals(10, datanodeManager.getMaxSlowpeerCollectNodes());
   }
 
   @After
