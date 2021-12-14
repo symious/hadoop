@@ -82,6 +82,8 @@ import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTest
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.SettableFuture;
 import org.apache.hadoop.yarn.util.StringHelper;
 
+import static org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager.NO_LABEL;
+
 /**
  * This class manages the list of applications for the resource manager. 
  */
@@ -442,14 +444,14 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
 
     Set<String> labels = queue.getAccessibleNodeLabels();
     String nodeLabel = queue.getDefaultNodeLabelExpression();
-    long avaMb = queue.getMetrics().getGuaranteedMB() - queue.getMetrics().getAllocatedMB();
+    long avaMb = queue.getEffectiveCapacity(NO_LABEL).getMemorySize() -
+        queue.getQueueResourceUsage().getUsed(NO_LABEL).getMemorySize();
     LOG.debug("Default Partition: " + nodeLabel + " AvaMB " + avaMb);
     //Got the max one
     if (CollectionUtils.isNotEmpty(labels)) {
       for (String tmpLabel : labels) {
-        long tmpAva =
-            queue.getMetrics().getPartitionQueueMetrics(tmpLabel)
-                .getAvailableMB();
+        long tmpAva = queue.getEffectiveCapacity(tmpLabel).getMemorySize() -
+            queue.getQueueResourceUsage().getUsed(tmpLabel).getMemorySize();
         if (tmpAva > avaMb) {
           nodeLabel = tmpLabel;
           avaMb = tmpAva;
