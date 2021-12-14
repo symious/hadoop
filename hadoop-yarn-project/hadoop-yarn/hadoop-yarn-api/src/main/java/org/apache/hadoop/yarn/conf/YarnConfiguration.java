@@ -4029,7 +4029,7 @@ public class YarnConfiguration extends Configuration {
           + "DefaultRMAdminRequestInterceptor";
 
   public static final String ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX =
-      ROUTER_PREFIX + ".fairness.handler.count.";
+      ROUTER_PREFIX + "fairness.handler.count.";
 
   public static final String
       ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS =
