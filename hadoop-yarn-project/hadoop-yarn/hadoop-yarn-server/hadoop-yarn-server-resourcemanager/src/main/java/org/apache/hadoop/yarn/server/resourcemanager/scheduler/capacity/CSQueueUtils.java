@@ -331,12 +331,9 @@ public class CSQueueUtils {
    */
    public static void updateConfiguredCapacityMetrics(ResourceCalculator rc,
        Resource partitionResource, String partition, AbstractCSQueue queue) {
-     queue.getMetrics().setGuaranteedResources(partition, rc.multiplyAndNormalizeDown(
-         partitionResource, queue.getQueueCapacities().getAbsoluteCapacity(partition),
-         queue.getMinimumAllocation()));
-     queue.getMetrics().setMaxCapacityResources(partition, rc.multiplyAndNormalizeDown(
-         partitionResource, queue.getQueueCapacities().getAbsoluteMaximumCapacity(partition),
-         queue.getMinimumAllocation()));
+     queue.getMetrics().setGuaranteedResources(partition, queue.getEffectiveCapacity(partition));
+     queue.getMetrics()
+         .setMaxCapacityResources(partition, queue.getEffectiveMaxCapacity(partition));
     queue.getMetrics().setGuaranteedCapacities(partition,
         queue.getQueueCapacities().getCapacity(partition),
         queue.getQueueCapacities().getAbsoluteCapacity(partition));
