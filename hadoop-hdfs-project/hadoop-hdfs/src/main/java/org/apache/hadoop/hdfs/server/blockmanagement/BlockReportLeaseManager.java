@@ -145,12 +145,12 @@ class BlockReportLeaseManager {
   /**
    * The maximum number of leases to hand out at any given time.
    */
-  private final int maxPending;
+  private volatile int maxPending;
 
   /**
    * The number of milliseconds after which a lease will expire.
    */
-  private final long leaseExpiryMs;
+  private volatile long leaseExpiryMs;
 
   /**
    * The next ID we will use for a block report lease.
@@ -350,5 +350,21 @@ class BlockReportLeaseManager {
                 Long.toHexString(id), dn.getDatanodeUuid(), numPending);
     }
     return id;
+  }
+
+  public void setMaxPending(int maxPending) {
+    this.maxPending = maxPending;
+  }
+
+  public int getMaxPending() {
+    return this.maxPending;
+  }
+
+  public void setLeaseExpiryMs(long leaseExpiryMs) {
+    this.leaseExpiryMs = leaseExpiryMs;
+  }
+
+  public long getLeaseExpiryMs() {
+    return this.leaseExpiryMs;
   }
 }

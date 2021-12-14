@@ -1389,6 +1389,22 @@ public class DFSUtil {
   }
 
   /**
+   * Get DFS_NAMENODE_INVALIDATE_WORK_PCT_PER_ITERATION from configuration.
+   *
+   * @param blocksInvalidateWorkPct float
+   * @return Value of DFS_NAMENODE_INVALIDATE_WORK_PCT_PER_ITERATION
+   */
+  public static float getInvalidateWorkPctPerIteration(float blocksInvalidateWorkPct) {
+    Preconditions.checkArgument(
+        (blocksInvalidateWorkPct > 0 && blocksInvalidateWorkPct <= 1.0f),
+        DFSConfigKeys.DFS_NAMENODE_INVALIDATE_WORK_PCT_PER_ITERATION +
+            " = '" + blocksInvalidateWorkPct + "' is invalid. " +
+            "It should be a positive, non-zero float value, not greater than 1.0f, " +
+            "to indicate a percentage.");
+    return blocksInvalidateWorkPct;
+  }
+
+  /**
    * Get DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION from
    * configuration.
    * 
@@ -1404,6 +1420,22 @@ public class DFSUtil {
         DFSConfigKeys.DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION +
         " = '" + blocksReplWorkMultiplier + "' is invalid. " +
         "It should be a positive, non-zero integer value.");
+    return blocksReplWorkMultiplier;
+  }
+
+  /**
+   * Get DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION from
+   * configuration.
+   *
+   * @param blocksReplWorkMultiplier int
+   * @return Value of DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION
+   */
+  public static int getReplWorkMultiplier(int blocksReplWorkMultiplier) {
+    Preconditions.checkArgument(
+        (blocksReplWorkMultiplier > 0),
+        DFSConfigKeys.DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION +
+            " = '" + blocksReplWorkMultiplier + "' is invalid. " +
+            "It should be a positive, non-zero integer value.");
     return blocksReplWorkMultiplier;
   }
   

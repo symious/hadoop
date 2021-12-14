@@ -199,6 +199,22 @@ public class DatanodeAdminManager {
         blocksPerInterval, nodesPerInterval, maxConcurrentTrackedNodes);
   }
 
+  public void refreshBlocksPerInterval(int blocksPerInterval) {
+    this.monitor.setNumBlocksPerCheck(blocksPerInterval);
+  }
+
+  public void refreshMaxConcurrentTrackedNodes(int maxConcurrentTrackedNodes) {
+    this.monitor.setMaxConcurrentTrackedNodes(maxConcurrentTrackedNodes);
+  }
+  
+  public int getBlocksPerInterval() {
+    return this.monitor.getNumBlocksPerCheck();
+  }
+
+  public int getMaxConcurrentTrackedNodes() {
+    return this.monitor.getMaxConcurrentTrackedNodes();
+  }
+
   /**
    * Stop the admin monitor thread, waiting briefly for it to terminate.
    */
@@ -453,7 +469,7 @@ public class DatanodeAdminManager {
     /**
      * The maximum number of blocks to check per tick.
      */
-    private final int numBlocksPerCheck;
+    private volatile int numBlocksPerCheck;
     /**
      * The maximum number of nodes to check per tick.
      */
@@ -462,7 +478,7 @@ public class DatanodeAdminManager {
      * The maximum number of nodes to track in decomNodeBlocks. A value of 0
      * means no limit.
      */
-    private final int maxConcurrentTrackedNodes;
+    private volatile int maxConcurrentTrackedNodes;
     /**
      * The number of blocks that have been checked on this tick.
      */
@@ -812,6 +828,22 @@ public class DatanodeAdminManager {
       datanode.getLeavingServiceStatus().set(underReplicatedBlocksInOpenFiles,
           underReplicatedOpenFiles, underReplicatedBlocks,
           outOfServiceOnlyReplicas);
+    }
+
+    public int getNumBlocksPerCheck() {
+      return numBlocksPerCheck;
+    }
+
+    public void setNumBlocksPerCheck(int numBlocksPerCheck) {
+      this.numBlocksPerCheck = numBlocksPerCheck;
+    }
+
+    public int getMaxConcurrentTrackedNodes() {
+      return maxConcurrentTrackedNodes;
+    }
+
+    public void setMaxConcurrentTrackedNodes(int maxConcurrentTrackedNodes) {
+      this.maxConcurrentTrackedNodes = maxConcurrentTrackedNodes;
     }
   }
 
