@@ -234,9 +234,14 @@ public class FederationClientInterceptor
    */
   public void acquirePermit(final String subClusterId)
       throws IOException {
-    long startTimeStamp = Time.monotonicNow();
-    Map<String, Semaphore> permits = routerRpcFairnessPolicyController.getPermits();
-    LOG.debug("Before acquirePermit ALL permits: " + permits);
+
+    long startTimeStamp = 0;
+    if (LOG.isDebugEnabled()) {
+      startTimeStamp = Time.monotonicNow();
+      LOG.debug("Before acquirePermit ALL permits: " +
+          routerRpcFairnessPolicyController.getPermits());
+    }
+
     if (routerRpcFairnessPolicyController != null
         && !routerRpcFairnessPolicyController.acquirePermit(subClusterId)) {
       // Throw StandByException,
@@ -247,11 +252,16 @@ public class FederationClientInterceptor
           "Router is overloaded for subCluster: " + subClusterId;
       throw new StandbyException(msg);
     }else{
-      LOG.info("Permit accepted for subCluster: {} ", subClusterId);
+      LOG.debug("Permit accepted for subCluster: {} ", subClusterId);
     }
-    long endTimeStamp = Time.monotonicNow();
-    LOG.debug("After acquirePermit ALL permits: " + permits + " ,cost time: "
-        + (endTimeStamp - startTimeStamp) + " ms");
+
+    if (LOG.isDebugEnabled()) {
+      long endTimeStamp = Time.monotonicNow();
+      LOG.debug("After acquirePermit ALL permits: " +
+          routerRpcFairnessPolicyController.getPermits() + " ,cost time: "
+          + (endTimeStamp - startTimeStamp) + " ms");
+    }
+
   }
 
   /**
@@ -261,15 +271,30 @@ public class FederationClientInterceptor
    * @param subClusterId Identifier of the Yarn SubCluster.
    */
   public void releasePermit(final String subClusterId) {
+
     if (routerRpcFairnessPolicyController != null) {
-      long startTimeStamp = Time.monotonicNow();
+
+      long startTimeStamp = 0;
+      if (LOG.isDebugEnabled()) {
+        startTimeStamp = Time.monotonicNow();
+      }
+
       routerRpcFairnessPolicyController.releasePermit(subClusterId);
-      LOG.info("Permit released successfully for subCluster: {} ", subClusterId);
-      Map<String, Semaphore> permits = routerRpcFairnessPolicyController.getPermits();
-      long endTimeStamp = Time.monotonicNow();
-      LOG.debug("After releasePermit ALL permits: " + permits + " ,cost time: "
-          + (endTimeStamp - startTimeStamp) + " ms");
+
+      if (LOG.isDebugEnabled()) {
+        long endTimeStamp = Time.monotonicNow();
+        LOG.debug(
+            "Permit released successfully for subCluster: " + subClusterId +
+                " ,after releasePermit ALL permits: " +
+                routerRpcFairnessPolicyController.getPermits() + " ,cost time: "
+                + (endTimeStamp - startTimeStamp) + " ms");
+      }
+
+    } else {
+      LOG.error(
+          "routerRpcFairnessPolicyController is null, releasePermit failed!");
     }
+
   }
 
   @VisibleForTesting
