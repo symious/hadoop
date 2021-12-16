@@ -27,6 +27,7 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.logaggregation.ContainerLogAggregationType;
 import org.apache.hadoop.yarn.logaggregation.ContainerLogMeta;
 import org.apache.hadoop.yarn.logaggregation.filecontroller.LogAggregationFileControllerFactory;
@@ -46,9 +47,7 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.StreamingOutput;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
 /**
  * Extracts aggregated logs and related information.
@@ -65,9 +64,73 @@ public class LogServlet extends Configured {
   private LogAggregationFileControllerFactory factoryInstance = null;
   private final AppInfoProvider appInfoProvider;
 
+  private Map<String, List<RemoteLogInfo>> clusterToLogDir = new HashMap<>();
+  private Map<String, LogAggregationFileControllerFactory> clusterToFactory =
+      new HashMap<>();
+
+
   public LogServlet(Configuration conf, AppInfoProvider appInfoProvider) {
     super(conf);
+    Collection<String> appLogDirMap =
+        conf.getStringCollection("yarn.remote-app-log-dir-mappings");
+    for (String m : appLogDirMap) {
+      String[] split = m.split("\\|");
+      if (split.length == 4) {
+        if (!clusterToLogDir.containsKey(split[0])) {
+          clusterToLogDir.put(split[0], new ArrayList<>());
+        }
+        clusterToLogDir.get(split[0]).add(new RemoteLogInfo(split[1], split[2], split[3]));
+      }
+    }
     this.appInfoProvider = appInfoProvider;
+    LOG.info("Cluster mapping info: " + clusterToLogDir.toString());
+  }
+
+  class RemoteLogInfo {
+    private String type;
+    private String suffix;
+    private String logDir;
+
+    public RemoteLogInfo(String type, String suffix, String logDir) {
+      this.type = type;
+      this.suffix = suffix;
+      this.logDir = logDir;
+    }
+
+    public String toString() {
+      return "type: " + type + " suffix: " + suffix + " logDir: " + logDir;
+    }
+  }
+
+  private LogAggregationFileControllerFactory getOrCreateFactory(
+      String clusterId) {
+    if (clusterId == null) {
+      getOrCreateFactory();
+    }
+    if (clusterToLogDir.containsKey(clusterId)) {
+      if (!clusterToFactory.containsKey(clusterId)) {
+        Configuration tmpConf = new YarnConfiguration(getConf());
+        List<RemoteLogInfo> infos = clusterToLogDir.get(clusterId);
+        StringBuilder fileControllers = new StringBuilder();
+        for (RemoteLogInfo info : infos) {
+          tmpConf.set(String.format(
+              YarnConfiguration.LOG_AGGREGATION_REMOTE_APP_LOG_DIR_SUFFIX_FMT,
+              info.type), info.suffix);
+          tmpConf.set(String
+              .format(YarnConfiguration.LOG_AGGREGATION_REMOTE_APP_LOG_DIR_FMT,
+                  info.type), info.logDir);
+          fileControllers.append(info.type);
+          fileControllers.append(",");
+        }
+        fileControllers.substring(0,fileControllers.length()-1);
+        tmpConf.set(YarnConfiguration.LOG_AGGREGATION_FILE_FORMATS, fileControllers.toString());
+        clusterToFactory
+            .put(clusterId, new LogAggregationFileControllerFactory(tmpConf));
+      }
+      return clusterToFactory.get(clusterId);
+    } else {
+      return getOrCreateFactory();
+    }
   }
 
   private LogAggregationFileControllerFactory getOrCreateFactory() {
@@ -234,7 +297,7 @@ public class LogServlet extends Configured {
       String nmId, boolean redirectedFromNode,
       String clusterId, boolean manualRedirection) {
 
-    builder.setFactory(getOrCreateFactory());
+    builder.setFactory(getOrCreateFactory(clusterId));
 
     BasicAppInfo appInfo;
     try {
@@ -376,7 +439,7 @@ public class LogServlet extends Configured {
           "Invalid ContainerId: " + containerIdStr);
     }
 
-    LogAggregationFileControllerFactory factory = getOrCreateFactory();
+    LogAggregationFileControllerFactory factory = getOrCreateFactory(clusterId);
 
     final long length = LogWebServiceUtils.parseLongParam(size);
     final long startIndex = LogWebServiceUtils.parseLongParam(start);
