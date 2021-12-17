@@ -154,6 +154,12 @@ class DataXceiver extends Receiver implements Runnable {
     }
   }
 
+  public void updateDatanodeSlowLogThresholdMs(
+      long datanodeSlowLogThresholdMs) {
+    getCurrentBlockReceiver().setDatanodeSlowLogThresholdMs(
+        datanodeSlowLogThresholdMs);
+  }
+
   /**
    * Update the current thread's name to contain the current status.
    * Use this only after this receiver has started on its thread, i.e.,

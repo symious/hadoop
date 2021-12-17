@@ -73,7 +73,7 @@ public class DirectoryScanner implements Runnable {
   private final FsDatasetSpi<?> dataset;
   private final ExecutorService reportCompileThreadPool;
   private final ScheduledExecutorService masterThread;
-  private final long scanPeriodMsecs;
+  private volatile long scanPeriodMsecs;
   private final int throttleLimitMsPerSec;
   private volatile boolean shouldRun = false;
   private boolean retainDiffs = false;
@@ -447,10 +447,15 @@ public class DirectoryScanner implements Runnable {
         conf.getInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_THREADS_KEY,
                     DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_THREADS_DEFAULT);
 
-    reportCompileThreadPool = Executors.newFixedThreadPool(threads, 
+    reportCompileThreadPool = Executors.newFixedThreadPool(threads,
         new Daemon.DaemonFactory());
     masterThread = new ScheduledThreadPoolExecutor(1,
         new Daemon.DaemonFactory());
+  }
+
+  public void updateDatanodeDirectoryScanInterval(int interval) {
+    // implicit casting to long
+    this.scanPeriodMsecs = interval * MILLIS_PER_SECOND;
   }
 
   /**

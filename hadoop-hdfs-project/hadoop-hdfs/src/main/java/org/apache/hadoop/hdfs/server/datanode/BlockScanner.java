@@ -82,6 +82,10 @@ public class BlockScanner {
     }
   }
 
+  synchronized void updateScanPeriodHs(long scanPeriodHs) {
+    this.conf.updateScanPeriodHs(scanPeriodHs);
+  }
+
   /**
    * The cached scanner configuration.
    */
@@ -118,7 +122,7 @@ public class BlockScanner {
     static boolean allowUnitTestSettings = false;
     final long targetBytesPerSec;
     final long maxStalenessMs;
-    final long scanPeriodMs;
+    volatile long scanPeriodMs;
     final long cursorSaveMs;
     final Class<? extends ScanResultHandler> resultHandler;
 
@@ -157,6 +161,11 @@ public class BlockScanner {
       }
 
       return tempScanPeriodMs;
+    }
+
+    public void updateScanPeriodHs(long scanPeriodHs) {
+      this.scanPeriodMs = TimeUnit.MILLISECONDS.convert(scanPeriodHs,
+          TimeUnit.HOURS);
     }
 
     @SuppressWarnings("unchecked")

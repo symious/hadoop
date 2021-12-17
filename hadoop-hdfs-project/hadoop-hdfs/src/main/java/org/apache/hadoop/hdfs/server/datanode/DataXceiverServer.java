@@ -49,14 +49,22 @@ class DataXceiverServer implements Runnable {
   private final HashMap<Peer, Thread> peers = new HashMap<Peer, Thread>();
   private final HashMap<Peer, DataXceiver> peersXceiver = new HashMap<Peer, DataXceiver>();
   private boolean closed = false;
-  
+
   /**
    * Maximal number of concurrent xceivers per node.
    * Enforcing the limit is required in order to avoid data-node
    * running out of memory.
    */
-  int maxXceiverCount =
+  volatile int maxXceiverCount =
     DFSConfigKeys.DFS_DATANODE_MAX_RECEIVER_THREADS_DEFAULT;
+
+  public synchronized void updateDatanodeSlowLogThresholdMs(
+      long datanodeSlowLogThresholdMs) {
+    for (Peer p : peers.keySet()) {
+      peersXceiver.get(p).updateDatanodeSlowLogThresholdMs(
+          datanodeSlowLogThresholdMs);
+    }
+  }
 
   /** A manager to make sure that cluster balancing does not
    * take too much resources.
@@ -307,5 +315,9 @@ class DataXceiverServer implements Runnable {
 
   public void updateBalancerMaxConcurrentMovers(int movers) {
     balanceThrottler.setMaxConcurrentMovers(movers);
+  }
+
+  public void setMaxXceiverCount(int maxXceiverCount) {
+    this.maxXceiverCount = maxXceiverCount;
   }
 }

@@ -83,7 +83,7 @@ public class StorageLocationChecker {
    * Maximum number of volume failures that can be tolerated without
    * declaring a fatal error.
    */
-  private final int maxVolumeFailuresTolerated;
+  private volatile int maxVolumeFailuresTolerated;
 
   public StorageLocationChecker(Configuration conf, Timer timer)
       throws DiskErrorException {
@@ -127,6 +127,17 @@ public class StorageLocationChecker {
                 .setNameFormat("StorageLocationChecker thread %d")
                 .setDaemon(true)
                 .build()));
+  }
+
+  public void setMaxVolumeFailuresTolerated(int maxVolumeFailuresTolerated)
+      throws DiskErrorException {
+    if (maxVolumeFailuresTolerated < DataNode.MAX_VOLUME_FAILURE_TOLERATED_LIMIT) {
+      throw new DiskErrorException("Invalid value configured for "
+          + DFS_DATANODE_FAILED_VOLUMES_TOLERATED_KEY + " - "
+          + maxVolumeFailuresTolerated + " "
+          + DataNode.MAX_VOLUME_FAILURES_TOLERATED_MSG);
+    }
+    this.maxVolumeFailuresTolerated = maxVolumeFailuresTolerated;
   }
 
   /**

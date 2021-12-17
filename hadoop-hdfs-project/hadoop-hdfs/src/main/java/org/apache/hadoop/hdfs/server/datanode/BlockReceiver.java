@@ -76,7 +76,7 @@ class BlockReceiver implements Closeable {
 
   @VisibleForTesting
   static long CACHE_DROP_LAG_BYTES = 8 * 1024 * 1024;
-  private final long datanodeSlowLogThresholdMs;
+  private volatile long datanodeSlowLogThresholdMs;
   private DataInputStream in = null; // from where data are read
   private DataChecksum clientChecksum; // checksum used by client
   private DataChecksum diskChecksum; // checksum we write to disk
@@ -1664,6 +1664,10 @@ class BlockReceiver implements Closeable {
         ackQueue.notifyAll();
       }
     }
+  }
+
+  public void setDatanodeSlowLogThresholdMs(long datanodeSlowLogThresholdMs) {
+    this.datanodeSlowLogThresholdMs = datanodeSlowLogThresholdMs;
   }
 
   /**
