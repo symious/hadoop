@@ -600,6 +600,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final long    DFS_ZONEMOVER_MONITOR_CHECK_INTERVAL_DEFAULT = 1000L * 60 * 2;
   public static final String  DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS =
       "dfs.zonemover.exitEvenHasProgress";
+  public static final String  DFS_ZONEMOVER_XATTR_SET_ENABLE_KEY =
+      "dfs.zonemover.xattr.set.enable";
+  public static final boolean DFS_ZONEMOVER_XATTR_SET_ENABLE_DEFAULT = false;
   public static final boolean DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS_DEFAULT = true;
   //ZoneChecker related keys
   public static final String  DFS_ZONECHECKER_DEFAULT_RATIO = "dfs.zonechecker.default.ratio";

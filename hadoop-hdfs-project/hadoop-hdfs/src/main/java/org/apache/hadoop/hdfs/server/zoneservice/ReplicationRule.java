@@ -18,12 +18,14 @@
 package org.apache.hadoop.hdfs.server.zoneservice;
 
 import com.google.common.base.Joiner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 import java.util.*;
 
 /** ReplicationRule is a class that defines the distribution of replicas
- * in a multiple datacenter environment. A ReplicationRule is composed of one 
+ * in a multiple datacenter environment. A ReplicationRule is composed of one
  * or multiple {@link ReplicationRuleSection}.
  */
 public class ReplicationRule {
@@ -33,7 +35,8 @@ public class ReplicationRule {
   private final static String[] STRIP_CHARACTERS = {" "};
   // "," is the separator of pattern "/dc1:replica1,/dc2:replica2"
   private final static String SECTION_SEPARATOR = ",";
-  
+  private final static Logger LOG = LoggerFactory.getLogger(ReplicationRule.class);
+
   ReplicationRule() {
     this.sections = new HashSet<>();
     this.datacenters = new HashSet<>();
@@ -52,13 +55,15 @@ public class ReplicationRule {
           "ReplicationRule string cannot be null");
     }
     ReplicationRule replicationRule = new ReplicationRule();
+
+    LOG.info("Trying to parse ReplicationRule from '" + rule + "' ...");
     
     // Strip
     String strip = rule;
     for (String s: STRIP_CHARACTERS) {
       strip = strip.replace(s, "");
     }
-    
+
     // Split
     String[] sections = strip.split(SECTION_SEPARATOR);
     for (String section: sections) {

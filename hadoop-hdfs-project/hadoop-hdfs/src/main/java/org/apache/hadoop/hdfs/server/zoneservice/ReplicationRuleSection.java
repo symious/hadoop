@@ -44,24 +44,24 @@ public class ReplicationRuleSection {
 
   /**
    * Construct the ReplicationRuleSection instance from a string format rule.
-   * @param rule a string follows the pattern "dc:replica".
+   * @param section a string follows the pattern "dc:replica".
    *             For example, "/sg_dc:3".
    * @return the constructed ReplicationRuleSection
    */
-  public static ReplicationRuleSection parseFromString(final String rule)
+  public static ReplicationRuleSection parseFromString(final String section)
       throws IllegalArgumentException {
-    if (rule == null) {
+    if (section == null) {
       throw new IllegalArgumentException(
           "ReplicationRuleSection string cannot be null");
     }
     
-    LOG.info("Trying to parse ReplicationRuleSection from {" + rule + "} ...");
+    LOG.info("Trying to parse ReplicationRuleSection from {" + section + "} ...");
     // Strip
-    String strip = rule;
+    String strip = section;
     for (String s: STRIP_CHARACTERS) {
       strip = strip.replace(s, "");
     }
-    
+
     // Split and check
     String[] fields = strip.split(FIELD_SEPARATOR);
     if (fields.length != 2) {

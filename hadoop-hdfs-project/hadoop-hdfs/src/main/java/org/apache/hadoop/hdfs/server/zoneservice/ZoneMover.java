@@ -65,6 +65,8 @@ public class ZoneMover {
   private final DFSClient dfs;
   private static final long DELAY_AFTER_CHOOSE_FAIL = 2 * 1000;
   private final Processor processor = new Processor();
+  private final ReplicationRuleUtil ruleUtil;
+  private final boolean xattrSetEnable;
 
   public ZoneMover(NameNodeConnector nnc, Configuration conf,
       ReplicationRule rule, AtomicInteger retryCount) {
@@ -96,6 +98,10 @@ public class ZoneMover {
     this.dfs = this.dispatcher.getDistributedFileSystem().getClient();
     this.storages = new StorageMap();
     this.targetPaths = nnc.getTargetPaths();
+    this.ruleUtil = new ReplicationRuleUtil(this.dispatcher.getDistributedFileSystem());
+    this.xattrSetEnable = conf.getBoolean(
+        DFSConfigKeys.DFS_ZONEMOVER_XATTR_SET_ENABLE_KEY,
+        DFSConfigKeys.DFS_ZONEMOVER_XATTR_SET_ENABLE_DEFAULT);
   }
 
   /**
@@ -585,6 +591,21 @@ public class ZoneMover {
         return;
       }
 
+      if (xattrSetEnable) {
+        try {
+          if (ruleUtil.hasRuleInXAttr(fullPath) &&
+              ruleUtil.getRuleFromXAttr(fullPath).equals(rule)) {
+            LOG.info("This file already has the replicationRule: " + fullPath);
+          } else {
+            ruleUtil.setRuleToXAttr(fullPath, rule);
+            LOG.info("Added replicationRule to: " + fullPath);
+          }
+        } catch (IOException e) {
+          LOG.warn(e.toString());
+          return;
+        }
+      }
+
       // get the first block
       LocatedBlock firstBlock = locatedBlocks.get(0);
       // Cannot just check the first and last block, as the dispatching action
@@ -592,7 +613,7 @@ public class ZoneMover {
       // may fail but other blocks succeed.
       if (areBlocksDistributionConsistent(locatedBlocks.getLocatedBlocks())) {
         if (isBlockSatisfyRule(firstBlock)) {
-          LOG.info("Skip the file as it already satisfies the rule: " + fullPath);
+          LOG.info("Skip the file as all blocks already satisfy the rule: " + fullPath);
           return;
         }
         processConsistentBlocks(locatedBlocks, result);
