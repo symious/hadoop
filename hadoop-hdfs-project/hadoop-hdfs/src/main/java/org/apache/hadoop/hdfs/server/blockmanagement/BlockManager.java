@@ -367,6 +367,8 @@ public class BlockManager implements BlockStatsMXBean {
    */
   private final short minReplicationToBeInMaintenance;
 
+  private boolean isDataCenterAwareness;
+
   public BlockManager(final Namesystem namesystem, boolean haEnabled,
       final Configuration conf)
     throws IOException {
@@ -393,6 +395,7 @@ public class BlockManager implements BlockStatsMXBean {
       conf, datanodeManager.getFSClusterStats(),
       datanodeManager.getNetworkTopology(),
       datanodeManager.getHost2DatanodeMap());
+    isDataCenterAwareness = blockplacement instanceof BlockPlacementPolicyWithDataCenter;
     storagePolicySuite = BlockStoragePolicySuite.createDefaultSuite();
     pendingReplications = new PendingReplicationBlocks(conf.getInt(
       DFSConfigKeys.DFS_NAMENODE_REPLICATION_PENDING_TIMEOUT_SEC_KEY,
@@ -645,6 +648,7 @@ public class BlockManager implements BlockStatsMXBean {
       throw new HadoopIllegalArgumentException("newpolicy == null");
     }
     this.blockplacement = newpolicy;
+    isDataCenterAwareness = blockplacement instanceof BlockPlacementPolicyWithDataCenter;
   }
 
   /** Dump meta data to out. */
@@ -1652,8 +1656,20 @@ public class BlockManager implements BlockStatsMXBean {
         excludedNodes.add(dn);
       }
 
-      // choose replication targets: NOT HOLDING THE GLOBAL LOCK
-      rw.chooseTargets(blockplacement, storagePolicySuite, excludedNodes);
+      boolean chosen = false;
+      if (isDataCenterAwareness) {
+        ReplicationRule rule = rw.getBlockCollection()
+            .getReplicationRule(namesystem.getFSDirectory());
+        if (rule != null && rule.getReplica() == rw.getBlock().getReplication()) {
+          chosen = true;
+          // choose replication targets: NOT HOLDING THE GLOBAL LOCK
+          rw.chooseTargets(blockplacement, storagePolicySuite, excludedNodes, rule);
+        }
+      }
+      if (!chosen) {
+        // choose replication targets: NOT HOLDING THE GLOBAL LOCK
+        rw.chooseTargets(blockplacement, storagePolicySuite, excludedNodes);
+      }
     }
 
     namesystem.writeLock();
@@ -3267,20 +3283,20 @@ public class BlockManager implements BlockStatsMXBean {
     assert namesystem.hasWriteLock();
     // first form a rack to datanodes map and
     BlockCollection bc = getBlockCollection(storedBlock);
-    ReplicationRule rule = bc.getReplicationRule(namesystem.getFSDirectory());
-
 
     final BlockStoragePolicy storagePolicy = storagePolicySuite.getPolicy(
         bc.getStoragePolicyID());
     final List<StorageType> excessTypes = storagePolicy.chooseExcess(
         replication, DatanodeStorageInfo.toStorageTypes(nonExcess));
     List<DatanodeStorageInfo> replicasToDelete = null;
-    if (rule != null && rule.getReplica() == replication
-        && blockplacement instanceof BlockPlacementPolicyWithDataCenter) {
-      replicasToDelete = ((BlockPlacementPolicyWithDataCenter)blockplacement)
-          .chooseReplicasToDelete(nonExcess, replication, rule, excessTypes,
-              addedNode, delNodeHint);
-    } else {
+    if (isDataCenterAwareness) {
+      ReplicationRule rule = bc.getReplicationRule(namesystem.getFSDirectory());
+      if (rule != null && rule.getReplica() == replication) {
+        replicasToDelete = blockplacement.chooseReplicasToDelete(
+            nonExcess, replication, rule, excessTypes, addedNode, delNodeHint);
+      }
+    }
+    if (replicasToDelete == null) {
       replicasToDelete = blockplacement
           .chooseReplicasToDelete(nonExcess, replication, excessTypes,
               addedNode, delNodeHint);

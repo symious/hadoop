@@ -20,7 +20,10 @@ package org.apache.hadoop.hdfs.server.blockmanagement;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageType;
+import org.apache.hadoop.hdfs.AddBlockFlag;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
+import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRuleSection;
 import org.apache.hadoop.net.NetworkTopology;
@@ -47,6 +50,11 @@ public class BlockPlacementPolicyWithDataCenter extends
     BlockPlacementPolicyDefault {
 
   protected DFSNetworkTopologyWithDataCenter dcClusterMap;
+  // use a virtual base to limit scope to the target datacenter
+  private static final Map<String, Node> dcBaseNodes = new HashMap<>();
+  private static final String VIRTUAL_HOST = "virtual_host";
+  private static final String VIRTUAL_RACK = "/virtual_rack";
+  private static final List<DatanodeStorageInfo> EMPTY_NODES = Collections.emptyList();
 
   @Override
   public void initialize(Configuration conf, FSClusterStats stats,
@@ -168,6 +176,10 @@ public class BlockPlacementPolicyWithDataCenter extends
           blocksize, maxNodesPerRack, results, avoidStaleNodes, storageTypes);
     }
     final String localRack = localMachine.getNetworkLocation();
+    if (localRack.endsWith(VIRTUAL_RACK)) {
+      return chooseRandom(localMachine, 1, NodeBase.ROOT, excludedNodes,
+          blocksize, maxNodesPerRack, results, avoidStaleNodes, storageTypes);
+    }
 
     try {
       // choose one from the local rack
@@ -175,12 +187,10 @@ public class BlockPlacementPolicyWithDataCenter extends
           blocksize, maxNodesPerRack, results, avoidStaleNodes, storageTypes);
     } catch (NotEnoughReplicasException e) {
       // find the next replica and retry with its rack
-      String localDataCenter = DFSNetworkTopologyWithDataCenter.getDataCenter(
-          localMachine.getNetworkLocation());
+      String localDataCenter = NetworkTopologyUtil.getDataCenter(localMachine);
       for(DatanodeStorageInfo resultStorage : results) {
         DatanodeDescriptor nextNode = resultStorage.getDatanodeDescriptor();
-        String nextDataCenter = DFSNetworkTopologyWithDataCenter.getDataCenter(
-            nextNode.getNetworkLocation());
+        String nextDataCenter = NetworkTopologyUtil.getDataCenter(nextNode);
         if ((nextNode != localMachine) && (localDataCenter.equals(nextDataCenter))) {
           if (LOG.isDebugEnabled()) {
             LOG.debug("Failed to choose from local rack (location = " + localRack
@@ -295,8 +305,7 @@ public class BlockPlacementPolicyWithDataCenter extends
       return chooseRandom(numOfReplicas, scope, excludedNodes, blocksize,
           maxNodesPerRack, results, avoidStaleNodes, storageTypes);
     }
-    String newScope = DFSNetworkTopologyWithDataCenter.getDataCenter(
-        base.getNetworkLocation());
+    String newScope = NetworkTopologyUtil.getDataCenter(base);
     if (LOG.isDebugEnabled()) {
       LOG.debug("(base.loc=" + base.getNetworkLocation() +
           ", base.name=" + base.getName() +
@@ -324,10 +333,7 @@ public class BlockPlacementPolicyWithDataCenter extends
         .chooseRandomWithStorageTypeTwoTrial(scope, excludedNodes, type);
   }
 
-  /**
-   * Replicas in DataCenter included in the rule have higher priority
-   * because we use them.
-   */
+  @Override
   public List<DatanodeStorageInfo> chooseReplicasToDelete(
       Collection<DatanodeStorageInfo> candidates,
       int expectedNumOfReplicas,
@@ -427,11 +433,10 @@ public class BlockPlacementPolicyWithDataCenter extends
       final Collection<DatanodeStorageInfo> storageInfos,
       final Map<String, List<DatanodeStorageInfo>> dcMap) {
     for(DatanodeStorageInfo s: storageInfos) {
-      final String dcName = DFSNetworkTopologyWithDataCenter.getDataCenter(
-          s.getDatanodeDescriptor().getNetworkLocation());
+      final String dcName = NetworkTopologyUtil.getDataCenter(s.getDatanodeDescriptor());
       List<DatanodeStorageInfo> storageList = dcMap.get(dcName);
       if (storageList == null) {
-        storageList = new ArrayList<DatanodeStorageInfo>();
+        storageList = new ArrayList<>();
         dcMap.put(dcName, storageList);
       }
       storageList.add(s);
@@ -440,9 +445,58 @@ public class BlockPlacementPolicyWithDataCenter extends
 
   @Override
   protected double maxLoad(DatanodeDescriptor node) {
-    String dataCenter = DFSNetworkTopologyWithDataCenter
-        .getDataCenter(node.getNetworkLocation());
+    String dataCenter = NetworkTopologyUtil.getDataCenter(node);
     return considerLoadFactor *
         stats.getDataCenterInServiceXceiverAverage(dataCenter);
+  }
+
+  @Override
+  public DatanodeStorageInfo[] chooseTarget(
+      String srcPath,
+      int numOfReplicas,
+      ReplicationRule rule,
+      Node writer,
+      List<DatanodeStorageInfo> chosenNodes,
+      boolean returnChosenNodes,
+      Set<Node> excludedNodes,
+      long blocksize,
+      final BlockStoragePolicy storagePolicy,
+      EnumSet<AddBlockFlag> flags) {
+    final Map<String, List<DatanodeStorageInfo>> dcMap = new HashMap<>();
+    splitNodesWithDataCenter(chosenNodes, dcMap);
+
+    // Replicate to the datacenter without any replicas first
+    Set<String> exists = dcMap.keySet();
+    for (ReplicationRuleSection section: rule.getSections()) {
+      String dc = section.getDataCenter();
+      if (!exists.contains(dc)) {
+        Node base = dcBaseNodes.get(dc);
+        if (base == null) {
+          base = new NodeBase(VIRTUAL_HOST, dc + VIRTUAL_RACK);
+          dcBaseNodes.put(dc, base);
+        }
+        int n = Math.min(numOfReplicas, section.getReplica());
+        // do not put datanodes in multiple datacenters to one pipeline,
+        // so return immediately
+        return super.chooseTarget(srcPath, n, base, EMPTY_NODES, returnChosenNodes,
+            excludedNodes, blocksize, storagePolicy, flags);
+      }
+    }
+
+    // Replicate to datacenters without enough replicas
+    for (ReplicationRuleSection section: rule.getSections()) {
+      List<DatanodeStorageInfo> storages = dcMap.get(section.getDataCenter());
+      if (section.getReplica() > storages.size()) {
+        int n = Math.min(numOfReplicas, section.getReplica() - storages.size());
+        Node base = (writer != null && NetworkTopologyUtil.getDataCenter(writer)
+            .equals(section.getDataCenter())) ?
+            writer: storages.get(0).getDatanodeDescriptor();
+        return super.chooseTarget(srcPath, n, base,
+            NetworkTopologyUtil.getStoragesInDataCenter(chosenNodes, section.getDataCenter()),
+            returnChosenNodes, excludedNodes, blocksize, storagePolicy, flags);
+      }
+    }
+
+    return DatanodeStorageInfo.EMPTY_ARRAY;
   }
 }

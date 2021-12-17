@@ -30,6 +30,7 @@ import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
@@ -153,8 +154,7 @@ public class TestBlockPlacementPolicyWithDataCenter {
     return (!clientHost.equals(datanodeInfo.getHostName()) &&
         !clientRack.equals(datanodeInfo.getNetworkLocation()) &&
         DFSNetworkTopologyWithDataCenter.getDataCenter(clientRack).equals(
-            DFSNetworkTopologyWithDataCenter.getDataCenter(
-                datanodeInfo.getNetworkLocation())
+            NetworkTopologyUtil.getDataCenter(datanodeInfo)
         ));
   }
 
@@ -264,17 +264,7 @@ public class TestBlockPlacementPolicyWithDataCenter {
         namesystem.getBlockManager().getDatanodeManager().getDatanodes();
 
     // Sort datanodes by rack, and add the DatanodeStorageInfo to map.
-    Map<String, List<DatanodeStorageInfo>> dcMap = new HashMap<>();
-    for (DatanodeDescriptor dn : datanodes) {
-      DatanodeStorageInfo storageInfo =  dn.getStorageInfos()[0];
-      String rackName = storageInfo.getDatanodeDescriptor().getNetworkLocation();
-      List<DatanodeStorageInfo> storageList = dcMap.get(rackName);
-      if (storageList == null) {
-        storageList = new ArrayList<DatanodeStorageInfo>();
-        dcMap.put(rackName, storageList);
-      }
-      storageList.add(storageInfo);
-    }
+    Map<String, List<DatanodeStorageInfo>> dcMap = getDcMapFromDatanodes(datanodes);
 
     List<DatanodeStorageInfo> excessReplicas;
     BlockStoragePolicySuite POLICY_SUITE = BlockStoragePolicySuite
@@ -341,5 +331,68 @@ public class TestBlockPlacementPolicyWithDataCenter {
     // delHintNode is in excessReplicas.
     assertEquals(delHintNode, excessReplicas.get(0).getDatanodeDescriptor());
 
+  }
+
+  @Test
+  public void testChooseTarget() {
+    BlockPlacementPolicyWithDataCenter policy =
+        (BlockPlacementPolicyWithDataCenter) namesystem.getBlockManager()
+            .getBlockPlacementPolicy();
+    BlockStoragePolicy storagePolicy = BlockStoragePolicySuite
+        .createDefaultSuite().getDefaultPolicy();
+
+    // Sort datanodes by rack, and add the DatanodeStorageInfo to map.
+    Set<DatanodeDescriptor> datanodes=
+        namesystem.getBlockManager().getDatanodeManager().getDatanodes();
+    Map<String, List<DatanodeStorageInfo>> dcMap = getDcMapFromDatanodes(datanodes);
+
+    // replicate to the datacenter without any replicas first
+    ReplicationRule rule = ReplicationRule
+        .parseFromString("/datacenter0:2,/datacenter1:2");
+    List<DatanodeStorageInfo> existNodes = new ArrayList<>();
+    existNodes.add(dcMap.get("/datacenter0/rack0").get(0));
+    DatanodeStorageInfo[] results = policy.chooseTarget(null, 3, rule, null,
+        existNodes, false, null, DEFAULT_BLOCK_SIZE, storagePolicy, null);
+    assertEquals(2, results.length);
+    for (DatanodeStorageInfo info: results) {
+      assertEquals("/datacenter1", NetworkTopologyUtil
+          .getDataCenter(info.getDatanodeDescriptor()));
+    }
+
+    // only replicate to one datacenter one time
+    existNodes.clear();
+    existNodes.add(dcMap.get("/datacenter0/rack0").get(0));
+    existNodes.add(dcMap.get("/datacenter1/rack0").get(0));
+    results = policy.chooseTarget(null, 2, rule, null,
+        existNodes, false, null, DEFAULT_BLOCK_SIZE, storagePolicy, null);
+    assertEquals(1, results.length);
+    String dc = NetworkTopologyUtil.getDataCenter(results[0].getDatanodeDescriptor());
+    assertTrue(dc.equals("/datacenter0") || dc.equals("/datacenter1"));
+
+    // allocated should not beyond numOfReplicas
+    rule = ReplicationRule.parseFromString("/datacenter0:3");
+    existNodes.clear();
+    existNodes.add(dcMap.get("/datacenter0/rack0").get(0));
+    results = policy.chooseTarget(null, 1, rule, null,
+        existNodes, false, null, DEFAULT_BLOCK_SIZE, storagePolicy, null);
+    assertEquals(1, results.length);
+    dc = NetworkTopologyUtil.getDataCenter(results[0].getDatanodeDescriptor());
+    assertEquals("/datacenter0", dc);
+  }
+
+  private Map<String, List<DatanodeStorageInfo>> getDcMapFromDatanodes(
+      Set<DatanodeDescriptor> datanodes) {
+    Map<String, List<DatanodeStorageInfo>> dcMap = new HashMap<>();
+    for (DatanodeDescriptor dn : datanodes) {
+      DatanodeStorageInfo storageInfo =  dn.getStorageInfos()[0];
+      String rackName = storageInfo.getDatanodeDescriptor().getNetworkLocation();
+      List<DatanodeStorageInfo> storageList = dcMap.get(rackName);
+      if (storageList == null) {
+        storageList = new ArrayList<>();
+        dcMap.put(rackName, storageList);
+      }
+      storageList.add(storageInfo);
+    }
+    return dcMap;
   }
 }

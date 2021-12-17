@@ -33,6 +33,7 @@ import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -107,6 +108,38 @@ public abstract class BlockPlacementPolicy {
   }
 
   /**
+   * choose <i>numOfReplicas</i> data nodes for <i>writer</i>
+   * to re-replicate a block with size <i>blocksize</i>
+   * If not, return as many as we can.
+   *
+   * @param srcPath the file to which this chooseTargets is being invoked.
+   * @param numOfReplicas additional number of replicas wanted.
+   * @param rule ReplicationRule to follow.
+   * @param writer the writer's machine, null if not in the cluster.
+   * @param chosenNodes datanodes that have been chosen as targets.
+   * @param returnChosenNodes decide if the chosenNodes are returned.
+   * @param excludedNodes datanodes that should not be considered as targets.
+   * @param blocksize size of the data to be written.
+   * @param flags Block placement flags.
+   * @return array of DatanodeDescriptor instances chosen as target
+   * and sorted as a pipeline.
+   */
+  public DatanodeStorageInfo[] chooseTarget(
+      String srcPath,
+      int numOfReplicas,
+      ReplicationRule rule,
+      Node writer,
+      List<DatanodeStorageInfo> chosenNodes,
+      boolean returnChosenNodes,
+      Set<Node> excludedNodes,
+      long blocksize,
+      final BlockStoragePolicy storagePolicy,
+      EnumSet<AddBlockFlag> flags) {
+    return chooseTarget(srcPath, numOfReplicas, writer, chosenNodes, returnChosenNodes,
+        excludedNodes, blocksize, storagePolicy, flags);
+  }
+
+  /**
    * @param storageTypes storage types that should be used as targets.
    */
   public DatanodeStorageInfo[] chooseTarget(String srcPath, int numOfReplicas,
@@ -148,6 +181,36 @@ public abstract class BlockPlacementPolicy {
       Collection<DatanodeStorageInfo> candidates, int expectedNumOfReplicas,
       List<StorageType> excessTypes, DatanodeDescriptor addedNode,
       DatanodeDescriptor delNodeHint);
+
+  /**
+   * Select the excess replica storages for deletion based on either
+   * replicationRule/delNodehint/Excess storage types.
+   *
+   * @param candidates
+   *          available replicas
+   * @param expectedNumOfReplicas
+   *          The required number of replicas for this block
+   * @param rule
+   *          The rule for replicas to follow
+   * @param excessTypes
+   *          type of the storagepolicy
+   * @param addedNode
+   *          New replica reported
+   * @param delNodeHint
+   *          Hint for excess storage selection
+   * @return Returns the list of excess replicas chosen for deletion
+   */
+  public List<DatanodeStorageInfo> chooseReplicasToDelete(
+      Collection<DatanodeStorageInfo> candidates,
+      int expectedNumOfReplicas,
+      ReplicationRule rule,
+      List<StorageType> excessTypes,
+      DatanodeDescriptor addedNode,
+      DatanodeDescriptor delNodeHint) {
+    return chooseReplicasToDelete(candidates, expectedNumOfReplicas,
+        excessTypes, addedNode, delNodeHint);
+  }
+
   /**
    * Used to setup a BlockPlacementPolicy object. This should be defined by 
    * all implementations of a BlockPlacementPolicy.
