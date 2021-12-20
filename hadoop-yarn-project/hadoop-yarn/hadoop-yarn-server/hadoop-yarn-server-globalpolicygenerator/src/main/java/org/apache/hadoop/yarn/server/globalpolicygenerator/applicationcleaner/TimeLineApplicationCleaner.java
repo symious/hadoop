@@ -54,6 +54,9 @@ public class TimeLineApplicationCleaner extends ApplicationCleaner {
 
   public static final String APPLICATION_STATE = "YARN_APPLICATION_STATE";
 
+  public static final String APPLICATION_FINISHED_TIMESTAMP =
+      "YARN_APPLICATION_FINISHED";
+
   private GPGMetrics gpgMetrics = GPGMetrics.getMetrics();;
 
   @Override
@@ -103,23 +106,30 @@ public class TimeLineApplicationCleaner extends ApplicationCleaner {
           long appFinishedStamp = Long.MAX_VALUE;
           NavigableSet<TimelineEvent> timelineEvents = entity.getEvents();
           for (TimelineEvent event : timelineEvents) {
-            if (event.getId().equals(APPLICATION_STATE)) {
+            if (event.getId().equals(APPLICATION_FINISHED_TIMESTAMP)) {
               appFinishedStamp = event.getTimestamp();
+              LOG.debug(
+                  "ApplicationID: " + applicationId + " ,appFinishedStamp: " +
+                      appFinishedStamp);
             }
           }
 
-          //add finished app to deleteList
+          //add finished app to deleteListls
           if((applicationState.equals(YarnApplicationState.FINISHED.toString()) ||
               applicationState.equals(YarnApplicationState.FAILED.toString()) ||
               applicationState.equals(YarnApplicationState.KILLED.toString())) &&
               (System.currentTimeMillis() - appFinishedStamp) >
                   getAppHomeExpireMinTime()){
             if(LOG.isDebugEnabled()){
-              LOG.debug("Add applicationID: " + applicationId + " to deleteList!");
+              LOG.debug("ApplicationID: " + applicationId + " finished " +
+                  (System.currentTimeMillis() - appFinishedStamp) +
+                  " ms, exceeds ExpireMinTime : " + getAppHomeExpireMinTime() +
+                  " ms, add it to deleted list!");
             }
             toDelete.add(applicationId);
           }
         }catch (Exception e){
+          gpgMetrics.incrFailedQueryAppsFromTimeline();
           LOG.error("Query app: " + app.getApplicationId() + " from timeline " +
               "failed!",e);
         }
