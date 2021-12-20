@@ -35,6 +35,7 @@ import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockStoragePolicySuite;
 import org.apache.hadoop.hdfs.server.namenode.FSDirectory.DirOp;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.hdfs.util.EnumCounters;
 import org.apache.hadoop.security.AccessControlException;
 
@@ -396,6 +397,11 @@ public class FSDirAttrOp {
     // Ensure the quota does not exceed
     if (oldBR < replication) {
       fsd.updateCount(iip, 0L, size, oldBR, replication, true);
+    }
+
+    ReplicationRule rule = file.getReplicationRule(fsd);
+    if (rule != null && rule.getReplica() != replication) {
+      FSDirectory.LOG.warn("replication={} conflicts with rule='{}'", replication, rule);
     }
 
     file.setFileReplication(replication, iip.getLatestSnapshotId());
