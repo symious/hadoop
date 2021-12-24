@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.router.clientrm;
 
+import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.ipc.StandbyException;
@@ -847,6 +848,10 @@ public class FederationClientInterceptor
   @Override
   public GetClusterMetricsResponse getClusterMetrics(
       GetClusterMetricsRequest request) throws YarnException, IOException {
+
+    long startTime = clock.getTime();
+    String requestId = RandomStringUtils.randomAlphabetic(8);
+
     Map<SubClusterId, SubClusterInfo> subclusters =
         federationFacade.getSubClusters(true);
     ClientMethod remoteMethod = new ClientMethod("getClusterMetrics",
@@ -854,25 +859,44 @@ public class FederationClientInterceptor
     ArrayList<SubClusterId> clusterList = new ArrayList<>(subclusters.keySet());
     Map<SubClusterId, GetClusterMetricsResponse> clusterMetrics =
         invokeConcurrent(clusterList, remoteMethod,
-            GetClusterMetricsResponse.class);
+            GetClusterMetricsResponse.class, requestId);
+
+    long stopTime = clock.getTime();
+    LOG.info("requestId:" + requestId + " ,getClusterMetrics cost time: " +
+        (stopTime - startTime) + "ms, clientIP: " + Server.getRemoteAddress());
     return RouterYarnClientUtils.merge(clusterMetrics.values());
   }
 
   <R> Map<SubClusterId, R> invokeConcurrent(ArrayList<SubClusterId> clusterIds,
-      ClientMethod request, Class<R> clazz) throws YarnException, IOException {
+      ClientMethod request, Class<R> clazz, String requestId) throws YarnException, IOException {
+
+    long startTime = clock.getTime();
     List<Callable<Object>> callables = new ArrayList<>();
     List<Future<Object>> futures = new ArrayList<>();
     acquirePermit(CONCURRENT_SUBCLUSTER_ID);
+    long stopTime = clock.getTime();
+    LOG.info("requestId: " + requestId + " ,acquirePermit cost time: " +
+        (stopTime - startTime) + " ms!");
+
     Map<SubClusterId, IOException> exceptions = new TreeMap<>();
     for (SubClusterId subClusterId : clusterIds) {
       callables.add(new Callable<Object>() {
         @Override
         public Object call() throws Exception {
+          long startTime = clock.getTime();
           ApplicationClientProtocol protocol =
               getClientRMProxyForSubCluster(subClusterId);
+          long stopTime_1 = clock.getTime();
           Method method = ApplicationClientProtocol.class
               .getMethod(request.getMethodName(), request.getTypes());
-          return method.invoke(protocol, request.getParams());
+          Object object = method.invoke(protocol, request.getParams());
+          long stopTime_2 = clock.getTime();
+          LOG.info("requestId: " + requestId + " ,user: " + user.getUserName() +
+              " ,method: " + request.getMethodName() + " ,subClusterId: " +
+              subClusterId + " ,getClientRMProxy cost time: " +
+              (stopTime_1 - startTime) + " ms" + " ,invoke cost time: " +
+              (stopTime_2 - stopTime_1) + " ms");
+          return object;
         }
       });
     }

@@ -528,7 +528,7 @@ public class TestFederationClientInterceptor extends BaseRouterClientRMTest {
         new Object[] {GetClusterMetricsRequest.newInstance()});
     Map<SubClusterId, GetClusterMetricsResponse> clusterMetrics =interceptor.
         invokeConcurrent(new ArrayList<>(), remoteMethod,
-            GetClusterMetricsResponse.class);
+            GetClusterMetricsResponse.class, null);
     Assert.assertEquals(true, clusterMetrics.isEmpty());
   }
 }

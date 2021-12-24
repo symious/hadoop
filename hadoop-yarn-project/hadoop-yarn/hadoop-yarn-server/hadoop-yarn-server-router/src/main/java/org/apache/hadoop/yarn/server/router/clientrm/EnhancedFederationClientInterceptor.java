@@ -19,6 +19,9 @@
 package org.apache.hadoop.yarn.server.router.clientrm;
 
 import org.apache.hadoop.ipc.Server;
+
+import org.apache.commons.lang3.RandomStringUtils;
+
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptsRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptsResponse;
@@ -79,6 +82,7 @@ public class EnhancedFederationClientInterceptor
       throws YarnException, IOException {
 
     long startTime = clock.getTime();
+    String requestId = RandomStringUtils.randomAlphabetic(8);
 
     if (request == null) {
       routerMetrics.incrMultipleAppsFailedRetrieved();
@@ -106,7 +110,7 @@ public class EnhancedFederationClientInterceptor
     ArrayList<SubClusterId> clusterList = new ArrayList<>(subclusters.keySet());
     Map<SubClusterId, GetApplicationsResponse> clusterApps =
         invokeConcurrent(clusterList, remoteMethod,
-            GetApplicationsResponse.class);
+            GetApplicationsResponse.class, requestId);
 
     long stopTime = clock.getTime();
     if (clusterApps.size() > 0) {
@@ -186,6 +190,7 @@ public class EnhancedFederationClientInterceptor
       throws YarnException, IOException {
 
     long startTime = clock.getTime();
+    String requestId = RandomStringUtils.randomAlphabetic(8);
 
     LOG.info("GetClusterNodes request info -> nodeStates: "
         + request.getNodeStates());
@@ -197,7 +202,7 @@ public class EnhancedFederationClientInterceptor
     ArrayList<SubClusterId> clusterList = new ArrayList<>(subclusters.keySet());
     Map<SubClusterId, GetClusterNodesResponse> clusterNodes =
         invokeConcurrent(clusterList, remoteMethod,
-            GetClusterNodesResponse.class);
+            GetClusterNodesResponse.class, requestId);
 
     long stopTime = clock.getTime();
     LOG.info("GetClusterNodes cost time: " + (stopTime - startTime) + "ms");
