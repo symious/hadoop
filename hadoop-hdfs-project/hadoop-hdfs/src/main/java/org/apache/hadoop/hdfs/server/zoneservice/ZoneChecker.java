@@ -10,6 +10,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSClient;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
@@ -20,6 +21,8 @@ import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.server.balancer.Dispatcher;
 import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
 import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
+import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.slf4j.Logger;
@@ -27,41 +30,55 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
-import java.text.DateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class ZoneChecker {
   private static final Logger LOG = LoggerFactory.getLogger(ZoneChecker.class);
   private static final String ROOT = "/";
   private final DFSClient dfs;
+  private float ratio;
+  private static final int MIN_FILE_NUM = 1;
 
   ZoneChecker(NameNodeConnector nnc, Configuration conf) {
     Dispatcher dispatcher =
         new ZoneDispatcher(nnc, Collections.<String>emptySet(),
             Collections.<String>emptySet(), 0, 0,
             0, conf, 0, 0);
+    ratio = conf.getFloat(DFSConfigKeys.DFS_ZONECHECKER_DEFAULT_RATIO,
+        DFSConfigKeys.DFS_ZONECHECKER_DEFAULT_RATIO_DEFAULT);
     this.dfs = dispatcher.getDistributedFileSystem().getClient();
   }
 
   /**
    * Run with prepared arguments.
    * @param conf configuration
+   * @param namenode URI of the NameNode
    * @param path the path to be checked
+   * @param ratio the ratio of files need to be checked
    */
-  private static int run(Configuration conf, URI namenode, String path) {
-    LOG.info("Start to check path: " + path);
+  private static int run(Configuration conf, URI namenode, String path,
+      Float ratio) {
     NameNodeConnector nnc;
     try {
       nnc = new NameNodeConnector(namenode,
           Collections.singletonList(new Path(path)), conf, 1);
       final ZoneChecker zch = new ZoneChecker(nnc, conf);
-      Map<ReplicationRule, List<String>> result = zch.getReplicaInfo(path);
+      //if ratio is inputted by user, set it
+      if (ratio <= 0.0f) {
+        LOG.info("Start to check path: " + path + " with default ratio.");
+      } else {
+        LOG.info("Start to check path: " + path + " with ratio " + ratio);
+        zch.setRatio(ratio);
+      }
+      Map<ReplicationRule, Set<String>> result = zch.getReplicaInfo(path);
       printResult(result);
       return 0;
     } catch (IOException e) {
@@ -73,7 +90,9 @@ public class ZoneChecker {
   static class Cli extends Configured implements Tool {
     private static final String USAGE = "Usage: hdfs zonechecker"
         + "\n\t[-namespace <namespace>]\tthe namespace to be checked."
-        + "\n\t-path <path>\tthe path to be checked.";
+        + "\n\t[-path <path>]\tthe path to be checked."
+        + "\n\t[-ratio <ratio>]\tif the path is a directory, the ratio of "
+        + "files will be checked";
 
     private static Options buildCliOptions() {
       Options options = new Options();
@@ -85,6 +104,11 @@ public class ZoneChecker {
       option = new Option(null, "path", true,
           "the path to be checked");
       option.setRequired(true);
+      options.addOption(option);
+
+      option = new Option(
+          null, "ratio", true,
+          "the ratio of files will be checked");
       options.addOption(option);
       return options;
     }
@@ -115,6 +139,9 @@ public class ZoneChecker {
           "Cannot find the NameNode for namespace: " + namespace);
     }
 
+    /**
+     * Get the path from args
+     */
     private static String getPath(CommandLine line)
         throws IllegalArgumentException {
       String path = line.getOptionValue("path");
@@ -124,36 +151,56 @@ public class ZoneChecker {
       return path;
     }
 
+    /**
+     * Get the ratio from args
+     */
+    private static Float getRatio(CommandLine line)
+        throws IllegalArgumentException {
+      float ratio;
+      if (line.hasOption("ratio")) {
+        ratio = Float.parseFloat(line.getOptionValue("ratio"));
+      } else {
+        return -1.0f;
+      }
+      if (ratio > 1.0f || ratio < 0.0f) {
+        throw new IllegalArgumentException("Please provide a valid ratio" +
+            " which need to be in [0,1]!");
+      }
+      return ratio;
+    }
+
     @Override
     public int run(String[] args) {
+      long startTime = Time.monotonicNow();
       final Configuration conf = getConf();
       final Options options = buildCliOptions();
       CommandLineParser parser = new GnuParser();
-
+      CommandLine commandLine;
       try {
-        CommandLine commandLine = parser.parse(options, args, true);
+        commandLine = parser.parse(options, args, true);
         return run(conf, getNamespaceUri(commandLine, conf),
-            getPath(commandLine));
+            getPath(commandLine), getRatio(commandLine));
       } catch (ParseException | IllegalArgumentException e) {
         System.out.println(e + ".  Exiting ...");
         return ExitStatus.ILLEGAL_ARGUMENTS.getExitCode();
       } finally {
-        System.out.format("%-24s ",
-            DateFormat.getDateTimeInstance().format(new Date()));
+        System.out.format("ZoneChecker took "
+            + StringUtils.formatTime(Time.monotonicNow() - startTime));
       }
     }
 
     /**
-     * Run with prepared arguments.
+     * Run with given ratio.
      */
-    int run(Configuration conf, URI namenodeURI, String path) {
-      return ZoneChecker.run(conf, namenodeURI, path);
+    int run(Configuration conf, URI namenodeURI, String path,
+        Float ratio) {
+      return ZoneChecker.run(conf, namenodeURI, path, ratio);
     }
   }
 
-  public Map<ReplicationRule, List<String>> getReplicaInfo(
+  public Map<ReplicationRule, Set<String>> getReplicaInfo(
       String fullPath) {
-    Map<ReplicationRule, List<String>> resultMap = new HashMap<>();
+    Map<ReplicationRule, Set<String>> resultMap = new HashMap<>();
     for (byte[] lastReturnedName = HdfsFileStatus.EMPTY_NAME;;) {
       final DirectoryListing children;
       try {
@@ -166,14 +213,17 @@ public class ZoneChecker {
       if (children == null) {
         return resultMap;
       }
-      for (HdfsFileStatus child : children.getPartialListing()) {
+      HdfsFileStatus[] partialList = children.getPartialListing();
+      int threshold = Math.max(MIN_FILE_NUM,
+          Math.round(partialList.length * ratio));
+      for (HdfsFileStatus child : getRandomList(partialList, threshold)) {
         resultMap = mergeRules(resultMap,
             getReplicaInfoRecursively(fullPath, child));
       }
 
       if (resultMap.keySet().size() == 1) {
         resultMap.put(resultMap.keySet().iterator().next(),
-            new ArrayList<>(Collections.singletonList(fullPath)));
+            new HashSet<>(Collections.singletonList(fullPath)));
       }
 
       if (children.hasMore()) {
@@ -186,9 +236,9 @@ public class ZoneChecker {
   }
 
   /** @return whether the check requires next round */
-  private Map<ReplicationRule, List<String>> getReplicaInfoRecursively(
+  private Map<ReplicationRule, Set<String>> getReplicaInfoRecursively(
       String parent, HdfsFileStatus status) {
-    Map<ReplicationRule, List<String>> resultMap = new HashMap<>();
+    Map<ReplicationRule, Set<String>> resultMap = new HashMap<>();
     String fullPath = status.getFullName(parent);
     if (status.isDir()) {
       if (!fullPath.endsWith(Path.SEPARATOR)) {
@@ -215,7 +265,7 @@ public class ZoneChecker {
             resultMap.get(replicationRule).add(fullPath);
           } else {
             resultMap.put(replicationRule,
-                new ArrayList<>(Collections.singletonList(fullPath)));
+                new HashSet<>(Collections.singletonList(fullPath)));
           }
         }
 
@@ -227,32 +277,46 @@ public class ZoneChecker {
     return resultMap;
   }
 
-  private Map<ReplicationRule, List<String>> mergeRules(
-      Map<ReplicationRule, List<String>> rule1,
-      Map<ReplicationRule, List<String>> rule2) {
-    if (rule1.isEmpty()) { return rule2; }
-    Map<ReplicationRule, List<String>> result = rule1;
-    for (Map.Entry<ReplicationRule, List<String>> entry:rule2.entrySet()) {
-      ReplicationRule key = entry.getKey();
-      List<ReplicationRule> keyList = new ArrayList<>(result.keySet());
-      if (keyList.contains(key)) {
-        result.get(key).addAll(entry.getValue());
-      } else {
-        result.put(key, entry.getValue());
-      }
-    }
-    return result;
+  /**
+   * Choose random list
+   */
+  private List<HdfsFileStatus> getRandomList(HdfsFileStatus[] hdfsFileStatuses,
+      int threshold) {
+    List<HdfsFileStatus> fileStatusList = Arrays.asList(hdfsFileStatuses);
+    if (fileStatusList.isEmpty()) { return fileStatusList; }
+    Collections.shuffle(fileStatusList);
+    return fileStatusList.subList(0, threshold);
   }
 
-  private static void printResult(Map<ReplicationRule, List<String>> map) {
+  private Map<ReplicationRule, Set<String>> mergeRules(
+      Map<ReplicationRule, Set<String>> rule1,
+      Map<ReplicationRule, Set<String>> rule2) {
+    if (rule1.isEmpty()) { return rule2; }
+    for (Map.Entry<ReplicationRule, Set<String>> entry:rule2.entrySet()) {
+      ReplicationRule key = entry.getKey();
+      List<ReplicationRule> keyList = new ArrayList<>(rule1.keySet());
+      if (keyList.contains(key)) {
+        rule1.get(key).addAll(entry.getValue());
+      } else {
+        rule1.put(key, entry.getValue());
+      }
+    }
+    return rule1;
+  }
+
+  private static void printResult(Map<ReplicationRule, Set<String>> map) {
     System.out.println("Zone checker result: ");
-    for (Map.Entry<ReplicationRule, List<String>> entry: map.entrySet()) {
+    for (Map.Entry<ReplicationRule, Set<String>> entry: map.entrySet()) {
       ReplicationRule replicationRule = entry.getKey();
       System.out.println(replicationRule.toString() + ":");
       for (String path: entry.getValue()) {
         System.out.println("  " + path);
       }
     }
+  }
+
+  private void setRatio(Float ratio) {
+    this.ratio = ratio;
   }
 
   /**

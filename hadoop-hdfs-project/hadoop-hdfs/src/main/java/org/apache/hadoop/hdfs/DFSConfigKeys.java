@@ -585,6 +585,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS =
       "dfs.zonemover.exitEvenHasProgress";
   public static final boolean DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS_DEFAULT = true;
+  //ZoneChecker related keys
+  public static final String  DFS_ZONECHECKER_DEFAULT_RATIO = "dfs.zonechecker.default.ratio";
+  public static final float   DFS_ZONECHECKER_DEFAULT_RATIO_DEFAULT = 1.0f;
+  //ZoneMover kafka trigger related keys
   public static final String  DFS_ZONEMOVER_KAFKA_BOOTSTRAP_SERVERS = "dfs.zonemover.kafka.bootstrap.servers";
   public static final String  DFS_ZONEMOVER_KAFKA_TOPIC = "dfs.zonemover.kafka.topic";
   public static final String  DFS_ZONEMOVER_KAFKA_GROUP_ID = "dfs.zonemover.kafka.group.id";
