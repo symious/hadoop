@@ -172,7 +172,7 @@
         $('#tab-startup-progress').html(out);
         $('#ui-tabs a[href="#tab-startup-progress"]').tab('show');
       });
-    }).error(ajax_error_handler);
+    }).fail(ajax_error_handler);
   }
 
   function load_datanode_info() {
@@ -341,7 +341,7 @@
           renderHistogram(data);
           $('#ui-tabs a[href="#tab-datanode"]').tab('show');
         });
-      })).error(ajax_error_handler);
+      })).fail(ajax_error_handler);
   }
 
   function load_datanode_volume_failures() {
@@ -380,7 +380,7 @@
           $('#tab-datanode-volume-failures').html(out);
           $('#ui-tabs a[href="#tab-datanode-volume-failures"]').tab('show');
         });
-      })).error(ajax_error_handler);
+      })).fail(ajax_error_handler);
   }
 
   function load_snapshot_info() {
@@ -391,7 +391,7 @@
           $('#tab-snapshot').html(out);
           $('#ui-tabs a[href="#tab-snapshot"]').tab('show');
         });
-      })).error(ajax_error_handler);
+      })).fail(ajax_error_handler);
   }
 
   function load_page() {

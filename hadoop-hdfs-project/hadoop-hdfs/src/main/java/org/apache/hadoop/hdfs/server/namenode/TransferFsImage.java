@@ -57,7 +57,7 @@ import org.apache.http.client.utils.URIBuilder;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
-import org.mortbay.jetty.EofException;
+import org.eclipse.jetty.io.EofException;
 
 import static org.apache.hadoop.hdfs.server.common.Util.IO_FILE_BUFFER_SIZE;
 import static org.apache.hadoop.hdfs.server.common.Util.connectionFactory;
