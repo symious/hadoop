@@ -234,8 +234,6 @@ public class ContainerManagerImpl extends CompositeService implements
   private NMTimelinePublisher nmMetricsPublisher;
   private boolean timelineServiceV2Enabled;
 
-  private NodeManagerMetrics nodeManagerMetrics = NodeManagerMetrics.create();
-
   public ContainerManagerImpl(Context context, ContainerExecutor exec,
       DeletionService deletionContext, NodeStatusUpdater nodeStatusUpdater,
       NodeManagerMetrics metrics, LocalDirsHandlerService dirsHandler) {
@@ -870,11 +868,11 @@ public class ContainerManagerImpl extends CompositeService implements
       boolean startRequest)
       throws YarnException {
     if (nmTokenIdentifier == null) {
-      nodeManagerMetrics.failedContainer();
+      metrics.failedContainer();
       throw RPCUtil.getRemoteException(INVALID_NMTOKEN_MSG);
     }
     if (containerTokenIdentifier == null) {
-      nodeManagerMetrics.failedContainer();
+      metrics.failedContainer();
       throw RPCUtil.getRemoteException(INVALID_CONTAINERTOKEN_MSG);
     }
     /*
@@ -919,7 +917,7 @@ public class ContainerManagerImpl extends CompositeService implements
     if (unauthorized) {
       String msg = messageBuilder.toString();
       LOG.error(msg);
-      nodeManagerMetrics.failedContainer();
+      metrics.failedContainer();
       throw RPCUtil.getRemoteException(msg);
     }
     if (containerTokenIdentifier.getRMIdentifier() != nodeStatusUpdater
@@ -928,7 +926,7 @@ public class ContainerManagerImpl extends CompositeService implements
       StringBuilder sb = new StringBuilder("\nContainer ");
       sb.append(containerTokenIdentifier.getContainerID().toString())
         .append(" rejected as it is allocated by a previous RM");
-      nodeManagerMetrics.failedContainer();
+      metrics.failedContainer();
       throw new InvalidContainerException(sb.toString());
     }
   }
