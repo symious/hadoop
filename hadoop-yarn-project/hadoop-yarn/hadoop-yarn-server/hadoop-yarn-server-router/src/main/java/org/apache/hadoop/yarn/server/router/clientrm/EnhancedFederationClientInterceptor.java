@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.router.clientrm;
 
+import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptsRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationAttemptsResponse;
@@ -88,7 +89,8 @@ public class EnhancedFederationClientInterceptor
     LOG.info("GetApplications request info -> tags: " +
         request.getApplicationTags() + ", states: " +
         request.getApplicationStates() + ", types: " +
-        request.getApplicationTypes() + ", limit: " + request.getLimit());
+        request.getApplicationTypes() + ", limit: " + request.getLimit() +
+        ", clientIP: " + Server.getRemoteAddress());
 
     if (request.getApplicationTags() == null ||
         request.getApplicationTags().size() <= 0) {
@@ -110,7 +112,8 @@ public class EnhancedFederationClientInterceptor
     if (clusterApps.size() > 0) {
       routerMetrics.succeededMultipleAppsRetrieved(stopTime - startTime);
     }
-    LOG.info("GetApplications cost time: " + (stopTime - startTime) + "ms");
+    LOG.info("GetApplications cost time: " + (stopTime - startTime) +
+        "ms, clientIP: " + Server.getRemoteAddress());
     return RouterYarnClientUtils.mergeApps(clusterApps.values());
   }
 
