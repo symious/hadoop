@@ -4043,6 +4043,10 @@ public class YarnConfiguration extends Configuration {
       ROUTER_PREFIX + "submit.retry";
   public static final int DEFAULT_ROUTER_CLIENTRM_SUBMIT_RETRY = 3;
 
+  public static final String ROUTER_OVERLOAD_REJECT_REQUEST =
+      ROUTER_PREFIX + "overload.reject.request";
+  public static final boolean DEFAULT_ROUTER_OVERLOAD_REJECT_REQUEST = false;
+
   public static final String ROUTER_WEBAPP_PREFIX = ROUTER_PREFIX + "webapp.";
 
   public static final String ROUTER_USER_CLIENT_THREADS_SIZE =

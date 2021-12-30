@@ -167,6 +167,7 @@ public class FederationClientInterceptor
       LoggerFactory.getLogger(FederationClientInterceptor.class);
 
   private int numSubmitRetries;
+  private boolean isOverloadRouterRejectRequest;
   private Map<SubClusterId, ApplicationClientProtocol> clientRMProxies;
   private FederationStateStoreFacade federationFacade;
   private Random rand;
@@ -214,6 +215,10 @@ public class FederationClientInterceptor
         conf.getInt(YarnConfiguration.ROUTER_CLIENTRM_SUBMIT_RETRY,
             YarnConfiguration.DEFAULT_ROUTER_CLIENTRM_SUBMIT_RETRY);
 
+    isOverloadRouterRejectRequest =
+        conf.getBoolean(YarnConfiguration.ROUTER_OVERLOAD_REJECT_REQUEST,
+            YarnConfiguration.DEFAULT_ROUTER_OVERLOAD_REJECT_REQUEST);
+
     clientRMProxies =
         new ConcurrentHashMap<SubClusterId, ApplicationClientProtocol>();
     routerMetrics = RouterMetrics.getMetrics();
@@ -250,7 +255,9 @@ public class FederationClientInterceptor
       LOG.error("Permit denied for subCluster: {} ", subClusterId);
       String msg =
           "Router is overloaded for subCluster: " + subClusterId;
-      throw new StandbyException(msg);
+      if (isOverloadRouterRejectRequest) {
+        throw new StandbyException(msg);
+      }
     }else{
       LOG.debug("Permit accepted for subCluster: {} ", subClusterId);
     }
