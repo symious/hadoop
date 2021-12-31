@@ -1,3 +1,20 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.hadoop.hdfs.server.zoneservice;
 
 import org.apache.commons.cli.CommandLine;
@@ -47,7 +64,7 @@ public class ZoneChecker {
   private float ratio;
   private static final int MIN_FILE_NUM = 1;
 
-  ZoneChecker(NameNodeConnector nnc, Configuration conf) {
+  public ZoneChecker(NameNodeConnector nnc, Configuration conf) {
     Dispatcher dispatcher =
         new ZoneDispatcher(nnc, Collections.<String>emptySet(),
             Collections.<String>emptySet(), 0, 0,
@@ -84,6 +101,23 @@ public class ZoneChecker {
     } catch (IOException e) {
       e.printStackTrace();
       return 1;
+    }
+  }
+
+  public static Map<ReplicationRule, Set<String>> getReplicaRule(
+      Configuration conf, URI namenode, String path, Float ratio) {
+    LOG.info("Start to check path: " + path + " with ratio " + ratio);
+    NameNodeConnector nnc;
+    try {
+      nnc = new NameNodeConnector(namenode,
+          Collections.singletonList(new Path(path)), conf, 1);
+      final ZoneChecker zch = new ZoneChecker(nnc, conf);
+      //if ratio is inputted by user, set it
+      if (ratio > 0.0f) { zch.setRatio(ratio); }
+      return zch.getReplicaInfo(path);
+    } catch (IOException e) {
+      e.printStackTrace();
+      return null;
     }
   }
 

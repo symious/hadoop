@@ -42,4 +42,11 @@ public enum ExitStatus {
   public int getExitCode() {
     return code;
   }
+
+  public static ExitStatus getExitStatusByCode(int code) {
+    for (ExitStatus exitStatus : values()) {
+      if (exitStatus.getExitCode() == code) { return exitStatus; }
+    }
+    throw new IllegalArgumentException("ExitStatus code is illegal");
+  }
 }

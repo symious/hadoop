@@ -66,8 +66,8 @@ public class ZoneMover {
   private static final long DELAY_AFTER_CHOOSE_FAIL = 2 * 1000;
   private final Processor processor = new Processor();
 
-  ZoneMover(NameNodeConnector nnc, Configuration conf, ReplicationRule rule,
-      AtomicInteger retryCount) {
+  public ZoneMover(NameNodeConnector nnc, Configuration conf,
+      ReplicationRule rule, AtomicInteger retryCount) {
     final long movedWinWidth = conf.getLong(
         DFSConfigKeys.DFS_ZONEMOVER_MOVEDWINWIDTH_KEY,
         DFSConfigKeys.DFS_ZONEMOVER_MOVEDWINWIDTH_DEFAULT);
@@ -174,7 +174,7 @@ public class ZoneMover {
    * @param rule the rule to apply
    * @return a ExitStatus code
    */
-  static int run(Configuration conf, URI namenode, List<Path> paths, ReplicationRule rule)
+  public static int run(Configuration conf, URI namenode, List<Path> paths, ReplicationRule rule)
       throws IOException, InterruptedException {
     LOG.info("Start to apply rule: " + rule + " to namenode:" + namenode + ", path: " + paths);
 
@@ -247,21 +247,32 @@ public class ZoneMover {
    * @param rule the rule to apply
    * @return a ExitStatus code
    */
-  static int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
+  public static int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
       URI namenode, List<Path> paths, ReplicationRule rule)
       throws IOException, InterruptedException{
-    NameNodeConnector nnc = new NameNodeConnector(ZoneMover.class.getSimpleName(),
-        namenode, ZONEMOVER_ID_PATH, paths, conf, 1);
-    ZoneMover zs = new ZoneMover(nnc, conf, rule, new AtomicInteger(0));
-    zs.init();
-    while (zoneMoverTrigger.hasNext()) {
-      String curPath = zoneMoverTrigger.getNext();
+    NameNodeConnector nnc = null;
+    ZoneMover zs = null;
+    try {
+      nnc = new NameNodeConnector(ZoneMover.class.getSimpleName(),
+              namenode, ZONEMOVER_ID_PATH, paths, conf, 1);
+      zs = new ZoneMover(nnc, conf, rule, new AtomicInteger(0));
+      zs.init();
+      while (zoneMoverTrigger.hasNext()) {
+        String curPath = zoneMoverTrigger.getNext();
 
-      // process the path
-      LOG.debug("Check path: " + curPath);
-      ExitStatus exitStatus = zs.run(curPath);
-      if (exitStatus != ExitStatus.SUCCESS) {
-        LOG.warn("Monitor process file fail: " + curPath);
+        // process the path
+        LOG.debug("Check path: " + curPath);
+        ExitStatus exitStatus = zs.run(curPath);
+        if (exitStatus != ExitStatus.SUCCESS) {
+          LOG.warn("Monitor process file fail: " + curPath);
+        }
+      }
+    } finally {
+      if (nnc != null) {
+        IOUtils.cleanupWithLogger(LOG, nnc);
+      }
+      if (zs != null) {
+        zs.shutdown();
       }
     }
     return ExitStatus.SUCCESS.getExitCode();

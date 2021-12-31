@@ -522,6 +522,18 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.datanode.metrics.logger.period.seconds";
   public static final int DFS_DATANODE_METRICS_LOGGER_PERIOD_SECONDS_DEFAULT =
       600;
+  //There is the setting for zone service.
+  public static final String  DFS_ZONESERVICE_HTTP_ADDRESS_KEY = "dfs.zoneservice.http-address";
+  public static final String  DFS_ZONESERVICE_HTTP_ADDRESS_DEFAULT = "0.0.0.0:50080";
+  public static final String  DFS_ZONESERVICE_HTTPS_ADDRESS_KEY = "dfs.zoneservice.https-address";
+  public static final String  DFS_ZONESERVICE_HTTPS_ADDRESS_DEFAULT = "0.0.0.0:50480";
+  public static final String  DFS_ZONESERVICE_HTTP_BIND_HOST_KEY = "dfs.zoneservice.http-bind-host";
+  public static final String  DFS_ZONESERVICE_HTTPS_BIND_HOST_KEY = "dfs.zoneservice.https-bind-host";
+
+  public static final String  DFS_ZONESERVICE_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY = "dfs.zoneservice.kerberos.internal.spnego.principal";
+  public static final String  DFS_ZONESERVICE_KEYTAB_FILE_KEY = "dfs.zoneservice.keytab.file";
+  public static final String  DFS_ZONESERVICE_THREADS_KEY = "dfs.zoneservice.threads";
+  public static final int     DFS_ZONESERVICE_THREADS_DEFAULT = 1;
   /**
    * The maximum number of getBlocks RPCs data movement utilities can make to
    * a NameNode per second. Values <= 0 disable throttling. This affects

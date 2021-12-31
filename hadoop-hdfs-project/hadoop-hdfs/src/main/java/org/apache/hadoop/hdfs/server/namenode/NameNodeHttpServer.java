@@ -197,7 +197,7 @@ public class NameNodeHttpServer {
     }
   }
   
-  private static Map<String, String> getAuthFilterParams(Configuration conf,
+  public static Map<String, String> getAuthFilterParams(Configuration conf,
       String hostname) throws IOException {
     Map<String, String> params = new HashMap<String, String>();
     // Select configs beginning with 'dfs.web.authentication.'

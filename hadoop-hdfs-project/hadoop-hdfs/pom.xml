@@ -252,6 +252,10 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
       <artifactId>json</artifactId>
       <version>20090211</version>
     </dependency>
+      <dependency>
+          <groupId>com.google.inject</groupId>
+          <artifactId>guice</artifactId>
+      </dependency>
   </dependencies>
 
   <build>

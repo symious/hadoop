@@ -115,7 +115,7 @@ public class TestNameNodeHttpServer {
     }
   }
 
-  private static boolean canAccess(String scheme, InetSocketAddress addr) {
+  protected static boolean canAccess(String scheme, InetSocketAddress addr) {
     if (addr == null)
       return false;
     try {
@@ -129,7 +129,7 @@ public class TestNameNodeHttpServer {
     return true;
   }
 
-  private static boolean implies(boolean a, boolean b) {
+  protected static boolean implies(boolean a, boolean b) {
     return !a || b;
   }
 }
