@@ -90,6 +90,13 @@ public class EnhancedFederationClientInterceptor
         request.getApplicationStates() + ", types: " +
         request.getApplicationTypes() + ", limit: " + request.getLimit());
 
+    if (request.getApplicationTags() == null ||
+        request.getApplicationTags().size() <= 0) {
+      RouterServerUtil.logAndThrowException(
+          "Router does not support getApplications requests without specifying a tag!",
+          null);
+    }
+
     Map<SubClusterId, SubClusterInfo> subclusters =
         federationFacade.getSubClusters(true);
     ClientMethod remoteMethod = new ClientMethod("getApplications",
