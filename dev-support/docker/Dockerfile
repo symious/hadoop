@@ -171,6 +171,7 @@ RUN apt-get -q update \
 # https://github.com/PyCQA/pylint/issues/2294
 ####
 RUN pip2 install isort==4.3.8
+RUN pip2 install lazy-object-proxy==1.6.0
 RUN pip2 install pylint==1.9.2
 
 ####
