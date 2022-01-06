@@ -44,7 +44,9 @@ import org.apache.hadoop.ha.HAAdmin;
 import org.apache.hadoop.ha.HAServiceTarget;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.hadoop.util.curator.ZKCuratorManager;
 import org.apache.hadoop.yarn.api.records.DecommissionType;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.NodeLabel;
@@ -167,6 +169,7 @@ public class RMAdminCLI extends HAAdmin {
                   + " \n\t\tor\n\t\t[NodeID] [resourcetypes] "
                   + "([OvercommitTimeout]). ",
                   "Update resource on specific node."))
+          .put("-failover", new UsageInfo("", "switch of active and standby"))
           .build();
 
   public RMAdminCLI() {
@@ -287,7 +290,8 @@ public class RMAdminCLI extends HAAdmin {
         + " [-refreshClusterMaxPriority]"
         + " [-updateNodeResource [NodeID] [MemSize] [vCores]"
         + " ([OvercommitTimeout]) or -updateNodeResource [NodeID] "
-        + "[ResourceTypes] ([OvercommitTimeout])]");
+        + "[ResourceTypes] ([OvercommitTimeout])]"
+        + " [-failover]");
     if (isHAEnabled) {
       appendHAUsage(summary);
     }
@@ -709,6 +713,65 @@ public class RMAdminCLI extends HAAdmin {
     return 0;
   }
 
+  private int handleFailover() {
+    int maxRetry = 10;
+    long maxWaitTime = 10000;
+    ZKCuratorManager zk = null;
+    try {
+      zk = new ZKCuratorManager(getConf());
+      zk.start();
+      String lockFilePath =
+          getConf().get(YarnConfiguration.AUTO_FAILOVER_ZK_BASE_PATH) + "/"
+              + getConf().get(YarnConfiguration.RM_CLUSTER_ID) + "/"
+              + "ActiveStandbyElectorLock";
+      byte[] activeData = zk.getData(lockFilePath);
+      if (!ToolRunner.confirmPrompt(
+          "\nLockFilePath is " + lockFilePath + ". Current active node is "
+              + new String(activeData).trim()
+              + ".\n\nYou may abort safely by answering 'n' or hitting ^C now.\n"
+              + "\nAre you sure you want to continue?")) {
+        System.out.println("Aborted");
+        return -1;
+      }
+      while (maxRetry > 0) {
+        if (!zk.delete(lockFilePath)) {
+          System.out.println("LockFilePath: " + lockFilePath + " isn't exist.");
+          return -1;
+        }
+        long deleteTime = Time.monotonicNow();
+        while (!zk.exists(lockFilePath)) {
+          if (Time.monotonicNow() - deleteTime > maxWaitTime) {
+            System.out.println("Wait " + maxWaitTime / 10
+                + "s ActiveStandbyElectorLock haven't been created. Maybe there is something wrong with ZK or RM.");
+            return -1;
+          }
+          Thread.sleep(1000);
+        }
+        byte[] currentData = zk.getData(lockFilePath);
+        if (Arrays.equals(activeData, currentData)) {
+          System.out.println(
+              "Preious active RM: " + new String(activeData).trim()
+                  + " get lock again.");
+          maxRetry--;
+          Thread.sleep(1000);
+        } else {
+          System.out
+              .println(new String(currentData).trim() + " become active.");
+          return 0;
+        }
+      }
+    } catch (Exception e) {
+      e.printStackTrace();
+      return -1;
+    } finally {
+      if (zk != null) {
+        zk.close();
+      }
+    }
+    System.out.println("Standby RM can't get lock. Maybe standby RM dead.");
+    return -1;
+  }
+
   @Override
   public int run(String[] args) throws Exception {
     YarnConfiguration yarnConf =
@@ -790,6 +853,8 @@ public class RMAdminCLI extends HAAdmin {
         exitCode = handleRemoveFromClusterNodeLabels(args, cmd, isHAEnabled);
       } else if ("-replaceLabelsOnNode".equals(cmd)) {
         exitCode = handleReplaceLabelsOnNodes(args, cmd, isHAEnabled);
+      } else if ("-failover".equals(cmd)) {
+        exitCode = handleFailover();
       } else {
         exitCode = -1;
         System.err.println(cmd.substring(1) + ": Unknown command");
