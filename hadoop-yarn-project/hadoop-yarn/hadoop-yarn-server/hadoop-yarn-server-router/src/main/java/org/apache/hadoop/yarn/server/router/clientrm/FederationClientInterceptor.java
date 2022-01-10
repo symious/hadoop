@@ -37,7 +37,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -128,6 +127,7 @@ import org.apache.hadoop.yarn.server.federation.policies.exceptions.FederationPo
 import org.apache.hadoop.yarn.server.federation.store.records.ApplicationHomeSubCluster;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterInfo;
+import org.apache.hadoop.yarn.server.federation.utils.CacheUtil;
 import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade;
 import org.apache.hadoop.yarn.server.router.RouterAuditLogger;
 import org.apache.hadoop.yarn.server.router.RouterMetrics;
@@ -135,12 +135,15 @@ import org.apache.hadoop.yarn.server.router.RouterServerUtil;
 import org.apache.hadoop.yarn.server.router.fairness.AbstractRouterRpcFairnessPolicyController;
 import org.apache.hadoop.yarn.server.router.fairness.RouterRpcFairnessPolicyController;
 import org.apache.hadoop.yarn.server.router.utils.FederationUtil;
+import org.apache.hadoop.yarn.server.router.utils.RouterRpcRequestCache;
 import org.apache.hadoop.yarn.util.Clock;
 import org.apache.hadoop.yarn.util.MonotonicClock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+
+import javax.cache.Cache;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_KEY;
@@ -184,6 +187,10 @@ public class FederationClientInterceptor
 
   /** Fairness manager to control handlers assigned per NS. */
   private RouterRpcFairnessPolicyController routerRpcFairnessPolicyController;
+
+  private static final String GET_CLUSTER_METRICS_CACHEID = "getClusterMetrics";
+  private Cache<Object, Object> cache;
+  private RouterRpcRequestCache routerRpcRequestCache;
 
   @Override
   public void init(String userName) {
@@ -230,6 +237,9 @@ public class FederationClientInterceptor
 
     this.routerRpcFairnessPolicyController =
         FederationUtil.getFairnessPolicyController(conf);
+
+    routerRpcRequestCache = RouterRpcRequestCache.getInstance();
+    this.cache = routerRpcRequestCache.getCache();
   }
 
   /**
@@ -849,26 +859,95 @@ public class FederationClientInterceptor
   public GetClusterMetricsResponse getClusterMetrics(
       GetClusterMetricsRequest request) throws YarnException, IOException {
 
-    long startTime = clock.getTime();
     String requestId = RandomStringUtils.randomAlphabetic(8);
 
-    Map<SubClusterId, SubClusterInfo> subclusters =
+    Map<SubClusterId, SubClusterInfo> subClusters =
         federationFacade.getSubClusters(true);
     ClientMethod remoteMethod = new ClientMethod("getClusterMetrics",
         new Class[] {GetClusterMetricsRequest.class}, new Object[] {request});
-    ArrayList<SubClusterId> clusterList = new ArrayList<>(subclusters.keySet());
-    Map<SubClusterId, GetClusterMetricsResponse> clusterMetrics =
-        invokeConcurrent(clusterList, remoteMethod,
-            GetClusterMetricsResponse.class, requestId);
+    ArrayList<SubClusterId> clusterList = new ArrayList<>(subClusters.keySet());
 
-    long stopTime = clock.getTime();
-    LOG.info("requestId:" + requestId + " ,getClusterMetrics cost time: " +
-        (stopTime - startTime) + "ms, clientIP: " + Server.getRemoteAddress());
+    Map<SubClusterId, GetClusterMetricsResponse> clusterMetrics;
+
+    try {
+      if (routerRpcRequestCache.isCachingEnabled()) {
+        long startTime = clock.getTime();
+        clusterMetrics = (Map<SubClusterId, GetClusterMetricsResponse>) cache
+            .get(buildGetClusterMetricsCacheRequest(clusterList, remoteMethod,
+                GetClusterMetricsResponse.class, requestId));
+        for (Map.Entry<SubClusterId, GetClusterMetricsResponse> entry : clusterMetrics
+            .entrySet()) {
+          SubClusterId key = entry.getKey();
+          GetClusterMetricsResponse value = entry.getValue();
+          if (LOG.isDebugEnabled()) {
+            LOG.debug(
+                "requestId:" + requestId + " ,SubClusterId: " + key.toString() +
+                    " ,NumNodeManagers: " +
+                    value.getClusterMetrics().getNumNodeManagers());
+          }
+        }
+        long stopTime = clock.getTime();
+        LOG.info("requestId:" + requestId +
+            " ,getClusterMetrics from cache cost time: " +
+            (stopTime - startTime) + "ms, clientIP: " +
+            Server.getRemoteAddress());
+      } else {
+        long startTime = clock.getTime();
+        clusterMetrics = invokeConcurrent(clusterList, remoteMethod,
+            GetClusterMetricsResponse.class, requestId);
+        long stopTime = clock.getTime();
+        LOG.info("requestId:" + requestId +
+            " ,getClusterMetrics without cache cost time: " +
+            (stopTime - startTime) + "ms, clientIP: " +
+            Server.getRemoteAddress());
+      }
+    } catch (Throwable ex) {
+      throw new YarnException(ex);
+    }
+
     return RouterYarnClientUtils.merge(clusterMetrics.values());
   }
 
+  private Object buildGetClusterMetricsCacheRequest(
+      ArrayList<SubClusterId> clusterList, ClientMethod remoteMethod,
+      Class clazz, String requestId) {
+    final String cacheKey =
+        buildCacheKey(getClass().getSimpleName(), GET_CLUSTER_METRICS_CACHEID,
+            null);
+    CacheUtil.CacheRequest<String, Map<SubClusterId, GetClusterMetricsResponse>>
+        cacheRequest =
+        new CacheUtil.CacheRequest<String, Map<SubClusterId, GetClusterMetricsResponse>>(
+            cacheKey,
+            new CacheUtil.Func<String, Map<SubClusterId, GetClusterMetricsResponse>>() {
+              @Override
+              public Map<SubClusterId, GetClusterMetricsResponse> invoke(
+                  String key)
+                  throws Exception {
+                Map<SubClusterId, GetClusterMetricsResponse> clusterMetrics =
+                    invokeConcurrent(clusterList, remoteMethod, clazz, requestId);
+                LOG.info("buildGetClusterMetricsCacheRequest refresh!");
+                return clusterMetrics;
+              }
+            });
+    return cacheRequest;
+  }
+
+  protected String buildCacheKey(String typeName, String methodName,
+      String argName) {
+    StringBuilder buffer = new StringBuilder();
+    buffer.append(typeName).append(".")
+        .append(methodName);
+    if (argName != null) {
+      buffer.append("::");
+      buffer.append(argName);
+    }
+    return buffer.toString();
+  }
+
+
   <R> Map<SubClusterId, R> invokeConcurrent(ArrayList<SubClusterId> clusterIds,
-      ClientMethod request, Class<R> clazz, String requestId) throws YarnException, IOException {
+      ClientMethod request, Class<R> clazz, String requestId)
+      throws YarnException, IOException {
 
     long startTime = clock.getTime();
     List<Callable<Object>> callables = new ArrayList<>();

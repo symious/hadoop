@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.apache.hadoop.test.LambdaTestUtils;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.MockApps;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationReportRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationReportResponse;
@@ -53,6 +54,7 @@ import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
 import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade;
 import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreTestUtil;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
+import org.apache.hadoop.yarn.server.router.utils.RouterRpcRequestCache;
 import org.apache.hadoop.yarn.util.resource.Resources;
 import org.junit.Assert;
 import org.junit.Test;
@@ -79,6 +81,8 @@ public class TestFederationClientInterceptor extends BaseRouterClientRMTest {
 
   private final static int NUM_SUBCLUSTER = 4;
 
+  private final static int TEST_RPC_CACHE_TIME = 30;
+
   @Override
   public void setUp() {
     super.setUpConfig();
@@ -89,6 +93,8 @@ public class TestFederationClientInterceptor extends BaseRouterClientRMTest {
     FederationStateStoreFacade.getInstance().reinitialize(stateStore,
         getConf());
     stateStoreUtil = new FederationStateStoreTestUtil(stateStore);
+
+    RouterRpcRequestCache.getInstance().reinitialize(getConf());
 
     interceptor.setConf(this.getConf());
     interceptor.init(user);
@@ -134,6 +140,9 @@ public class TestFederationClientInterceptor extends BaseRouterClientRMTest {
 
     // Disable StateStoreFacade cache
     conf.setInt(YarnConfiguration.FEDERATION_CACHE_TIME_TO_LIVE_SECS, 0);
+
+    conf.setInt(YarnConfiguration.ROUTER_RPC_CACHE_TIME_TO_LIVE_SECS,
+        TEST_RPC_CACHE_TIME);
 
     return conf;
   }
@@ -530,5 +539,62 @@ public class TestFederationClientInterceptor extends BaseRouterClientRMTest {
         invokeConcurrent(new ArrayList<>(), remoteMethod,
             GetClusterMetricsResponse.class, null);
     Assert.assertEquals(true, clusterMetrics.isEmpty());
+  }
+
+  @Test
+  public void testGetClusterMetricsRequestWithCache()
+      throws YarnException, IOException, InterruptedException {
+    LOG.info(
+        "Test FederationClientInterceptor : Get Cluster Metrics request with cache");
+
+    // First request and create cache
+    long startTime_1 = Time.monotonicNow();
+    GetClusterMetricsResponse response =
+        interceptor.getClusterMetrics(GetClusterMetricsRequest.newInstance());
+    Assert.assertEquals(subClusters.size(),
+        response.getClusterMetrics().getNumNodeManagers());
+    long endTime_1 = Time.monotonicNow();
+    long request1_costTime = endTime_1 - startTime_1;
+    LOG.info("request1_costTime = " + request1_costTime);
+
+    // Second request directly get from cache
+    Thread.sleep(1 * 1000);
+    long startTime_2 = Time.monotonicNow();
+    response =
+        interceptor.getClusterMetrics(GetClusterMetricsRequest.newInstance());
+    Assert.assertEquals(subClusters.size(),
+        response.getClusterMetrics().getNumNodeManagers());
+    long endTime_2 = Time.monotonicNow();
+    long request2_costTime = endTime_2 - startTime_2;
+    LOG.info("request2_costTime = " + request2_costTime);
+
+    // Third request directly get from cache too, because cache is not timeout
+    Thread.sleep(10 * 1000);
+    long startTime_3 = Time.monotonicNow();
+    response =
+        interceptor.getClusterMetrics(GetClusterMetricsRequest.newInstance());
+    Assert.assertEquals(subClusters.size(),
+        response.getClusterMetrics().getNumNodeManagers());
+    long endTime_3 = Time.monotonicNow();
+    long request3_costTime = endTime_3 - startTime_3;
+    LOG.info("request3_costTime = " + request3_costTime);
+
+    // Fourth request cache timeout and reload again
+    Thread.sleep(TEST_RPC_CACHE_TIME * 1000);
+    long startTime_4 = Time.monotonicNow();
+    response =
+        interceptor.getClusterMetrics(GetClusterMetricsRequest.newInstance());
+    Assert.assertEquals(subClusters.size(),
+        response.getClusterMetrics().getNumNodeManagers());
+    long endTime_4 = Time.monotonicNow();
+    long request4_costTime = endTime_4 - startTime_4;
+    LOG.info("request4_costTime = " + request4_costTime);
+
+    Assert.assertTrue(request1_costTime > request2_costTime);
+    Assert.assertTrue(request4_costTime > request2_costTime);
+
+    Assert.assertTrue(request1_costTime > request3_costTime);
+    Assert.assertTrue(request4_costTime > request3_costTime);
+
   }
 }

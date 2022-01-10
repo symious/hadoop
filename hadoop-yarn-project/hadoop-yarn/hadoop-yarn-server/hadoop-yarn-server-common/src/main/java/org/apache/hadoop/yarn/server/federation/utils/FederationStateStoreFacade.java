@@ -202,7 +202,7 @@ public final class FederationStateStoreFacade {
                         new CreatedExpiryPolicy(cacheExpiry)))
                 .setCacheLoaderFactory(
                     new FactoryBuilder.SingletonFactory<CacheLoader<Object, Object>>(
-                        new CacheLoaderImpl<Object, Object>()));
+                        new CacheUtil.CacheLoaderImpl<Object, Object>()));
         this.cache = jcacheManager.createCache(this.getClass().getSimpleName(),
             configuration);
       }
@@ -549,9 +549,9 @@ public final class FederationStateStoreFacade {
     final String cacheKey =
         buildCacheKey(getClass().getSimpleName(), GET_SUBCLUSTERS_CACHEID,
             Boolean.toString(filterInactiveSubClusters));
-    CacheRequest<String, Map<SubClusterId, SubClusterInfo>> cacheRequest =
-        new CacheRequest<String, Map<SubClusterId, SubClusterInfo>>(cacheKey,
-            new Func<String, Map<SubClusterId, SubClusterInfo>>() {
+    CacheUtil.CacheRequest<String, Map<SubClusterId, SubClusterInfo>> cacheRequest =
+        new CacheUtil.CacheRequest<String, Map<SubClusterId, SubClusterInfo>>(cacheKey,
+            new CacheUtil.Func<String, Map<SubClusterId, SubClusterInfo>>() {
               @Override
               public Map<SubClusterId, SubClusterInfo> invoke(String key)
                   throws Exception {
@@ -579,10 +579,11 @@ public final class FederationStateStoreFacade {
   private Object buildGetPoliciesConfigurationsCacheRequest() {
     final String cacheKey = buildCacheKey(getClass().getSimpleName(),
         GET_POLICIES_CONFIGURATIONS_CACHEID, null);
-    CacheRequest<String, Map<String, SubClusterPolicyConfiguration>> cacheRequest =
-        new CacheRequest<String, Map<String, SubClusterPolicyConfiguration>>(
+    CacheUtil.CacheRequest<String, Map<String, SubClusterPolicyConfiguration>>
+        cacheRequest =
+        new CacheUtil.CacheRequest<String, Map<String, SubClusterPolicyConfiguration>>(
             cacheKey,
-            new Func<String, Map<String, SubClusterPolicyConfiguration>>() {
+            new CacheUtil.Func<String, Map<String, SubClusterPolicyConfiguration>>() {
               @Override
               public Map<String, SubClusterPolicyConfiguration> invoke(
                   String key) throws Exception {
@@ -608,88 +609,4 @@ public final class FederationStateStoreFacade {
     return buffer.toString();
   }
 
-  /**
-   * Internal class that implements the CacheLoader interface that can be
-   * plugged into the CacheManager to load objects into the cache for specified
-   * keys.
-   */
-  private static class CacheLoaderImpl<K, V> implements CacheLoader<K, V> {
-    @SuppressWarnings("unchecked")
-    @Override
-    public V load(K key) throws CacheLoaderException {
-      try {
-        CacheRequest<K, V> query = (CacheRequest<K, V>) key;
-        assert query != null;
-        return query.getValue();
-      } catch (Throwable ex) {
-        throw new CacheLoaderException(ex);
-      }
-    }
-
-    @Override
-    public Map<K, V> loadAll(Iterable<? extends K> keys)
-        throws CacheLoaderException {
-      // The FACADE does not use the Cache's getAll API. Hence this is not
-      // required to be implemented
-      throw new NotImplementedException("Code is not implemented");
-    }
-  }
-
-  /**
-   * Internal class that encapsulates the cache key and a function that returns
-   * the value for the specified key.
-   */
-  private static class CacheRequest<K, V> {
-    private K key;
-    private Func<K, V> func;
-
-    public CacheRequest(K key, Func<K, V> func) {
-      this.key = key;
-      this.func = func;
-    }
-
-    public V getValue() throws Exception {
-      return func.invoke(key);
-    }
-
-    @Override
-    public int hashCode() {
-      final int prime = 31;
-      int result = 1;
-      result = prime * result + ((key == null) ? 0 : key.hashCode());
-      return result;
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public boolean equals(Object obj) {
-      if (this == obj) {
-        return true;
-      }
-      if (obj == null) {
-        return false;
-      }
-      if (getClass() != obj.getClass()) {
-        return false;
-      }
-      CacheRequest<K, V> other = (CacheRequest<K, V>) obj;
-      if (key == null) {
-        if (other.key != null) {
-          return false;
-        }
-      } else if (!key.equals(other.key)) {
-        return false;
-      }
-
-      return true;
-    }
-  }
-
-  /**
-   * Encapsulates a method that has one parameter and returns a value of the
-   * type specified by the TResult parameter.
-   */
-  protected interface Func<T, TResult> {
-    TResult invoke(T input) throws Exception;
-  }
 }

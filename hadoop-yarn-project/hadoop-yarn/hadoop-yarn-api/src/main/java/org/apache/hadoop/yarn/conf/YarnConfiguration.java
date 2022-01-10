@@ -3904,6 +3904,11 @@ public class YarnConfiguration extends Configuration {
   // 5 minutes
   public static final int DEFAULT_FEDERATION_CACHE_TIME_TO_LIVE_SECS = 5 * 60;
 
+  public static final String ROUTER_RPC_CACHE_TIME_TO_LIVE_SECS =
+      FEDERATION_PREFIX + "rpc.cache-ttl.secs";
+  // default no cache
+  public static final int DEFAULT_ROUTER_RPC_CACHE_TIME_TO_LIVE_SECS = -1;
+
   public static final String FEDERATION_FLUSH_CACHE_FOR_RM_ADDR =
       FEDERATION_PREFIX + "flush-cache-for-rm-addr";
   public static final boolean DEFAULT_FEDERATION_FLUSH_CACHE_FOR_RM_ADDR = true;
