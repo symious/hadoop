@@ -21,7 +21,6 @@ enum ResultCode {
   SUCCESS(0, "Success!"),
   MONITOR_MODE_ON(1, "Monitor Mode ON"),
   MONITOR_MODE_OFF(2, "Monitor Mode OFF"),
-  NOT_FOUND(3, "The thread not found"),
 
   IN_PROGRESS(1000, "In Process"),
   ALREADY_RUNNING(1001, "Already running"),
@@ -31,7 +30,7 @@ enum ResultCode {
   ILLEGAL_ARGUMENTS(1005, "Illegal arguments"),
   INTERRUPTED(1006, "Fail caused by interrupt"),
   UNFINALIZED_UPGRADE(1007, "Unfinalized Upgrade"),
-  ZONEMOVERINEXISTERROR(1008, "No running ZoneMover found"),
+  THREAD_FULL(1008, "No more available thread"),
   UNKNOWNERROR(1009, "Unknown ERROR!");
 
   private Integer code;

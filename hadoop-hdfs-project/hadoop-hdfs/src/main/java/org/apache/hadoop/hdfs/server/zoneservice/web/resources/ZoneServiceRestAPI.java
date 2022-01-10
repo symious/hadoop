@@ -19,7 +19,6 @@ package org.apache.hadoop.hdfs.server.zoneservice.web.resources;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.Consumes;
-import javax.ws.rs.DELETE;
 import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
@@ -31,10 +30,9 @@ import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 import com.google.inject.Singleton;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
@@ -44,23 +42,26 @@ import org.apache.hadoop.hdfs.server.zoneservice.ZoneMoverKafkaTrigger;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneMoverTrigger;
 
 import java.io.IOException;
-import java.lang.reflect.Type;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Semaphore;
 
 @Path("replicarule/")
 @Singleton
 public class ZoneServiceRestAPI {
-  static Thread monitorThread;
   private static final String defaultRatio = "-1";
   private static final String defaultMode = "";
-  //TODO: Set a thread pool or use signal to constrain the amount of threads
+  private static final Configuration conf = new Configuration();
+  private static final int maxThread = conf.getInt(
+      DFSConfigKeys.DFS_ZONESERVICE_THREADS_KEY,
+      DFSConfigKeys.DFS_ZONESERVICE_THREADS_DEFAULT);
+  private static final Semaphore semaphore = new Semaphore(maxThread);
+
   public ZoneServiceRestAPI() { }
 
   /**
@@ -98,11 +99,19 @@ public class ZoneServiceRestAPI {
       @QueryParam("namespace") String nameSpace,
       @QueryParam("ratio") @DefaultValue(defaultRatio) String ratio,
       @PathParam("path") String path) {
-    Map<ReplicationRule, Set<String>> hashMap =
-        checkPath(nameSpace, path, ratio);
-    Gson gson = new Gson();
-    Type gsonType = new TypeToken<HashMap>(){}.getType();
-    return gson.toJson(hashMap,gsonType);
+    if (semaphore.availablePermits() == 0) {
+      return ResultCode.THREAD_FULL.toString();
+    }
+    try {
+      semaphore.acquire();
+      Map<ReplicationRule, Set<String>> hashMap =
+          checkPath(nameSpace, path, ratio);
+      semaphore.release();
+      return hashMap.toString();
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+      return ResultCode.INTERRUPTED.toString();
+    }
   }
 
   /**
@@ -123,7 +132,18 @@ public class ZoneServiceRestAPI {
       @QueryParam("rule") String replicaRule,
       @QueryParam("mode") @DefaultValue(defaultMode) String mode,
       @PathParam("path") String path) {
-    return movePath(nameSpace, path, replicaRule, mode).toString();
+    if (semaphore.availablePermits() == 0) {
+      return ResultCode.THREAD_FULL.toString();
+    }
+    try {
+      semaphore.acquire();
+      String result = movePath(nameSpace, path, replicaRule, mode).toString();
+      semaphore.release();
+      return result;
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+      return ResultCode.INTERRUPTED.toString();
+    }
   }
 
   /**
@@ -142,31 +162,19 @@ public class ZoneServiceRestAPI {
       @QueryParam("namespace") String nameSpace,
       @QueryParam("rule") String replicaRule,
       @PathParam("path") String path) {
-    return movePath(nameSpace, path, replicaRule, defaultMode).toString();
-  }
-
-  /**
-   * stop the active zonemover thread
-   * @param hsr       http servlet request
-   * @param nameSpace URI of the NameNode
-   * @param path      kill the thread running on the give path
-   * @return status of result
-   */
-  @DELETE
-  @Path("{path:.*}")
-  public String stopZoneMover(@Context HttpServletRequest hsr,
-      @QueryParam("namespace") String nameSpace,
-      @PathParam("path") String path) {
-    //TODO: record and delete thread according to the given path
-    Thread[] ts = new Thread[Thread.activeCount()];
-    Thread.enumerate(ts);
-    for (Thread t : ts) {
-      if (t.getName().equals("monitor" + nameSpace)) {
-        t.interrupt();
-        return ResultCode.MONITOR_MODE_OFF.toString();
-      }
+    if (semaphore.availablePermits() == 0) {
+      return ResultCode.THREAD_FULL.toString();
     }
-    return ResultCode.NOT_FOUND.toString();
+    try {
+      semaphore.acquire();
+      String result =
+          movePath(nameSpace, path, replicaRule, defaultMode).toString();
+      semaphore.release();
+      return result;
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+      return ResultCode.INTERRUPTED.toString();
+    }
   }
 
   /**
@@ -215,17 +223,8 @@ public class ZoneServiceRestAPI {
         //if in monitor mode, there will not be any return
         //TODO: monitor mode will start with the zone service
         //TODO: monitor mode will be controlled by paths and rules in a storage
-        monitorThread = new Thread("monitor" + nameSpace) {
-          public void run() {
-            try {
-              ZoneMover.run(
-                  zoneMoverTrigger, conf, namenode, paths, replicationRule);
-            } catch (Exception e) {
-              e.printStackTrace();
-            }
-          }
-        };
-        monitorThread.start();
+
+        ZoneMover.run(zoneMoverTrigger, conf, namenode, paths, replicationRule);
         return ResultCode.MONITOR_MODE_ON;
       }
       return ResultCode.UNKNOWNERROR;

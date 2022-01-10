@@ -532,8 +532,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
 
   public static final String  DFS_ZONESERVICE_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY = "dfs.zoneservice.kerberos.internal.spnego.principal";
   public static final String  DFS_ZONESERVICE_KEYTAB_FILE_KEY = "dfs.zoneservice.keytab.file";
+
   public static final String  DFS_ZONESERVICE_THREADS_KEY = "dfs.zoneservice.threads";
-  public static final int     DFS_ZONESERVICE_THREADS_DEFAULT = 1;
+  public static final int     DFS_ZONESERVICE_THREADS_DEFAULT = 50;
   /**
    * The maximum number of getBlocks RPCs data movement utilities can make to
    * a NameNode per second. Values <= 0 disable throttling. This affects
