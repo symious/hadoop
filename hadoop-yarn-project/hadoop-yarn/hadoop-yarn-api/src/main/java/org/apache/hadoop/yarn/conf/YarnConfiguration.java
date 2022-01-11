@@ -1086,6 +1086,10 @@ public class YarnConfiguration extends Configuration {
   public static final String DEFAULT_CLIENT_FAILOVER_NO_HA_PROXY_PROVIDER =
       "org.apache.hadoop.yarn.client.DefaultNoHARMFailoverProxyProvider";
 
+  public static final String CLIENT_CONNECT_RANDOM_ORDER =
+      CLIENT_FAILOVER_PREFIX + "random.order";
+  public static boolean RANDOM_ORDER_DEFAULT = false;
+
   public static final String CLIENT_FAILOVER_MAX_ATTEMPTS =
       CLIENT_FAILOVER_PREFIX + "max-attempts";
 
