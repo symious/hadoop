@@ -21,8 +21,11 @@ package org.apache.hadoop.yarn.client;
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.logging.Log;
@@ -49,6 +52,7 @@ public class ConfiguredRMFailoverProxyProvider<T>
   protected Class<T> protocol;
   protected YarnConfiguration conf;
   protected String[] rmServiceIds;
+  protected boolean randomized = false;
 
   @Override
   public void init(Configuration configuration, RMProxy<T> rmProxy,
@@ -57,7 +61,18 @@ public class ConfiguredRMFailoverProxyProvider<T>
     this.protocol = protocol;
     this.rmProxy.checkAllowedProtocols(this.protocol);
     this.conf = new YarnConfiguration(configuration);
+    this.randomized =
+        conf.getBoolean(YarnConfiguration.CLIENT_CONNECT_RANDOM_ORDER,
+            YarnConfiguration.RANDOM_ORDER_DEFAULT);
     Collection<String> rmIds = HAUtil.getRMHAIds(conf);
+    if (randomized) {
+      List<String> newRmIds = new ArrayList<>();
+      newRmIds.addAll(rmIds);
+      Collections.shuffle(newRmIds);
+      rmIds = newRmIds;
+      LOG.info("CLIENT_CONNECT_RANDOM_ORDER enable, rmIds: " + rmIds);
+    }
+
     this.rmServiceIds = rmIds.toArray(new String[rmIds.size()]);
     conf.set(YarnConfiguration.RM_HA_ID, rmServiceIds[currentProxyIndex]);
 
