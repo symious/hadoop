@@ -332,10 +332,12 @@ fi
 # to the classpath
 if [[ ( "$HADOOP_CLASSPATH" != "" ) && ( "$HADOOP_USE_CLIENT_CLASSLOADER" = "" ) ]]; then
   # Prefix it if its to be preceded
-  if [ "$HADOOP_USER_CLASSPATH_FIRST" != "" ]; then
-    CLASSPATH=${HADOOP_CLASSPATH}:${CLASSPATH}
-  else
-    CLASSPATH=${CLASSPATH}:${HADOOP_CLASSPATH}
-  fi
+  for path in $(echo "${HADOOP_CLASSPATH}" | tr : '\n'); do
+    if [ "$HADOOP_USER_CLASSPATH_FIRST" != "" ]; then
+      CLASSPATH=${path}:${CLASSPATH}
+    else
+      CLASSPATH=${CLASSPATH}:${path}
+    fi
+  done
 fi
 
