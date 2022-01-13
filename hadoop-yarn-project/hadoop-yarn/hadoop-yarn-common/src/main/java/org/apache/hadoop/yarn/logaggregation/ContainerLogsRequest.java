@@ -37,6 +37,7 @@ public class ContainerLogsRequest {
   private long bytes;
   private ContainerState containerState;
   private long startIndex;
+  private boolean needLogMetaInfo;
 
   public ContainerLogsRequest() {}
 
@@ -166,5 +167,13 @@ public class ContainerLogsRequest {
 
   public void setStartIndex(long startIndex) {
     this.startIndex = startIndex;
+  }
+
+  public boolean isNeedLogMetaInfo() {
+    return needLogMetaInfo;
+  }
+
+  public void setNeedLogMetaInfo(boolean needLogMetaInfo) {
+    this.needLogMetaInfo = needLogMetaInfo;
   }
 }

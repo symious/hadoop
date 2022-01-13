@@ -94,7 +94,7 @@ public final class LogToolUtils {
   public static void outputContainerLog(String containerId, String nodeId,
       String fileName, long fileLength, long outputSize,
       String lastModifiedTime, InputStream fis, OutputStream os,
-      byte[] buf, ContainerLogAggregationType logType, long startIndex) throws IOException {
+      byte[] buf, ContainerLogAggregationType logType, long startIndex, boolean needLogMetaInfo) throws IOException {
 
     long toSkip = 0;
     long totalBytesToRead = fileLength;
@@ -110,10 +110,14 @@ public final class LogToolUtils {
       if (startIndex > 0) {
         skipToStartIndex(startIndex, fis);
       }
-      if (outputSize < fileLength) {
+      if (startIndex + outputSize >= fileLength) {
+        totalBytesToRead = fileLength - startIndex;
+      } else {
         totalBytesToRead = outputSize;
         skipAfterRead = fileLength - outputSize - startIndex;
       }
+      LOG.debug("outputSize: " + outputSize + " totalBytesToRead: "
+          + totalBytesToRead + " skipAfterRead: " + skipAfterRead);
     }
 
     long curRead = 0;
@@ -123,9 +127,11 @@ public final class LogToolUtils {
     int len = fis.read(buf, 0, toRead);
     boolean keepGoing = (len != -1 && curRead < totalBytesToRead);
 
-    byte[] b = formatContainerLogHeader(containerId, nodeId, logType, fileName,
-        lastModifiedTime, fileLength);
-    os.write(b, 0, b.length);
+    if (needLogMetaInfo) {
+      byte[] b = formatContainerLogHeader(containerId, nodeId, logType, fileName,
+          lastModifiedTime, fileLength);
+      os.write(b, 0, b.length);
+    }
     while (keepGoing) {
       os.write(buf, 0, len);
       curRead += len;
@@ -186,56 +192,38 @@ public final class LogToolUtils {
       byte[] buf, ContainerLogAggregationType logType) throws IOException {
 
     outputContainerLog(containerId, nodeId, fileName, fileLength, outputSize,
-        lastModifiedTime, fis, os, buf, logType, 0);
+        lastModifiedTime, fis, os, buf, logType, 0, true);
   }
 
   public static void outputContainerLogThroughZeroCopy(String containerId,
       String nodeId, String fileName, long fileLength, long outputSize,
       String lastModifiedTime, FileInputStream fis, OutputStream os,
-      ContainerLogAggregationType logType, long startIndex,
-      boolean isIncrementalFlag) throws IOException {
+      ContainerLogAggregationType logType, long startIndex) throws IOException {
     long toSkip = 0;
     long totalBytesToRead = fileLength;
-
-    if (outputSize <= 0) {
-      totalBytesToRead = 0;
-      LOG.debug("outputSize is not bigger than 0, " +
-          "outputContainerLogThroughZeroCopy return nothing!");
-    } else if(startIndex < 0){
-      long absBytes = Math.abs(startIndex);
+    if (outputSize < 0) {
+      long absBytes = Math.abs(outputSize);
       if (absBytes < fileLength) {
         toSkip = fileLength - absBytes;
         totalBytesToRead = absBytes;
-        LOG.debug("startIndex less than 0, outputContainerLogThroughZeroCopy " +
-                "return from start to end, startIndex: {} , totalBytesToRead: {}",
-            startIndex, totalBytesToRead);
       }
-    } else if(fileLength > (outputSize + startIndex)){
-      //return from start to specific size
-      toSkip = startIndex;
-      totalBytesToRead = outputSize;
-      LOG.debug("outputContainerLogThroughZeroCopy return from start to " +
-          "specific size, startIndex: {} ,totalBytesToRead: {}", startIndex,
-          totalBytesToRead);
-    } else if(fileLength < (outputSize + startIndex) && fileLength > startIndex){
-      //return from start to end
-      toSkip = startIndex;
-      totalBytesToRead = fileLength - startIndex;
-      LOG.debug("outputContainerLogThroughZeroCopy return from start to end," +
-              " startIndex: {} ,totalBytesToRead: {}", startIndex,
-          totalBytesToRead);
-    } else{
-      //return whole fileLength
-      LOG.debug("outputContainerLogThroughZeroCopy return whole fileLength");
+    } else {
+      if (startIndex > 0) {
+        toSkip = startIndex;
+      } else {
+        startIndex = 0;
+      }
+      if (outputSize + startIndex < outputSize) {
+        outputSize = outputSize - startIndex;
+      }
+      if (startIndex + outputSize >= fileLength) {
+        totalBytesToRead = fileLength - startIndex;
+      } else {
+        totalBytesToRead = outputSize;
+      }
     }
-
-    // output log summary
-    if (!isIncrementalFlag) {
-      byte[] b = formatContainerLogHeader(containerId, nodeId, logType, fileName,
-          lastModifiedTime, fileLength);
-      os.write(b, 0, b.length);
-    }
-
+    LOG.debug("toSkip: " + toSkip + " outputSize: " + outputSize
+        + " totalBytesToRead: " + totalBytesToRead);
     if (totalBytesToRead > 0) {
       // output log content
       FileChannel inputChannel = fis.getChannel();

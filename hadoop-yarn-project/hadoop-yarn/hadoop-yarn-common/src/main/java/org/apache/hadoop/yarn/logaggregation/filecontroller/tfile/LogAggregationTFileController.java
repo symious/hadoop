@@ -217,10 +217,12 @@ public class LogAggregationTFileController
                           Times.format(thisNodeFile.getModificationTime()),
                           valueStream, os, buf,
                           ContainerLogAggregationType.AGGREGATED,
-                          logRequest.getStartIndex());
-                      byte[] b = aggregatedLogSuffix(fileType).getBytes(
-                          Charset.forName("UTF-8"));
-                      os.write(b, 0, b.length);
+                          logRequest.getStartIndex(), logRequest.isNeedLogMetaInfo());
+                      if (logRequest.isNeedLogMetaInfo()) {
+                        byte[] b = aggregatedLogSuffix(fileType).getBytes(
+                            Charset.forName("UTF-8"));
+                        os.write(b, 0, b.length);
+                      }
                       findLogs = true;
                     } else {
                       long totalSkipped = 0;

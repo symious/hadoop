@@ -382,10 +382,8 @@ public class NMWebServices {
       @QueryParam(YarnWebServiceParams.RESPONSE_CONTENT_SIZE)
       String size,
       @QueryParam(YarnWebServiceParams.RESPONSE_START)
-          String start,
-      @QueryParam(YarnWebServiceParams.IS_INCREMENTAL)
-      boolean isIncremental) {
-    return getLogs(containerIdStr, filename, format, size, start, isIncremental);
+          String start) {
+    return getLogs(containerIdStr, filename, format, size, start);
   }
 
   /**
@@ -421,9 +419,7 @@ public class NMWebServices {
       @QueryParam(YarnWebServiceParams.RESPONSE_CONTENT_SIZE)
       String size,
       @QueryParam(YarnWebServiceParams.RESPONSE_START)
-      String start,
-      @QueryParam(YarnWebServiceParams.IS_INCREMENTAL)
-          boolean isIncremental) {
+      String start) {
     ContainerId tempContainerId;
     try {
       tempContainerId = ContainerId.fromString(containerIdStr);
@@ -480,7 +476,6 @@ public class NMWebServices {
 
       final long startIndex = parseStartIndexLongParam(start);
 
-      boolean isIncrementalFlag = isIncremental;
       StreamingOutput stream = new StreamingOutput() {
         @Override
         public void write(OutputStream os) throws IOException,
@@ -489,26 +484,7 @@ public class NMWebServices {
             LogToolUtils.outputContainerLogThroughZeroCopy(
                 containerId.toString(), nmContext.getNodeId().toString(),
                 outputFileName, fileLength, bytes, lastModifiedTime, fis, os,
-                ContainerLogAggregationType.LOCAL, startIndex,
-                isIncrementalFlag);
-
-            StringBuilder sb = new StringBuilder();
-            if (!isIncrementalFlag) {
-              String endOfFile = "End of LogType:" + outputFileName;
-              sb.append(endOfFile + ".");
-              if (isRunning) {
-                sb.append("This log file belongs to a running container ("
-                    + containerIdStr + ") and so may not be complete." + "\n");
-              } else {
-                sb.append("\n");
-              }
-              sb.append(StringUtils.repeat("*", endOfFile.length() + 50)
-                  + "\n\n");
-            } else {
-              sb.append("\n");
-            }
-            os.write(sb.toString().getBytes(Charset.forName("UTF-8")));
-
+                ContainerLogAggregationType.LOCAL, startIndex);
             // If we have aggregated logs for this container,
             // output the aggregation logs as well.
             ApplicationId appId = containerId.getApplicationAttemptId()
@@ -540,12 +516,16 @@ public class NMWebServices {
           }
         }
       };
-      ResponseBuilder resp = Response.ok(stream);
+      ResponseBuilder resp = Response.status(206);
+      resp.entity(stream);
+      long readBytes = 0;
+      if ((startIndex + bytes > fileLength) || bytes > fileLength) {
+        readBytes = fileLength - startIndex;
+      } else {
+        readBytes = bytes;
+      }
+      resp.header("Content-Length", "" + readBytes);
       resp.header("Content-Type", contentType + "; " + JettyUtils.UTF_8);
-      // Sending the X-Content-Type-Options response header with the value
-      // nosniff will prevent Internet Explorer from MIME-sniffing a response
-      // away from the declared content-type.
-      resp.header("X-Content-Type-Options", "nosniff");
       return resp.build();
     } catch (IOException ex) {
       return Response.serverError().entity(ex.getMessage()).build();
