@@ -30,6 +30,8 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.Options.Rename;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockManagerTestUtil;
+import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter;
 import org.junit.Test;
 
@@ -159,6 +161,8 @@ public class TestDFSRename {
       assertTrue(bm.getStoredBlock(lbs.getLocatedBlocks().get(0).getBlock().
           getLocalBlock()) != null);
       dfs.rename(srcPath, dstPath, Rename.OVERWRITE);
+      BlockManagerTestUtil.waitForMarkedDeleteQueueIsEmpty(
+          cluster.getNamesystem(0).getBlockManager());
       assertTrue(bm.getStoredBlock(lbs.getLocatedBlocks().get(0).getBlock().
           getLocalBlock()) == null);
       

@@ -152,6 +152,8 @@ public class TestComputeInvalidateWork {
       dn.shutdown();
     }
     dfs.delete(path, false);
+    BlockManagerTestUtil.waitForMarkedDeleteQueueIsEmpty(
+        cluster.getNamesystem(0).getBlockManager());
     namesystem.writeLock();
     InvalidateBlocks invalidateBlocks;
     int expected = NUM_OF_DATANODES;
