@@ -99,6 +99,8 @@ class ReplicationWork {
               getStoragesInDataCenter(liveReplicaStorages, targetDc);
           if (storages.size() > 0) {
             srcNode = storages.get(0).getDatanodeDescriptor();
+            LOG.debug("Changed srcNode from {} to {}",
+                originalSrcNode.getIpAddr(), srcNode.getIpAddr());
           }
         }
       }

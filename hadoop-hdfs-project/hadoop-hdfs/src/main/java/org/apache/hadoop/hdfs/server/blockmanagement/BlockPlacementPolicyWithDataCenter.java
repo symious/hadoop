@@ -469,7 +469,7 @@ public class BlockPlacementPolicyWithDataCenter extends
     Set<String> exists = dcMap.keySet();
     for (ReplicationRuleSection section: rule.getSections()) {
       String dc = section.getDataCenter();
-      if (!exists.contains(dc)) {
+      if (section.getReplica() > 0 && !exists.contains(dc)) {
         Node base = dcBaseNodes.get(dc);
         if (base == null) {
           base = new NodeBase(VIRTUAL_HOST, dc + VIRTUAL_RACK);
