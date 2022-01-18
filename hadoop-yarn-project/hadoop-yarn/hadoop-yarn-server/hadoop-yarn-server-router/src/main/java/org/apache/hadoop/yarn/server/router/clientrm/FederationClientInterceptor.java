@@ -189,8 +189,8 @@ public class FederationClientInterceptor
   private RouterRpcFairnessPolicyController routerRpcFairnessPolicyController;
 
   private static final String GET_CLUSTER_METRICS_CACHEID = "getClusterMetrics";
-  private Cache<Object, Object> cache;
-  private RouterRpcRequestCache routerRpcRequestCache;
+  protected Cache<Object, Object> cache;
+  protected RouterRpcRequestCache routerRpcRequestCache;
 
   @Override
   public void init(String userName) {

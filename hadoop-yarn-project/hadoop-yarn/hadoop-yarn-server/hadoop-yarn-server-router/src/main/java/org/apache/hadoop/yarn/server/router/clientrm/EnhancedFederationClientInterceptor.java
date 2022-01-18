@@ -44,6 +44,7 @@ import org.apache.hadoop.yarn.api.records.QueueInfo;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterInfo;
+import org.apache.hadoop.yarn.server.federation.utils.CacheUtil;
 import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade;
 import org.apache.hadoop.yarn.server.router.RouterMetrics;
 import org.apache.hadoop.yarn.server.router.RouterServerUtil;
@@ -71,6 +72,8 @@ public class EnhancedFederationClientInterceptor
   private FederationStateStoreFacade federationFacade;
   private RouterMetrics routerMetrics;
   private final Clock clock = new MonotonicClock();
+
+  private static final String GET_CLUSTER_NODES_CACHEID = "getClusterNodes";
 
   public EnhancedFederationClientInterceptor() {
     federationFacade = FederationStateStoreFacade.getInstance();
@@ -189,23 +192,50 @@ public class EnhancedFederationClientInterceptor
   public GetClusterNodesResponse getClusterNodes(GetClusterNodesRequest request)
       throws YarnException, IOException {
 
-    long startTime = clock.getTime();
     String requestId = RandomStringUtils.randomAlphabetic(8);
+    LOG.info("requestId:" + requestId +
+        " ,getClusterNodes request info -> nodeStates: " +
+        request.getNodeStates());
 
-    LOG.info("GetClusterNodes request info -> nodeStates: "
-        + request.getNodeStates());
-
-    Map<SubClusterId, SubClusterInfo> subclusters =
+    Map<SubClusterId, SubClusterInfo> subClusters =
         federationFacade.getSubClusters(true);
+    ArrayList<SubClusterId> clusterList = new ArrayList<>(subClusters.keySet());
     ClientMethod remoteMethod = new ClientMethod("getClusterNodes",
         new Class[] {GetClusterNodesRequest.class}, new Object[] {request});
-    ArrayList<SubClusterId> clusterList = new ArrayList<>(subclusters.keySet());
-    Map<SubClusterId, GetClusterNodesResponse> clusterNodes =
-        invokeConcurrent(clusterList, remoteMethod,
-            GetClusterNodesResponse.class, requestId);
 
-    long stopTime = clock.getTime();
-    LOG.info("GetClusterNodes cost time: " + (stopTime - startTime) + "ms");
+    Map<SubClusterId, GetClusterNodesResponse> clusterNodes;
+
+    if (routerRpcRequestCache.isCachingEnabled()) {
+      long startTime = clock.getTime();
+      clusterNodes = (Map<SubClusterId, GetClusterNodesResponse>) cache
+          .get(buildGetClusterNodesCacheRequest(clusterList, remoteMethod,
+              GetClusterNodesResponse.class, requestId));
+      for (Map.Entry<SubClusterId, GetClusterNodesResponse> entry : clusterNodes
+          .entrySet()) {
+        SubClusterId key = entry.getKey();
+        GetClusterNodesResponse value = entry.getValue();
+        if (LOG.isDebugEnabled()) {
+          LOG.debug(
+              "requestId:" + requestId + " ,SubClusterId: " + key.toString() +
+                  " ,NumNodeReports: " +
+                  value.getNodeReports().size());
+        }
+      }
+      long stopTime = clock.getTime();
+      LOG.info("requestId:" + requestId +
+          " ,getClusterNodes from cache cost time: " + (stopTime - startTime) +
+          "ms, clientIP: " + Server.getRemoteAddress());
+    } else {
+      long startTime = clock.getTime();
+      clusterNodes = invokeConcurrent(clusterList, remoteMethod,
+          GetClusterNodesResponse.class, requestId);
+      long stopTime = clock.getTime();
+      LOG.info("requestId:" + requestId +
+          " ,getClusterNodes without cache cost time: " +
+          (stopTime - startTime) + "ms, clientIP: " +
+          Server.getRemoteAddress());
+    }
+
     return RouterYarnClientUtils.mergeNodes(clusterNodes.values());
   }
 
@@ -373,5 +403,30 @@ public class EnhancedFederationClientInterceptor
     long stopTime = clock.getTime();
     LOG.debug("getContainers cost time: " + (stopTime - startTime) + "ms");
     return response;
+  }
+
+  private Object buildGetClusterNodesCacheRequest(
+      ArrayList<SubClusterId> clusterList, ClientMethod remoteMethod,
+      Class clazz, String requestId) {
+    final String cacheKey =
+        buildCacheKey(getClass().getSimpleName(), GET_CLUSTER_NODES_CACHEID,
+            remoteMethod.getParams()[0].toString());
+    LOG.info("buildGetClusterNodesCacheRequest cacheKey: " + cacheKey);
+    CacheUtil.CacheRequest<String, Map<SubClusterId, GetClusterNodesResponse>>
+        cacheRequest =
+        new CacheUtil.CacheRequest<String, Map<SubClusterId, GetClusterNodesResponse>>(
+            cacheKey,
+            new CacheUtil.Func<String, Map<SubClusterId, GetClusterNodesResponse>>() {
+              @Override
+              public Map<SubClusterId, GetClusterNodesResponse> invoke(
+                  String key)
+                  throws Exception {
+                Map<SubClusterId, GetClusterNodesResponse> clusterNodes =
+                    invokeConcurrent(clusterList, remoteMethod, clazz, requestId);
+                LOG.info("buildGetClusterNodesCacheRequest refresh!");
+                return clusterNodes;
+              }
+            });
+    return cacheRequest;
   }
 }
