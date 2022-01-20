@@ -25,6 +25,7 @@ import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneDispatcher.ZoneSource;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneDispatcher.ZoneDDatanode;
 import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Tool;
@@ -53,8 +54,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ZoneMover {
   private static final Logger LOG = LoggerFactory.getLogger(ZoneMover.class);
   private static final String ROOT = "/";
-  private static final Path ZONEMOVER_ID_PATH =
-      new Path("/system/zonemover.id");
+  private static final String ZONEMOVER_ID_PATH = "/system/zonemover.id";
   private final ZoneDispatcher dispatcher;
   private final StorageMap storages;
   private final List<Path> targetPaths;
@@ -190,7 +190,7 @@ public class ZoneMover {
     try {
       // Set maxNotChangedIterations to 1 as ZoneMover does not need to loop
       nnc = new NameNodeConnector(ZoneMover.class.getSimpleName(),
-          namenode, ZONEMOVER_ID_PATH, paths, conf, 1);
+          namenode, getIdPath(RunMode.BATCH), paths, conf, 1);
       zs = new ZoneMover(nnc, conf, rule, retryCount);
       zs.init();
       int round = 0;
@@ -254,7 +254,7 @@ public class ZoneMover {
     ZoneMover zs = null;
     try {
       nnc = new NameNodeConnector(ZoneMover.class.getSimpleName(),
-              namenode, ZONEMOVER_ID_PATH, paths, conf, 1);
+              namenode, getIdPath(RunMode.MONITOR), paths, conf, 1);
       zs = new ZoneMover(nnc, conf, rule, new AtomicInteger(0));
       zs.init();
       while (zoneMoverTrigger.hasNext()) {
@@ -276,6 +276,14 @@ public class ZoneMover {
       }
     }
     return ExitStatus.SUCCESS.getExitCode();
+  }
+
+  private static Path getIdPath(RunMode mode) {
+    return new Path(String.format("%s.%s.%s.%s",
+        ZONEMOVER_ID_PATH,
+        mode.toString().toLowerCase(),
+        NetUtils.getLocalHostname(),
+        Time.now()));
   }
 
   private static long calculateSleepTime(final Configuration conf) {
@@ -482,6 +490,8 @@ public class ZoneMover {
       return dcTargetStorageTypeMap.get(datacenter).get(st);
     }
   }
+
+  enum RunMode {BATCH, MONITOR}
 
   class Processor {
 
