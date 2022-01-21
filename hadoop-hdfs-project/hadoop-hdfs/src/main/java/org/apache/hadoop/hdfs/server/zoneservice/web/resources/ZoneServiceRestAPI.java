@@ -35,6 +35,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
+import org.apache.hadoop.hdfs.server.zoneservice.AuditLogger;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneChecker;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneMover;
@@ -45,6 +46,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -55,7 +57,8 @@ import java.util.concurrent.Semaphore;
 @Singleton
 public class ZoneServiceRestAPI {
   private static final String defaultRatio = "-1";
-  private static final String defaultMode = "";
+  private static final String defaultMode = "batch";
+  private static final String defaultNull = "N/A";
   private static final Configuration conf = new Configuration();
   private static final int maxThread = conf.getInt(
       DFSConfigKeys.DFS_ZONESERVICE_THREADS_KEY,
@@ -74,12 +77,17 @@ public class ZoneServiceRestAPI {
   @Consumes()
   @Produces()
   public String getThread(@Context HttpServletRequest hsr) {
+    Date startTime = new Date();
     StackTraceElement[] elements = Thread.currentThread().getStackTrace();
     StringBuilder result = new StringBuilder();
     for (StackTraceElement element : elements)
       result.append("File: ").append(element.getFileName()).append(" Line: ")
           .append(element.getLineNumber()).append(" Method: ")
           .append(element.getMethodName()).append("\n");
+    AuditLogger.logRuleProcess(
+        Thread.currentThread().getStackTrace()[1].getMethodName(), defaultNull,
+        defaultNull, defaultNull, startTime, new Date(),
+        ResultCode.SUCCESS.getMsg(), defaultNull);
     return result.toString();
   }
 
@@ -99,7 +107,12 @@ public class ZoneServiceRestAPI {
       @QueryParam("namespace") String nameSpace,
       @QueryParam("ratio") @DefaultValue(defaultRatio) String ratio,
       @PathParam("path") String path) {
+    Date startTime = new Date();
     if (semaphore.availablePermits() == 0) {
+      AuditLogger.logRuleProcess(
+          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+          path, defaultNull, startTime, new Date(),
+          ResultCode.THREAD_FULL.getMsg(), defaultNull);
       return ResultCode.THREAD_FULL.toString();
     }
     try {
@@ -107,9 +120,17 @@ public class ZoneServiceRestAPI {
       Map<ReplicationRule, Set<String>> hashMap =
           checkPath(nameSpace, path, ratio);
       semaphore.release();
+      AuditLogger.logRuleProcess(
+          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+          path, defaultNull, startTime, new Date(),
+          ResultCode.SUCCESS.getMsg(), defaultNull);
       return hashMap.toString();
     } catch (InterruptedException e) {
       e.printStackTrace();
+      AuditLogger.logRuleProcess(
+          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+          path, defaultNull, startTime, new Date(),
+          ResultCode.INTERRUPTED.getMsg(), defaultNull);
       return ResultCode.INTERRUPTED.toString();
     }
   }
@@ -132,16 +153,28 @@ public class ZoneServiceRestAPI {
       @QueryParam("rule") String replicaRule,
       @QueryParam("mode") @DefaultValue(defaultMode) String mode,
       @PathParam("path") String path) {
+    Date startTime = new Date();
     if (semaphore.availablePermits() == 0) {
+      AuditLogger.logRuleProcess(
+          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace, 
+          path, replicaRule, startTime, new Date(),
+          ResultCode.THREAD_FULL.getMsg(), mode);
       return ResultCode.THREAD_FULL.toString();
     }
     try {
       semaphore.acquire();
-      String result = movePath(nameSpace, path, replicaRule, mode).toString();
+      ResultCode result = movePath(nameSpace, path, replicaRule, mode);
       semaphore.release();
-      return result;
+      AuditLogger.logRuleProcess(
+          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+          path, replicaRule, startTime, new Date(), result.getMsg(), mode);
+      return result.toString();
     } catch (InterruptedException e) {
       e.printStackTrace();
+      AuditLogger.logRuleProcess(
+          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+          path, replicaRule, startTime, new Date(),
+          ResultCode.INTERRUPTED.getMsg(), mode);
       return ResultCode.INTERRUPTED.toString();
     }
   }
@@ -162,17 +195,29 @@ public class ZoneServiceRestAPI {
       @QueryParam("namespace") String nameSpace,
       @QueryParam("rule") String replicaRule,
       @PathParam("path") String path) {
+    Date startTime = new Date();
     if (semaphore.availablePermits() == 0) {
+      AuditLogger.logRuleProcess(
+          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+          path, replicaRule, startTime, new Date(),
+          ResultCode.THREAD_FULL.getMsg(), defaultMode);
       return ResultCode.THREAD_FULL.toString();
     }
     try {
       semaphore.acquire();
-      String result =
-          movePath(nameSpace, path, replicaRule, defaultMode).toString();
+      ResultCode result = movePath(nameSpace, path, replicaRule, defaultMode);
       semaphore.release();
-      return result;
+      AuditLogger.logRuleProcess(
+          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+          path, replicaRule, startTime, new Date(),
+          result.getMsg(), defaultMode);
+      return result.toString();
     } catch (InterruptedException e) {
       e.printStackTrace();
+      AuditLogger.logRuleProcess(
+          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+          path, replicaRule, startTime, new Date(),
+          ResultCode.INTERRUPTED.getMsg(), defaultMode);
       return ResultCode.INTERRUPTED.toString();
     }
   }
@@ -195,7 +240,7 @@ public class ZoneServiceRestAPI {
     paths.add(new org.apache.hadoop.fs.Path(path));
 
     try {
-      if (mode.equals("")) {
+      if (mode.equals("batch")) {
         switch (Objects.requireNonNull(ExitStatus.getExitStatusByCode(
             ZoneMover.run(conf, namenode, paths, replicationRule)))) {
           case SUCCESS:
