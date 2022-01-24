@@ -35,6 +35,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
+import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.timelineservice.ApplicationAttemptEntity;
 import org.apache.hadoop.yarn.api.records.timelineservice.ApplicationEntity;
 import org.apache.hadoop.yarn.api.records.timelineservice.ContainerEntity;
@@ -180,8 +181,12 @@ public class TimelineServiceV2Publisher extends AbstractSystemMetricsPublisher {
     Map<String, Object> entityInfo = new HashMap<String, Object>();
     entityInfo.put(ApplicationMetricsConstants.DIAGNOSTICS_INFO_EVENT_INFO,
         app.getDiagnostics().toString());
+    FinalApplicationStatus finalApplicationStatus = app.getFinalApplicationStatus();
+    if (finalApplicationStatus.equals(FinalApplicationStatus.UNDEFINED)) {
+      finalApplicationStatus = ((RMAppImpl)app).createFinalApplicationStatus(state);
+    }
     entityInfo.put(ApplicationMetricsConstants.FINAL_STATUS_EVENT_INFO,
-        app.getFinalApplicationStatus().toString());
+        finalApplicationStatus.toString());
     entityInfo.put(ApplicationMetricsConstants.STATE_EVENT_INFO,
         RMServerUtils.createApplicationState(state).toString());
     ApplicationAttemptId appAttemptId = app.getCurrentAppAttempt() == null

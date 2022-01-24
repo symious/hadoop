@@ -654,7 +654,7 @@ public class RMAppImpl implements RMApp, Recoverable {
     }
   }
 
-  private FinalApplicationStatus createFinalApplicationStatus(RMAppState state) {
+  public FinalApplicationStatus createFinalApplicationStatus(RMAppState state) {
     switch(state) {
     case NEW:
     case NEW_SAVING:

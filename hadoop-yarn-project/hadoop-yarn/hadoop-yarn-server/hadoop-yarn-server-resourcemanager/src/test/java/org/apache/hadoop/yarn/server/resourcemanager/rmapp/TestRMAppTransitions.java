@@ -1091,6 +1091,7 @@ public class TestRMAppTransitions {
     RMApp application = testCreateAppFinalSaving(null);
     final String diagMsg = "some diagnostics";
     // attempt_finished event comes before attempt_saved event
+    Assert.assertEquals(FinalApplicationStatus.UNDEFINED, application.getFinalApplicationStatus());
     RMAppEvent event = new RMAppEvent(application.getApplicationId(),
         RMAppEventType.ATTEMPT_FINISHED, diagMsg);
     application.handle(event);
@@ -1099,6 +1100,7 @@ public class TestRMAppTransitions {
         new RMAppEvent(application.getApplicationId(), RMAppEventType.APP_UPDATE_SAVED);
     application.handle(appUpdated);
     assertAppState(RMAppState.FINISHED, application);
+    Assert.assertEquals(FinalApplicationStatus.FAILED, application.getFinalApplicationStatus());
 
     assertTimesAtFinish(application);
     // finished without a proper unregister implies failed
