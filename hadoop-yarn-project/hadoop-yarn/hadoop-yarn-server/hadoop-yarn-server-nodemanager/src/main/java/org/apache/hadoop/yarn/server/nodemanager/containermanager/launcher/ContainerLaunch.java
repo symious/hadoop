@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager.launcher;
 
 import static org.apache.hadoop.fs.CreateFlag.CREATE;
 import static org.apache.hadoop.fs.CreateFlag.OVERWRITE;
+import static org.apache.hadoop.security.sdi.SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR;
 import static org.apache.hadoop.yarn.server.nodemanager.ContainerExecutor.TOKEN_FILE_NAME_FMT;
 
 import org.apache.hadoop.yarn.server.nodemanager.executor.DeletionAsUserContext;
@@ -1342,6 +1343,11 @@ public class ContainerLaunch implements Callable<Integer> {
       line("# Creating copy of launch script");
       line("cp \"", src.toUri().getPath(), "\" \"", dest.toUri().getPath(),
           "\"");
+      // change HADOOP_USER_RPCPASSWORD value to '********'
+      // sed -ri 's/(HADOOP_USER_RPCPASSWORD=")[^"]*/\1********/' launch_container.sh
+      String hidePassword = "********";
+      line("sed -ri 's/(", SDI_CREDENTIAL_ENV_VAR, "=\")[^\"]*/\\1",
+          hidePassword, "/'", " \"", dest.toUri().getPath(), "\"");
       // set permissions to 640 because we need to be able to run
       // log aggregation in secure mode as well
       if(dest.isAbsolute()) {
