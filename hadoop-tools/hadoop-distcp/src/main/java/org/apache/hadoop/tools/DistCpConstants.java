@@ -81,6 +81,8 @@ public class DistCpConstants {
   /* Total bytes to be copied. Updated by copylisting. Unfiltered count */
   public static final String CONF_LABEL_TOTAL_BYTES_TO_BE_COPIED = "mapred.total.bytes.expected";
 
+  public static final String CONF_LABEL_TOTAL_BLOCKS_TO_BE_COPIED = "mapred.total.blocks.expected";
+
   /* Total number of paths to copy, includes directories. Unfiltered count */
   public static final String CONF_LABEL_TOTAL_NUMBER_OF_RECORDS = "mapred.number.of.records";
 

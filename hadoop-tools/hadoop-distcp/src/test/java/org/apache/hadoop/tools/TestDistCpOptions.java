@@ -331,6 +331,8 @@ public class TestDistCpOptions {
           options.getCopyStrategy());
       options.setCopyStrategy("dynamic");
       Assert.assertEquals("dynamic", options.getCopyStrategy());
+      options.setCopyStrategy("block");
+      Assert.assertEquals("block", options.getCopyStrategy());
     }
   }
 

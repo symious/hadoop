@@ -94,6 +94,11 @@ public class FileBasedCopyListing extends CopyListing {
     return globbedListing.getBytesToCopy();
   }
 
+  @Override
+  protected long getBlocksToCopy() {
+    return globbedListing.getBlocksToCopy();
+  }
+
   /** {@inheritDoc} */
   @Override
   protected long getNumberOfPaths() {

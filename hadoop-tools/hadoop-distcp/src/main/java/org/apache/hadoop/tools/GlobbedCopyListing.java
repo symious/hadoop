@@ -96,6 +96,11 @@ public class GlobbedCopyListing extends CopyListing {
     return simpleListing.getBytesToCopy();
   }
 
+  @Override
+  protected long getBlocksToCopy() {
+    return simpleListing.getBlocksToCopy();
+  }
+
   /** {@inheritDoc} */
   @Override
   protected long getNumberOfPaths() {
