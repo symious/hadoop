@@ -621,6 +621,15 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final XAttr.NameSpace  DFS_ZONE_REPLICATION_RULE_XATTR_NAMESPACE =
       XAttr.NameSpace.USER;
   public static final String  DFS_ZONE_REPLICATION_RULE_XATTR_NAME = "replicationRule";
+  public static final String  DFS_ZONE_COORDINATOR_MAX_CONCURRENT_REPLICATIONS_KEY =
+      "dfs.zone.coordinator.max.concurrent.replications";
+  public static final int     DFS_ZONE_COORDINATOR_MAX_CONCURRENT_REPLICATIONS_DEFAULT = 1000;
+  public static final String  DFS_ZONE_COORDINATOR_MIN_CHECK_INTERVAL_KEY =
+      "dfs.zone.coordinator.min.check.interval";
+  public static final long    DFS_ZONE_COORDINATOR_MIN_CHECK_INTERVAL_DEFAULT = 10000L;
+  public static final String  DFS_ZONE_COORDINATOR_MAX_CHECK_TIMES_KEY =
+      "dfs.zone.coordinator.max.check.times";
+  public static final int     DFS_ZONE_COORDINATOR_MAX_CHECK_TIMES_DEFAULT = 30;
 
   public static final String  DFS_DATANODE_ADDRESS_KEY = "dfs.datanode.address";
   public static final int     DFS_DATANODE_DEFAULT_PORT = 50010;

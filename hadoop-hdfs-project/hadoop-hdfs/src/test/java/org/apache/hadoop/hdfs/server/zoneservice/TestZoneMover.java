@@ -211,6 +211,7 @@ public class TestZoneMover {
 
   @Test
   public void testGetZoneMoveItems() throws IOException {
+    // block distribution is "/dc1:3"
     final String[] racks = {"/dc1/rack0", "/dc1/rack1", "/dc1/rack2"};
     Map<String, Short> ruleMap = new HashMap<>();
     ruleMap.put("/dc0", (short) 1);
@@ -233,18 +234,37 @@ public class TestZoneMover {
         namenode,
         new Path("/testIsBlockSatisfyRule"),
         new ArrayList<Path>(), conf, 1);
-    ZoneMover zoneMover = new ZoneMover(nnc, conf, rule, new AtomicInteger(1));
 
     DistributedFileSystem fs = cluster.getFileSystem();
     Path path1 = new Path("/test.txt");
     DFSTestUtil.createFile(fs, path1, FILE_LEN, REPLICATION, 0L);
-    List<LocatedBlock> blocks1 = DFSTestUtil.getAllBlocks(fs, path1);
-    assertEquals(1, blocks1.size());
-    assertFalse(zoneMover.isBlockSatisfyRule(blocks1.get(0)));
+    List<LocatedBlock> allBlocks = DFSTestUtil.getAllBlocks(fs, path1);
+    assertEquals(1, allBlocks.size());
+    LocatedBlock block = allBlocks.get(0);
 
     ZoneMover.ZoneMoveItem moveItem =
         new ZoneMover.ZoneMoveItem("/dc1", "/dc0", (short) 1);
-    List<ZoneMover.ZoneMoveItem> items = zoneMover.getZoneMoveItems(blocks1.get(0));
+    checkRuleAndItem(nnc, conf, rule, block, moveItem);
+
+    // works well even rule has more replicas than block
+    // rule becomes "/dc0:2,/dc1:2"
+    ruleMap.put("/dc0", (short) 2);
+    rule = ReplicationRule.parseFromMap(ruleMap);
+    checkRuleAndItem(nnc, conf, rule, block, moveItem);
+
+    // works well even block has more replicas than rule
+    // rule becomes "/dc0:1,/dc1:1"
+    ruleMap.put("/dc0", (short) 1);
+    ruleMap.put("/dc1", (short) 1);
+    rule = ReplicationRule.parseFromMap(ruleMap);
+    checkRuleAndItem(nnc, conf, rule, block, moveItem);
+  }
+
+  private void checkRuleAndItem(NameNodeConnector nnc, Configuration conf,
+      ReplicationRule rule, LocatedBlock block, ZoneMover.ZoneMoveItem moveItem) {
+    ZoneMover zoneMover = new ZoneMover(nnc, conf, rule, new AtomicInteger(1));
+    assertFalse(zoneMover.isBlockSatisfyRule(block));
+    List<ZoneMover.ZoneMoveItem> items = zoneMover.getZoneMoveItems(block);
     assertEquals(1, items.size());
     assertEquals(moveItem, items.get(0));
   }

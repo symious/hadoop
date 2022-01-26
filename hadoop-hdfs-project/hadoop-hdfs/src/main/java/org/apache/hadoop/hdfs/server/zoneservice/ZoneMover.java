@@ -67,6 +67,9 @@ public class ZoneMover {
   private final Processor processor = new Processor();
   private final ReplicationRuleUtil ruleUtil;
   private final boolean xattrSetEnable;
+  private final ZoneReplicationCoordinator coordinator;
+  private Result result;
+  private final Thread fetcher = new Thread(new Fetcher());
 
   public ZoneMover(NameNodeConnector nnc, Configuration conf,
       ReplicationRule rule, AtomicInteger retryCount) {
@@ -102,6 +105,9 @@ public class ZoneMover {
     this.xattrSetEnable = conf.getBoolean(
         DFSConfigKeys.DFS_ZONEMOVER_XATTR_SET_ENABLE_KEY,
         DFSConfigKeys.DFS_ZONEMOVER_XATTR_SET_ENABLE_DEFAULT);
+    this.coordinator = new ZoneReplicationCoordinator(
+        conf, this.dispatcher.getDistributedFileSystem());
+    fetcher.start();
   }
 
   /**
@@ -154,8 +160,12 @@ public class ZoneMover {
     }
   }
 
+  /* Note that this method does not call waitForCheckCompletion.
+   * It is generally running in monitor mode.
+   */
   ExitStatus run(String path) {
     Result result = new Result();
+    this.result = result;
     processor.processPath(path, result);
     return result.getExitStatus();
   }
@@ -502,10 +512,18 @@ public class ZoneMover {
   class Processor {
 
     private Result processPath() {
-      Result result = new Result();
+      result = new Result();
       for (Path target: targetPaths) {
         processPath(target.toUri().getPath(), result);
       }
+
+      coordinator.waitForCheckCompletion();
+      try {
+        fetcher.join();
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+
       // wait for pending move to finish and retry the failed migration
       boolean hasFailed = Dispatcher.waitForMoveCompletion(storages.targets.values());
       boolean hasSuccess = Dispatcher.checkForSuccess(storages.targets.values());
@@ -574,14 +592,8 @@ public class ZoneMover {
         HdfsLocatedFileStatus status, Result result) {
       LOG.info("Processing file: " + fullPath + " ....");
 
-      if (status.getReplication() != rule.getReplica()) {
-        LOG.warn("Skip replication inconsistent file: " + fullPath);
-        return;
-      }
-
       final LocatedBlocks locatedBlocks = status.getBlockLocations();
-      int n = locatedBlocks.locatedBlockCount();
-      if (n == 0) {
+      if (status.getLen() == 0) {
         LOG.info("Skip empty file: " + fullPath);
         return;
       }
@@ -606,12 +618,53 @@ public class ZoneMover {
         }
       }
 
-      // get the first block
-      LocatedBlock firstBlock = locatedBlocks.get(0);
+      if (status.getReplication() < rule.getReplica()) {
+        LOG.debug("factor < rule.replication file: " + fullPath);
+        // For cases like changing "/Telin-3:3" to "/Telin-3:3,/Telin-4:2",
+        // ZoneMover does not need to wait for NameNode to schedule replication.
+        // For cases like changing "/Telin-3:3" to "/Telin-3:2,/Telin-4:3",
+        // ZoneMover needs to wait for NameNode to schedule first and then
+        // do redistribution. If ZoneMover does not wait, it will increase
+        // the number of inter-dc block replications.
+        if (isFileNeedMove(locatedBlocks)) {
+          coordinator.addFile(fullPath, rule.getReplica() - status.getReplication(),
+              locatedBlocks.getLocatedBlocks().size());
+        }
+      } else if (status.getReplication() > rule.getReplica()) {
+        LOG.debug("factor > rule.replication file: " + fullPath);
+        // For cases like changing "/Telin-3:3,/Telin-4:2" -> "/Telin-3:3",
+        // ZoneMover does not need to wait.
+        // For cases like changing "/Telin-3:3" to "/Telin-3:1,/Telin-4:1",
+        // ZoneMover needs to wait. Otherwise, NameNode may schedule the
+        // datanode to delete the replica first, which is also used as the
+        // proxy of replaceBlock scheduled by ZoneMover.
+        if (isFileNeedMove(locatedBlocks)) {
+          coordinator.addFile(fullPath, rule.getReplica() - status.getReplication(),
+              locatedBlocks.getLocatedBlocks().size());
+        }
+      } else {
+        processFileBlocks(fullPath, status, result);
+      }
+    }
+
+    private boolean isFileNeedMove(LocatedBlocks locatedBlocks) {
+      for (LocatedBlock block: locatedBlocks.getLocatedBlocks()) {
+        if (!getZoneMoveItems(block).isEmpty()) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    private void processFileBlocks(String fullPath,
+        HdfsLocatedFileStatus status, Result result) {
+      final LocatedBlocks locatedBlocks = status.getBlockLocations();
       // Cannot just check the first and last block, as the dispatching action
       // is parallel and asynchronous. The movement of any blocks of a file
       // may fail but other blocks succeed.
       if (areBlocksDistributionConsistent(locatedBlocks.getLocatedBlocks())) {
+        // get the first block
+        LocatedBlock firstBlock = locatedBlocks.get(0);
         if (isBlockSatisfyRule(firstBlock)) {
           LOG.info("Skip the file as all blocks already satisfy the rule: " + fullPath);
           return;
@@ -772,6 +825,23 @@ public class ZoneMover {
         Thread.sleep(DELAY_AFTER_CHOOSE_FAIL);
       } catch (InterruptedException e) {
         // ignore
+      }
+    }
+  }
+
+  class Fetcher implements Runnable {
+    @Override
+    public void run() {
+      ZoneReplicationCoordinator.FileState fileState;
+      while (true) {
+        try {
+          fileState = coordinator.getNextFinishedFile();
+        } catch (NoSuchElementException e) {
+          LOG.info("No more files!");
+          return;
+        }
+        processor.processFileBlocks(
+            fileState.getFilePath(), fileState.getFileStatus(), result);
       }
     }
   }
