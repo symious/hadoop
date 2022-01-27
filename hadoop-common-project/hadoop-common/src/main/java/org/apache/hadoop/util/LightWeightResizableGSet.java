@@ -86,17 +86,32 @@ public class LightWeightResizableGSet<K, E extends K>
   }
 
   @Override
-  public E put(final E element) {
+  public synchronized E put(final E element) {
     E existing = super.put(element);
     expandIfNecessary();
     return existing;
+  }
+
+  @Override
+  public synchronized E get(K key) {
+    return super.get(key);
+  }
+
+  @Override
+  public synchronized E remove(K key) {
+    return super.remove(key);
+  }
+
+  @Override
+  public synchronized int size() {
+    return super.size();
   }
 
   /**
    * Resize the internal table to given capacity.
    */
   @SuppressWarnings("unchecked")
-  protected void resize(int cap) {
+  protected synchronized void resize(int cap) {
     int newCapacity = actualArrayLength(cap);
     if (newCapacity == this.capacity) {
       return;
@@ -121,7 +136,7 @@ public class LightWeightResizableGSet<K, E extends K>
   /**
    * Checks if we need to expand, and expands if necessary.
    */
-  protected void expandIfNecessary() {
+  protected synchronized void expandIfNecessary() {
     if (size > this.threshold && capacity < MAX_ARRAY_LENGTH) {
       resize(capacity * 2);
     }
