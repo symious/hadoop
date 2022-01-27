@@ -651,6 +651,11 @@ public class BlockManager implements BlockStatsMXBean {
     isDataCenterAwareness = blockplacement instanceof BlockPlacementPolicyWithDataCenter;
   }
 
+  /** Check if BlockManager is data center awareness */
+  public boolean getDataCenterAwareness() {
+    return isDataCenterAwareness;
+  }
+
   /** Dump meta data to out. */
   public void metaSave(PrintWriter out) {
     assert namesystem.hasWriteLock(); // TODO: block manager read lock and NS write lock

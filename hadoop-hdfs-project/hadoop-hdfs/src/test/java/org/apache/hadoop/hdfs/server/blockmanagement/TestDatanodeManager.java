@@ -36,11 +36,15 @@ import java.util.Random;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSTestUtil;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
@@ -56,6 +60,7 @@ import org.apache.hadoop.hdfs.server.common.StorageInfo;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
 import org.apache.hadoop.net.DNSToSwitchMapping;
 import org.apache.hadoop.net.NetworkTopology;
+import org.apache.hadoop.net.StaticMapping;
 import org.apache.hadoop.util.Shell;
 import org.junit.Assert;
 import org.junit.Test;
@@ -297,6 +302,46 @@ public class TestDatanodeManager {
   @Test
   public void testSortLocatedBlocks() throws IOException, URISyntaxException {
     HelperFunction(null);
+  }
+
+  @Test
+  public void testIsInterDCRead() throws IOException {
+    // setup the cluster
+    final String[] hosts = {"host0", "host1", "host2"};
+    final String[] racks = {"/dc0/rack0", "/dc0/rack1", "/dc1/rack2"};
+    Configuration conf = new HdfsConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, 3);
+    conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY, true);
+    MiniDFSCluster cluster = new MiniDFSCluster
+        .Builder(conf).numDataNodes(hosts.length)
+        .hosts(hosts).racks(racks).build();
+    cluster.waitActive();
+    DistributedFileSystem fs = cluster.getFileSystem();
+    org.apache.hadoop.fs.Path path = new org.apache.hadoop.fs.Path("/test.txt");
+    DFSTestUtil.createFile(fs, path, 1024, (short)3, 0L);
+
+    // create DatanodeManager instance
+    FSNamesystem fsn = Mockito.mock(FSNamesystem.class);
+    Mockito.when(fsn.hasWriteLock()).thenReturn(true);
+    DatanodeManager dm = mockDatanodeManager(fsn, conf);
+
+    // client in /dc0
+    List<LocatedBlock> blocks = DFSTestUtil.getAllBlocks(fs, path);
+    String clientMachine = "host3";
+    StaticMapping.addNodeToRack(clientMachine, "/dc0/rack1");
+    Assert.assertEquals(1, blocks.size());
+    Assert.assertEquals(3, blocks.get(0).getLocations().length);
+    Assert.assertFalse(dm.isInterDCRead(clientMachine, blocks));
+
+    // client in /dc1
+    StaticMapping.addNodeToRack(clientMachine, "/dc1/rack1");
+    Assert.assertFalse(dm.isInterDCRead(clientMachine, blocks));
+
+    // client in /dc2
+    StaticMapping.addNodeToRack(clientMachine, "/dc2/rack1");
+    Assert.assertTrue(dm.isInterDCRead(clientMachine, blocks));
+
+    cluster.shutdown();
   }
 
   /**

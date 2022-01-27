@@ -40,6 +40,7 @@ import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
 import org.apache.hadoop.hdfs.protocol.*;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeDescriptor.BlockTargetPair;
@@ -507,6 +508,40 @@ public class DatanodeManager {
 
   private boolean isSlowNode(String dnUuid) {
     return avoidSlowDataNodesForRead && slowNodesUuidSet.contains(dnUuid);
+  }
+
+  /** Check if the read traffic is inter-dc. */
+  public boolean isInterDCRead(final String clientMachine,
+      final List<LocatedBlock> locatedblocks) {
+    if (locatedblocks.size() == 0) {
+      return false;
+    }
+
+    String clientLocation;
+    Node client = getDatanodeByHost(clientMachine);
+    if (client != null) {
+      clientLocation = client.getNetworkLocation();
+    } else {
+      List<String> hosts = new ArrayList<>(1);
+      hosts.add(clientMachine);
+      List<String> resolvedHosts = dnsToSwitchMapping.resolve(hosts);
+      if (resolvedHosts != null && !resolvedHosts.isEmpty()) {
+        clientLocation = resolvedHosts.get(0);
+      } else {
+        LOG.error("Node Resolution failed. Please make sure that rack " +
+            "awareness scripts are functional.");
+        return false;
+      }
+    }
+    String clientDC = NetworkTopologyUtil.getDataCenter(clientLocation);
+
+    DatanodeInfo[] locations = locatedblocks.get(0).getLocations();
+    for (DatanodeInfo location: locations) {
+      if (NetworkTopologyUtil.getDataCenter(location).equals(clientDC)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /** Sort the located blocks by the distance to the target host. */
