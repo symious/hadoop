@@ -21,10 +21,12 @@ import java.io.IOException;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
@@ -592,6 +594,8 @@ public class TestGroupsCaching {
   public void testEntriesExpireIfBackgroundRefreshFails() throws Exception {
     conf.setLong(
         CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_CACHE_SECS, 1);
+    conf.setLong(
+        CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_CLEAR_CACHE_SECS, 10);
     conf.setBoolean(
         CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_CACHE_BACKGROUND_RELOAD,
         true);
@@ -754,6 +758,93 @@ public class TestGroupsCaching {
     // Cache entry has expired so it results in a new fetch
     groups.getGroups("me");
     assertEquals(startingRequestCount + 1, FakeGroupMapping.getRequestCount());
+  }
+
+  @Test
+  public void testCacheEntriesExpireWithClearing() throws Exception {
+    conf.setLong(
+        CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_CACHE_SECS, 1);
+    conf.setLong(
+        CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_CLEAR_CACHE_SECS, 10);
+
+    FakeTimer timer = new FakeTimer();
+    final Groups groups = new Groups(conf, timer);
+    groups.cacheGroupsAdd(Arrays.asList(myGroups));
+    groups.refresh();
+    FakeGroupMapping.clearBlackList();
+
+    groups.getGroups("One");
+    groups.getGroups("Two");
+    groups.getGroups("Three");
+    int oldCacheSize = groups.getAllGroups().size();
+    assertEquals(oldCacheSize, 3);
+
+    timer.advance(20 * 1000);
+
+    // Cache entry has expired and removed, we just reload cache key 'One', so
+    // other key can not access
+    groups.getGroups("One");
+    Map<String,List<String>> userGroupMap =  groups.getAllGroups();
+    assertTrue(userGroupMap.containsKey("One"));
+    assertFalse(userGroupMap.containsKey("Two"));
+    assertFalse(userGroupMap.containsKey("Three"));
+  }
+
+  @Test
+  public void testCacheEntriesExpireWithoutClearing() throws Exception {
+    conf.setLong(
+        CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_CACHE_SECS, 1);
+    conf.setLong(
+        CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_CLEAR_CACHE_SECS, 10000000L);
+    FakeTimer timer = new FakeTimer();
+    final Groups groups = new Groups(conf, timer);
+    groups.cacheGroupsAdd(Arrays.asList(myGroups));
+    groups.refresh();
+    FakeGroupMapping.clearBlackList();
+
+    groups.getGroups("One");
+    groups.getGroups("Two");
+    groups.getGroups("Three");
+    int oldCacheSize = groups.getAllGroups().size();
+    assertEquals(oldCacheSize, 3);
+
+    timer.advance(20 * 1000);
+
+    // Cache entry has expired, but we do not clear old cache, so
+    // cache size not changed
+    groups.getGroups("One");
+    Map<String,List<String>> userGroupMap =  groups.getAllGroups();
+    assertTrue(userGroupMap.containsKey("One"));
+    assertTrue(userGroupMap.containsKey("Two"));
+    assertTrue(userGroupMap.containsKey("Three"));
+  }
+
+  @Test
+  public void testUpdateUserGroup() throws Exception {
+    conf.setLong(
+        CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_CACHE_SECS, 1);
+
+    FakeTimer timer = new FakeTimer();
+    final Groups groups = new Groups(conf, timer);
+    groups.cacheGroupsAdd(Arrays.asList(myGroups));
+    groups.refresh();
+    FakeGroupMapping.clearBlackList();
+
+    assertEquals(groups.getGroups("One"), Arrays.asList(myGroups));
+
+    //modify groups, old group:["grp1","grp2"] -> new group:["grp1","grp2","grp3"]
+    groups.cacheGroupsAdd(Collections.singletonList("grp3"));
+
+    // Cache entry not expired, use old user groups
+    assertEquals(groups.getGroups("One"), Arrays.asList(myGroups));
+
+    timer.advance(2 * 1000);
+
+    // Cache entry has expired and reload new groups
+    String[] newGroups = {"grp1", "grp2", "grp3"};
+    Map<String,List<String>> cache = groups.getAllGroups();
+    assertEquals(groups.getGroups("One"), Arrays.asList(newGroups));
+    assertEquals(cache.get("One"), Arrays.asList(newGroups));
   }
 
   @Test

@@ -88,6 +88,7 @@ public class Groups {
   private Set<String> negativeCache;
   private final boolean reloadGroupsInBackground;
   private final int reloadGroupsThreadCount;
+  private final long clearCacheTime;
 
   private final AtomicLong backgroundRefreshSuccess =
       new AtomicLong(0);
@@ -130,14 +131,18 @@ public class Groups {
               HADOOP_SECURITY_GROUPS_CACHE_BACKGROUND_RELOAD_THREADS,
           CommonConfigurationKeys.
               HADOOP_SECURITY_GROUPS_CACHE_BACKGROUND_RELOAD_THREADS_DEFAULT);
+    clearCacheTime =
+        conf.getLong(CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_CLEAR_CACHE_SECS,
+            CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_CLEAR_CACHE_SECS_DEFAULT) * 1000;
     parseStaticMapping(conf);
 
     this.timer = timer;
+
     this.cache = CacheBuilder.newBuilder()
-      .refreshAfterWrite(cacheTimeout, TimeUnit.MILLISECONDS)
-      .ticker(new TimerToTickerAdapter(timer))
-      .expireAfterWrite(10 * cacheTimeout, TimeUnit.MILLISECONDS)
-      .build(new GroupCacheLoader());
+        .refreshAfterWrite(cacheTimeout, TimeUnit.MILLISECONDS)
+        .ticker(new TimerToTickerAdapter(timer))
+        .expireAfterWrite(clearCacheTime, TimeUnit.MILLISECONDS)
+        .build(new GroupCacheLoader());
 
     if(negativeCacheTimeout > 0) {
       Cache<String, Boolean> tempMap = CacheBuilder.newBuilder()
@@ -411,6 +416,15 @@ public class Groups {
     if(isNegativeCacheEnabled()) {
       negativeCache.clear();
     }
+  }
+
+  /**
+   * Get all user-to-groups mappings.
+   */
+  @VisibleForTesting
+  public Map<String,List<String>> getAllGroups() {
+    LOG.info("get All userToGroupsMap cache");
+    return cache.asMap();
   }
 
   /**
