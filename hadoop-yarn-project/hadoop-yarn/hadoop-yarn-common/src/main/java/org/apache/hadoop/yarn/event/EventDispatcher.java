@@ -18,7 +18,10 @@
 
 package org.apache.hadoop.yarn.event;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.util.Time;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.metrics.EventTypeMetrics;
 import org.apache.hadoop.yarn.util.Clock;
 import org.apache.hadoop.yarn.util.MonotonicClock;
@@ -30,6 +33,9 @@ import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.ShutdownHookManager;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingDeque;
 
@@ -51,6 +57,10 @@ public class EventDispatcher<T extends Event> extends
   private volatile boolean stopped = false;
   private boolean shouldExitOnError = true;
   private EventTypeMetrics metrics;
+
+  private int detailsInterval;
+  private volatile int lastEventDetailsQueueSizeLogged = 0;
+  private long lastTime = Time.monotonicNow();
 
   private static final Logger LOG =
       LoggerFactory.getLogger(EventDispatcher.class);
@@ -110,6 +120,15 @@ public class EventDispatcher<T extends Event> extends
   }
 
   @Override
+  protected void serviceInit(Configuration conf) throws Exception {
+    super.serviceInit(conf);
+    this.detailsInterval = getConfig().getInt(YarnConfiguration.
+            YARN_DISPATCHER_PRINT_EVENTS_INFO_THRESHOLD,
+        YarnConfiguration.
+            DEFAULT_YARN_DISPATCHER_PRINT_EVENTS_INFO_THRESHOLD);
+  }
+
+  @Override
   protected void serviceStart() throws Exception {
     this.eventProcessor.start();
     super.serviceStart();
@@ -140,8 +159,34 @@ public class EventDispatcher<T extends Event> extends
             "event queue: " + remCapacity);
       }
       this.eventQueue.put(event);
+      if (qSize != 0 && qSize % detailsInterval == 0
+          && lastEventDetailsQueueSizeLogged != qSize) {
+        lastEventDetailsQueueSizeLogged = qSize;
+        printEventQueueDetails();
+      }
     } catch (InterruptedException e) {
       LOG.info("Interrupted. Trying to exit gracefully.");
+    }
+  }
+
+  private void printEventQueueDetails() {
+    //Avoid High-Frequency printEventQueueDetails
+    if (Time.monotonicNow() - lastTime > 15000) {
+      lastTime = Time.monotonicNow();
+      Iterator<Event> iterator = (Iterator<Event>) eventQueue.iterator();
+      Map<Enum, Long> counterMap = new HashMap<>();
+      while (iterator.hasNext()) {
+        Enum eventType = iterator.next().getType();
+        if (!counterMap.containsKey(eventType)) {
+          counterMap.put(eventType, 0L);
+        }
+        counterMap.put(eventType, counterMap.get(eventType) + 1);
+      }
+      for (Map.Entry<Enum, Long> entry : counterMap.entrySet()) {
+        long num = entry.getValue();
+        LOG.info("Event type: " + entry.getKey()
+            + ", Event record counter: " + num);
+      }
     }
   }
 
