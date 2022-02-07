@@ -1824,10 +1824,17 @@ public class CapacityScheduler extends
     switch(event.getType()) {
     case NODE_ADDED:
     {
+      long startTime = Time.monotonicNow();
       NodeAddedSchedulerEvent nodeAddedEvent = (NodeAddedSchedulerEvent)event;
       addNode(nodeAddedEvent.getAddedRMNode());
+      CapacitySchedulerMetrics.getMetrics()
+          .recoveryNodeLatency(Time.monotonicNow() - startTime);
+
+      startTime = Time.monotonicNow();
       recoverContainersOnNode(nodeAddedEvent.getContainerReports(),
         nodeAddedEvent.getAddedRMNode());
+      CapacitySchedulerMetrics.getMetrics()
+          .recoveryContainerLatency(Time.monotonicNow() - startTime);
     }
     break;
     case NODE_REMOVED:

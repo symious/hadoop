@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity;
 
+import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
+import org.apache.hadoop.metrics2.lib.MutableQuantiles;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.metrics2.MetricsInfo;
@@ -50,6 +52,13 @@ public class CapacitySchedulerMetrics {
   @Metric("Scheduler commit failure") MutableRate commitFailure;
   @Metric("Scheduler node update") MutableRate nodeUpdate;
 
+  private MutableQuantiles recoveryNodeLatency;
+  private MutableQuantiles recoveryContainerLatency;
+  @Metric("Aggregate of recovery node latency")
+  MutableGaugeLong aggRecoveryNodeLatency;
+  @Metric("Aggregate of recovery container latency")
+  MutableGaugeLong aggRecoveryContainerLatency;
+
   private static volatile CapacitySchedulerMetrics INSTANCE = null;
   private static MetricsRegistry registry;
 
@@ -59,11 +68,19 @@ public class CapacitySchedulerMetrics {
         if(INSTANCE == null){
           INSTANCE = new CapacitySchedulerMetrics();
           registerMetrics();
+          INSTANCE.registerQuantiles();
           isInitialized.set(true);
         }
       }
     }
     return INSTANCE;
+  }
+
+  private void registerQuantiles() {
+    recoveryNodeLatency = registry.newQuantiles("recoveryNodeLatency",
+        "latency of recovery node", "ops", "latency", 30);
+    recoveryContainerLatency = registry.newQuantiles("recoveryContainerLatency",
+        "latency of recovery container", "ops", "latency", 30);
   }
 
   private static void registerMetrics() {
@@ -115,5 +132,15 @@ public class CapacitySchedulerMetrics {
   @VisibleForTesting
   public long getNumOfCommitSuccess() {
     return this.commitSuccess.lastStat().numSamples();
+  }
+
+  public void recoveryNodeLatency(long duration) {
+    recoveryNodeLatency.add(duration);
+    aggRecoveryNodeLatency.incr(duration);
+  }
+
+  public void recoveryContainerLatency(long duration) {
+    recoveryContainerLatency.add(duration);
+    aggRecoveryContainerLatency.incr(duration);
   }
 }
