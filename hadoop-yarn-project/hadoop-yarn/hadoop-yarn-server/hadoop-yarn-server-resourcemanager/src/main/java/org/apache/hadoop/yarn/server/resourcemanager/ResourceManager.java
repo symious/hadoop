@@ -796,6 +796,7 @@ public class ResourceManager extends CompositeService
       nodesListManagerDispatcher = createNodesListManagerEventDispatcher();
       addIfService(nodesListManagerDispatcher);
       rmDispatcher.register(NodesListManagerEventType.class, nodesListManagerDispatcher);
+      rmContext.setNodesListManagerEventDispatcher(nodesListManagerDispatcher);
 
       // Initialize the scheduler
       scheduler = createScheduler();
@@ -806,6 +807,7 @@ public class ResourceManager extends CompositeService
       schedulerDispatcher = createSchedulerEventDispatcher();
       addIfService(schedulerDispatcher);
       rmDispatcher.register(SchedulerEventType.class, schedulerDispatcher);
+      rmContext.setSchedulerDispatcher(schedulerDispatcher);
 
       // Register event handler for RmAppEvents
       rmDispatcher.register(RMAppEventType.class,

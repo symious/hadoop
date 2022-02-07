@@ -23,8 +23,10 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceLimits;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -129,6 +131,9 @@ public class RMActiveServiceContext {
   private VolumeManager volumeManager;
 
   private AtomicLong tokenSequenceNo = new AtomicLong(1);
+
+  private EventHandler<SchedulerEvent> schedulerDispatcher;
+  private EventHandler<NodesListManagerEvent> nodesListManagerDispatcher;
 
   public RMActiveServiceContext() {
     queuePlacementManager = new PlacementManager();
@@ -618,5 +623,21 @@ public class RMActiveServiceContext {
    */
   public void incrTokenSequenceNo() {
     this.tokenSequenceNo.incrementAndGet();
+  }
+
+  public void setSchedulerDispatcher(EventHandler<SchedulerEvent> schedulerDispatcher) {
+    this.schedulerDispatcher = schedulerDispatcher;
+  }
+
+  public void setNodesListManagerEventDispatcher(EventHandler<NodesListManagerEvent> nodesListManagerDispatcher) {
+    this.nodesListManagerDispatcher = nodesListManagerDispatcher;
+  }
+
+  public EventHandler<NodesListManagerEvent> getNodesListManagerDispatcher() {
+    return nodesListManagerDispatcher;
+  }
+
+  public EventHandler<SchedulerEvent> getSchedulerDispatcher() {
+    return schedulerDispatcher;
   }
 }

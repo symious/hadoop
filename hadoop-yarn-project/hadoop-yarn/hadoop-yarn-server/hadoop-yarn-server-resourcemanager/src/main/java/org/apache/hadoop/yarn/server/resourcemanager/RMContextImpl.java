@@ -22,6 +22,8 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.concurrent.ConcurrentMap;
 
+import org.apache.hadoop.yarn.event.EventHandler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -681,5 +683,26 @@ public class RMContextImpl implements RMContext {
   @Override
   public void incrTokenSequenceNo() {
     this.activeServiceContext.incrTokenSequenceNo();
+  }
+
+  @Override
+  public void setSchedulerDispatcher(EventHandler<SchedulerEvent> schedulerDispatcher) {
+    this.activeServiceContext.setSchedulerDispatcher(schedulerDispatcher);
+  }
+
+  @Override
+  public void setNodesListManagerEventDispatcher(
+      EventHandler<NodesListManagerEvent> nodesListManagerDispatcher) {
+    this.activeServiceContext.setNodesListManagerEventDispatcher(nodesListManagerDispatcher);
+  }
+
+  @Override
+  public EventHandler<NodesListManagerEvent> getNodesListManagerDispatcher() {
+    return this.activeServiceContext.getNodesListManagerDispatcher();
+  }
+
+  @Override
+  public EventHandler<SchedulerEvent> getSchedulerDispatcher() {
+    return this.activeServiceContext.getSchedulerDispatcher();
   }
 }

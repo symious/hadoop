@@ -62,6 +62,7 @@ public class EventDispatcher<T extends Event> extends
   private volatile int lastEventDetailsQueueSizeLogged = 0;
   private long lastTime = Time.monotonicNow();
 
+  private long eventQueueSize = 0;
   private static final Logger LOG =
       LoggerFactory.getLogger(EventDispatcher.class);
   private static final Marker FATAL =
@@ -153,6 +154,7 @@ public class EventDispatcher<T extends Event> extends
       if (qSize !=0 && qSize %1000 == 0) {
         LOG.info("Size of " + getName() + " event-queue is " + qSize);
       }
+      eventQueueSize = qSize;
       int remCapacity = eventQueue.remainingCapacity();
       if (remCapacity < 1000) {
         LOG.info("Very low remaining capacity on " + getName() + "" +
@@ -207,4 +209,7 @@ public class EventDispatcher<T extends Event> extends
     this.metrics = metrics;
   }
 
+  public long getEventQueueSize(){
+    return this.eventQueue.size();
+  }
 }

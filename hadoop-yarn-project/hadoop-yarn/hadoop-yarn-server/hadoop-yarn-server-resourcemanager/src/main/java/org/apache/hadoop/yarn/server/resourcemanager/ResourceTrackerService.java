@@ -33,6 +33,9 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.hadoop.yarn.event.EventDispatcher;
+import org.apache.hadoop.yarn.event.EventHandler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -655,6 +658,12 @@ public class ResourceTrackerService extends AbstractService implements
       AsyncDispatcher asyncDispatcher = (AsyncDispatcher) dispatcher;
       metrics.setNumRmEvents(asyncDispatcher.getLastEventQueueSizeLogged());
     }
+    long schedulerQueueSize =
+        ((EventDispatcher) rmContext.getSchedulerDispatcher()).getEventQueueSize();
+    long nodesListQueueSize =
+        ((EventDispatcher) rmContext.getNodesListManagerDispatcher()).getEventQueueSize();
+    metrics.setNumRmSchedulerEvents(schedulerQueueSize);
+    metrics.setNumRmNodesListEvents(nodesListQueueSize);
 
     /**
      * Here is the node heartbeat sequence...

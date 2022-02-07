@@ -71,6 +71,8 @@ public class ClusterMetrics {
   @Metric("#Total number of failures for refresh queue") MutableGaugeLong
       refreshQueueFailures;
   @Metric("# of RM Events") MutableGaugeLong numRmEvents;
+  @Metric("# of RM Scheduler Events") MutableGaugeLong numRmSchedulerEvents;
+  @Metric("# of RM Nodes List Events") MutableGaugeLong numRmNodesListEvents;
   @Metric("GPU Capability") MutableGaugeLong capabilityGPUs;
   @Metric("RM Event Processor CPU Usage 60 second Avg") MutableGaugeLong
     rmEventProcCPUAvg;
@@ -386,5 +388,23 @@ public class ClusterMetrics {
 
   public void setNumRmEvents(long num) {
     numRmEvents.set(num);
+  }
+
+  // Num of RM Scheduler Events
+  public long getNumRmSchedulerEvents() {
+    return numRmSchedulerEvents.value();
+  }
+
+  public void setNumRmSchedulerEvents(long num) {
+    numRmSchedulerEvents.set(num);
+  }
+
+  // Num of RM Nodes List Events
+  public long getNumRmNodesListEvents() {
+    return numRmNodesListEvents.value();
+  }
+
+  public void setNumRmNodesListEvents(long num) {
+    numRmNodesListEvents.set(num);
   }
 }
