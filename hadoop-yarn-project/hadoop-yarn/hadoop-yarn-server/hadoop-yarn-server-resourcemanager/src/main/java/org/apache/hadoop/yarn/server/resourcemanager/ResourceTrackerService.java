@@ -34,8 +34,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableMap;
 import org.apache.hadoop.yarn.event.EventDispatcher;
-import org.apache.hadoop.yarn.event.EventHandler;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -124,6 +122,8 @@ public class ResourceTrackerService extends AbstractService implements
   private float heartBeatIntervalSpeedupFactor;
   private float heartBeatIntervalSlowdownFactor;
 
+  private long rmRecoveryWindowHeartBeatInterval;
+
   private boolean isCoLocateEnabled;
 
   private Server server;
@@ -193,6 +193,9 @@ public class ResourceTrackerService extends AbstractService implements
           YarnConfiguration.isDelegatedCentralizedNodeLabelConfiguration(conf);
     }
     updateHeartBeatConfiguration(conf);
+    this.rmRecoveryWindowHeartBeatInterval =
+        conf.getLong(YarnConfiguration.RM_NM_RECOVERY_HEARTBEAT_INTERVAL_MS,
+            YarnConfiguration.DEFAULT_RM_NM_RECOVERY_HEARTBEAT_INTERVAL_MS);
     updateCoLocateConfiguration(conf);
     loadDynamicResourceConfiguration(conf);
     decommissioningWatcher.init(conf);
@@ -752,6 +755,10 @@ public class ResourceTrackerService extends AbstractService implements
           nextHeartBeatInterval, heartBeatIntervalMin,
           heartBeatIntervalMax, heartBeatIntervalSpeedupFactor,
           heartBeatIntervalSlowdownFactor);
+    }
+
+    if (!rmContext.isSchedulerReady() && newInterval < rmRecoveryWindowHeartBeatInterval) {
+      newInterval = rmRecoveryWindowHeartBeatInterval;
     }
 
     if (LOG.isDebugEnabled()) {

@@ -759,6 +759,10 @@ public class YarnConfiguration extends Configuration {
   public static final float
       DEFAULT_RM_NM_HEARTBEAT_INTERVAL_SLOWDOWN_FACTOR = 1.0f;
 
+  public static final String RM_NM_RECOVERY_HEARTBEAT_INTERVAL_MS =
+      RM_PREFIX + "nodemanagers.recovery.heartbeat-interval";
+  public static final long DEFAULT_RM_NM_RECOVERY_HEARTBEAT_INTERVAL_MS = 10000;
+
   public static final int DEFAULT_RM_EVENT_BASE_NUMBER = 5000;
 
   /** Number of worker threads that write the history data. */
