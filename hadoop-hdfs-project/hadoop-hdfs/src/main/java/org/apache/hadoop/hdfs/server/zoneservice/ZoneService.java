@@ -26,11 +26,13 @@ import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.StartupProgress;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.StartupProgressMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.tracing.TraceUtils;
 import org.apache.hadoop.tracing.TracerConfigurationManager;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.htrace.core.Tracer;
 import org.slf4j.Logger;
@@ -48,6 +50,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_METRICS_PERCENTILES_INTER
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_HTTP_BIND_HOST_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_HTTP_ADDRESS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_HTTP_ADDRESS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT;
 import static org.apache.hadoop.util.ExitUtil.terminate;
 
 public class ZoneService extends ReconfigurableBase  {
@@ -63,6 +67,9 @@ public class ZoneService extends ReconfigurableBase  {
   // httpServer
   protected ZoneServiceHttpServer httpServer;
 
+  // store driver
+  protected StoreDriver driver;
+
   private static final String ZONESERVICE_HTRACE_PREFIX = "zoneservice.htrace.";
 
   private static final StartupProgress startupProgress = new StartupProgress();
@@ -76,6 +83,7 @@ public class ZoneService extends ReconfigurableBase  {
         build();
     this.tracerConfigurationManager =
         new TracerConfigurationManager(ZONESERVICE_HTRACE_PREFIX, conf);
+
     try {
       initialize(getConf());
     } catch (IOException | HadoopIllegalArgumentException e) {
@@ -115,6 +123,14 @@ public class ZoneService extends ReconfigurableBase  {
     StartupProgressMetrics.register(startupProgress);
 
     startHttpServer(conf);
+
+    Class<? extends StoreDriver> driverClass = conf.getClass(
+        DFS_ZONESERVICE_STORE_DRIVER_CLASS,
+        DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT,
+        StoreDriver.class);
+    driver = ReflectionUtils.newInstance(driverClass, conf);
+    driver.init(conf, httpServer.getHttpAddress().getHostName() + ":"
+        + httpServer.getHttpAddress().getPort());
   }
 
   /**
