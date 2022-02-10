@@ -92,6 +92,8 @@ public class ShadowFileRpcPasswordMapping extends Configured
     private MutableGaugeLong refreshFailuresTotal;
     @Metric("Process line failure since startup")
     private MutableGaugeLong processLineFailuresTotal;
+    @Metric("Count of users")
+    private MutableGaugeLong usersCount;
 
     static ShadowFileMetrics create() {
       return DefaultMetricsSystem.instance().register(new ShadowFileMetrics());
@@ -223,6 +225,7 @@ public class ShadowFileRpcPasswordMapping extends Configured
       isStartup = false;
     }
     metrics.refreshSuccess.add(Time.now() - start);
+    metrics.usersCount.set(updateCache.size());
   }
 
   private MD5Hash checksum() {
