@@ -383,6 +383,28 @@ public class TimelineServiceV2Publisher extends AbstractSystemMetricsPublisher {
             entity, appAttempt.getAppAttemptId().getApplicationId()));
   }
 
+  @Override
+  public void amContainerAllocated(RMAppAttempt appAttempt) {
+    ApplicationAttemptId attemptId = appAttempt.getAppAttemptId();
+    TimelineEntity entity = createAppAttemptEntity(attemptId);
+    Map<String, Object> entityInfo = new HashMap<String, Object>();
+    if (appAttempt.getMasterContainer() != null) {
+      entityInfo.put(AppAttemptMetricsConstants.MASTER_CONTAINER_INFO,
+          appAttempt.getMasterContainer().getId().toString());
+      entityInfo.put(AppAttemptMetricsConstants.MASTER_NODE_ADDRESS,
+          appAttempt.getMasterContainer().getNodeHttpAddress());
+      entityInfo.put(AppAttemptMetricsConstants.MASTER_NODE_ID,
+          appAttempt.getMasterContainer().getNodeId().toString());
+    }
+    entity.setInfo(entityInfo);
+    entity.setIdPrefix(
+        TimelineServiceHelper.invertLong(attemptId.getAttemptId()));
+
+    getDispatcher().getEventHandler().handle(
+        new TimelineV2PublishEvent(SystemMetricsEventType.PUBLISH_ENTITY,
+            entity, appAttempt.getAppAttemptId().getApplicationId()));
+  }
+
   private static ApplicationAttemptEntity createAppAttemptEntity(
       ApplicationAttemptId appAttemptId) {
     ApplicationAttemptEntity entity = new ApplicationAttemptEntity();

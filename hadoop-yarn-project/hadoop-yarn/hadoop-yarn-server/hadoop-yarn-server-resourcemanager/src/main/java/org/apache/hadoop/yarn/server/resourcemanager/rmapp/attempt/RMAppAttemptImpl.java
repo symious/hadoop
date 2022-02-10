@@ -1215,6 +1215,8 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
         return RMAppAttemptState.SCHEDULED;
       }
       appAttempt.setMasterContainer(amContainer);
+      appAttempt.rmContext.getSystemMetricsPublisher()
+          .amContainerAllocated(appAttempt);
       rmMasterContainer.setAMContainer(true);
       // The node set in NMTokenSecrentManager is used for marking whether the
       // NMToken has been issued for this node to the AM.

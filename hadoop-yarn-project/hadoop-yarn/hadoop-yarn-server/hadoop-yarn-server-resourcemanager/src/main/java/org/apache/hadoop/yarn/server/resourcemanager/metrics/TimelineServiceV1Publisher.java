@@ -287,6 +287,10 @@ public class TimelineServiceV1Publisher extends AbstractSystemMetricsPublisher {
             entity, appAttempt.getAppAttemptId().getApplicationId()));
   }
 
+  @Override
+  public void amContainerAllocated(RMAppAttempt appAttempt) {
+  }
+
   @SuppressWarnings("unchecked")
   @Override
   public void containerCreated(RMContainer container, long createdTime) {

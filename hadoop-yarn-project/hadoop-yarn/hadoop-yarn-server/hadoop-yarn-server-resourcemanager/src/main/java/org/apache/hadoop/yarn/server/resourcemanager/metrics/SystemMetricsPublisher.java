@@ -48,6 +48,8 @@ public interface SystemMetricsPublisher {
   void appAttemptFinished(RMAppAttempt appAttempt,
       RMAppAttemptState appAttemtpState, RMApp app, long finishedTime);
 
+  void amContainerAllocated(RMAppAttempt appAttempt);
+
   void containerCreated(RMContainer container, long createdTime);
 
   void containerFinished(RMContainer container, long finishedTime);
