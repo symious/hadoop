@@ -110,6 +110,9 @@ public final class LogToolUtils {
       if (startIndex > 0) {
         skipToStartIndex(startIndex, fis);
       }
+      if (outputSize + startIndex < outputSize) {
+        outputSize = outputSize - startIndex;
+      }
       if (startIndex + outputSize >= fileLength) {
         totalBytesToRead = fileLength - startIndex;
       } else {

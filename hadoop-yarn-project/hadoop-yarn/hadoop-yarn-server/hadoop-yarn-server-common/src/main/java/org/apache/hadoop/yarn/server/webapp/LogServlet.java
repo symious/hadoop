@@ -456,72 +456,60 @@ public class LogServlet extends Configured {
               filename, format, startIndex, length, false);
     }
     String appOwner = appInfo.getUser();
-    if (Apps.isApplicationFinalState(appInfo.getAppState())) {
-      // directly find logs from HDFS.
-      return LogWebServiceUtils
-          .sendStreamOutputResponse(factory, appId, appOwner, null,
-              containerIdStr, filename, format, startIndex, length, false);
+    String nodeHttpAddress = null;
+    if (nmId != null && !nmId.isEmpty()) {
+      try {
+        nodeHttpAddress = getNMWebAddressFromRM(nmId);
+      } catch (Exception ex) {
+        LOG.debug("Exception happened during obtaining NM web address " +
+            "from RM.", ex);
+      }
+    }
+    if (nodeHttpAddress == null || nodeHttpAddress.isEmpty()) {
+      try {
+        nodeHttpAddress = appInfoProvider.getNodeHttpAddress(
+            req, appId.toString(),
+            containerId.getApplicationAttemptId().toString(),
+            containerId.toString(), clusterId);
+      } catch (Exception ex) {
+        LOG.warn("Could not obtain node HTTP address from provider.", ex);
+        // output the aggregated logs
+        return LogWebServiceUtils
+            .sendStreamOutputResponse(factory, appId, appOwner, null,
+                containerIdStr, filename, format, startIndex, length, true);
+      }
+      // make sure nodeHttpAddress is not null and not empty. Otherwise,
+      // we would only get aggregated logs instead of re-directing the
+      // request.
+      // If this is the redirect request from NM, we should not re-direct the
+      // request back. Simply output the aggregated logs.
+      if (nodeHttpAddress == null || nodeHttpAddress.isEmpty()
+          || redirectedFromNode) {
+        // output the aggregated logs
+        return LogWebServiceUtils
+            .sendStreamOutputResponse(factory, appId, appOwner, null,
+                containerIdStr, filename, format, startIndex, length, !redirectedFromNode);
+      }
+    }
+    String uri = "/" + containerId.toString() + "/logs/" + filename;
+    String resURI = JOINER.join(
+        LogWebServiceUtils.getAbsoluteNMWebAddress(getConf(),
+            nodeHttpAddress),
+        NM_DOWNLOAD_URI_STR, uri);
+    String query = req.getQueryString();
+    if (query != null && !query.isEmpty()) {
+      resURI += "?" + query;
     }
 
-    if (LogWebServiceUtils.isRunningState(appInfo.getAppState())) {
-      String nodeHttpAddress = null;
-      if (nmId != null && !nmId.isEmpty()) {
-        try {
-          nodeHttpAddress = getNMWebAddressFromRM(nmId);
-        } catch (Exception ex) {
-          LOG.debug("Exception happened during obtaining NM web address " +
-              "from RM.", ex);
-        }
-      }
-      if (nodeHttpAddress == null || nodeHttpAddress.isEmpty()) {
-        try {
-          nodeHttpAddress = appInfoProvider.getNodeHttpAddress(
-              req, appId.toString(),
-              containerId.getApplicationAttemptId().toString(),
-              containerId.toString(), clusterId);
-        } catch (Exception ex) {
-          LOG.warn("Could not obtain node HTTP address from provider.", ex);
-          // output the aggregated logs
-          return LogWebServiceUtils
-              .sendStreamOutputResponse(factory, appId, appOwner, null,
-                  containerIdStr, filename, format, startIndex, length, true);
-        }
-        // make sure nodeHttpAddress is not null and not empty. Otherwise,
-        // we would only get aggregated logs instead of re-directing the
-        // request.
-        // If this is the redirect request from NM, we should not re-direct the
-        // request back. Simply output the aggregated logs.
-        if (nodeHttpAddress == null || nodeHttpAddress.isEmpty()
-            || redirectedFromNode) {
-          // output the aggregated logs
-          return LogWebServiceUtils
-              .sendStreamOutputResponse(factory, appId, appOwner, null,
-                  containerIdStr, filename, format, startIndex, length, true);
-        }
-      }
-      String uri = "/" + containerId.toString() + "/logs/" + filename;
-      String resURI = JOINER.join(
-          LogWebServiceUtils.getAbsoluteNMWebAddress(getConf(),
-              nodeHttpAddress),
-          NM_DOWNLOAD_URI_STR, uri);
-      String query = req.getQueryString();
-      if (query != null && !query.isEmpty()) {
-        resURI += "?" + query;
-      }
 
-
-      if (manualRedirection) {
-        return createLocationResponse(resURI, createEmptyStream());
-      }
-
-      Response.ResponseBuilder response = Response.status(
-          HttpServletResponse.SC_TEMPORARY_REDIRECT);
-      response.header("Location", resURI);
-      return response.build();
-    } else {
-      return LogWebServiceUtils.createBadResponse(Status.NOT_FOUND,
-          "The application is not at Running or Finished State.");
+    if (manualRedirection) {
+      return createLocationResponse(resURI, createEmptyStream());
     }
+
+    Response.ResponseBuilder response = Response.status(
+        HttpServletResponse.SC_TEMPORARY_REDIRECT);
+    response.header("Location", resURI);
+    return response.build();
   }
 
   public static WrappedLogMetaRequest.Builder createRequestFromContainerId(

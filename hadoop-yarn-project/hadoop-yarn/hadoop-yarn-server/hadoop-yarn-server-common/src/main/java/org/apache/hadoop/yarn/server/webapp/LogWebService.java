@@ -36,6 +36,7 @@ import org.apache.hadoop.http.JettyUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.client.AuthenticatedURL;
 import org.apache.hadoop.security.authentication.client.AuthenticationException;
+import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.api.records.timelineservice.TimelineEntity;
 import org.apache.hadoop.yarn.api.records.timelineservice.TimelineEntityType;
@@ -61,6 +62,7 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response;
+import javax.ws.rs.core.Response.Status;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -147,8 +149,11 @@ public class LogWebService implements AppInfoProvider {
       @DefaultValue("false") boolean manualRedirection) {
     if (clusterId == null || clusterId.isEmpty()) {
       clusterId = getAppToCluster(appId);
+      if (clusterId == null) {
+        return Response.status(Status.NOT_FOUND)
+            .entity("Cluster id is not found.").build();
+      }
     }
-
     Set<TimelineEntity> appAttemptEntities = getAppAttempts(appId, clusterId);
     TimelineEntity latestAttemptEntity = getLatestId(appAttemptEntities);
     if (latestAttemptEntity == null) {
@@ -158,7 +163,10 @@ public class LogWebService implements AppInfoProvider {
     String amContainerId = (String) latestAttemptEntity.getInfo().
         get(AppAttemptMetricsConstants.MASTER_CONTAINER_INFO);
     LOG.debug("amContainerId: " + amContainerId);
-
+    if (amContainerId == null) {
+      return Response.status(Status.NOT_FOUND)
+          .entity("Am container id is not found.").build();
+    }
     return getContainerLogsInfo(req, res, amContainerId, nmId, redirectedFromNode, clusterId,
         manualRedirection);
   }
@@ -182,8 +190,11 @@ public class LogWebService implements AppInfoProvider {
       @DefaultValue("false") boolean manualRedirection) {
     if (clusterId == null || clusterId.isEmpty()) {
       clusterId = getAppToCluster(appId);
+      if (clusterId == null) {
+        return Response.status(Status.NOT_FOUND)
+            .entity("Cluster id is not found").build();
+      }
     }
-
     Set<TimelineEntity> appAttemptEntities = getAppAttempts(appId, clusterId);
     TimelineEntity latestAttemptEntity = getLatestId(appAttemptEntities);
     if (latestAttemptEntity == null) {
@@ -193,7 +204,10 @@ public class LogWebService implements AppInfoProvider {
     String amContainerId = (String) latestAttemptEntity.getInfo().
         get(AppAttemptMetricsConstants.MASTER_CONTAINER_INFO);
     LOG.debug("amContainerId: " + amContainerId);
-
+    if (amContainerId == null) {
+      return Response.status(Status.NOT_FOUND)
+          .entity("Am container id is not found.").build();
+    }
     return getLogs(req, res, amContainerId, filename, format, start, size,
         nmId, redirectedFromNode, clusterId, manualRedirection);
   }
@@ -400,6 +414,11 @@ public class LogWebService implements AppInfoProvider {
       @QueryParam(YarnWebServiceParams.MANUAL_REDIRECTION)
       @DefaultValue("false") boolean manualRedirection) {
     initForReadableEndpoints(res);
+    if (clusterId == null || clusterId.isEmpty()) {
+      clusterId = getAppToCluster(
+          ContainerId.fromString(containerIdStr).getApplicationAttemptId()
+              .getApplicationId().toString());
+    }
     return logServlet.getLogFile(req, containerIdStr, filename, format, start,
         size, nmId, redirectedFromNode, clusterId, manualRedirection);
   }
