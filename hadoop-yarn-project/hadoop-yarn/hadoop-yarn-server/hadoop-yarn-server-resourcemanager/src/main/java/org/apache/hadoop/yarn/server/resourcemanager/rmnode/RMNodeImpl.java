@@ -817,8 +817,9 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
             + " clusterUtil: " + clusterUtil);
       }
     }
-    return calculateHeartBeatIntervalByQueueSize(
-        metrics.getNumRmEvents(), newInterval, maxInterval, slowdownFactor);
+    long eventSize = metrics.getNumRmEvents() + metrics.getNumRmSchedulerEvents();
+    return calculateHeartBeatIntervalByQueueSize(eventSize, newInterval, maxInterval,
+        slowdownFactor);
   }
 
   public void handle(RMNodeEvent event) {
