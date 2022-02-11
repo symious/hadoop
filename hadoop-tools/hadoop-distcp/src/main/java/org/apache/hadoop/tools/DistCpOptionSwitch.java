@@ -222,8 +222,11 @@ public enum DistCpOptionSwitch {
    * Use fast copy.
    */
   FAST_COPY_ENABLE(DistCpConstants.CONF_LABEL_FAST_COPY_ENABLE,
-      new Option("fastCopyEnable", false, "Use fast copy if this argument set."));
+      new Option("fastCopyEnable", false, "Use fast copy if this argument set.")),
 
+  UPDATE_ROOT_DIRECTORY_ATTRIBUTE(DistCpConstants.CONF_LABEL_UPDATE_ROOT_DIRECTORY_ATTRIBUTE,
+      new Option("updateRootDirectoryAttribute", false,
+              "Update root directory attributes (eg permissions, ownership ...)"));
 
   public static final String PRESERVE_STATUS_DEFAULT = "-prbugpct";
   private final String confLabel;

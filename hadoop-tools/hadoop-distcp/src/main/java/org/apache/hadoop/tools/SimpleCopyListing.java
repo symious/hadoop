@@ -690,10 +690,14 @@ public class SimpleCopyListing extends CopyListing {
       DistCpOptions options) throws IOException {
     boolean syncOrOverwrite = options.shouldSyncFolder() ||
         options.shouldOverwrite();
+
+    boolean skipRoot = syncOrOverwrite &&
+            !options.shouldUpdateRootDirectoryAttrs();
+
     for (CopyListingFileStatus fs : fileStatus) {
       if (fs.getPath().equals(sourcePathRoot) &&
-          fs.isDirectory() && syncOrOverwrite) {
-        // Skip the root-paths when syncOrOverwrite
+          fs.isDirectory() && skipRoot) {
+        // Skip the root-paths when syncOrOverwrite & update root is not set.
         if (LOG.isDebugEnabled()) {
           LOG.debug("Skip " + fs.getPath());
         }

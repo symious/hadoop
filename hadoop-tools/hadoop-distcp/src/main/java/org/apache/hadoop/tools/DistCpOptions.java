@@ -117,6 +117,8 @@ public class DistCpOptions {
    */
   private boolean fastCopyEnable = false;
 
+  private boolean updateRootDirectoryAttribute = false;
+
   public static enum FileAttribute{
     REPLICATION, BLOCKSIZE, USER, GROUP, PERMISSION, CHECKSUMTYPE, ACL, XATTR, TIMES;
 
@@ -190,6 +192,7 @@ public class DistCpOptions {
       this.copyBufferSize = that.copyBufferSize;
       this.verboseLog = that.verboseLog;
       this.fastCopyEnable = that.fastCopyEnable;
+      this.updateRootDirectoryAttribute = that.updateRootDirectoryAttribute;
     }
   }
 
@@ -219,6 +222,15 @@ public class DistCpOptions {
    */
   public boolean shouldSyncFolder() {
     return syncFolder;
+  }
+
+  /**
+   * Should the attributes of root directory be updated according to the source?
+   *
+   * @return true if the attributes should be updated. false otherwise.
+   */
+  public boolean shouldUpdateRootDirectoryAttrs() {
+    return updateRootDirectoryAttribute;
   }
 
   /**
@@ -684,6 +696,17 @@ public class DistCpOptions {
     return fastCopyEnable;
   }
 
+  public void setUpdateRootDirectoryAttribute(
+          boolean newUpdateRootDirectoryAttribute) {
+    validate(DistCpOptionSwitch.UPDATE_ROOT_DIRECTORY_ATTRIBUTE,
+            newUpdateRootDirectoryAttribute);
+    this.updateRootDirectoryAttribute = newUpdateRootDirectoryAttribute;
+  }
+
+  public boolean getUpdateRootDirectoryAttribute() {
+    return updateRootDirectoryAttribute;
+  }
+
   public void validate(DistCpOptionSwitch option, boolean value) {
 
     boolean syncFolder = (option == DistCpOptionSwitch.SYNC_FOLDERS ?
@@ -703,6 +726,8 @@ public class DistCpOptions {
         value : this.verboseLog);
     boolean fastCopyEnable = (option == DistCpOptionSwitch.FAST_COPY_ENABLE) ?
         value : this.fastCopyEnable;
+    boolean updateRootDirectoryAttribute = (option == DistCpOptionSwitch.UPDATE_ROOT_DIRECTORY_ATTRIBUTE) ?
+            value : this.updateRootDirectoryAttribute;
 
     if (syncFolder && atomicCommit) {
       throw new IllegalArgumentException("Atomic commit can't be used with " +
@@ -806,6 +831,8 @@ public class DistCpOptions {
         String.valueOf(verboseLog));
     DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.FAST_COPY_ENABLE,
         String.valueOf(fastCopyEnable));
+    DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.UPDATE_ROOT_DIRECTORY_ATTRIBUTE,
+            String.valueOf(updateRootDirectoryAttribute));
   }
 
   /**
@@ -846,6 +873,7 @@ public class DistCpOptions {
         ", copyBufferSize=" + copyBufferSize +
         ", verboseLog=" + verboseLog +
         ", fastCopyEnable=" + fastCopyEnable +
+        ", updateRootDirectoryAttribute=" + updateRootDirectoryAttribute +
         '}';
   }
 

@@ -567,6 +567,16 @@ public class TestDistCpOptions {
   }
 
   @Test
+  public void testUpdateRootDirectoryAttribute() {
+    DistCpOptions options = new DistCpOptions(
+            Collections.singletonList(
+                    new Path("hdfs://localhost:8020/source")),
+            new Path("hdfs://localhost:8020/target/"));
+    options.setUpdateRootDirectoryAttribute(true);
+    Assert.assertTrue(options.getUpdateRootDirectoryAttribute());
+  }
+
+  @Test
   public void testAppendToConf() {
     final int expectedBlocksPerChunk = 999;
     final String expectedValForEmptyConfigKey = "VALUE_OF_EMPTY_CONFIG_KEY";

@@ -196,6 +196,10 @@ public class OptionsParser {
       option.setFastCopyEnable(true);
     }
 
+    if (command.hasOption(DistCpOptionSwitch.UPDATE_ROOT_DIRECTORY_ATTRIBUTE.getSwitch())) {
+      option.setUpdateRootDirectoryAttribute(true);
+    }
+
     return option;
   }
 
