@@ -98,6 +98,13 @@ public class CombinedSystemMetricsPublisher implements SystemMetricsPublisher {
   }
 
   @Override
+  public void amContainerAllocated(RMAppAttempt appAttempt) {
+    for (SystemMetricsPublisher publisher : this.publishers) {
+      publisher.amContainerAllocated(appAttempt);
+    }
+  }
+
+  @Override
   public void containerCreated(RMContainer container, long createdTime) {
     for (SystemMetricsPublisher publisher : this.publishers) {
       publisher.containerCreated(container, createdTime);

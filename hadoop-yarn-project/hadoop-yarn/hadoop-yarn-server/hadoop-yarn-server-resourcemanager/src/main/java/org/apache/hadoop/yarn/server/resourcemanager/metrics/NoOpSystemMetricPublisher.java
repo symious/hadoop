@@ -52,6 +52,10 @@ public class NoOpSystemMetricPublisher implements SystemMetricsPublisher{
   }
 
   @Override
+  public void amContainerAllocated(RMAppAttempt appAttempt) {
+  }
+
+  @Override
   public void containerCreated(RMContainer container, long createdTime) {
   }
 
