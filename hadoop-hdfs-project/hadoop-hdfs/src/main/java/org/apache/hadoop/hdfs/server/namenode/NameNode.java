@@ -118,6 +118,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERV
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_ENABLED_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_AUTO_FAILOVER_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_AUTO_FAILOVER_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_FENCE_METHODS_KEY;
@@ -323,7 +324,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION,
           DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY,
           DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES,
-          DFS_LEASE_HARDLIMIT_KEY));
+          DFS_LEASE_HARDLIMIT_KEY,
+          DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2187,6 +2189,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfDecommissionMaxConcurrentTrackedNodes(property, newVal);
     } else if (property.equals(DFS_LEASE_HARDLIMIT_KEY)) {
       return reconfLeaseHardLimit(property, newVal);
+    } else if (property.equals(DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY)) {
+      return reconfReplicationRuleEnabled(newVal);
     } else if (property.equals(ipcClientRPCBackoffEnable)) {
       return reconfigureIPCBackoffEnabled(newVal);
     } else if (property.equals(DFS_HOSTS_MAINTENANCE_ENABLED_KEY)) {
@@ -2211,6 +2215,18 @@ public class NameNode extends ReconfigurableBase implements
       LOG.info("RECONFIGURE* changed leaseHardLimit to " +
           namesystem.getLeaseManager().getHardLimit());
     }
+  }
+
+  private String reconfReplicationRuleEnabled(String newVal) {
+    boolean enable;
+    if (newVal == null) {
+      enable = namesystem.getBlockManager().getReplicationRuleEnabled();
+    } else {
+      enable = Boolean.parseBoolean(newVal);
+      namesystem.getBlockManager().setReplicationRuleEnabled(enable);
+      LOG.info("RECONFIGURE* changed replicationRuleEnabled to " + enable);
+    }
+    return Boolean.toString(enable);
   }
 
   private String reconfDecommissionBlocksPerInterval(String property,

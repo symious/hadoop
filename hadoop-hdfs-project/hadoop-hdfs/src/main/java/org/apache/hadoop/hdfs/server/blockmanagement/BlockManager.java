@@ -368,6 +368,7 @@ public class BlockManager implements BlockStatsMXBean {
   private final short minReplicationToBeInMaintenance;
 
   private boolean isDataCenterAwareness;
+  private boolean isReplicationRuleEnabled;
 
   public BlockManager(final Namesystem namesystem, boolean haEnabled,
       final Configuration conf)
@@ -396,6 +397,9 @@ public class BlockManager implements BlockStatsMXBean {
       datanodeManager.getNetworkTopology(),
       datanodeManager.getHost2DatanodeMap());
     isDataCenterAwareness = blockplacement instanceof BlockPlacementPolicyWithDataCenter;
+    isReplicationRuleEnabled = conf.getBoolean(
+        DFSConfigKeys.DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY,
+        DFSConfigKeys.DFS_NAMENODE_REPLICATION_RULE_ENABLE_DEFAULT);
     storagePolicySuite = BlockStoragePolicySuite.createDefaultSuite();
     pendingReplications = new PendingReplicationBlocks(conf.getInt(
       DFSConfigKeys.DFS_NAMENODE_REPLICATION_PENDING_TIMEOUT_SEC_KEY,
@@ -649,6 +653,16 @@ public class BlockManager implements BlockStatsMXBean {
     }
     this.blockplacement = newpolicy;
     isDataCenterAwareness = blockplacement instanceof BlockPlacementPolicyWithDataCenter;
+  }
+
+  /** Check if replication rule enabled  */
+  public boolean getReplicationRuleEnabled() {
+    return isReplicationRuleEnabled;
+  }
+
+  /** Enable/Disable replication rule */
+  public void setReplicationRuleEnabled(boolean enable) {
+    this.isReplicationRuleEnabled = enable;
   }
 
   /** Check if BlockManager is data center awareness */
@@ -1662,7 +1676,7 @@ public class BlockManager implements BlockStatsMXBean {
       }
 
       boolean chosen = false;
-      if (isDataCenterAwareness) {
+      if (isDataCenterAwareness && isReplicationRuleEnabled) {
         ReplicationRule rule = rw.getBlockCollection()
             .getReplicationRule(namesystem.getFSDirectory());
         if (rule != null && rule.getReplica() == rw.getBlock().getReplication()) {
@@ -3294,7 +3308,7 @@ public class BlockManager implements BlockStatsMXBean {
     final List<StorageType> excessTypes = storagePolicy.chooseExcess(
         replication, DatanodeStorageInfo.toStorageTypes(nonExcess));
     List<DatanodeStorageInfo> replicasToDelete = null;
-    if (isDataCenterAwareness) {
+    if (isDataCenterAwareness && isReplicationRuleEnabled) {
       ReplicationRule rule = bc.getReplicationRule(namesystem.getFSDirectory());
       if (rule != null && rule.getReplica() == replication) {
         replicasToDelete = blockplacement.chooseReplicasToDelete(

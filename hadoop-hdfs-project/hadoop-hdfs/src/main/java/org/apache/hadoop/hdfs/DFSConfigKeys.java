@@ -751,6 +751,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final Class<BlockPlacementPolicyDefault> DFS_BLOCK_REPLICATOR_CLASSNAME_DEFAULT = BlockPlacementPolicyDefault.class;
   public static final String  DFS_REPLICATION_MAX_KEY = "dfs.replication.max";
   public static final int     DFS_REPLICATION_MAX_DEFAULT = 512;
+  public static final String  DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY =
+      "dfs.namenode.replication-rule.enable";
+  public static final boolean DFS_NAMENODE_REPLICATION_RULE_ENABLE_DEFAULT = false;
 
   public static final String  DFS_DF_INTERVAL_KEY = "dfs.df.interval";
   public static final int     DFS_DF_INTERVAL_DEFAULT = 60000;
