@@ -96,6 +96,8 @@ public abstract class AbstractCSQueue implements CSQueue {
   final ResourceCalculator resourceCalculator;
   Set<String> accessibleLabels;
   Set<String> accessMultiLabelTimes;
+  int queuePerAppMaxVcores;
+  long queuePerAppMaxMemoryMB;
   Set<String> resourceTypes;
   final RMNodeLabelsManager labelManager;
   String defaultLabelExpression;
@@ -293,6 +295,14 @@ public abstract class AbstractCSQueue implements CSQueue {
     return accessMultiLabelTimes;
   }
 
+  public int getQueuePerAppMaxVcores() {
+    return queuePerAppMaxVcores;
+  }
+
+  public long getQueuePerAppMaxMemoryMB() {
+    return queuePerAppMaxMemoryMB;
+  }
+
   @Override
   public boolean hasAccess(QueueACL acl, UserGroupInformation user) {
     return authorizer.checkPermission(
@@ -366,6 +376,10 @@ public abstract class AbstractCSQueue implements CSQueue {
           configuration.getAccessibleNodeLabels(getQueuePath());
       this.accessMultiLabelTimes =
           configuration.getMultiLabelAccessHoursPerQueue(getQueuePath());
+      this.queuePerAppMaxVcores =
+          configuration.getAppMaxVcoresPerQueue(getQueuePath());
+      this.queuePerAppMaxMemoryMB =
+          configuration.getAppMaxMemoryMBPerQueue(getQueuePath());
       this.defaultLabelExpression =
           configuration.getDefaultNodeLabelExpression(
               getQueuePath());
@@ -471,6 +485,16 @@ public abstract class AbstractCSQueue implements CSQueue {
       }
       defaultApplicationLifetime = defaultApplicationLifetime > 0
           ? defaultApplicationLifetime : maxApplicationLifetime;
+
+      if (queuePerAppMaxVcores <= 0 || queuePerAppMaxMemoryMB <= 0) {
+        String errMsg =
+            "Queue max resources for single app must bigger than 0, invalid " +
+                "config for queue " + getQueuePath() + " queuePerAppMaxVcores: "
+                + queuePerAppMaxVcores + " queuePerAppMaxMemoryMB: " +
+                queuePerAppMaxMemoryMB;
+        throw new IllegalArgumentException(errMsg);
+      }
+
     } finally {
       writeLock.unlock();
     }

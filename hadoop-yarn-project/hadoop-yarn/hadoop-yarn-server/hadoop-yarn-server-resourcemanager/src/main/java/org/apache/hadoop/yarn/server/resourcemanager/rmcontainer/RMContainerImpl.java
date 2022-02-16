@@ -28,6 +28,14 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.ApplicationResourceUsageReport;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceLimits;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.LeafQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
@@ -64,6 +72,10 @@ import org.apache.hadoop.yarn.state.StateMachine;
 import org.apache.hadoop.yarn.state.StateMachineFactory;
 import org.apache.hadoop.yarn.util.resource.Resources;
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
+
+import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.MAX_MEMORY_MB_PER_APPLICATION_SUFFIX;
+import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.MAX_VCORES_PER_APPLICATION_SUFFIX;
+import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.getQueuePrefix;
 
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class RMContainerImpl implements RMContainer {
@@ -588,6 +600,46 @@ public class RMContainerImpl implements RMContainer {
               RMAppAttemptEventType.CONTAINER_ALLOCATED));
 
       publishNonAMContainerEventstoATS(container);
+
+      //Add App total assigned resource check
+      ResourceScheduler scheduler = container.rmContext.getScheduler();
+      if(scheduler instanceof CapacityScheduler) {
+        CapacityScheduler cs = (CapacityScheduler)scheduler;
+        String queueName = container.getQueueName();
+        LeafQueue queue = (LeafQueue) cs.getQueue(queueName);
+        int queuePerAppMaxVcores = queue.getQueuePerAppMaxVcores();
+        long queuePerAppMaxMemoryMB = queue.getQueuePerAppMaxMemoryMB();
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Queue: " + queueName + " ,queuePerAppMaxVcores: " +
+              queuePerAppMaxVcores + " ,queuePerAppMaxMemoryMB: " +
+              queuePerAppMaxMemoryMB);
+        }
+
+        ApplicationResourceUsageReport appResUsageReport =
+            container.rmContext.getScheduler()
+                .getAppResourceUsageReport(container.appAttemptId);
+        int allocatedCpuVcores = appResUsageReport
+            .getUsedResources().getVirtualCores();
+        long allocatedMemoryMB = appResUsageReport
+            .getUsedResources().getMemorySize();
+
+        if (allocatedCpuVcores > queuePerAppMaxVcores ||
+            allocatedMemoryMB > queuePerAppMaxMemoryMB) {
+          ApplicationId appId =
+              container.getApplicationAttemptId().getApplicationId();
+          String message =
+              "application: " + appId + " total assigned resources: [" +
+                  allocatedCpuVcores + " vcores, " + allocatedMemoryMB +
+                  " MB], beyond queue max resources limit: " + "[" +
+                  queuePerAppMaxVcores + " vcores, " +
+                  queuePerAppMaxMemoryMB +
+                  " MB]";
+          LOG.warn(message);
+          container.rmContext.getDispatcher().getEventHandler().handle(
+              new RMAppEvent(appId, RMAppEventType.KILL,
+                  message));
+        }
+      }
 
     }
   }

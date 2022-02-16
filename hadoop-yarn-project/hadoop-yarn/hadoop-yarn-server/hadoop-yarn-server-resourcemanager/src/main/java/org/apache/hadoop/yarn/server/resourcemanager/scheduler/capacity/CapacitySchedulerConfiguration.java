@@ -161,6 +161,15 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   @Private
   public static final String MAXIMUM_ALLOCATION_VCORES =
           "maximum-allocation-vcores";
+
+  @Private
+  public static final String MAX_VCORES_PER_APPLICATION_SUFFIX =
+      "max-vcores-application";
+
+  @Private
+  public static final String MAX_MEMORY_MB_PER_APPLICATION_SUFFIX =
+      "max-memory-mb-application";
+
   /**
    * Ordering policy of queues
    */
@@ -479,6 +488,30 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
       getInt(getQueuePrefix(queue) + MAXIMUM_APPLICATIONS_SUFFIX,
           (int)UNDEFINED);
     return maxApplicationsPerQueue;
+  }
+
+  /**
+   * Get the single app max vcores per queue setting.
+   * @param queue name of the queue
+   * @return setting specified or Integer.MAX_VALUE if not set
+   */
+  public int getAppMaxVcoresPerQueue(String queue) {
+    int appMaxVcoresPerQueue =
+        getInt(getQueuePrefix(queue) + MAX_VCORES_PER_APPLICATION_SUFFIX,
+            Integer.MAX_VALUE);
+    return appMaxVcoresPerQueue;
+  }
+
+  /**
+   * Get the single app max memory MB per queue setting.
+   * @param queue name of the queue
+   * @return setting specified or -1 if not set
+   */
+  public long getAppMaxMemoryMBPerQueue(String queue) {
+    long appMaxMemoryMBPerQueue =
+        getLong(getQueuePrefix(queue) + MAX_MEMORY_MB_PER_APPLICATION_SUFFIX,
+            Long.MAX_VALUE);
+    return appMaxMemoryMBPerQueue;
   }
 
   /**
