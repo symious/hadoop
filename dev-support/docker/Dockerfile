@@ -166,6 +166,7 @@ RUN apt-get -q update \
 # Install pylint at fixed version (2.0.0 removed python2 support)
 # https://github.com/PyCQA/pylint/issues/2294
 ####
+RUN pip install -U pip==20.2.4
 RUN pip2 install \
     configparser==4.0.2 \
     pylint==1.9.2 \
