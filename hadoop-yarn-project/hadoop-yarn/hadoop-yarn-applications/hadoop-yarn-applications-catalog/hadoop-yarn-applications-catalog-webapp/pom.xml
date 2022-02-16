@@ -265,6 +265,9 @@
                         <goals>
                             <goal>yarn</goal>
                         </goals>
+                        <configuration>
+                            <arguments>install --ignore-engines</arguments>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
