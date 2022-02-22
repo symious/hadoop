@@ -2961,4 +2961,13 @@ public class DistributedFileSystem extends FileSystem
       EnumSet<OpenFilesType> openFilesTypes, String path) throws IOException {
     return dfs.listOpenFiles(openFilesTypes, path);
   }
+
+  protected void closeBasicFileSystem() throws IOException {
+    super.close();
+  }
+
+  protected void renameBasicFileSystem(Path src, Path dst,
+      final Options.Rename... options) throws IOException {
+    super.rename(src, dst, options);
+  }
 }
