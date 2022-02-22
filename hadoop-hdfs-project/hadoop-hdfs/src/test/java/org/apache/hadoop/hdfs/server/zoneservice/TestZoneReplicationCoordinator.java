@@ -62,7 +62,8 @@ public class TestZoneReplicationCoordinator {
     // check replications if the cluster has enough datanodes
     ZoneReplicationCoordinator coordinator = new ZoneReplicationCoordinator(conf, fs);
     fs.setReplication(new Path(filePath), (short)3);
-    coordinator.addFile(filePath, 2, 1);
+    ReplicationRule rule = ReplicationRule.parseFromString("/test:3");
+    coordinator.addFile(filePath, rule, 2, 1);
     long timeout = 6000L;
     ZoneReplicationCoordinator.FileState fileState = coordinator.getNextFinishedFile(timeout);
     Assert.assertNotNull(fileState);
@@ -71,7 +72,8 @@ public class TestZoneReplicationCoordinator {
     // keep waiting if the cluster does not have valid
     // datanodes to store new replicas
     fs.setReplication(new Path(filePath), (short)4);
-    coordinator.addFile(filePath, 1, 1);
+    rule = ReplicationRule.parseFromString("/test:4");
+    coordinator.addFile(filePath, rule, 1, 1);
     fileState = coordinator.getNextFinishedFile(timeout);
     Assert.assertNull(fileState);
 

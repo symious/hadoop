@@ -81,12 +81,14 @@ public class ZoneReplicationCoordinator {
    * @param blockReplicaDelta the number of replicas to add
    * @param blockNum number of blocks
    */
-  public void addFile(String filePath, int blockReplicaDelta, int blockNum) {
+  public void addFile(String filePath, ReplicationRule rule,
+      int blockReplicaDelta, int blockNum) {
     if (isWaitingCompletion.get()) {
       throw new UnsupportedOperationException(
           "Cannot add new files while waiting completion!");
     }
     Preconditions.checkNotNull(filePath);
+    Preconditions.checkNotNull(rule);
 
     if (blockNum <= 0 || blockReplicaDelta == 0) {
       return;
@@ -109,7 +111,7 @@ public class ZoneReplicationCoordinator {
       int n = runningReplications.addAndGet(replicaDelta);
       LOG.debug("Added {} replicas, now runningReplications is: {}", replicaDelta, n);
     }
-    this.waitFiles.add(new FileState(filePath, maxCheckTimes, replicaDelta));
+    this.waitFiles.add(new FileState(filePath, rule, maxCheckTimes, replicaDelta));
   }
 
   /**
@@ -292,9 +294,11 @@ public class ZoneReplicationCoordinator {
     // the number of replicas to add for the file
     private final int replicaDelta;
     private HdfsLocatedFileStatus fileStatus;
+    private ReplicationRule rule;
 
-    FileState(String filePath, int checkTimes, int replicaDelta) {
+    FileState(String filePath, ReplicationRule rule, int checkTimes, int replicaDelta) {
       this.filePath = filePath;
+      this.rule = rule;
       this.leftCheckTimes = checkTimes;
       this.replicaDelta = replicaDelta;
     }
@@ -331,6 +335,10 @@ public class ZoneReplicationCoordinator {
       this.fileStatus = fileStatus;
     }
 
+    public ReplicationRule getRule() {
+      return rule;
+    }
+
     @Override
     public String toString() {
       return "FileState{" +
@@ -339,6 +347,7 @@ public class ZoneReplicationCoordinator {
           ", leftCheckTimes=" + leftCheckTimes +
           ", replicaDelta=" + replicaDelta +
           ", fileStatus=" + fileStatus +
+          ", rule=" + rule +
           '}';
     }
   }

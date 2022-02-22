@@ -199,13 +199,13 @@ public class TestZoneMover {
     DFSTestUtil.createFile(fs, path1, FILE_LEN, REPLICATION, 0L);
     List<LocatedBlock> blocks1 = DFSTestUtil.getAllBlocks(fs, path1);
     assertEquals(1, blocks1.size());
-    assertTrue(zoneMover.isBlockSatisfyRule(blocks1.get(0)));
+    assertTrue(zoneMover.isBlockSatisfyRule(blocks1.get(0), rule));
 
     Path path2 = new Path("/test.txt");
     DFSTestUtil.createFile(fs, path2, FILE_LEN, (short) (REPLICATION - 1), 0L);
     List<LocatedBlock> blocks2 = DFSTestUtil.getAllBlocks(fs, path2);
     assertEquals(1, blocks2.size());
-    assertFalse(zoneMover.isBlockSatisfyRule(blocks2.get(0)));
+    assertFalse(zoneMover.isBlockSatisfyRule(blocks2.get(0), rule));
 
   }
 
@@ -263,8 +263,8 @@ public class TestZoneMover {
   private void checkRuleAndItem(NameNodeConnector nnc, Configuration conf,
       ReplicationRule rule, LocatedBlock block, ZoneMover.ZoneMoveItem moveItem) {
     ZoneMover zoneMover = new ZoneMover(nnc, conf, rule, new AtomicInteger(1));
-    assertFalse(zoneMover.isBlockSatisfyRule(block));
-    List<ZoneMover.ZoneMoveItem> items = zoneMover.getZoneMoveItems(block);
+    assertFalse(zoneMover.isBlockSatisfyRule(block, rule));
+    List<ZoneMover.ZoneMoveItem> items = zoneMover.getZoneMoveItems(block, rule);
     assertEquals(1, items.size());
     assertEquals(moveItem, items.get(0));
   }
