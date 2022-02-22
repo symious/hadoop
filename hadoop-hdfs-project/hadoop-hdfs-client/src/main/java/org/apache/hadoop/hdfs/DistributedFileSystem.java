@@ -3342,4 +3342,13 @@ public class DistributedFileSystem extends FileSystem
   public HdfsDataOutputStreamBuilder appendFile(Path path) {
     return new HdfsDataOutputStreamBuilder(this, path).append();
   }
+
+  protected void closeBasicFileSystem() throws IOException {
+    super.close();
+  }
+
+  protected void renameBasicFileSystem(final Path src, final Path dst,
+      final Options.Rename... options) throws IOException {
+    super.rename(src, dst, options);
+  }
 }
