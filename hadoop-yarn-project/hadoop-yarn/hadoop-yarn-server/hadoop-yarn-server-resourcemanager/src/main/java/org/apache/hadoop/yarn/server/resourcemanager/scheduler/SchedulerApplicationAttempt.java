@@ -646,7 +646,7 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
   @SuppressWarnings("unchecked")
   public void containerLaunchedOnNode(ContainerId containerId,
       NodeId nodeId) {
-    writeLock.lock();
+    readLock.lock();
     try {
       // Inform the container
       RMContainer rmContainer = getRMContainer(containerId);
@@ -660,7 +660,7 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
       rmContainer.handle(
           new RMContainerEvent(containerId, RMContainerEventType.LAUNCHED));
     } finally {
-      writeLock.unlock();
+      readLock.unlock();
     }
   }
   
