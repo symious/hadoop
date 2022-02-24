@@ -17,16 +17,29 @@
  */
 package org.apache.hadoop.io.retry;
 
-import static org.junit.Assert.*;
-
-import java.io.IOException;
-import java.util.concurrent.CountDownLatch;
-
+import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.fs.InvalidRequestException;
 import org.apache.hadoop.io.retry.UnreliableImplementation.TypeOfExceptionToFailWith;
 import org.apache.hadoop.io.retry.UnreliableInterface.UnreliableException;
+import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.StandbyException;
+import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.junit.Test;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+
+import java.io.IOException;
+import java.lang.reflect.Proxy;
+import java.util.concurrent.CountDownLatch;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyInt;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 public class TestFailoverProxy {
 
@@ -81,6 +94,22 @@ public class TestFailoverProxy {
       return failovers < 1 ? RetryAction.FAILOVER_AND_RETRY : RetryAction.FAIL;
     }
     
+  }
+
+  public static class FailOverNTimesOnAnyExceptionPolicy implements RetryPolicy {
+
+    private final int maxRetries;
+
+    public FailOverNTimesOnAnyExceptionPolicy(int n) {
+      this.maxRetries = n;
+    }
+
+    @Override
+    public RetryAction shouldRetry(Exception e, int retries, int failovers,
+        boolean isIdempotentOrAtMostOnce) {
+      return failovers < this.maxRetries ? RetryAction.FAILOVER_AND_RETRY : RetryAction.FAIL;
+    }
+
   }
   
   private static FlipFlopProxyProvider<UnreliableInterface>
@@ -319,7 +348,7 @@ public class TestFailoverProxy {
         impl1,
         new UnreliableImplementation("impl2",
             TypeOfExceptionToFailWith.STANDBY_EXCEPTION));
-    
+
     final UnreliableInterface unreliable = (UnreliableInterface)RetryProxy
       .create(UnreliableInterface.class, proxyProvider,
           RetryPolicies.failoverOnNetworkException(
@@ -356,6 +385,42 @@ public class TestFailoverProxy {
     } catch (Exception e) {
       assertTrue("Expected IOE but got " + e.getClass(),
           e instanceof IOException);
+    }
+  }
+
+  @Test
+  public void testFailoverLoggingThreshold() {
+
+    int ITERATIONS = 10;
+
+    RetryPolicy retryPolicy = new FailOverNTimesOnAnyExceptionPolicy(ITERATIONS);
+    FlipFlopProxyProvider<UnreliableInterface> proxyProvider = newFlipFlopProxyProvider();
+
+    for (int threshold = 0; threshold < ITERATIONS; threshold++) {
+      GenericTestUtils.LogCapturer logs =
+          GenericTestUtils.LogCapturer.captureLogs(RetryInvocationHandler.LOG);
+
+      final RetryInvocationHandler<UnreliableInterface> handler =
+          new RetryInvocationHandler<>(proxyProvider, retryPolicy);
+      handler.setFailoverThreshold(threshold);
+
+      UnreliableInterface unreliable = (UnreliableInterface) Proxy.newProxyInstance(
+          proxyProvider.getInterface().getClassLoader(),
+          new Class<?>[] {UnreliableInterface.class},
+          handler
+      );
+
+      try {
+        unreliable.failsRouterExceptionsWrappedInRemoteException(StandbyException.class.getName());
+        fail("Should have thrown *some* exception");
+      } catch (Exception e) {
+        assertTrue("Expected RemoteException but got " + e.getClass(),
+            e instanceof RemoteException);
+        // If threshold == 0, log all to info. 10 loops = 9 logs
+        // If threshold > 0, first failover doesn't log => n loops = n-1 logs
+        assertEquals(threshold == 0 ? ITERATIONS - 1 : threshold - 1,
+            StringUtils.countMatches(logs.getOutput(), "Trying to failover immediately"));
+      }
     }
   }
 }

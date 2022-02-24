@@ -18,13 +18,12 @@
 
 package org.apache.hadoop.io.retry;
 
-import java.io.IOException;
-
-import javax.security.sasl.SaslException;
-
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.security.AccessControlException;
+
+import javax.security.sasl.SaslException;
+import java.io.IOException;
 
 /**
  * The methods of UnreliableInterface could throw exceptions in a
@@ -86,6 +85,9 @@ public interface UnreliableInterface {
   @Idempotent
   void failsWithWrappedAccessControlException()
       throws IOException;
+
+  @Idempotent
+  void failsRouterExceptionsWrappedInRemoteException(String exceptionStr) throws RemoteException;
 
   public String succeedsOnceThenFailsReturningString()
       throws UnreliableException, StandbyException, IOException;

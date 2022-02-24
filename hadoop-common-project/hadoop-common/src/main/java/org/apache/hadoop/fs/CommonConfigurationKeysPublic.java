@@ -1127,5 +1127,15 @@ public class CommonConfigurationKeysPublic {
       "hadoop.distributed.config.base.path";
   public static final String HADOOP_DISTRIBUTED_CONFIG_BASE_PATH_DEFAULT =
       "/hadoop-distributed-config";
+
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String FAILOVER_SKIP_INFO_LOGGING_THRESHOLD =
+      "ipc.client.failover.logging.threshold";
+  public static final int FAILOVER_SKIP_INFO_LOGGING_THRESHOLD_DEFAULT =
+      2;
 }
 

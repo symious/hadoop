@@ -19,10 +19,17 @@ package org.apache.hadoop.io.retry;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.retry.FailoverProxyProvider.ProxyInfo;
 import org.apache.hadoop.io.retry.RetryPolicy.RetryAction;
-import org.apache.hadoop.ipc.*;
+import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.ipc.Client.ConnectionId;
+import org.apache.hadoop.ipc.ProtocolTranslator;
+import org.apache.hadoop.ipc.RPC;
+import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.ipc.RpcConstants;
+import org.apache.hadoop.ipc.RpcInvocationHandler;
+import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +43,9 @@ import java.lang.reflect.Proxy;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
+
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FAILOVER_SKIP_INFO_LOGGING_THRESHOLD;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FAILOVER_SKIP_INFO_LOGGING_THRESHOLD_DEFAULT;
 
 /**
  * A {@link RpcInvocationHandler} which supports client side retry .
@@ -317,6 +327,8 @@ public class RetryInvocationHandler<T> implements RpcInvocationHandler {
 
   private final AsyncCallHandler asyncCallHandler = new AsyncCallHandler();
 
+  private int failoverThreshold;
+
   protected RetryInvocationHandler(FailoverProxyProvider<T> proxyProvider,
       RetryPolicy retryPolicy) {
     this(proxyProvider, retryPolicy, Collections.<String, RetryPolicy>emptyMap());
@@ -328,6 +340,10 @@ public class RetryInvocationHandler<T> implements RpcInvocationHandler {
     this.proxyDescriptor = new ProxyDescriptor<>(proxyProvider);
     this.defaultPolicy = defaultPolicy;
     this.methodNameToPolicyMap = methodNameToPolicyMap;
+
+    Configuration conf = new Configuration();
+    this.failoverThreshold = conf.getInt(FAILOVER_SKIP_INFO_LOGGING_THRESHOLD,
+        FAILOVER_SKIP_INFO_LOGGING_THRESHOLD_DEFAULT);
   }
 
   private RetryPolicy getRetryPolicy(Method method) {
@@ -392,8 +408,8 @@ public class RetryInvocationHandler<T> implements RpcInvocationHandler {
       final int failovers, final long delay, final Exception ex) {
     // log info if this has made some successful calls or
     // this is not the first failover
-    final boolean info = hasSuccessfulCall || failovers != 0
-        || asyncCallHandler.hasSuccessfulCall();
+    final boolean info = (hasSuccessfulCall || failovers != 0
+        || asyncCallHandler.hasSuccessfulCall()) && !skipFailoverInfoLog(ex, isFailover, failovers);
     if (!info && !LOG.isDebugEnabled()) {
       return;
     }
@@ -413,6 +429,17 @@ public class RetryInvocationHandler<T> implements RpcInvocationHandler {
       LOG.debug(b.toString(), ex);
     }
   }
+
+  protected void setFailoverThreshold(int failoverThreshold) {
+    this.failoverThreshold = failoverThreshold;
+  }
+
+  protected boolean skipFailoverInfoLog(Exception ex, boolean isFailover, int failovers) {
+    return ex instanceof RemoteException &&
+        ((RemoteException) ex).unwrapRemoteException() instanceof StandbyException
+        && isFailover && failoverThreshold != 0 && failovers >= failoverThreshold;
+  }
+
 
   protected Object invokeMethod(Method method, Object[] args) throws Throwable {
     try {

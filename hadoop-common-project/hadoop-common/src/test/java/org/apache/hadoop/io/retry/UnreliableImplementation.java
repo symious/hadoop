@@ -17,13 +17,12 @@
  */
 package org.apache.hadoop.io.retry;
 
-import java.io.IOException;
-
-import javax.security.sasl.SaslException;
-
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.security.AccessControlException;
+
+import javax.security.sasl.SaslException;
+import java.io.IOException;
 
 /**
  * For the usage and purpose of this class see {@link UnreliableInterface}
@@ -144,6 +143,12 @@ class UnreliableImplementation implements UnreliableInterface {
     AccessControlException ace = new AccessControlException();
     IOException ioe = new IOException(ace);
     throw new IOException(ioe);
+  }
+
+  @Override
+  public void failsRouterExceptionsWrappedInRemoteException(String exceptionStr)
+      throws RemoteException {
+    throw new RemoteException(exceptionStr, "dummy failure");
   }
 
   @Override
