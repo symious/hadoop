@@ -41,6 +41,11 @@ import org.apache.hadoop.hdfs.server.zoneservice.ZoneChecker;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneMover;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneMoverKafkaTrigger;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneMoverTrigger;
+import org.apache.hadoop.hdfs.server.zoneservice.store.BaseRecord;
+import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
+import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
+import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
+import org.apache.hadoop.util.ReflectionUtils;
 
 import java.io.IOException;
 import java.net.URI;
@@ -53,6 +58,9 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Semaphore;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT;
+
 @Path("replicarule/")
 @Singleton
 public class ZoneServiceRestAPI {
@@ -64,8 +72,16 @@ public class ZoneServiceRestAPI {
       DFSConfigKeys.DFS_ZONESERVICE_THREADS_KEY,
       DFSConfigKeys.DFS_ZONESERVICE_THREADS_DEFAULT);
   private static final Semaphore semaphore = new Semaphore(maxThread);
+  public Class<? extends StoreDriver> driverClass = conf.getClass(
+      DFS_ZONESERVICE_STORE_DRIVER_CLASS,
+      DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT,
+      StoreDriver.class);
+  private final StoreDriver driver =
+      ReflectionUtils.newInstance(driverClass, conf);
 
-  public ZoneServiceRestAPI() { }
+  public ZoneServiceRestAPI() {
+    driver.init(conf, "ReplicationRuleServlet");
+  }
 
   /**
    * Check active threads for debug
@@ -154,28 +170,37 @@ public class ZoneServiceRestAPI {
       @QueryParam("mode") @DefaultValue(defaultMode) String mode,
       @PathParam("path") String path) {
     Date startTime = new Date();
+    String currentMethod =
+        Thread.currentThread().getStackTrace()[1].getMethodName();
     if (semaphore.availablePermits() == 0) {
-      AuditLogger.logRuleProcess(
-          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace, 
+      AuditLogger.logRuleProcess(currentMethod, nameSpace,
           path, replicaRule, startTime, new Date(),
           ResultCode.THREAD_FULL.getMsg(), mode);
       return ResultCode.THREAD_FULL.toString();
     }
     try {
       semaphore.acquire();
+      MigrationRecord migrationRecord =
+          new MigrationRecord(nameSpace, path, replicaRule);
+      driver.put(migrationRecord, false, true);
       ResultCode result = movePath(nameSpace, path, replicaRule, mode);
       semaphore.release();
-      AuditLogger.logRuleProcess(
-          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+      driver.remove(new Query<BaseRecord>(migrationRecord), BaseRecord.class);
+      AuditLogger.logRuleProcess(currentMethod, nameSpace,
           path, replicaRule, startTime, new Date(), result.getMsg(), mode);
       return result.toString();
     } catch (InterruptedException e) {
       e.printStackTrace();
-      AuditLogger.logRuleProcess(
-          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+      AuditLogger.logRuleProcess(currentMethod, nameSpace,
           path, replicaRule, startTime, new Date(),
           ResultCode.INTERRUPTED.getMsg(), mode);
       return ResultCode.INTERRUPTED.toString();
+    } catch (IOException e) {
+      e.printStackTrace();
+      AuditLogger.logRuleProcess(currentMethod, nameSpace,
+          path, replicaRule, startTime, new Date(),
+          ResultCode.IO_EXCEPTION.getMsg(), mode);
+      return ResultCode.IO_EXCEPTION.toString();
     }
   }
 
@@ -196,29 +221,37 @@ public class ZoneServiceRestAPI {
       @QueryParam("rule") String replicaRule,
       @PathParam("path") String path) {
     Date startTime = new Date();
+    String currentMethod =
+        Thread.currentThread().getStackTrace()[1].getMethodName();
     if (semaphore.availablePermits() == 0) {
-      AuditLogger.logRuleProcess(
-          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+      AuditLogger.logRuleProcess(currentMethod, nameSpace,
           path, replicaRule, startTime, new Date(),
           ResultCode.THREAD_FULL.getMsg(), defaultMode);
       return ResultCode.THREAD_FULL.toString();
     }
     try {
       semaphore.acquire();
+      MigrationRecord migrationRecord =
+          new MigrationRecord(nameSpace, path, replicaRule);
+      driver.put(migrationRecord, false, true);
       ResultCode result = movePath(nameSpace, path, replicaRule, defaultMode);
       semaphore.release();
-      AuditLogger.logRuleProcess(
-          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
-          path, replicaRule, startTime, new Date(),
-          result.getMsg(), defaultMode);
+      driver.remove(new Query<BaseRecord>(migrationRecord), BaseRecord.class);
+      AuditLogger.logRuleProcess(currentMethod, nameSpace, path, replicaRule,
+          startTime, new Date(), result.getMsg(), defaultMode);
       return result.toString();
     } catch (InterruptedException e) {
       e.printStackTrace();
-      AuditLogger.logRuleProcess(
-          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+      AuditLogger.logRuleProcess(currentMethod, nameSpace,
           path, replicaRule, startTime, new Date(),
           ResultCode.INTERRUPTED.getMsg(), defaultMode);
       return ResultCode.INTERRUPTED.toString();
+    } catch (IOException e) {
+      e.printStackTrace();
+      AuditLogger.logRuleProcess(currentMethod, nameSpace,
+          path, replicaRule, startTime, new Date(),
+          ResultCode.IO_EXCEPTION.getMsg(), defaultMode);
+      return ResultCode.IO_EXCEPTION.toString();
     }
   }
 

@@ -71,11 +71,21 @@ public abstract class BaseRecord implements Comparable<BaseRecord> {
   /**
    * Check if this record matches a partial record.
    */
-  public boolean like(BaseRecord other) {
+  public boolean match(BaseRecord other) {
     if (other == null) {
       return false;
     }
     return getPrimaryKey().equals(other.getPrimaryKey());
+  }
+
+  /**
+   * Check if this record belongs to a partial record.
+   */
+  public boolean contain(BaseRecord other) {
+    if (other == null) {
+      return false;
+    }
+    return other.getPrimaryKey().startsWith(getPrimaryKey());
   }
 
   @Override

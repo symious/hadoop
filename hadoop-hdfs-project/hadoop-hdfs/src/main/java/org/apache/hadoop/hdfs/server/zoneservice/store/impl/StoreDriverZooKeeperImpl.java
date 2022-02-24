@@ -152,13 +152,23 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
 
   @Override
   public <T extends BaseRecord> T get(Query<T> query, Class<T> clazz) throws IOException {
-    List<T> records = getMultiple(clazz, query);
+    List<T> records = getMultiple(clazz, query, false);
     if (records.size() > 1) {
       throw new IOException("Found more than one object in collection");
     } else if (records.size() == 1) {
       return records.get(0);
     } else {
       return null;
+    }
+  }
+
+  @Override
+  public <T extends BaseRecord> List<T> getLike(Query<T> query, Class<T> clazz) throws IOException {
+    List<T> records = getMultiple(clazz, query, true);
+    if (records.size() >= 1) {
+      return records;
+    } else {
+      return new ArrayList<>();
     }
   }
 
@@ -221,7 +231,7 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
       return true;
     }
 
-    // All records should be the same
+    // All records should be the same class
     T record0 = records.get(0);
     Class<? extends BaseRecord> recordClass = record0.getClass();
     String znode = getZNodeForClass(recordClass);
@@ -255,22 +265,22 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
 
     // Check the records to remove
     String znode = getZNodeForClass(clazz);
-    List<T> recordsToRemove = filterMultiple(query, records);
+    List<T> recordsToRemove = filterMultiple(query, records, false);
 
     // Remove the records
     int removed = 0;
     for (T existingRecord : recordsToRemove) {
-      LOG.info("Removing \"{}\"", existingRecord);
+      LOG.info("Removing \"{}\"", existingRecord.getPrimaryKey());
       try {
         String primaryKey = getPrimaryKey(existingRecord);
         String path = getNodePath(znode, primaryKey);
         if (zkManager.delete(path)) {
           removed++;
         } else {
-          LOG.error("Did not remove \"{}\"", existingRecord);
+          LOG.error("Did not remove \"{}\"", existingRecord.getPrimaryKey());
         }
       } catch (Exception e) {
-        LOG.error("Cannot remove \"{}\"", existingRecord, e);
+        LOG.error("Cannot remove \"{}\"", existingRecord.getPrimaryKey(), e);
       }
     }
     return removed;
@@ -296,10 +306,10 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
   }
 
   public <T extends BaseRecord> List<T> getMultiple(
-      Class<T> clazz, Query<T> query) throws IOException  {
+      Class<T> clazz, Query<T> query, boolean fuzzy) throws IOException  {
     QueryResult<T> result = getAll(clazz);
     List<T> records = result.getRecords();
-    List<T> ret = filterMultiple(query, records);
+    List<T> ret = filterMultiple(query, records, fuzzy);
     return ret;
   }
 
@@ -307,11 +317,13 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
    * Filters a list of records to find all records matching the query.
    */
   public static <T extends BaseRecord> List<T> filterMultiple(
-      final Query<T> query, final Iterable<T> records) {
+      final Query<T> query, final Iterable<T> records, boolean fuzzy) {
 
     List<T> matchingList = new ArrayList<>();
     for (T record : records) {
-      if (query.matches(record)) {
+      if (!fuzzy && query.matches(record)) {
+        matchingList.add(record);
+      } else if (fuzzy && query.likes(record)) {
         matchingList.add(record);
       }
     }

@@ -47,7 +47,17 @@ public class Query<T extends BaseRecord> {
     if (this.partial == null) {
       return false;
     }
-    return this.partial.like(other);
+    return this.partial.match(other);
+  }
+
+  /**
+   * Check if the path of the query contains the path of other
+   */
+  public boolean likes(T other) {
+    if (this.partial == null) {
+      return false;
+    }
+    return this.partial.contain(other);
   }
 
   @Override
