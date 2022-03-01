@@ -264,6 +264,9 @@ public class NameNodeRpcServer implements NamenodeProtocols {
 
   private final String defaultECPolicyName;
 
+  private final boolean clientRPCSdiAuthEnabled;
+  private final boolean serviceRPCSdiAuthEnabled;
+
   public NameNodeRpcServer(Configuration conf, NameNode nn)
       throws IOException {
     this.nn = nn;
@@ -274,6 +277,13 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     int handlerCount = 
       conf.getInt(DFS_NAMENODE_HANDLER_COUNT_KEY, 
                   DFS_NAMENODE_HANDLER_COUNT_DEFAULT);
+
+    clientRPCSdiAuthEnabled = conf.getBoolean(
+        CommonConfigurationKeys.HADOOP_CLIENT_RPC_SDI_AUTHENTICATION_ENABLED,
+        false);
+    serviceRPCSdiAuthEnabled = conf.getBoolean(
+        CommonConfigurationKeys.HADOOP_SERVICE_RPC_SDI_AUTHENTICATION_ENABLED,
+        false);
 
     RPC.setProtocolEngine(conf, ClientNamenodeProtocolPB.class,
         ProtobufRpcEngine.class);
@@ -362,6 +372,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
           .setNumHandlers(serviceHandlerCount)
           .setVerbose(false)
           .setSecretManager(namesystem.getDelegationTokenSecretManager())
+          .setRpcPasswordAuthenticate(serviceRPCSdiAuthEnabled)
           .build();
 
       // Add all the RPC protocols that the namenode implements
@@ -455,7 +466,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
         .setPort(rpcAddr.getPort())
         .setNumHandlers(handlerCount)
         .setVerbose(false)
-        .setRpcPasswordAuthenticate(true)
+        .setRpcPasswordAuthenticate(clientRPCSdiAuthEnabled)
         .setSecretManager(namesystem.getDelegationTokenSecretManager())
         .build();
 

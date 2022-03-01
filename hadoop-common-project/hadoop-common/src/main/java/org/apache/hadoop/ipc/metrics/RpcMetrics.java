@@ -18,6 +18,7 @@
 package org.apache.hadoop.ipc.metrics;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.cache.CacheStats;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -111,6 +112,32 @@ public class RpcMetrics {
   MutableCounterLong rpcClientBackoff;
   @Metric("Number of Slow RPC calls")
   MutableCounterLong rpcSlowCalls;
+
+  @Metric("Total request count of PasswordMatchedCached")
+  public long passwordMatchedCacheTotalRequest() {
+    return passwordMatchedCacheStats() != null ?
+        passwordMatchedCacheStats().requestCount() : 0;
+  }
+  @Metric("Hit count of PasswordMatchedCached")
+  public long passwordMatchedCacheHitCount() {
+    return passwordMatchedCacheStats() != null ?
+        passwordMatchedCacheStats().hitCount() : 0;
+  }
+  @Metric("Miss count of PasswordMatchedCached")
+  public long passwordMatchedCacheMissCount() {
+    return passwordMatchedCacheStats() != null ?
+        passwordMatchedCacheStats().missCount() : 0;
+  }
+  @Metric("Eviction count of PasswordMatchedCached")
+  public long passwordMatchedCacheEvictionCount() {
+    return passwordMatchedCacheStats() != null ?
+        passwordMatchedCacheStats().evictionCount() : 0;
+  }
+  @Metric("Load count of PasswordMatchedCached")
+  public long passwordMatchedCacheLoadCount() {
+    return passwordMatchedCacheStats() != null ?
+        passwordMatchedCacheStats().loadCount() : 0;
+  }
 
   @Metric("Number of open connections") public int numOpenConnections() {
     return server.getNumOpenConnections();
@@ -300,5 +327,9 @@ public class RpcMetrics {
   @VisibleForTesting
   public MetricsTag getTag(String tagName) {
     return registry.getTag(tagName);
+  }
+
+  public CacheStats passwordMatchedCacheStats() {
+    return server.getPasswordMatchedCacheStats();
   }
 }

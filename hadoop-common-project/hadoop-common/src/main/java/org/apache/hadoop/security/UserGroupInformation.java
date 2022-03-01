@@ -387,6 +387,7 @@ public class UserGroupInformation {
     authenticationMethod = null;
     conf = null;
     groups = null;
+    rpcPassword = null;
     kerberosMinSecondsBeforeRelogin = 0;
     setLoginUser(null);
     HadoopKerberosName.setRules(null);
