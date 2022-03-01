@@ -94,6 +94,8 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
 
   private static final String DEFAULT_MULTI_LABEL_ACCESS_HOURS = "-1";
 
+  public static final float DEFAULT_MULTI_LABEL_RESOURCE_BUFFER_RATIO = 0.05f;
+
   @Private
   public static final String MAXIMUM_APPLICATIONS_SUFFIX =
     "maximum-applications";

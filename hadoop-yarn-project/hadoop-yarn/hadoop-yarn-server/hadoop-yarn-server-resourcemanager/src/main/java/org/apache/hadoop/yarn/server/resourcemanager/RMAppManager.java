@@ -83,6 +83,7 @@ import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.SettableFu
 import org.apache.hadoop.yarn.util.StringHelper;
 
 import static org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager.NO_LABEL;
+import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.DEFAULT_MULTI_LABEL_RESOURCE_BUFFER_RATIO;
 
 /**
  * This class manages the list of applications for the resource manager. 
@@ -431,7 +432,7 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
           submissionContext.setNodeLabelExpression(nodeLabel);
         }
       } catch (Exception e) {
-        LOG.error("Failed On Select Label from Queue, name:" + queueName);
+        LOG.error("Failed On Select Label from Queue, name:" + queueName, e);
       }
     }
   }
@@ -441,26 +442,72 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
     if (CollectionUtils.isNotEmpty(queue.getChildQueues())) {
       return null;
     }
-
-    Set<String> labels = queue.getAccessibleNodeLabels();
-    String nodeLabel = queue.getDefaultNodeLabelExpression();
-    long avaMb = queue.getEffectiveCapacity(NO_LABEL).getMemorySize() -
-        queue.getQueueResourceUsage().getUsed(NO_LABEL).getMemorySize();
-    LOG.debug("Default Partition: " + nodeLabel + " AvaMB " + avaMb);
-    //Got the max one
-    if (CollectionUtils.isNotEmpty(labels)) {
-      for (String tmpLabel : labels) {
-        long tmpAva = queue.getEffectiveCapacity(tmpLabel).getMemorySize() -
-            queue.getQueueResourceUsage().getUsed(tmpLabel).getMemorySize();
-        if (tmpAva > avaMb) {
-          nodeLabel = tmpLabel;
-          avaMb = tmpAva;
+    // Check Min first then Max
+    String[] conditions = {"MIN", "MAX"};
+    for (String condition : conditions) {
+      QueueUsageModel queueUsageModel = chooseLowUsedLabel(queue, condition);
+      // If usage less than threshold
+      // It means queue has enough resource then return
+      if (queueUsageModel.usageRatio < (1 - DEFAULT_MULTI_LABEL_RESOURCE_BUFFER_RATIO)) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug(
+              "Final Partition: " + queueUsageModel.labelName + " usage " +
+                  queueUsageModel.usageRatio + " condition: " + condition);
         }
-        LOG.debug("New Partition: " + tmpLabel + " AvaMB " + tmpAva);
+        return queueUsageModel.labelName;
       }
     }
-    LOG.debug("Final Partition: " + nodeLabel + " AvaMB " + avaMb);
-    return nodeLabel;
+    return null;
+  }
+
+  private class QueueUsageModel {
+    private String labelName;
+    private float usageRatio;
+
+    public QueueUsageModel(String labelName, float usageRatio) {
+      this.labelName = labelName;
+      this.usageRatio = usageRatio;
+    }
+  }
+
+  private QueueUsageModel chooseLowUsedLabel(LeafQueue queue, String flag) {
+    String nodeLabel = NO_LABEL;
+    float used = 1f;
+    Set<String> labels = new HashSet<>();
+    labels.addAll(queue.getAccessibleNodeLabels());
+    labels.add(NO_LABEL);
+    // Look for the lowest usage label
+    for (String tmpLabel : labels) {
+      float tmpUsed = calculateUsedRatioOfLabel(tmpLabel, queue, flag);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("New Partition: " + tmpLabel + " minUsed: " + tmpUsed + " condition:" + flag);
+      }
+      if (tmpUsed <= used) {
+        nodeLabel = tmpLabel;
+        used = tmpUsed;
+      }
+    }
+    return new QueueUsageModel(nodeLabel, used);
+  }
+
+  private float calculateUsedRatioOfLabel(String label, LeafQueue queue, String flag) {
+    // If Effective is Zero then return 1f
+    if (queue.getEffectiveCapacity(label).getMemorySize() == 0 ||
+        queue.getEffectiveCapacity(label).getVirtualCores() == 0 ||
+        queue.getEffectiveMaxCapacity(label).getMemorySize() == 0 ||
+        queue.getEffectiveMaxCapacity(label).getVirtualCores() == 0) {
+      return 1f;
+    }
+    long memUsed = queue.getQueueResourceUsage().getUsed(label).getMemorySize();
+    long coreUsed = queue.getQueueResourceUsage().getUsed(label).getVirtualCores();
+    long memTotal = queue.getEffectiveCapacity(label).getMemorySize();
+    long coreTotal = queue.getEffectiveCapacity(label).getVirtualCores();
+    if (flag.equals("MAX")) {
+      memTotal = queue.getEffectiveMaxCapacity(label).getMemorySize();
+      coreTotal = queue.getEffectiveMaxCapacity(label).getVirtualCores();
+    }
+    return Math.max(Float.valueOf(memUsed) / Float.valueOf(memTotal),
+        Float.valueOf(coreUsed) / Float.valueOf(coreTotal));
   }
 
   protected void recoverApplication(ApplicationStateData appState,
