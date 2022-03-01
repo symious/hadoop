@@ -606,7 +606,8 @@ public class ClientRMService extends AbstractService implements
       RMAuditLogger.logFailure(user, AuditConstants.SUBMIT_APP_REQUEST,
           ie.getMessage(), "ClientRMService",
           "Exception in submitting application", applicationId, callerContext,
-          submissionContext.getQueue(), submissionContext.getApplicationTags());
+          submissionContext.getQueue(), submissionContext.getApplicationTags(),
+          submissionContext.getApplicationName());
       throw RPCUtil.getRemoteException(ie);
     }
 
@@ -632,7 +633,9 @@ public class ClientRMService extends AbstractService implements
         RMAuditLogger.logFailure(user, AuditConstants.SUBMIT_APP_REQUEST,
             e.getMessage(), "ClientRMService",
             "Exception in submitting application", applicationId,
-            submissionContext.getQueue(), submissionContext.getApplicationTags());
+            submissionContext.getQueue(),
+            submissionContext.getApplicationTags(),
+            submissionContext.getApplicationName());
         throw RPCUtil.getRemoteException(e);
       }
     }
@@ -699,7 +702,8 @@ public class ClientRMService extends AbstractService implements
           "ClientRMService", applicationId, callerContext,
           submissionContext.getQueue(),
           submissionContext.getNodeLabelExpression(),
-          submissionContext.getApplicationTags());
+          submissionContext.getApplicationTags(),
+          submissionContext.getApplicationName());
     } catch (YarnException e) {
       LOG.info("Exception in submitting " + applicationId, e);
       RMAuditLogger.logFailure(user, AuditConstants.SUBMIT_APP_REQUEST,
@@ -707,7 +711,8 @@ public class ClientRMService extends AbstractService implements
           "Exception in submitting application", applicationId, callerContext,
           submissionContext.getQueue(),
           submissionContext.getNodeLabelExpression(),
-          submissionContext.getApplicationTags());
+          submissionContext.getApplicationTags(),
+          submissionContext.getApplicationName());
       throw e;
     }
 

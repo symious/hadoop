@@ -149,7 +149,7 @@ public class TestRMAuditLogger {
     } else {
       sLog = RMAuditLogger.createSuccessLog(USER, OPERATION, TARGET, appId,
           attemptId, containerId, resource, callerContext, tmpIp, queueName,
-          partition, null);
+          partition, null, null);
     }
     StringBuilder expLog = new StringBuilder();
     expLog.append("USER=test\t");
@@ -303,7 +303,7 @@ public class TestRMAuditLogger {
     String fLog = args == null ?
       RMAuditLogger.createFailureLog(USER, OPERATION, PERM, TARGET, DESC,
           appId, attemptId, containerId, resource, callerContext,
-          queueName, partition, null) :
+          queueName, partition, null, null) :
         RMAuditLogger.createFailureLog(USER, OPERATION, PERM, TARGET, DESC,
             args);
     StringBuilder expLog = new StringBuilder();
