@@ -691,7 +691,7 @@ public class CommonConfigurationKeysPublic {
    * core-default.xml</a>
    */
   public static final int
-      HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_MINUTE_DEFAULT = 5;
+      HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_MINUTE_DEFAULT = 1;
   /**
    * @see
    * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
