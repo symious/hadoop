@@ -123,14 +123,14 @@ public interface FederationRPCMBean {
   String getProxyOpPermitAcceptedPerNs();
 
   /**
-   * Get the number of operations rejected due to lack of permits of each namespace as a hashmap.
-   * @return Number of operations rejected due to lack of permits of each namespace as a hashmap.
+   * Get the number of operations rejected due to lack of permits of each namespace as a CompositeData object.
+   * @return Number of operations rejected due to lack of permits of each namespace as a CompositeData object.
    */
   CompositeData getProxyOpPermitRejectedPerNsJSON();
 
   /**
-   * Get the number of operations accepted of each namespace as a hashmap.
-   * @return Number of operations accepted of each namespace as a hashmap.
+   * Get the number of operations accepted of each namespace as a CompositeData object.
+   * @return Number of operations accepted of each namespace as a CompositeData object.
    */
   CompositeData getProxyOpPermitAcceptedPerNsJSON();
 }
