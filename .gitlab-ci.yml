@@ -1,0 +1,30 @@
+stages:
+  - compile
+  - pretest
+  - test
+
+pretest:
+  stage: pretest
+  tags:
+    - yarn
+  script:
+    -  ./submodule-ci.sh
+  artifacts:
+    paths:
+      - submodule-ci.yml
+
+submodule-test:
+  stage: test
+  trigger:
+    strategy: depend
+    include:
+      - artifact: submodule-ci.yml
+        job: pretest
+
+
+compile:
+  stage: compile
+  tags:
+    - yarn
+  script:
+    - mvn install -DskipTests
