@@ -332,4 +332,12 @@ public class RpcMetrics {
   public CacheStats passwordMatchedCacheStats() {
     return server.getPasswordMatchedCacheStats();
   }
+
+  public long getRpcAuthenticationSuccesses() {
+    return rpcAuthenticationSuccesses.value();
+  }
+
+  public long getRpcAuthenticationFailures() {
+    return rpcAuthenticationFailures.value();
+  }
 }

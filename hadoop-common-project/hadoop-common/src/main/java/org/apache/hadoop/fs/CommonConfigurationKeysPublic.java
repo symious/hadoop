@@ -756,6 +756,20 @@ public class CommonConfigurationKeysPublic {
    * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
    * core-default.xml</a>
    */
+  public static final String HADOOP_SDI_AUTHENTICATION_SILENT_MODE_ENABLED =
+      "hadoop.sdi.authentication.silent.mode.enabled";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final boolean HADOOP_SDI_AUTHENTICATION_SILENT_MODE_ENABLED_DEFAULT =
+      false;
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
   public static final String HADOOP_SECURITY_INSTRUMENTATION_REQUIRES_ADMIN =
     "hadoop.security.instrumentation.requires.admin";
   /**

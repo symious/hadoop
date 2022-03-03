@@ -36,6 +36,7 @@ import java.net.URISyntaxException;
 import java.security.PrivilegedExceptionAction;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CLIENT_RPC_SDI_AUTHENTICATION_ENABLED;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SDI_AUTHENTICATION_SILENT_MODE_ENABLED;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE;
 import static org.junit.Assert.assertEquals;
 
@@ -106,6 +107,57 @@ public class TestSdiAuthentication {
       assertEquals(2, metrics.passwordMatchedCacheTotalRequest());
       assertEquals(1, metrics.passwordMatchedCacheMissCount());
       assertEquals(1, metrics.passwordMatchedCacheHitCount());
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
+
+  @Test
+  public void testSdiAuthSilentMode()
+      throws IOException, URISyntaxException, InterruptedException {
+    File shadowFile = new File(TestNameNodeRpcServer.class
+        .getResource("/shadow").toURI());
+    String password = "I AM THE DANGER";
+    // bypassUser succeed to start and check MiniDFSCluster
+    System.setProperty("HADOOP_USER_NAME", "hdfs");
+    Configuration conf = new HdfsConfiguration();
+
+    conf.set(HADOOP_CLIENT_RPC_SDI_AUTHENTICATION_ENABLED, "true");
+    conf.set(HADOOP_SDI_AUTHENTICATION_SILENT_MODE_ENABLED, "true");
+    conf.set(HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE,
+        shadowFile.getAbsolutePath());
+    UserGroupInformation.setConfiguration(conf);
+
+    MiniDFSCluster cluster = null;
+    RpcMetrics metrics = null;
+
+    try {
+      cluster = new MiniDFSCluster.Builder(conf).build();
+      cluster.waitActive();
+      metrics = ((NameNodeRpcServer) cluster.getNameNodeRpc()).
+          getClientRpcServer().getRpcMetrics();
+
+      try {
+        // walterWithoutPassword failed to operation MiniDFSCluster
+        String username = "walterWithoutPassword";
+        UserGroupInformation ugi =
+            UserGroupInformation.createRemoteUser(username);
+        MiniDFSCluster finalCluster = cluster;
+        ugi.doAs((PrivilegedExceptionAction<Void>) () -> {
+          DistributedFileSystem fs = finalCluster.getFileSystem();
+          final Path root = new Path("/");
+          fs.listStatus(root);
+          fs.close();
+          return null;
+        });
+      } catch (IOException ioe) {
+        // Silent mode shouldn't reach here.
+        Assert.fail("IOException expected.");
+      }
+      Assert.assertEquals(1, metrics.getRpcAuthenticationFailures());
+
     } finally {
       if (cluster != null) {
         cluster.shutdown();

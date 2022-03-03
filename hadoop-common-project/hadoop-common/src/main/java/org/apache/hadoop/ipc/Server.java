@@ -461,6 +461,7 @@ public abstract class Server {
 
   private boolean logSlowRPC = false;
   private final boolean rpcPasswordAuthenticate;
+  private final boolean isSdiAuthSilentMode;
   private final PasswordEncoder passwordEncoder;
   // PasswordMatchEntry -> passwd matched
   private final Cache<PasswordMatchEntry, Boolean> passwordMatchedCache;
@@ -2618,12 +2619,17 @@ public abstract class Server {
       } catch (ExecutionException e) {
         LOG.error("Get Authentication error from cache for user: " + user, e);
       } catch (AuthenticationException ie) {
-        LOG.info("Connection Authentication from " + this
+        LOG.warn("Connection Authentication from " + this
                 + " for protocol " + connectionContext.getProtocol()
-                + " is failed for user " + user);
+                + " is failed for user " + user
+                + " from " + getHostAddress() + ":" + getPort()
+                + ". Reason: " + ie.getMessage()
+                + (isSdiAuthSilentMode ? " [Silent]" : ""));
         rpcMetrics.incrAuthenticationFailures();
-        throw new FatalRpcServerException(
-                RpcErrorCodeProto.FATAL_RPC_UNAUTHENTICATED, ie);
+        if (!isSdiAuthSilentMode) {
+          throw new FatalRpcServerException(
+              RpcErrorCodeProto.FATAL_RPC_UNAUTHENTICATED, ie);
+        }
       }
     }
 
@@ -2898,6 +2904,9 @@ public abstract class Server {
     this.ignoreSDIAuthenticate = conf.getBoolean(
         CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY,
         CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_DEFAULT);
+    this.isSdiAuthSilentMode = conf.getBoolean(
+        CommonConfigurationKeys.HADOOP_SDI_AUTHENTICATION_SILENT_MODE_ENABLED,
+        CommonConfigurationKeys.HADOOP_SDI_AUTHENTICATION_SILENT_MODE_ENABLED_DEFAULT);
 
     // configure supported authentications
     this.enabledAuthMethods = getAuthMethods(secretManager, conf);
