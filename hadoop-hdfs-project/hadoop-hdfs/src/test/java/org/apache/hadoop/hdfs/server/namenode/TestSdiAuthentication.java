@@ -22,7 +22,10 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.metrics.RpcMetrics;
+import org.apache.hadoop.security.AccessControlException;
+import org.apache.hadoop.security.AuthenticationException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.junit.Assert;
 import org.junit.Test;
@@ -78,6 +81,8 @@ public class TestSdiAuthentication {
         Assert.fail("IOException expected.");
       } catch (IOException ioe) {
         // ok, expected.
+        Assert.assertTrue(((RemoteException) ioe).unwrapRemoteException()
+            instanceof AuthenticationException);
       }
 
       try {

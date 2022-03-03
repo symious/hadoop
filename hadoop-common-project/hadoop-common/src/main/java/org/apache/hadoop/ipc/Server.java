@@ -106,6 +106,7 @@ import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcSaslProto.SaslAuth;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcSaslProto.SaslState;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.AccessControlException;
+import org.apache.hadoop.security.AuthenticationException;
 import org.apache.hadoop.security.SaslPropertiesResolver;
 import org.apache.hadoop.security.SaslRpcServer;
 import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
@@ -2584,7 +2585,7 @@ public abstract class Server {
             LOG.info("[SDICredential] RpcPassword not set for {}.", userName);
           }
         } else {
-          throw new IOException("Illegal user error.");
+          throw new AuthenticationException("Illegal user error.");
         }
 
         if (!UserGroupInformation.createRemoteUser(userName).isBypassUser()) {
@@ -2592,12 +2593,12 @@ public abstract class Server {
               UserGroupInformation.createRemoteUser(userName).queryRpcPassword();
 
           if (hashedRpcPassword == null) {
-            throw new IOException(
+            throw new AuthenticationException(
                 "No rpcPassword record on server side for user: " + userName);
           }
           if (rpcPassword == null) {
-            throw new IOException("Rpc password empty from client side " +
-                "for user: " + userName);
+            throw new AuthenticationException("Rpc password empty from " +
+                "client side for user: " + userName);
           }
 
           Callable<Boolean> passwordMatchedLoader = new Callable<Boolean>() {
@@ -2609,14 +2610,14 @@ public abstract class Server {
           if (!passwordMatchedCache.get(
               new PasswordMatchEntry(userName, rpcPassword, hashedRpcPassword),
               passwordMatchedLoader)) {
-            throw new IOException("Rpc Authentication failed for user: " +
-                userName);
+            throw new AuthenticationException(
+                "Rpc Authentication failed for user: " + userName);
           }
         }
         rpcMetrics.incrAuthenticationSuccesses();
       } catch (ExecutionException e) {
         LOG.error("Get Authentication error from cache for user: " + user, e);
-      } catch (IOException ie) {
+      } catch (AuthenticationException ie) {
         LOG.info("Connection Authentication from " + this
                 + " for protocol " + connectionContext.getProtocol()
                 + " is failed for user " + user);

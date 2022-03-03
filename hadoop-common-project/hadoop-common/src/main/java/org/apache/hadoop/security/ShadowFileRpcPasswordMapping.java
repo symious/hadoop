@@ -73,7 +73,7 @@ public class ShadowFileRpcPasswordMapping extends Configured
   private volatile boolean isStartup = true;
 
   private AtomicReference<ConcurrentHashMap<String, RpcPasswordAndBypass>>
-      cacheRef = new AtomicReference<>();
+      cacheRef = new AtomicReference<>(new ConcurrentHashMap<>());
 
   /**
    * ShadowFileMetrics maintains shadow file related statistics.
