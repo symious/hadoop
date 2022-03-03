@@ -20,6 +20,8 @@ package org.apache.hadoop.hdfs.server.federation.metrics;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 
+import javax.management.openmbean.CompositeData;
+
 /**
  * JMX interface for the RPC server.
  * TODO use the default RPC MBean.
@@ -119,4 +121,16 @@ public interface FederationRPCMBean {
    * @return Number of operations accepted of each namespace.
    */
   String getProxyOpPermitAcceptedPerNs();
+
+  /**
+   * Get the number of operations rejected due to lack of permits of each namespace as a hashmap.
+   * @return Number of operations rejected due to lack of permits of each namespace as a hashmap.
+   */
+  CompositeData getProxyOpPermitRejectedPerNsJSON();
+
+  /**
+   * Get the number of operations accepted of each namespace as a hashmap.
+   * @return Number of operations accepted of each namespace as a hashmap.
+   */
+  CompositeData getProxyOpPermitAcceptedPerNsJSON();
 }
