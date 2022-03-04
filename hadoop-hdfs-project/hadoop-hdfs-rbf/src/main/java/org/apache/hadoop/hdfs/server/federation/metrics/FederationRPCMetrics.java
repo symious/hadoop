@@ -30,6 +30,8 @@ import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 
+import javax.management.openmbean.CompositeData;
+
 /**
  * Implementation of the RPC metrics collector.
  */
@@ -312,5 +314,15 @@ public class FederationRPCMetrics implements FederationRPCMBean {
   @Override
   public String getProxyOpPermitAcceptedPerNs() {
     return rpcServer.getRPCClient().getAcceptedPermitsPerNsJSON();
+  }
+
+  @Override
+  public CompositeData getProxyOpPermitRejectedPerNsJSON() {
+    return rpcServer.getRPCClient().getRejectedPermitsPerNs();
+  }
+
+  @Override
+  public CompositeData getProxyOpPermitAcceptedPerNsJSON() {
+    return rpcServer.getRPCClient().getAcceptedPermitsPerNs();
   }
 }

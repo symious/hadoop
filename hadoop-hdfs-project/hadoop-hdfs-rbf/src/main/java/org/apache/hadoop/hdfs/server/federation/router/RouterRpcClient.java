@@ -84,6 +84,13 @@ import org.slf4j.LoggerFactory;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
+import javax.management.openmbean.CompositeData;
+import javax.management.openmbean.CompositeDataSupport;
+import javax.management.openmbean.CompositeType;
+import javax.management.openmbean.OpenDataException;
+import javax.management.openmbean.OpenType;
+import javax.management.openmbean.SimpleType;
+
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_KEY;
 import static org.apache.hadoop.hdfs.server.federation.fairness.RouterRpcFairnessConstants.CONCURRENT_NS;
@@ -304,6 +311,10 @@ public class RouterRpcClient {
     return JSON.toString(rejectedPermitsPerNs);
   }
 
+  public CompositeData getRejectedPermitsPerNs() {
+    return generateCompositeDataMetrics(rejectedPermitsPerNs);
+  }
+
   /**
    * JSON representation of the accepted permits for each nameservice.
    *
@@ -311,6 +322,37 @@ public class RouterRpcClient {
    */
   public String getAcceptedPermitsPerNsJSON() {
     return JSON.toString(acceptedPermitsPerNs);
+  }
+
+  public CompositeData getAcceptedPermitsPerNs() {
+    return generateCompositeDataMetrics(acceptedPermitsPerNs);
+  }
+
+  private CompositeData generateCompositeDataMetrics(Map<String, AtomicLong> metrics) {
+    if (metrics.isEmpty()) {
+      return null;
+    }
+
+    try {
+      String[] fields =
+          metrics.keySet().toArray(new String[metrics.size()]);
+      OpenType[] types =
+          Collections.nCopies(metrics.size(), SimpleType.LONG)
+              .toArray(new OpenType[0]);
+      Long[] values = new Long[metrics.size()];
+      for (int i = 0; i < metrics.size(); i++) {
+        values[i] = metrics.get(fields[i]).get();
+      }
+
+      CompositeType type =
+          new CompositeType(this.getClass().getName(), this.getClass().getName(), fields, fields,
+              types);
+      CompositeData data = new CompositeDataSupport(type, fields, values);
+      return data;
+    } catch (OpenDataException e) {
+      e.printStackTrace();
+      return null;
+    }
   }
 
   /**
@@ -1490,7 +1532,8 @@ public class RouterRpcClient {
           )routerRpcFairnessPolicyController;
   }
 
-  private void incrRejectedPermitForNs(String ns) {
+  @VisibleForTesting
+  protected void incrRejectedPermitForNs(String ns) {
     if (!rejectedPermitsPerNs.containsKey(ns)) {
       rejectedPermitsPerNs.put(ns, new AtomicLong());
     }
@@ -1502,7 +1545,8 @@ public class RouterRpcClient {
         rejectedPermitsPerNs.get(ns).longValue() : 0L;
   }
 
-  private void incrAcceptedPermitForNs(String ns) {
+  @VisibleForTesting
+  protected void incrAcceptedPermitForNs(String ns) {
     if (!acceptedPermitsPerNs.containsKey(ns)) {
       acceptedPermitsPerNs.put(ns, new AtomicLong());
     }
