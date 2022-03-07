@@ -27,6 +27,7 @@ import org.apache.hadoop.io.compress.bzip2.Bzip2Factory;
 import org.apache.hadoop.io.compress.zlib.ZlibFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.io.erasurecode.ErasureCodeNative;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,6 +67,7 @@ public class NativeLibraryChecker {
     boolean nativeHadoopLoaded = NativeCodeLoader.isNativeCodeLoaded();
     boolean zlibLoaded = false;
     boolean snappyLoaded = false;
+    boolean isalLoaded = false;
     boolean zStdLoaded = false;
     // lz4 is linked within libhadoop
     boolean lz4Loaded = nativeHadoopLoaded;
@@ -77,6 +79,7 @@ public class NativeLibraryChecker {
     String hadoopLibraryName = "";
     String zlibLibraryName = "";
     String snappyLibraryName = "";
+    String isalDetail = "";
     String zstdLibraryName = "";
     String lz4LibraryName = "";
     String bzip2LibraryName = "";
@@ -98,8 +101,15 @@ public class NativeLibraryChecker {
       if (zStdLoaded && NativeCodeLoader.buildSupportsZstd()) {
         zstdLibraryName = ZStandardCodec.getLibraryName();
       }
-      if (OpensslCipher.getLoadingFailureReason() != null) {
-        openSslDetail = OpensslCipher.getLoadingFailureReason();
+      isalDetail = ErasureCodeNative.getLoadingFailureReason();
+      if (isalDetail != null) {
+        isalLoaded = false;
+      } else {
+        isalDetail = ErasureCodeNative.getLoadingFailureReason();
+        isalLoaded = true;
+      }
+      openSslDetail = OpensslCipher.getLoadingFailureReason();
+      if (openSslDetail != null) {
         openSslLoaded = false;
       } else {
         openSslDetail = OpensslCipher.getLibraryName();
@@ -134,6 +144,7 @@ public class NativeLibraryChecker {
     System.out.printf("lz4:     %b %s%n", lz4Loaded, lz4LibraryName);
     System.out.printf("bzip2:   %b %s%n", bzip2Loaded, bzip2LibraryName);
     System.out.printf("openssl: %b %s%n", openSslLoaded, openSslDetail);
+    System.out.printf("ISA-L:   %b %s%n", isalLoaded, isalDetail);
     if (Shell.WINDOWS) {
       System.out.printf("winutils: %b %s%n", winutilsExists, winutilsPath);
     }

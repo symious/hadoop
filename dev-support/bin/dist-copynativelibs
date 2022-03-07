@@ -90,6 +90,12 @@ for i in "$@"; do
     --builddir=*)
       BUILD_DIR=${i#*=}
     ;;
+    --isallib=*)
+      ISALLIB=${i#*=}
+    ;;
+    --isalbundle=*)
+      ISALBUNDLE=${i#*=}
+    ;;
     --opensslbinbundle=*)
       OPENSSLBINBUNDLE=${i#*=}
     ;;
@@ -143,6 +149,8 @@ if [[ -d "${LIB_DIR}" ]]; then
   bundle_native_lib "${ZSTDLIBBUNDLE}" "zstd.lib" "zstd" "${ZSTDLIB}"
 
   bundle_native_lib "${OPENSSLLIBBUNDLE}" "openssl.lib" "crypto" "${OPENSSLLIB}"
+
+  bundle_native_lib "${ISALBUNDLE}" "isal.lib" "isa" "${ISALLIB}"
 fi
 
 # Windows

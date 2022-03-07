@@ -528,6 +528,9 @@
         <zstd.lib></zstd.lib>
         <zstd.include></zstd.include>
         <require.zstd>false</require.zstd>
+        <isal.prefix></isal.prefix>
+        <isal.lib></isal.lib>
+        <require.isal>false</require.isal>
         <openssl.prefix></openssl.prefix>
         <openssl.lib></openssl.lib>
         <openssl.include></openssl.include>
@@ -586,6 +589,13 @@
                     <javahClassName>org.apache.hadoop.io.compress.zstd.ZStandardDecompressor</javahClassName>
                     <javahClassName>org.apache.hadoop.io.compress.lz4.Lz4Compressor</javahClassName>
                     <javahClassName>org.apache.hadoop.io.compress.lz4.Lz4Decompressor</javahClassName>
+                    <javahClassName>org.apache.hadoop.io.erasurecode.rawcoder.AbstractNativeRawEncoder</javahClassName>
+                    <javahClassName>org.apache.hadoop.io.erasurecode.rawcoder.AbstractNativeRawDecoder</javahClassName>
+                    <javahClassName>org.apache.hadoop.io.erasurecode.rawcoder.NativeRSRawEncoder</javahClassName>
+                    <javahClassName>org.apache.hadoop.io.erasurecode.rawcoder.NativeRSRawDecoder</javahClassName>
+                    <javahClassName>org.apache.hadoop.io.erasurecode.rawcoder.NativeXORRawEncoder</javahClassName>
+                    <javahClassName>org.apache.hadoop.io.erasurecode.rawcoder.NativeXORRawDecoder</javahClassName>
+                    <javahClassName>org.apache.hadoop.io.erasurecode.ErasureCodeNative</javahClassName>
                     <javahClassName>org.apache.hadoop.crypto.OpensslCipher</javahClassName>
                     <javahClassName>org.apache.hadoop.crypto.random.OpensslSecureRandom</javahClassName>
                     <javahClassName>org.apache.hadoop.util.NativeCrc32</javahClassName>
@@ -619,6 +629,9 @@
                     <CUSTOM_ZSTD_PREFIX>${zstd.prefix}</CUSTOM_ZSTD_PREFIX>
                     <CUSTOM_ZSTD_LIB>${zstd.lib}</CUSTOM_ZSTD_LIB>
                     <CUSTOM_ZSTD_INCLUDE>${zstd.include}</CUSTOM_ZSTD_INCLUDE>
+                    <REQUIRE_ISAL>${require.isal}</REQUIRE_ISAL>
+                    <CUSTOM_ISAL_PREFIX>${isal.prefix}</CUSTOM_ISAL_PREFIX>
+                    <CUSTOM_ISAL_LIB>${isal.lib}</CUSTOM_ISAL_LIB>
                     <REQUIRE_OPENSSL>${require.openssl} </REQUIRE_OPENSSL>
                     <CUSTOM_OPENSSL_PREFIX>${openssl.prefix} </CUSTOM_OPENSSL_PREFIX>
                     <CUSTOM_OPENSSL_LIB>${openssl.lib} </CUSTOM_OPENSSL_LIB>
@@ -635,6 +648,20 @@
                   <binary>${project.build.directory}/native/test_bulk_crc32</binary>
                   <timeout>1200</timeout>
                   <results>${project.build.directory}/native-results</results>
+                </configuration>
+              </execution>
+              <execution>
+                <id>erasure_code_test</id>
+                <goals><goal>cmake-test</goal></goals>
+                <phase>test</phase>
+                <configuration>
+                  <binary>${project.build.directory}/native/erasure_code_test</binary>
+                  <timeout>300</timeout>
+                  <results>${project.build.directory}/native-results</results>
+                  <skipIfMissing>true</skipIfMissing>
+                  <env>
+                    <LD_LIBRARY_PATH>${LD_LIBRARY_PATH}:${isal.lib}:${isal.prefix}:/usr/lib</LD_LIBRARY_PATH>
+                  </env>
                 </configuration>
               </execution>
             </executions>
@@ -712,6 +739,13 @@
                     <javahClassName>org.apache.hadoop.io.compress.snappy.SnappyDecompressor</javahClassName>
                     <javahClassName>org.apache.hadoop.io.compress.zstd.ZStandardCompressor</javahClassName>
                     <javahClassName>org.apache.hadoop.io.compress.zstd.ZStandardDecompressor</javahClassName>
+                    <javahClassName>org.apache.hadoop.io.erasurecode.rawcoder.AbstractNativeRawEncoder</javahClassName>
+                    <javahClassName>org.apache.hadoop.io.erasurecode.rawcoder.AbstractNativeRawDecoder</javahClassName>
+                    <javahClassName>org.apache.hadoop.io.erasurecode.rawcoder.NativeRSRawEncoder</javahClassName>
+                    <javahClassName>org.apache.hadoop.io.erasurecode.rawcoder.NativeRSRawDecoder</javahClassName>
+                    <javahClassName>org.apache.hadoop.io.erasurecode.rawcoder.NativeXORRawEncoder</javahClassName>
+                    <javahClassName>org.apache.hadoop.io.erasurecode.rawcoder.NativeXORRawDecoder</javahClassName>
+                    <javahClassName>org.apache.hadoop.io.erasurecode.ErasureCodeNative</javahClassName>
                     <javahClassName>org.apache.hadoop.io.compress.lz4.Lz4Compressor</javahClassName>
                     <javahClassName>org.apache.hadoop.io.compress.lz4.Lz4Decompressor</javahClassName>
                     <javahClassName>org.apache.hadoop.crypto.OpensslCipher</javahClassName>
@@ -771,6 +805,9 @@
                     <argument>/p:CustomOpensslLib=${openssl.lib}</argument>
                     <argument>/p:CustomOpensslInclude=${openssl.include}</argument>
                     <argument>/p:RequireOpenssl=${require.openssl}</argument>
+                    <argument>/p:RequireIsal=${require.isal}</argument>
+                    <argument>/p:CustomIsalPrefix=${isal.prefix}</argument>
+                    <argument>/p:CustomIsalLib=${isal.lib}</argument>
                   </arguments>
                 </configuration>
               </execution>
