@@ -343,8 +343,6 @@ public class TestDecommissioningStatus {
     // Delete the under-replicated file, which should let the 
     // DECOMMISSION_IN_PROGRESS node become DECOMMISSIONED
     AdminStatesBaseTest.cleanupFile(fileSys, f);
-    BlockManagerTestUtil.waitForMarkedDeleteQueueIsEmpty(
-        cluster.getNamesystem(0).getBlockManager());
     BlockManagerTestUtil.recheckDecommissionState(dm);
     assertTrue("the node should be decommissioned",
         dead.get(0).isDecommissioned());

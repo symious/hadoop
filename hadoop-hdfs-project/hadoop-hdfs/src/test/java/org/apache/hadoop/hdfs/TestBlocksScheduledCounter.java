@@ -17,26 +17,18 @@
  */
 package org.apache.hadoop.hdfs;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
-import org.apache.hadoop.hdfs.protocol.LocatedBlock;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockManagerTestUtil;
-import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeDescriptor;
-import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeManager;
-import org.apache.hadoop.hdfs.server.datanode.DataNode;
-import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
-import org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter;
-import org.junit.After;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
 
 import java.io.IOException;
 import java.util.ArrayList;
 
-import static org.junit.Assert.assertEquals;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeDescriptor;
+import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeManager;
+import org.junit.After;
+import org.junit.Test;
 
 /**
  * This class tests DatanodeDescriptor.getBlocksScheduled() at the
@@ -53,7 +45,7 @@ public class TestBlocksScheduledCounter {
       fs.close();
       fs = null;
     }
-    if (cluster != null) {
+    if(cluster!=null){
       cluster.shutdown();
       cluster = null;
     }
@@ -65,25 +57,25 @@ public class TestBlocksScheduledCounter {
 
     cluster.waitActive();
     fs = cluster.getFileSystem();
-
+    
     //open a file an write a few bytes:
     FSDataOutputStream out = fs.create(new Path("/testBlockScheduledCounter"));
-    for (int i = 0; i < 1024; i++) {
+    for (int i=0; i<1024; i++) {
       out.write(i);
     }
     // flush to make sure a block is allocated.
     out.hflush();
-
+    
     ArrayList<DatanodeDescriptor> dnList = new ArrayList<DatanodeDescriptor>();
-    final DatanodeManager dm =
-        cluster.getNamesystem().getBlockManager().getDatanodeManager();
+    final DatanodeManager dm = cluster.getNamesystem().getBlockManager(
+        ).getDatanodeManager();
     dm.fetchDatanodes(dnList, dnList, false);
     DatanodeDescriptor dn = dnList.get(0);
-
+    
     assertEquals(1, dn.getBlocksScheduled());
-
+   
     // close the file and the counter should go to zero.
-    out.close();
+    out.close();   
     assertEquals(0, dn.getBlocksScheduled());
   }
 

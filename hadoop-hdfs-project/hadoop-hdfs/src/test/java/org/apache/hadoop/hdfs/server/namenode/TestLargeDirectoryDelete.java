@@ -22,7 +22,6 @@ import java.util.Random;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockManagerTestUtil;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -140,8 +139,6 @@ public class TestLargeDirectoryDelete {
     
     final long start = Time.now();
     mc.getFileSystem().delete(new Path("/root"), true); // recursive delete
-    BlockManagerTestUtil.waitForMarkedDeleteQueueIsEmpty(
-        mc.getNamesystem(0).getBlockManager());
     final long end = Time.now();
     threads[0].endThread();
     threads[1].endThread();
