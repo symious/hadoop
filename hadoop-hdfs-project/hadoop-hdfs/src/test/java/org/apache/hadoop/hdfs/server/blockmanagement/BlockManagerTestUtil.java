@@ -40,9 +40,6 @@ import com.google.common.base.Preconditions;
 import org.mockito.internal.util.reflection.Whitebox;
 
 public class BlockManagerTestUtil {
-
-  static final long SLEEP_TIME = 1000;
-
   public static void setNodeReplicationLimit(final BlockManager blockManager,
       final int limit) {
     blockManager.maxReplicationStreams = limit;
@@ -156,20 +153,7 @@ public class BlockManagerTestUtil {
    */
   public static  CorruptReplicasMap getCorruptReplicas(final BlockManager blockManager){
     return blockManager.corruptReplicas;
-
-  }
-
-  /**
-   * Wait for the processing of the marked deleted block to complete.
-   */
-  public static void waitForMarkedDeleteQueueIsEmpty(
-      BlockManager blockManager) throws InterruptedException {
-    while (true) {
-      if (blockManager.getMarkedDeleteQueue().isEmpty()) {
-        return;
-      }
-      Thread.sleep(SLEEP_TIME);
-    }
+    
   }
 
   /**

@@ -147,8 +147,6 @@ public class TestMetaSave {
     nnRpc.delete("/filestatus0", true);
     nnRpc.delete("/filestatus1", true);
 
-    BlockManagerTestUtil.waitForMarkedDeleteQueueIsEmpty(
-        cluster.getNamesystem().getBlockManager());
     nnRpc.metaSave("metasaveAfterDelete.out.txt");
 
     // Verification

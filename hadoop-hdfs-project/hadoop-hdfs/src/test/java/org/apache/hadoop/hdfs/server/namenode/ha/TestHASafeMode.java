@@ -340,8 +340,6 @@ public class TestHASafeMode {
     // once it starts up
     banner("Removing the blocks without rolling the edit log");
     fs.delete(new Path("/test"), true);
-    BlockManagerTestUtil.waitForMarkedDeleteQueueIsEmpty(
-        cluster.getNamesystem(0).getBlockManager());
     BlockManagerTestUtil.computeAllPendingWork(
         nn0.getNamesystem().getBlockManager());
     cluster.triggerHeartbeats();
@@ -381,8 +379,6 @@ public class TestHASafeMode {
     // ACKed when due to block removals.
     banner("Removing the blocks without rolling the edit log");
     fs.delete(new Path("/test"), true);
-    BlockManagerTestUtil.waitForMarkedDeleteQueueIsEmpty(
-        cluster.getNamesystem(0).getBlockManager());
     BlockManagerTestUtil.computeAllPendingWork(
         nn0.getNamesystem().getBlockManager());
     

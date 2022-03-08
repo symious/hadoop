@@ -44,7 +44,6 @@ import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockManagerTestUtil;
 import org.apache.hadoop.hdfs.server.namenode.FSDirectory;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.INode;
@@ -1129,8 +1128,7 @@ public class TestSnapshotDeletion {
   }
 
   @Test
-  public void testCorrectNumberOfBlocksAfterRestart()
-      throws IOException, InterruptedException {
+  public void testCorrectNumberOfBlocksAfterRestart() throws IOException {
     final Path foo = new Path("/foo");
     final Path bar = new Path(foo, "bar");
     final Path file = new Path(foo, "file");
@@ -1151,10 +1149,9 @@ public class TestSnapshotDeletion {
     hdfs.delete(bar, true);
     hdfs.delete(foo, true);
 
+    long numberOfBlocks = cluster.getNamesystem().getBlocksTotal();
     cluster.restartNameNode(0);
-    BlockManagerTestUtil.waitForMarkedDeleteQueueIsEmpty(
-        cluster.getNamesystem().getBlockManager());
-    assertEquals(0, cluster.getNamesystem().getBlocksTotal());
+    assertEquals(numberOfBlocks, cluster.getNamesystem().getBlocksTotal());
   }
 
   /*
