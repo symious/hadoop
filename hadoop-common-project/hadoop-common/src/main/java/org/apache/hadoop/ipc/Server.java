@@ -3686,6 +3686,17 @@ public abstract class Server {
   }
 
   /**
+   * The CacheStats of passwordMatchedCache
+   * @return The CacheStats of passwordMatchedCache.
+   */
+  public CacheStats getPasswordMatchedCacheStats() {
+    if (passwordMatchedCache != null) {
+      return passwordMatchedCache.stats();
+    }
+    return null;
+  }
+
+  /**
    * When the read or write buffer size is larger than this limit, i/o will be 
    * done in chunks of this size. Most RPC requests and responses would be
    * be smaller.
