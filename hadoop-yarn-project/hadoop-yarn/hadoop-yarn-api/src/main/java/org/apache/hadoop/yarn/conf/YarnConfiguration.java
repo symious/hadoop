@@ -851,6 +851,10 @@ public class YarnConfiguration extends Configuration {
       RM_PREFIX + "fast-recovery.thread-count";
   public static final int DEFAULT_FAST_RECOVERY_THREAD_COUNT = 1;
 
+  public static final String FAST_RECOVERY_CONTAINERS_THREAD_COUNT =
+      RM_PREFIX + "fast-recovery.containers.thread-count";
+  public static final int DEFAULT_FAST_RECOVERY_CONTAINERS_THREAD_COUNT = 1;
+
   public static final String YARN_FAIL_FAST = YARN_PREFIX + "fail-fast";
   public static final boolean DEFAULT_YARN_FAIL_FAST = false;
 

@@ -29,7 +29,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.gson.Gson;
@@ -515,99 +517,148 @@ public abstract class AbstractYarnScheduler
           && containerReports.isEmpty())) {
         return;
       }
-
-      for (NMContainerStatus container : containerReports) {
-        ApplicationId appId =
-            container.getContainerId().getApplicationAttemptId()
-                .getApplicationId();
-        RMApp rmApp = rmContext.getRMApps().get(appId);
-        if (rmApp == null) {
-          LOG.error("Skip recovering container " + container
-              + " for unknown application.");
-          killOrphanContainerOnNode(nm, container);
-          continue;
-        }
-
-        SchedulerApplication<T> schedulerApp = applications.get(appId);
-        if (schedulerApp == null) {
-          LOG.info("Skip recovering container  " + container
-              + " for unknown SchedulerApplication. "
-              + "Application current state is " + rmApp.getState());
-          killOrphanContainerOnNode(nm, container);
-          continue;
-        }
-
-        LOG.info("Recovering container " + container);
-        SchedulerApplicationAttempt schedulerAttempt =
-            schedulerApp.getCurrentAppAttempt();
-
-        if (!rmApp.getApplicationSubmissionContext()
-            .getKeepContainersAcrossApplicationAttempts()) {
-          // Do not recover containers for stopped attempt or previous attempt.
-          if (schedulerAttempt.isStopped() || !schedulerAttempt
-              .getApplicationAttemptId().equals(
-                  container.getContainerId().getApplicationAttemptId())) {
-            LOG.info("Skip recovering container " + container
-                + " for already stopped attempt.");
-            killOrphanContainerOnNode(nm, container);
-            continue;
-          }
-        }
-
-        Queue queue = schedulerApp.getQueue();
-        //To make sure we don't face ambiguity, CS queues should be referenced
-        //by their full queue names
-        String queueName =  queue instanceof CSQueue ?
-            ((CSQueue)queue).getQueuePath() : queue.getQueueName();
-
-        // create container
-        RMContainer rmContainer = recoverAndCreateContainer(container, nm,
-            queueName);
-
-        // recover RMContainer
-        rmContainer.handle(
-            new RMContainerRecoverEvent(container.getContainerId(), container));
-
-        // recover scheduler node
-        SchedulerNode schedulerNode = nodeTracker.getNode(nm.getNodeID());
-        schedulerNode.recoverContainer(rmContainer);
-
-        // recover queue: update headroom etc.
-        Queue queueToRecover = schedulerAttempt.getQueue();
-        queueToRecover.recoverContainer(getClusterResource(), schedulerAttempt,
-            rmContainer);
-
-        // recover scheduler attempt
-        schedulerAttempt.recoverContainer(schedulerNode, rmContainer);
-
-        // set master container for the current running AMContainer for this
-        // attempt.
-        RMAppAttempt appAttempt = rmApp.getCurrentAppAttempt();
-        if (appAttempt != null) {
-          Container masterContainer = appAttempt.getMasterContainer();
-
-          // Mark current running AMContainer's RMContainer based on the master
-          // container ID stored in AppAttempt.
-          if (masterContainer != null && masterContainer.getId().equals(
-              rmContainer.getContainerId())) {
-            ((RMContainerImpl) rmContainer).setAMContainer(true);
-          }
-        }
-
-        if (schedulerAttempt.getPendingRelease().remove(
-            container.getContainerId())) {
-          // release the container
-          rmContainer.handle(
-              new RMContainerFinishedEvent(container.getContainerId(),
-                  SchedulerUtils
-                      .createAbnormalContainerStatus(container.getContainerId(),
-                          SchedulerUtils.RELEASED_CONTAINER),
-                  RMContainerEventType.RELEASED));
-          LOG.info(container.getContainerId() + " is released by application.");
+      int count = 0;
+      boolean fastRecovery = this.rmContext.getYarnConfiguration()
+          .getBoolean(YarnConfiguration.FAST_RECOVERY_ENABLED,
+              YarnConfiguration.DEFAULT_RM_FAST_RECOVERY_ENABLED);
+      if (fastRecovery) {
+        count = recoverContainersOnNodeByMultiThreads(containerReports, nm);
+      } else {
+        for (NMContainerStatus container : containerReports) {
+          recoverContainerOnNode(container, nm);
+          ++count;
         }
       }
-    } finally {
+      LOG.info("Successfully recovered " + count + " out of "
+          + containerReports.size() + " containers");
+    }finally {
       writeLock.unlock();
+    }
+  }
+
+  private int recoverContainersOnNodeByMultiThreads(List<NMContainerStatus> containerReports,
+      RMNode nm) {
+    List<FutureTask<Integer>> tasks = new ArrayList<>();
+    int count = 0;
+    int threadNum =
+        this.rmContext.getYarnConfiguration().getInt(YarnConfiguration.FAST_RECOVERY_CONTAINERS_THREAD_COUNT,
+            YarnConfiguration.DEFAULT_FAST_RECOVERY_CONTAINERS_THREAD_COUNT);
+    for (int index = 0; index < threadNum; index++) {
+      int finalIndex = index;
+      FutureTask<Integer> task = new FutureTask<>(new Callable<Integer>() {
+        @Override
+        public Integer call() throws Exception {
+          int count = 0;
+          for (int i = finalIndex; i < containerReports.size(); i = i + threadNum, count++) {
+            recoverContainerOnNode(containerReports.get(i), nm);
+          }
+          return count;
+        }
+      });
+      Thread thread = new Thread(task);
+      thread.setName("RecoverThread" + finalIndex);
+      thread.start();
+      tasks.add(task);
+    }
+    LOG.info("Waiting ContainersRecoverThread finish...");
+    for (FutureTask<Integer> t : tasks) {
+      try {
+        count = count + t.get();
+      } catch (Exception e) {
+        LOG.error("Exception during recovery window: ", e);
+      }
+    }
+    return count;
+  }
+
+  private void recoverContainerOnNode(NMContainerStatus container, RMNode nm) {
+    ApplicationId appId =
+        container.getContainerId().getApplicationAttemptId()
+            .getApplicationId();
+    RMApp rmApp = rmContext.getRMApps().get(appId);
+    if (rmApp == null) {
+      LOG.error("Skip recovering container " + container
+          + " for unknown application.");
+      killOrphanContainerOnNode(nm, container);
+      return;
+    }
+
+    SchedulerApplication<T> schedulerApp = applications.get(appId);
+    if (schedulerApp == null) {
+      LOG.info("Skip recovering container  " + container
+          + " for unknown SchedulerApplication. "
+          + "Application current state is " + rmApp.getState());
+      killOrphanContainerOnNode(nm, container);
+      return;
+    }
+
+    LOG.info("Recovering container " + container);
+    SchedulerApplicationAttempt schedulerAttempt =
+        schedulerApp.getCurrentAppAttempt();
+
+    if (!rmApp.getApplicationSubmissionContext()
+        .getKeepContainersAcrossApplicationAttempts()) {
+      // Do not recover containers for stopped attempt or previous attempt.
+      if (schedulerAttempt.isStopped() || !schedulerAttempt
+          .getApplicationAttemptId().equals(
+              container.getContainerId().getApplicationAttemptId())) {
+        LOG.info("Skip recovering container " + container
+            + " for already stopped attempt.");
+        killOrphanContainerOnNode(nm, container);
+        return;
+      }
+    }
+
+    Queue queue = schedulerApp.getQueue();
+    //To make sure we don't face ambiguity, CS queues should be referenced
+    //by their full queue names
+    String queueName = queue instanceof CSQueue ?
+        ((CSQueue) queue).getQueuePath() : queue.getQueueName();
+
+    // create container
+    RMContainer rmContainer = recoverAndCreateContainer(container, nm,
+        queueName);
+
+    // recover RMContainer
+    rmContainer.handle(
+        new RMContainerRecoverEvent(container.getContainerId(), container));
+
+    // recover scheduler node
+    SchedulerNode schedulerNode = nodeTracker.getNode(nm.getNodeID());
+    schedulerNode.recoverContainer(rmContainer);
+
+    // recover queue: update headroom etc.
+    Queue queueToRecover = schedulerAttempt.getQueue();
+    queueToRecover.recoverContainer(getClusterResource(), schedulerAttempt,
+        rmContainer);
+
+    // recover scheduler attempt
+    schedulerAttempt.recoverContainer(schedulerNode, rmContainer);
+
+    // set master container for the current running AMContainer for this
+    // attempt.
+    RMAppAttempt appAttempt = rmApp.getCurrentAppAttempt();
+    if (appAttempt != null) {
+      Container masterContainer = appAttempt.getMasterContainer();
+
+      // Mark current running AMContainer's RMContainer based on the master
+      // container ID stored in AppAttempt.
+      if (masterContainer != null && masterContainer.getId().equals(
+          rmContainer.getContainerId())) {
+        ((RMContainerImpl) rmContainer).setAMContainer(true);
+      }
+    }
+
+    if (schedulerAttempt.getPendingRelease().remove(
+        container.getContainerId())) {
+      // release the container
+      rmContainer.handle(
+          new RMContainerFinishedEvent(container.getContainerId(),
+              SchedulerUtils
+                  .createAbnormalContainerStatus(container.getContainerId(),
+                      SchedulerUtils.RELEASED_CONTAINER),
+              RMContainerEventType.RELEASED));
+      LOG.info(container.getContainerId() + " is released by application.");
     }
   }
 
