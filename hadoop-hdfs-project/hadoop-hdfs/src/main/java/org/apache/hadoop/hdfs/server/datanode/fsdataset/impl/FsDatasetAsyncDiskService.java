@@ -36,6 +36,7 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.ExtendedBlockId;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.server.common.DataNodeLockManager;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeFaultInjector;
 import org.apache.hadoop.hdfs.server.datanode.FileIoProvider;
@@ -356,7 +357,9 @@ class FsDatasetAsyncDiskService {
     }
 
     private boolean removeReplicaFromMem() {
-      try (AutoCloseableLock lock = fsdatasetImpl.datasetWriteLock.acquire()) {
+      try (AutoCloseableLock lock = fsdatasetImpl.acquireDatasetLockManager()
+          .writeLock(DataNodeLockManager.LockLevel.BLOCK_POOl,
+              block.getBlockPoolId())) {
         final ReplicaInfo info = fsdatasetImpl.volumeMap
             .get(block.getBlockPoolId(), block.getLocalBlock());
         if (info == null) {

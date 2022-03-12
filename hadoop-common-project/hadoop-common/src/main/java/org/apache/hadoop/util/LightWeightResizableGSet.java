@@ -20,6 +20,8 @@ package org.apache.hadoop.util;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
 
+import java.util.Iterator;
+
 /**
  * A low memory footprint {@link GSet} implementation,
  * which uses an array for storing the elements
@@ -105,6 +107,15 @@ public class LightWeightResizableGSet<K, E extends K>
   @Override
   public synchronized int size() {
     return super.size();
+  }
+
+  /**
+   * Called getIterator in the community patch, which is not a very
+   * descriptive name. Changed to consumeIterator.
+   * @param consumer consumer to execute
+   */
+  public synchronized void consumeIterator(Consumer<Iterator<E>> consumer) {
+    consumer.accept(super.values().iterator());
   }
 
   /**

@@ -48,7 +48,6 @@ import org.apache.hadoop.hdfs.server.protocol.SlowPeerReports;
 import org.apache.hadoop.hdfs.server.protocol.StorageReport;
 import org.apache.hadoop.hdfs.server.protocol.VolumeFailureSummary;
 import org.apache.hadoop.test.GenericTestUtils;
-import org.apache.hadoop.util.AutoCloseableLock;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -253,10 +252,8 @@ public class TestBlockRecovery2 {
                 recoveringBlock = new BlockRecoveryCommand.RecoveringBlock(
                 block.getBlock(), locations, block.getBlock()
                 .getGenerationStamp() + 1);
-            try(AutoCloseableLock ignored = dataNode.data.acquireDatasetLock()) {
-              Thread.sleep(2000);
-              dataNode.initReplicaRecovery(recoveringBlock);
-            }
+            Thread.sleep(2000);
+            dataNode.initReplicaRecovery(recoveringBlock);
           } catch (Exception e) {
             recoveryInitResult.set(false);
           }
