@@ -15,6 +15,7 @@
 .classpath
 .project
 .settings
+*.versionsBackup
 target
 build
 

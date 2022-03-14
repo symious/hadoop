@@ -1,0 +1,251 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Dockerfile for installing the necessary dependencies for building Hadoop.
+# See BUILDING.txt.
+
+FROM gitlab/gitlab-runner:latest
+
+WORKDIR /root
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+#####
+# Disable suggests/recommends
+#####
+RUN echo APT::Install-Recommends "0"\; > /etc/apt/apt.conf.d/10disableextras
+RUN echo APT::Install-Suggests "0"\; >>  /etc/apt/apt.conf.d/10disableextras
+
+ENV DEBIAN_FRONTEND noninteractive
+ENV DEBCONF_TERSE true
+
+######
+# Install common dependencies from packages. Versions here are either
+# sufficient or irrelevant.
+#
+# WARNING: DO NOT PUT JAVA APPS HERE! Otherwise they will install default
+# Ubuntu Java.  See Java section below!
+######
+# hadolint ignore=DL3008
+RUN apt-get -q update \
+    && apt-get -q install -y --no-install-recommends \
+        apt-utils \
+        build-essential \
+        bzip2 \
+        curl \
+        doxygen \
+        fuse \
+        g++ \
+        gcc \
+        git \
+        gnupg-agent \
+        libbz2-dev \
+        libcurl4-openssl-dev \
+        libfuse-dev \
+        libprotobuf-dev \
+        libprotoc-dev \
+        libsasl2-dev \
+        libsnappy-dev \
+        libssl-dev \
+        libtool \
+        zstd \
+        locales \
+        make \
+        pinentry-curses \
+        pkg-config \
+        python \
+        python2.7 \
+        python3-pip \
+        python-pkg-resources \
+        python-setuptools \
+        rsync \
+        software-properties-common \
+        sudo \
+        zlib1g-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+#######
+# OpenJDK 8
+#######
+# hadolint ignore=DL3008
+RUN apt-get -q update \
+    && apt-get -q install -y --no-install-recommends openjdk-8-jdk \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+######
+# Install cmake 3.1.0 (3.5.1 ships with Xenial)
+######
+RUN mkdir -p /opt/cmake \
+    && curl -L -s -S \
+      https://cmake.org/files/v3.1/cmake-3.1.0-Linux-x86_64.tar.gz \
+      -o /opt/cmake.tar.gz \
+    && tar xzf /opt/cmake.tar.gz --strip-components 1 -C /opt/cmake
+ENV CMAKE_HOME /opt/cmake
+ENV PATH "${PATH}:/opt/cmake/bin"
+
+######
+# Install Google Protobuf 2.5.0 (2.6.0 ships with Xenial)
+######
+# hadolint ignore=DL3003
+RUN mkdir -p /opt/protobuf-src \
+    && curl -L -s -S \
+      https://github.com/google/protobuf/releases/download/v2.5.0/protobuf-2.5.0.tar.gz \
+      -o /opt/protobuf.tar.gz \
+    && tar xzf /opt/protobuf.tar.gz --strip-components 1 -C /opt/protobuf-src \
+    && cd /opt/protobuf-src \
+    && ./configure --prefix=/opt/protobuf \
+    && make install \
+    && cd /root \
+    && rm -rf /opt/protobuf-src
+ENV PROTOBUF_HOME /opt/protobuf
+ENV PATH "${PATH}:/opt/protobuf/bin"
+RUN echo "export PATH=\"${PATH}:/opt/protobuf/bin\"" >> /etc/profile
+
+######
+# Install Apache Maven 3.3.9 (3.3.9 ships with Xenial)
+######
+# hadolint ignore=DL3008
+RUN apt-get -q update \
+    && apt-get -q install -y --no-install-recommends maven \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+ENV MAVEN_HOME /usr
+
+######
+# Install Apache Ant 1.9.6 (1.9.6 ships with Xenial)
+######
+# hadolint ignore=DL3008
+RUN apt-get -q update \
+    && apt-get -q install -y --no-install-recommends ant \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+#######
+# Install SpotBugs 4.2.2
+#######
+RUN mkdir -p /opt/spotbugs \
+    && curl -L -s -S https://github.com/spotbugs/spotbugs/releases/download/4.2.2/spotbugs-4.2.2.tgz \
+      -o /opt/spotbugs.tgz \
+    && tar xzf /opt/spotbugs.tgz --strip-components 1 -C /opt/spotbugs \
+    && chmod +x /opt/spotbugs/bin/*
+ENV SPOTBUGS_HOME /opt/spotbugs
+ENV PATH "${PATH}:/opt/spotbugs/bin"
+
+####
+# Install shellcheck (0.4.6, the latest as of 2017-09-26)
+####
+# hadolint ignore=DL3008
+RUN add-apt-repository -y ppa:hvr/ghc \
+    && apt-get -q update \
+    && apt-get -q install -y --no-install-recommends shellcheck ghc-8.0.2 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+####
+# Install bats (0.4.0, the latest as of 2017-09-26, ships with Xenial)
+####
+# hadolint ignore=DL3008
+RUN apt-get -q update \
+    && apt-get -q install -y --no-install-recommends bats \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+####
+# Install pylint at fixed version (2.0.0 removed python2 support)
+# https://github.com/PyCQA/pylint/issues/2294
+####
+RUN pip3 install isort==4.3.8
+RUN pip3 install lazy-object-proxy==1.6.0
+RUN pip3 install pylint==1.9.2
+
+####
+# Install dateutil.parser
+####
+RUN pip3 install python-dateutil==2.7.3
+
+###
+# Install node.js 8.17.0 for web UI framework (4.2.6 ships with Xenial)
+###
+#RUN curl -L -s -S https://deb.nodesource.com/setup_8.x | bash - \
+#    && apt-get install -y --no-install-recommends nodejs=8.17.0-1nodesource1 \
+#    && apt-get clean \
+#    && rm -rf /var/lib/apt/lists/* \
+#    && npm install -g bower@1.8.8
+
+###
+## Install Yarn 1.12.1 for web UI framework
+####
+RUN curl -s -S https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - \
+    && echo 'deb https://dl.yarnpkg.com/debian/ stable main' > /etc/apt/sources.list.d/yarn.list \
+    && apt-get -q update \
+    && apt-get install -y --no-install-recommends yarn=1.12.1-1 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+###
+# Install hadolint
+####
+RUN curl -L -s -S \
+        https://github.com/hadolint/hadolint/releases/download/v1.11.1/hadolint-Linux-x86_64 \
+        -o /bin/hadolint \
+   && chmod a+rx /bin/hadolint \
+   && shasum -a 512 /bin/hadolint | \
+        awk '$1!="734e37c1f6619cbbd86b9b249e69c9af8ee1ea87a2b1ff71dccda412e9dac35e63425225a95d71572091a3f0a11e9a04c2fc25d9e91b840530c26af32b9891ca" {exit(1)}'
+
+###
+# Avoid out of memory errors in builds
+###
+ENV MAVEN_OPTS -Xms256m -Xmx1536m -Dhttps.protocols=TLSv1.2 -Dhttps.cipherSuites=TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
+
+###
+# Everything past this point is not needed for releasing.
+# So tell release script not to read the rest of the file:
+# RELEASE CUT HERE
+###
+
+# Setup SDI password store
+RUN mkdir -p /etc/hadoop
+COPY shadow /etc/hadoop/shadow.orig
+COPY shadow.bypass /etc/hadoop/shadow.bypass
+RUN chmod 777 /etc/hadoop
+RUN ln -s /etc/hadoop/shadow.orig /etc/hadoop/shadow \
+    && chmod 666 /etc/hadoop/shadow
+ENV HADOOP_USER_RPCPASSWORD "I AM THE DANGER"
+
+
+###
+# Everything past this point is either not needed for testing or breaks Yetus.
+# So tell Yetus not to read the rest of the file:
+# YETUS CUT HERE
+###
+
+# Hugo static website generator (for new hadoop site and Ozone docs)
+RUN curl -L -o hugo.deb https://github.com/gohugoio/hugo/releases/download/v0.30.2/hugo_0.30.2_Linux-64bit.deb \
+    && dpkg --install hugo.deb \
+    && rm hugo.deb
+
+# install some useful tools
+RUN apt-get -q update \
+    && apt-get -q install -y --no-install-recommends \
+        vim-tiny less
+
+# Add a welcome message and environment checks.
+COPY hadoop_env_checks.sh /root/hadoop_env_checks.sh
+RUN chmod 755 /root/hadoop_env_checks.sh
+# hadolint ignore=SC2016
+RUN echo '${HOME}/hadoop_env_checks.sh' >> /root/.bashrc
