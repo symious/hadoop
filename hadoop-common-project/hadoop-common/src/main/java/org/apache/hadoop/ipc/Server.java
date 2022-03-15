@@ -2622,7 +2622,6 @@ public abstract class Server {
         LOG.warn("Connection Authentication from " + this
                 + " for protocol " + connectionContext.getProtocol()
                 + " is failed for user " + user
-                + " from " + getHostAddress() + ":" + getPort()
                 + ". Reason: " + ie.getMessage()
                 + (isSdiAuthSilentMode ? " [Silent]" : ""));
         rpcMetrics.incrAuthenticationFailures();
