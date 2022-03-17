@@ -1607,6 +1607,20 @@ public class UserGroupInformation {
   }
 
   /**
+   * If this is a proxy user, get the real user. Otherwise, return
+   * this user.
+   * @param user the user to check
+   * @return the real user or self
+   */
+  public static UserGroupInformation getRealUserOrSelf(UserGroupInformation user) {
+    if (user == null) {
+      return null;
+    }
+    UserGroupInformation real = user.getRealUser();
+    return real != null ? real : user;
+  }
+
+  /**
    * This class is used for storing the groups for testing. It stores a local
    * map that has the translation of usernames to groups.
    */

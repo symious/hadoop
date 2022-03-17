@@ -146,9 +146,6 @@ public class RouterRpcClient {
   private static final Pattern STACK_TRACE_PATTERN =
       Pattern.compile("\\tat (.*)\\.(.*)\\((.*):(\\d*)\\)");
 
-  private static final String CLIENT_IP_STR = "clientIp";
-  private static final String CLIENT_PORT_STR = "clientPort";
-
   /** Fairness manager to control handlers assigned per NS. */
   private volatile RouterRpcFairnessPolicyController routerRpcFairnessPolicyController;
   private Map<String, AtomicLong> rejectedPermitsPerNs = new ConcurrentHashMap<>();
@@ -620,8 +617,8 @@ public class RouterRpcClient {
     byte[] origSignature = ctx == null ? null : ctx.getSignature();
     CallerContext.Builder builder =
         new CallerContext.Builder("", contextFieldSeparator)
-            .append(CLIENT_IP_STR, Server.getRemoteAddress())
-            .append(CLIENT_PORT_STR,
+            .append(CallerContext.CLIENT_IP_STR, Server.getRemoteAddress())
+            .append(CallerContext.CLIENT_PORT_STR,
                 Integer.toString(Server.getRemotePort()))
             .setSignature(origSignature);
     // Append the original caller context

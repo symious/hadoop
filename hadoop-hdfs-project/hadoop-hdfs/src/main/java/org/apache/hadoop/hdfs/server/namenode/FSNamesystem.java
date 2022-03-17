@@ -353,7 +353,6 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
           "rollingLockWaitTimeMetrics", null, detailedLockWaitTimeMetrics);
   private static final String IS_INTER_DC_READ_STR = "isInterDCRead";
 
-  private static final String CLIENT_PORT_STR = "clientPort";
   private final String contextFieldSeparator;
 
   boolean isAuditEnabled() {
@@ -416,7 +415,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       byte[] origSignature = ctx == null ? null : ctx.getSignature();
       CallerContext.setCurrent(
           new CallerContext.Builder(origContext, contextFieldSeparator)
-              .append(CLIENT_PORT_STR, String.valueOf(Server.getRemotePort()))
+              .append(CallerContext.CLIENT_PORT_STR, String.valueOf(Server.getRemotePort()))
               .setSignature(origSignature)
               .build());
     }
@@ -424,7 +423,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
   private boolean isClientPortInfoAbsent(CallerContext ctx){
     return ctx == null || ctx.getContext() == null
-        || !ctx.getContext().contains(CLIENT_PORT_STR);
+        || !ctx.getContext().contains(CallerContext.CLIENT_PORT_STR);
   }
 
   /**

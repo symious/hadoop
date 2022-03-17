@@ -21,6 +21,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENG
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_IP_PROXY_USERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_RATIO_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_RATIO_KEY;
@@ -47,6 +48,9 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 
 import com.google.common.collect.Lists;
+
+import org.apache.commons.lang3.ArrayUtils;
+import org.apache.hadoop.ipc.CallerContext;
 
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -259,19 +263,23 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   
   private final String minimumDataNodeVersion;
 
+  // Users who can override the client ip
+  private final String[] ipProxyUsers;
+
   public NameNodeRpcServer(Configuration conf, NameNode nn)
       throws IOException {
     this.nn = nn;
     this.namesystem = nn.getNamesystem();
     this.retryCache = namesystem.getRetryCache();
     this.metrics = NameNode.getNameNodeMetrics();
-    
+
     int handlerCount = 
       conf.getInt(DFS_NAMENODE_HANDLER_COUNT_KEY, 
                   DFS_NAMENODE_HANDLER_COUNT_DEFAULT);
     boolean serviceRPCSdiAuthEnabled = conf.getBoolean(
         CommonConfigurationKeys.HADOOP_SERVICE_RPC_SDI_AUTHENTICATION_ENABLED,
         false);
+    ipProxyUsers = conf.getStrings(DFS_NAMENODE_IP_PROXY_USERS);
 
     RPC.setProtocolEngine(conf, ClientNamenodeProtocolPB.class,
         ProtobufRpcEngine.class);
@@ -338,7 +346,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
         new TraceAdminProtocolServerSideTranslatorPB(this);
     BlockingService traceAdminService = TraceAdminService
         .newReflectiveBlockingService(traceAdminXlator);
-    
+
     WritableRpcEngine.ensureInitialized();
 
     InetSocketAddress serviceRpcAddr = nn.getServiceRpcServerAddress(conf);
@@ -765,7 +773,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   @Override // ClientProtocol
   public HdfsFileStatus create(String src, FsPermission masked,
       String clientName, EnumSetWritable<CreateFlag> flag,
-      boolean createParent, short replication, long blockSize, 
+      boolean createParent, short replication, long blockSize,
       CryptoProtocolVersion[] supportedVersions, String ecPolicyName)
       throws IOException {
     checkNNStartup();
@@ -1241,7 +1249,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     metrics.incrFileInfoOps();
     return namesystem.getFileInfo(src, true);
   }
-  
+
   @Override // ClientProtocol
   public boolean isFileClosed(String src) throws IOException{
     checkNNStartup();
@@ -1686,7 +1694,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
       });
     }
   }
-  
+
   @Override // DatanodeProtocol
   public void errorReport(DatanodeRegistration nodeReg,
                           int errorCode, String msg) throws IOException { 
@@ -1744,7 +1752,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
        throw new UnregisteredNodeException(nodeReg);
     }
   }
-    
+
 
   @Override // RefreshAuthorizationPolicyProtocol
   public void refreshServiceAcl() throws IOException {
@@ -1761,7 +1769,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
 
   @Override // RefreshAuthorizationPolicyProtocol
   public void refreshUserToGroupsMappings() throws IOException {
-    LOG.info("Refreshing all user-to-groups mappings. Requested by user: " + 
+    LOG.info("Refreshing all user-to-groups mappings. Requested by user: " +
              getRemoteUser().getShortUserName());
     Groups.getUserToGroupsMappingService().refresh();
   }
@@ -1831,9 +1839,9 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     nn.checkHaStateChange(req);
     nn.transitionToActive();
   }
-  
+
   @Override // HAServiceProtocol
-  public synchronized void transitionToStandby(StateChangeRequestInfo req) 
+  public synchronized void transitionToStandby(StateChangeRequestInfo req)
       throws ServiceFailedException, AccessControlException, IOException {
     checkNNStartup();
     nn.checkHaStateChange(req);
@@ -1895,7 +1903,29 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     }
   }
 
-  private static String getClientMachine() {
+  private String getClientMachine() {
+    if (ipProxyUsers != null) {
+      // Get the real user (or effective if it isn't a proxy user)
+      UserGroupInformation user =
+          UserGroupInformation.getRealUserOrSelf(Server.getRemoteUser());
+      if (user != null &&
+          ArrayUtils.contains(ipProxyUsers, user.getShortUserName())) {
+        CallerContext context = CallerContext.getCurrent();
+        if (context != null && context.isContextValid()) {
+          String cc = context.getContext();
+          // if the rpc has a caller context of "clientIp:1.2.3.4,CLI",
+          // return "1.2.3.4" as the client machine.
+          String key = CallerContext.CLIENT_IP_STR +
+              CallerContext.Builder.KEY_VALUE_SEPARATOR;
+          int posn = cc.indexOf(key);
+          if (posn != -1) {
+            posn += key.length();
+            int end = cc.indexOf(",", posn);
+            return end == -1 ? cc.substring(posn) : cc.substring(posn, end);
+          }
+        }
+      }
+    }
     String clientMachine;
     String proxyMachine = Server.getProxyHostAddress();
     if (proxyMachine != null) {
