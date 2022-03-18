@@ -535,6 +535,12 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
 
   public static final String  DFS_ZONESERVICE_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY = "dfs.zoneservice.kerberos.internal.spnego.principal";
   public static final String  DFS_ZONESERVICE_KEYTAB_FILE_KEY = "dfs.zoneservice.keytab.file";
+  public static final String  DFS_ZONESERVICE_BATCH_THREAD_POOL_SIZE = "dfs.zoneservice.batch.thread.pool.size";
+  public static final int     DFS_ZONESERVICE_BATCH_THREAD_POOL_SIZE_DEFAULT = 5;
+  public static final String  DFS_ZONESERVICE_BATCH_THREAD_POOL_MAX_SIZE = "dfs.zoneservice.batch.thread.pool.size.max";
+  public static final int     DFS_ZONESERVICE_BATCH_THREAD_POOL_MAX_SIZE_DEFAULT = 5;
+  public static final String  DFS_ZONESERVICE_BATCH_THREAD_POOL_ALIVE_TIME = "dfs.zoneservice.batch.thread.pool.alive.time";
+  public static final int     DFS_ZONESERVICE_BATCH_THREAD_POOL_ALIVE_TIME_DEFAULT = 3600;
 
   public static final String  DFS_ZONESERVICE_THREADS_KEY = "dfs.zoneservice.threads";
   public static final int     DFS_ZONESERVICE_THREADS_DEFAULT = 50;
@@ -604,6 +610,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.zonemover.xattr.set.enable";
   public static final boolean DFS_ZONEMOVER_XATTR_SET_ENABLE_DEFAULT = false;
   public static final boolean DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS_DEFAULT = true;
+  public static final String  DFS_ZONEMOVER_CHECK_ZK_UPDATE_PATH_RULE_MAP_INTERVAL =
+      "dfs.zonemover.check.zk.update.path.rule.map.interval";
+  public static final int     DFS_ZONEMOVER_CHECK_ZK_UPDATE_PATH_RULE_MAP_INTERVAL_DEFAULT = 5;
   //ZoneChecker related keys
   public static final String  DFS_ZONECHECKER_DEFAULT_RATIO = "dfs.zonechecker.default.ratio";
   public static final float   DFS_ZONECHECKER_DEFAULT_RATIO_DEFAULT = 1.0f;

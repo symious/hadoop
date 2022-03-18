@@ -24,6 +24,7 @@ import org.apache.hadoop.hdfs.server.zoneservice.store.BaseRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.QueryResult;
+import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.curator.ZKCuratorManager;
@@ -80,7 +81,8 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
     }
 
     // Initialize supported classes.
-    if (!initRecordStorage(MigrationRecord.class)) {
+    if (!initRecordStorage(MigrationRecord.class) ||
+        !initRecordStorage(SignalRecord.class)) {
       return false;
     };
     return true;

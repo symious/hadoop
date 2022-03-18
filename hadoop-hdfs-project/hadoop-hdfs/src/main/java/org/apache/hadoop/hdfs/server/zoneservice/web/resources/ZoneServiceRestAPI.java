@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.zoneservice.web.resources;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.Consumes;
+import javax.ws.rs.DELETE;
 import javax.ws.rs.DefaultValue;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
@@ -39,17 +40,18 @@ import org.apache.hadoop.hdfs.server.zoneservice.AuditLogger;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneChecker;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneMover;
-import org.apache.hadoop.hdfs.server.zoneservice.ZoneMoverKafkaTrigger;
-import org.apache.hadoop.hdfs.server.zoneservice.ZoneMoverTrigger;
-import org.apache.hadoop.hdfs.server.zoneservice.store.BaseRecord;
+
 import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
+import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.util.ReflectionUtils;
+import org.apache.hadoop.hdfs.server.zoneservice.MonitorThread;
 
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
@@ -94,12 +96,13 @@ public class ZoneServiceRestAPI {
   @Produces()
   public String getThread(@Context HttpServletRequest hsr) {
     Date startTime = new Date();
-    StackTraceElement[] elements = Thread.currentThread().getStackTrace();
     StringBuilder result = new StringBuilder();
-    for (StackTraceElement element : elements)
-      result.append("File: ").append(element.getFileName()).append(" Line: ")
-          .append(element.getLineNumber()).append(" Method: ")
-          .append(element.getMethodName()).append("\n");
+    Thread[] ts = new Thread[Thread.activeCount()];
+    Thread.enumerate(ts);
+    for (Thread t : ts)
+      result.append("Name: ").append(t.getName()).append(" ID: ")
+          .append(t.getId()).append(" Method: ")
+          .append(Arrays.toString(t.getStackTrace())).append("\n");
     AuditLogger.logRuleProcess(
         Thread.currentThread().getStackTrace()[1].getMethodName(), defaultNull,
         defaultNull, defaultNull, startTime, new Date(),
@@ -152,11 +155,10 @@ public class ZoneServiceRestAPI {
   }
 
   /**
-   * refresh replication rule, not allow use monitor mode by this method
+   * set replication rule
    * @param hsr          http servlet request
    * @param nameSpace    URI of the NameNode
    * @param replicaRule  the replica rule to apply
-   * @param mode         mode to run zonemover
    * @param path         the path to apply the rule
    * @return status of result
    */
@@ -167,7 +169,6 @@ public class ZoneServiceRestAPI {
   public String setReplicaRule(@Context HttpServletRequest hsr,
       @QueryParam("namespace") String nameSpace,
       @QueryParam("rule") String replicaRule,
-      @QueryParam("mode") @DefaultValue(defaultMode) String mode,
       @PathParam("path") String path) {
     Date startTime = new Date();
     String currentMethod =
@@ -175,7 +176,7 @@ public class ZoneServiceRestAPI {
     if (semaphore.availablePermits() == 0) {
       AuditLogger.logRuleProcess(currentMethod, nameSpace,
           path, replicaRule, startTime, new Date(),
-          ResultCode.THREAD_FULL.getMsg(), mode);
+          ResultCode.THREAD_FULL.getMsg(), defaultMode);
       return ResultCode.THREAD_FULL.toString();
     }
     try {
@@ -183,23 +184,23 @@ public class ZoneServiceRestAPI {
       MigrationRecord migrationRecord =
           new MigrationRecord(nameSpace, path, replicaRule);
       driver.put(migrationRecord, false, true);
-      ResultCode result = movePath(nameSpace, path, replicaRule, mode);
+      ResultCode result = movePath(nameSpace, path, replicaRule);
       semaphore.release();
-      driver.remove(new Query<BaseRecord>(migrationRecord), BaseRecord.class);
-      AuditLogger.logRuleProcess(currentMethod, nameSpace,
-          path, replicaRule, startTime, new Date(), result.getMsg(), mode);
+      driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
+      AuditLogger.logRuleProcess(currentMethod, nameSpace, path, replicaRule,
+          startTime, new Date(), result.getMsg(), defaultMode);
       return result.toString();
     } catch (InterruptedException e) {
       e.printStackTrace();
       AuditLogger.logRuleProcess(currentMethod, nameSpace,
           path, replicaRule, startTime, new Date(),
-          ResultCode.INTERRUPTED.getMsg(), mode);
+          ResultCode.INTERRUPTED.getMsg(), defaultMode);
       return ResultCode.INTERRUPTED.toString();
     } catch (IOException e) {
       e.printStackTrace();
       AuditLogger.logRuleProcess(currentMethod, nameSpace,
           path, replicaRule, startTime, new Date(),
-          ResultCode.IO_EXCEPTION.getMsg(), mode);
+          ResultCode.IO_EXCEPTION.getMsg(), defaultMode);
       return ResultCode.IO_EXCEPTION.toString();
     }
   }
@@ -234,9 +235,9 @@ public class ZoneServiceRestAPI {
       MigrationRecord migrationRecord =
           new MigrationRecord(nameSpace, path, replicaRule);
       driver.put(migrationRecord, false, true);
-      ResultCode result = movePath(nameSpace, path, replicaRule, defaultMode);
+      ResultCode result = movePath(nameSpace, path, replicaRule);
       semaphore.release();
-      driver.remove(new Query<BaseRecord>(migrationRecord), BaseRecord.class);
+      driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
       AuditLogger.logRuleProcess(currentMethod, nameSpace, path, replicaRule,
           startTime, new Date(), result.getMsg(), defaultMode);
       return result.toString();
@@ -256,15 +257,103 @@ public class ZoneServiceRestAPI {
   }
 
   /**
+   * set path-rule mapping
+   * @param hsr          http servlet request
+   * @param nameSpace    URI of the NameNode
+   * @param replicaRule  the replica rule will set on the path
+   * @param path         the path to apply the rule
+   * @return status of result
+   */
+  @POST
+  @Path("rulemap/{path:.*}")
+  @Consumes()
+  public String setPathRuleMap(@Context HttpServletRequest hsr,
+      @QueryParam("namespace") String nameSpace,
+      @QueryParam("rule") String replicaRule,
+      @PathParam("path") String path) {
+    return createUpdateMap(nameSpace, path, replicaRule, true);
+  }
+
+  /**
+   * refresh path-rule mapping, not allow create new mapping by this method
+   * @param hsr          http servlet request
+   * @param nameSpace    URI of the NameNode
+   * @param replicaRule  the replica rule will set on the path
+   * @param path         the path to apply the rule
+   * @return status of result
+   */
+  @PUT
+  @Path("rulemap/{path:.*}")
+  @Consumes()
+  public String refreshPathRuleMap(@Context HttpServletRequest hsr,
+      @QueryParam("namespace") String nameSpace,
+      @QueryParam("rule") String replicaRule,
+      @PathParam("path") String path) {
+    return createUpdateMap(nameSpace, path, replicaRule, false);
+  }
+
+  /**
+   * Delete path-rule map from zookeeper
+   * @param nameSpace the URI of namenode
+   * @param path      delete record according to the given path
+   * @return status of result
+   */
+  @DELETE
+  @Path("rulemap/{path:.*}")
+  public String removePathRuleMap(@Context HttpServletRequest hsr,
+      @QueryParam("namespace") String nameSpace,
+      @PathParam("path") String path) {
+    Date startTime = new Date();
+    try {
+      String threadName = "monitor_" + nameSpace;
+      MigrationRecord migrationRecord = new MigrationRecord(nameSpace, path,
+          "");
+      SignalRecord signalRecord = new SignalRecord(nameSpace, true);
+      if (driver.get(new Query<>(migrationRecord),
+          MigrationRecord.class) == null) {
+        AuditLogger.logRuleProcess(
+            "DeletePathRuleMap", nameSpace,
+            path, defaultNull, startTime, new Date(),
+            ResultCode.NO_MIGRATION_RECORD.getMsg(), "monitor");
+        return ResultCode.NO_MIGRATION_RECORD.toString();
+      }
+      Thread[] ts = new Thread[Thread.activeCount()];
+      Thread.enumerate(ts);
+      for (Thread tt : ts) {
+        if (tt.getName().equals(threadName)) {
+          driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
+          driver.put(signalRecord, true, false);
+          AuditLogger.logRuleProcess(
+              "DeletePathRuleMap", nameSpace,
+              path, defaultNull, startTime, new Date(),
+              ResultCode.SUCCESS.getMsg(), "monitor");
+          return ResultCode.SUCCESS.toString();
+        }
+      }
+      AuditLogger.logRuleProcess(
+          "DeletePathRuleMap", nameSpace,
+          path, defaultNull, startTime, new Date(),
+          ResultCode.NO_MIGRATION_RECORD.getMsg(), "monitor");
+      return ResultCode.NO_MIGRATION_RECORD.toString();
+    } catch (IOException e) {
+      e.printStackTrace();
+      AuditLogger.logRuleProcess(
+          "DeletePathRuleMap", nameSpace,
+          path, defaultNull, startTime, new Date(),
+          ResultCode.IO_EXCEPTION.getMsg(), "monitor");
+      return ResultCode.IO_EXCEPTION.toString();
+    }
+  }
+
+  /**
    * Move the path with ZoneMover
    * @param nameSpace   URI of the NameNode
    * @param path        the path to apply the rule
    * @param replicaRule the replica rule to apply
-   * @param mode        if use monitor mode or not
    * @return ResultCode
    */
-  protected ResultCode movePath(String nameSpace, String path, String replicaRule,
-      String mode) {
+  protected ResultCode movePath(String nameSpace, String path,
+      String replicaRule) {
     final Configuration conf = new Configuration();
     final URI namenode = getNamespaceUri(nameSpace, conf);
     final ReplicationRule replicationRule =
@@ -273,37 +362,26 @@ public class ZoneServiceRestAPI {
     paths.add(new org.apache.hadoop.fs.Path(path));
 
     try {
-      if (mode.equals("batch")) {
-        switch (Objects.requireNonNull(ExitStatus.getExitStatusByCode(
-            ZoneMover.run(conf, namenode, paths, replicationRule)))) {
-          case SUCCESS:
-            return ResultCode.SUCCESS;
-          case IN_PROGRESS:
-            return ResultCode.IN_PROGRESS;
-          case ALREADY_RUNNING:
-            return ResultCode.ALREADY_RUNNING;
-          case NO_MOVE_BLOCK:
-            return ResultCode.NO_MOVE_BLOCK;
-          case NO_MOVE_PROGRESS:
-            return ResultCode.NO_MOVE_PROGRESS;
-          case IO_EXCEPTION:
-            return ResultCode.IO_EXCEPTION;
-          case ILLEGAL_ARGUMENTS:
-            return ResultCode.ILLEGAL_ARGUMENTS;
-          case INTERRUPTED:
-            return ResultCode.INTERRUPTED;
-          case UNFINALIZED_UPGRADE:
-            return ResultCode.UNFINALIZED_UPGRADE;
-        }
-      } else {
-        final ZoneMoverTrigger zoneMoverTrigger =
-            new ZoneMoverKafkaTrigger(conf, paths);
-        //if in monitor mode, there will not be any return
-        //TODO: monitor mode will start with the zone service
-        //TODO: monitor mode will be controlled by paths and rules in a storage
-
-        ZoneMover.run(zoneMoverTrigger, conf, namenode, paths, replicationRule);
-        return ResultCode.MONITOR_MODE_ON;
+      switch (Objects.requireNonNull(ExitStatus.getExitStatusByCode(
+          ZoneMover.run(conf, namenode, paths, replicationRule)))) {
+        case SUCCESS:
+          return ResultCode.SUCCESS;
+        case IN_PROGRESS:
+          return ResultCode.IN_PROGRESS;
+        case ALREADY_RUNNING:
+          return ResultCode.ALREADY_RUNNING;
+        case NO_MOVE_BLOCK:
+          return ResultCode.NO_MOVE_BLOCK;
+        case NO_MOVE_PROGRESS:
+          return ResultCode.NO_MOVE_PROGRESS;
+        case IO_EXCEPTION:
+          return ResultCode.IO_EXCEPTION;
+        case ILLEGAL_ARGUMENTS:
+          return ResultCode.ILLEGAL_ARGUMENTS;
+        case INTERRUPTED:
+          return ResultCode.INTERRUPTED;
+        case UNFINALIZED_UPGRADE:
+          return ResultCode.UNFINALIZED_UPGRADE;
       }
       return ResultCode.UNKNOWNERROR;
     } catch (IOException e) {
@@ -328,6 +406,75 @@ public class ZoneServiceRestAPI {
     URI namenode = getNamespaceUri(nameSpace, conf);
     return ZoneChecker.getReplicaRule(conf, namenode, path,
         Float.parseFloat(ratio));
+  }
+
+  /**
+   * Create or update path rule map in zk and let ZoneMover process know
+   * @param nameSpace    name of the namespace
+   * @param path         the path will be updated
+   * @param replicaRule  the rule will be applied
+   * @param allowCreate  allow create new map by this method or not
+   * @return the status of the result
+   */
+  protected String createUpdateMap(String nameSpace, String path,
+      String replicaRule, boolean allowCreate) {
+    Date startTime = new Date();
+    try {
+      String threadName = "monitor_" + nameSpace;
+      SignalRecord signalRecord = new SignalRecord(nameSpace, true);
+      MigrationRecord migrationRecord = new MigrationRecord(nameSpace, path,
+          replicaRule, "monitor");
+      Thread[] ts = new Thread[Thread.activeCount()];
+      Thread.enumerate(ts);
+      for (Thread tt : ts) {
+        //If the thread is existed the new path-rule will add into the thread
+        if (tt.getName().equals(threadName)) {
+          if (driver.get(new Query<>(migrationRecord),
+              MigrationRecord.class) == null & allowCreate) {
+            driver.put(migrationRecord, true, false);
+            driver.put(signalRecord, true, false);
+            AuditLogger.logRuleProcess(
+                "setPathRuleMap", nameSpace,
+                path, replicaRule, startTime, new Date(),
+                ResultCode.CREATE_SUCCESS.getMsg(), "monitor");
+            return ResultCode.CREATE_SUCCESS.toString();
+          }
+          driver.put(migrationRecord, true, false);
+          driver.put(signalRecord, true, false);
+          AuditLogger.logRuleProcess(
+              "updatePathRuleMap", nameSpace,
+              path, replicaRule, startTime, new Date(),
+              ResultCode.UPDATE_SUCCESS.getMsg(), "monitor");
+          return ResultCode.UPDATE_SUCCESS.toString();
+        }
+      }
+      if (!allowCreate) {
+        //no thread on this namespace, not allow to create thread by this method
+        AuditLogger.logRuleProcess(
+            "refreshPathRuleMap", nameSpace,
+            path, replicaRule, startTime, new Date(),
+            ResultCode.METHOD_ERROR.getMsg(), "monitor");
+        return ResultCode.METHOD_ERROR.toString();
+      }
+      //If there is no monitor thread for this namespace, it will create a new one
+      Thread monitorThread = new MonitorThread(threadName, new Configuration(),
+          getNamespaceUri(nameSpace, new Configuration()));
+      driver.put(migrationRecord, true, true);
+      driver.put(signalRecord, true, false);
+      monitorThread.start();
+      AuditLogger.logRuleProcess(
+          "CreatePathRuleMap", nameSpace,
+          path, replicaRule, startTime, new Date(),
+          ResultCode.CREATE_SUCCESS.getMsg(), "monitor");
+      return ResultCode.CREATE_SUCCESS.toString();
+    } catch (IOException e) {
+      e.printStackTrace();
+      AuditLogger.logRuleProcess(
+          "CreatePathRuleMap", nameSpace,
+          path, replicaRule, startTime, new Date(),
+          ResultCode.IO_EXCEPTION.getMsg(), "monitor");
+      return ResultCode.IO_EXCEPTION.toString();
+    }
   }
 
   private URI getNamespaceUri(String namespace, Configuration conf)

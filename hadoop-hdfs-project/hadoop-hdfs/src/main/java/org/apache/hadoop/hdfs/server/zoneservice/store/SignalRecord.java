@@ -20,114 +20,65 @@ package org.apache.hadoop.hdfs.server.zoneservice.store;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-public class MigrationRecord extends BaseRecord{
-  private String ns;
-  private String path;
-  private String rule;
-  private String mode;
+public class SignalRecord extends BaseRecord {
+  private final String ns;
+  private boolean needUpdate;
   private long dateCreated;
   private long dateModified;
-  private static final String PATHSUFFIX = "/";
   private static final SimpleDateFormat dateFormat =
       new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
-  public MigrationRecord(String ns, String path, String rule) {
-    this(ns, path, rule, "batch");
+  public SignalRecord(String nameSpace) {
+    this(nameSpace, false);
   }
 
-  public MigrationRecord(String ns, String path, String rule, String mode) {
+  public SignalRecord(String nameSpace, boolean updateFlag) {
     init();
-    this.ns = ns;
-    this.path = unifyPath(path);
-    this.rule = rule;
-    this.mode = mode;
+    ns = nameSpace;
+    needUpdate = updateFlag;
   }
 
-  public void setNs(String ns) {
-    this.ns = ns;
+  public boolean isNeedUpdate() {
+    return needUpdate;
   }
 
-  public String getNs() {
-    return this.ns;
-  }
-
-  public void setPath(String path) {
-    this.path = unifyPath(path);
-  }
-
-  public String getPath() {
-    return this.path;
-  }
-
-  public void setRule(String rule) {
-    this.rule = rule;
-  }
-
-  public String getRule() {
-    return this.rule;
-  }
-
-  public void setMode(String mode) {
-    this.mode = mode;
-  }
-
-  public String getMode() {
-    return this.mode;
+  public void finishUpdate() {
+    needUpdate = false;
   }
 
   @Override
   public void setDateModified(long time) {
-    this.dateModified = time;
+    dateModified = time;
   }
 
   @Override
   public long getDateModified() {
-    return this.dateModified;
+    return dateModified;
   }
 
   @Override
   public void setDateCreated(long time) {
-    this.dateCreated = time;
+    dateCreated = time;
   }
 
   @Override
   public long getDateCreated() {
-    return this.dateCreated;
+    return dateCreated;
   }
 
   @Override
   public String getPrimaryKey() {
-    return ns + "_" + path;
-  }
-
-  @Override
-  public boolean equals(Object obj) {
-    if (!(obj instanceof MigrationRecord)) {
-      return false;
-    }
-    MigrationRecord record = (MigrationRecord) obj;
-    return this.ns.equals(record.ns) && this.path.equals(record.path)
-        && this.rule.equals(record.rule);
+    return ns;
   }
 
   @Override
   public String toString() {
-    return "MigrationRecord{" +
+    return "SignalRecord{" +
         "ns='" + ns + '\'' +
-        ", path='" + path + '\'' +
-        ", rule='" + rule + '\'' +
-        ", mode='" + mode + '\'' +
+        ", needUpdate=" + needUpdate +
         ", dateCreated=" + dateFormat.format(ms2Date(dateCreated)) +
         ", dateModified=" + dateFormat.format(ms2Date(dateModified)) +
         '}';
-  }
-
-  //Remove the path suffix -- "/"
-  private String unifyPath(String path) {
-    if (path.endsWith(PATHSUFFIX)) {
-      return path.substring(0, path.length() - 1);
-    }
-    return path;
   }
 
   //Convert system ms to Date
