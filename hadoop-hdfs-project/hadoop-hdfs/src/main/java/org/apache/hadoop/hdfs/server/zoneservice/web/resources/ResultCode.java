@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice.web.resources;
 
+import org.json.JSONObject;
+
 public enum ResultCode {
   SUCCESS(0, "Success!"),
   CREATE_SUCCESS(1, "Create Success!"),
@@ -27,13 +29,14 @@ public enum ResultCode {
   NO_MOVE_BLOCK(1002, "No move block"),
   NO_MOVE_PROGRESS(1003, "No move progress"),
   NO_MIGRATION_RECORD(1004, "No migration record found"),
-  IO_EXCEPTION(1005, "Fail caused by IOException!"),
-  ILLEGAL_ARGUMENTS(1006, "Illegal arguments"),
-  INTERRUPTED(1007, "Fail caused by interrupt"),
-  UNFINALIZED_UPGRADE(1008, "Unfinalized Upgrade"),
-  THREAD_FULL(1009, "No more available thread"),
-  METHOD_ERROR(1010, "Cannot create new record"),
-  UNKNOWNERROR(1011, "Unknown ERROR!");
+  NO_DISTRIBUTION(1005, "No distribution found for the give path"),
+  IO_EXCEPTION(1006, "Fail caused by IOException!"),
+  ILLEGAL_ARGUMENTS(1007, "Illegal arguments"),
+  INTERRUPTED(1008, "Fail caused by interrupt"),
+  UNFINALIZED_UPGRADE(1009, "Unfinalized Upgrade"),
+  THREAD_FULL(10010, "No more available thread"),
+  METHOD_ERROR(1011, "Cannot create new record"),
+  UNKNOWNERROR(1012, "Unknown ERROR!");
 
   private final Integer code;
   private final String msg;
@@ -51,6 +54,6 @@ public enum ResultCode {
   }
 
   public String toString() {
-    return "code=" + code + ", massage=" + msg;
+    return (new JSONObject(this)).toString();
   }
 }
