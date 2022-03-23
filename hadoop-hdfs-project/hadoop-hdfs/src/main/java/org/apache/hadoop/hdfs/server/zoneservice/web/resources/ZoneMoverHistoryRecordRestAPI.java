@@ -67,7 +67,8 @@ public class ZoneMoverHistoryRecordRestAPI {
           ZoneServiceHttpResponse(Object2String(signalRecordList)).toString();
     } catch (IOException e) {
       e.printStackTrace();
-      return new ZoneServiceHttpResponse(ResultCode.IO_EXCEPTION).toString();
+      return new ZoneServiceHttpResponse(ResultCode.IO_EXCEPTION, "[]")
+          .toString();
     }
   }
 
@@ -94,8 +95,8 @@ public class ZoneMoverHistoryRecordRestAPI {
         Query<MigrationRecord> query = new Query<>(migrationRecord);
         MigrationRecord result = driver.get(query, MigrationRecord.class);
         if (result == null) {
-          return new
-              ZoneServiceHttpResponse(ResultCode.NO_MIGRATION_RECORD).toString();
+          return new ZoneServiceHttpResponse(ResultCode.NO_MIGRATION_RECORD, "[]")
+              .toString();
         }
         return new ZoneServiceHttpResponse(Object2String(result)).toString();
       } else if (mode.toLowerCase().equals("recursive")) {
@@ -106,15 +107,18 @@ public class ZoneMoverHistoryRecordRestAPI {
             driver.getLike(query, MigrationRecord.class);
         if (resultList.isEmpty()) {
           return new
-              ZoneServiceHttpResponse(ResultCode.NO_MIGRATION_RECORD).toString();
+              ZoneServiceHttpResponse(ResultCode.NO_MIGRATION_RECORD, "[]")
+              .toString();
         }
         return new ZoneServiceHttpResponse(Object2String(resultList)).toString();
       } else {
-        return new ZoneServiceHttpResponse(ResultCode.IO_EXCEPTION).toString();
+        return new ZoneServiceHttpResponse(ResultCode.IO_EXCEPTION, "[]")
+            .toString();
       }
     } catch (IOException e) {
       e.printStackTrace();
-      return new ZoneServiceHttpResponse(ResultCode.IO_EXCEPTION).toString();
+      return new ZoneServiceHttpResponse(ResultCode.IO_EXCEPTION, "[]")
+          .toString();
     }
   }
 

@@ -31,6 +31,11 @@ public class ZoneServiceHttpResponse {
     data = "{}";
   }
 
+  public ZoneServiceHttpResponse(ResultCode resultCode, String dataInput) {
+    status = resultCode;
+    data = dataInput;
+  }
+
   @Override
   public String toString() {
     return status.toString().substring(0, status.toString().length()-1) +
