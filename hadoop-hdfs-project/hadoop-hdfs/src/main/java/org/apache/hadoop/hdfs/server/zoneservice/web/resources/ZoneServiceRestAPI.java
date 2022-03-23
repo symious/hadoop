@@ -182,41 +182,8 @@ public class ZoneServiceRestAPI {
       @QueryParam("namespace") String nameSpace,
       @QueryParam("rule") String replicaRule,
       @PathParam("path") String path) {
-    Date startTime = new Date();
-    String currentMethod =
-        Thread.currentThread().getStackTrace()[1].getMethodName();
-    //Check if there is any available thread
-    if (semaphore.availablePermits() == 0) {
-      AuditLogger.logRuleProcess(currentMethod, nameSpace,
-          path, replicaRule, startTime, new Date(),
-          ResultCode.THREAD_FULL.getMsg(), defaultMode);
-      return new ZoneServiceHttpResponse(ResultCode.THREAD_FULL).toString();
-    }
-
-    try {
-      semaphore.acquire();
-      MigrationRecord migrationRecord =
-          new MigrationRecord(nameSpace, path, replicaRule);
-      driver.put(migrationRecord, false, true);
-      ResultCode result = movePath(nameSpace, path, replicaRule);
-      semaphore.release();
-      driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
-      AuditLogger.logRuleProcess(currentMethod, nameSpace, path, replicaRule,
-          startTime, new Date(), result.getMsg(), defaultMode);
-      return new ZoneServiceHttpResponse(result).toString();
-    } catch (InterruptedException e) {
-      e.printStackTrace();
-      AuditLogger.logRuleProcess(currentMethod, nameSpace,
-          path, replicaRule, startTime, new Date(),
-          ResultCode.INTERRUPTED.getMsg(), defaultMode);
-      return new ZoneServiceHttpResponse(ResultCode.INTERRUPTED).toString();
-    } catch (IOException e) {
-      e.printStackTrace();
-      AuditLogger.logRuleProcess(currentMethod, nameSpace,
-          path, replicaRule, startTime, new Date(),
-          ResultCode.IO_EXCEPTION.getMsg(), defaultMode);
-      return new ZoneServiceHttpResponse(ResultCode.IO_EXCEPTION).toString();
-    }
+    return new ZoneServiceHttpResponse(
+        setBatchProcess(nameSpace, path, replicaRule)).toString();
   }
 
   /**
@@ -235,41 +202,8 @@ public class ZoneServiceRestAPI {
       @QueryParam("namespace") String nameSpace,
       @QueryParam("rule") String replicaRule,
       @PathParam("path") String path) {
-    Date startTime = new Date();
-    String currentMethod =
-        Thread.currentThread().getStackTrace()[1].getMethodName();
-    //Check if there is any available thread
-    if (semaphore.availablePermits() == 0) {
-      AuditLogger.logRuleProcess(currentMethod, nameSpace,
-          path, replicaRule, startTime, new Date(),
-          ResultCode.THREAD_FULL.getMsg(), defaultMode);
-      return new ZoneServiceHttpResponse(ResultCode.THREAD_FULL).toString();
-    }
-
-    try {
-      semaphore.acquire();
-      MigrationRecord migrationRecord =
-          new MigrationRecord(nameSpace, path, replicaRule);
-      driver.put(migrationRecord, false, true);
-      ResultCode result = movePath(nameSpace, path, replicaRule);
-      semaphore.release();
-      driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
-      AuditLogger.logRuleProcess(currentMethod, nameSpace, path, replicaRule,
-          startTime, new Date(), result.getMsg(), defaultMode);
-      return new ZoneServiceHttpResponse(result).toString();
-    } catch (InterruptedException e) {
-      e.printStackTrace();
-      AuditLogger.logRuleProcess(currentMethod, nameSpace,
-          path, replicaRule, startTime, new Date(),
-          ResultCode.INTERRUPTED.getMsg(), defaultMode);
-      return new ZoneServiceHttpResponse(ResultCode.INTERRUPTED).toString();
-    } catch (IOException e) {
-      e.printStackTrace();
-      AuditLogger.logRuleProcess(currentMethod, nameSpace,
-          path, replicaRule, startTime, new Date(),
-          ResultCode.IO_EXCEPTION.getMsg(), defaultMode);
-      return new ZoneServiceHttpResponse(ResultCode.IO_EXCEPTION).toString();
-    }
+    return new ZoneServiceHttpResponse(
+        setBatchProcess(nameSpace, path, replicaRule)).toString();
   }
 
   /**
@@ -414,6 +348,61 @@ public class ZoneServiceRestAPI {
   }
 
   /**
+   * set batch mode process and handle the exceptions
+   * @param nameSpace    URI of the NameNode
+   * @param replicaRule  the replica rule to apply
+   * @param path         the path to apply the rule
+   * @return status of result
+   */
+  protected ResultCode setBatchProcess(String nameSpace, String path,
+      String replicaRule) {
+    Date startTime = new Date();
+    String currentMethod =
+        Thread.currentThread().getStackTrace()[1].getMethodName();
+    try {
+      MigrationRecord migrationRecord =
+          new MigrationRecord(nameSpace, path, replicaRule);
+      //If there is a rule applying on the path, reject the query
+      if (driver.get(new Query<>(migrationRecord), MigrationRecord.class)
+          != null) {
+        AuditLogger.logRuleProcess(currentMethod, nameSpace,
+            path, replicaRule, startTime, new Date(),
+            ResultCode.REJECT.getMsg(), defaultMode);
+        return ResultCode.REJECT;
+      }
+
+      //Check if there is any available thread
+      if (semaphore.availablePermits() == 0) {
+        AuditLogger.logRuleProcess(currentMethod, nameSpace,
+            path, replicaRule, startTime, new Date(),
+            ResultCode.THREAD_FULL.getMsg(), defaultMode);
+        return ResultCode.THREAD_FULL;
+      }
+
+      semaphore.acquire();
+      driver.put(migrationRecord, false, true);
+      ResultCode result = movePath(nameSpace, path, replicaRule);
+      semaphore.release();
+      driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
+      AuditLogger.logRuleProcess(currentMethod, nameSpace, path, replicaRule,
+          startTime, new Date(), result.getMsg(), defaultMode);
+      return result;
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+      AuditLogger.logRuleProcess(currentMethod, nameSpace,
+          path, replicaRule, startTime, new Date(),
+          ResultCode.INTERRUPTED.getMsg(), defaultMode);
+      return ResultCode.INTERRUPTED;
+    } catch (IOException e) {
+      e.printStackTrace();
+      AuditLogger.logRuleProcess(currentMethod, nameSpace,
+          path, replicaRule, startTime, new Date(),
+          ResultCode.IO_EXCEPTION.getMsg(), defaultMode);
+      return ResultCode.IO_EXCEPTION;
+    }
+  }
+
+  /**
    * check path with zone checker
    * @param nameSpace URI of the NameNode
    * @param path      the path to be checked
@@ -444,13 +433,24 @@ public class ZoneServiceRestAPI {
       SignalRecord signalRecord = new SignalRecord(nameSpace, true);
       MigrationRecord migrationRecord = new MigrationRecord(nameSpace, path,
           replicaRule, "monitor");
+      MigrationRecord existedRecord =
+          driver.get(new Query<>(migrationRecord), MigrationRecord.class);
+      //If there is batch mode running on the path, reject the query
+      if (existedRecord != null) {
+        if (existedRecord.getMode().equals("batch")) {
+          AuditLogger.logRuleProcess(
+              "updatePathRuleMap", nameSpace,
+              path, replicaRule, startTime, new Date(),
+              ResultCode.REJECT.getMsg(), "monitor");
+          return ResultCode.REJECT;
+        }
+      }
       Thread[] ts = new Thread[Thread.activeCount()];
       Thread.enumerate(ts);
       for (Thread tt : ts) {
         //If the thread is existed the new path-rule will add into the thread
         if (tt.getName().equals(threadName)) {
-          if (driver.get(new Query<>(migrationRecord),
-              MigrationRecord.class) == null & allowCreate) {
+          if (existedRecord == null & allowCreate) {
             driver.put(migrationRecord, true, false);
             driver.put(signalRecord, true, false);
             AuditLogger.logRuleProcess(
