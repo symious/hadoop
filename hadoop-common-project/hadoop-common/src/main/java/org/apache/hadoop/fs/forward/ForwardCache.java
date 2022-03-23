@@ -44,7 +44,7 @@ public class ForwardCache {
     if (initialized.get()) {
       return;
     }
-    String forwardRulesValue = conf.get(FS_FORWARD_RULES);
+    String forwardRulesValue = conf.get(FS_FORWARD_RULES, "");
     if (forwardRulesValue.isEmpty()) {
       return;
     }

@@ -163,9 +163,6 @@ public class CommonConfigurationKeysPublic {
   public static final String FS_PROTECTED_DIRECTORIES =
       "fs.protected.directories";
 
-  public static final String FS_FORWARD_RULES_ENABLED =
-      "fs.forward.rules.enabled";
-  public static final boolean FS_FORWARD_RULES_ENABLED_DEFAULT = false;
   public static final String FS_FORWARD_RULES = "fs.forward.rules";
 
   public static final String FS_PROTECTED_DIRECTORIES_USE_FILE_ENABLED_KEY =
