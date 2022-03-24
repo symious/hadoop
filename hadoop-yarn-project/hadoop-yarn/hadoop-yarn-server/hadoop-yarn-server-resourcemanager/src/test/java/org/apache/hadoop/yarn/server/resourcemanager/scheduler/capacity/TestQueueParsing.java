@@ -1153,4 +1153,81 @@ public class TestQueueParsing {
     }
     Assert.assertTrue(existedQueues.isEmpty());
   }
+
+  @Test
+  public void testQueueParsingWithDefaultUserLimitValues()
+      throws IOException {
+    YarnConfiguration conf = new YarnConfiguration();
+    CapacitySchedulerConfiguration csConf =
+        new CapacitySchedulerConfiguration(conf);
+    final String queueA = CapacitySchedulerConfiguration.ROOT + ".a";
+    final String queueB = CapacitySchedulerConfiguration.ROOT + ".b";
+
+    // Define top-level queues
+    csConf.setQueues(CapacitySchedulerConfiguration.ROOT, new String[] {"a", "b"});
+
+    // Set default value
+    csConf.setDefaultUserLimit(20);
+    csConf.setDefaultUserLimitFactor(2.0f);
+
+    // Set A configuration and let B use default values
+    csConf.setCapacity(queueA, 50);
+    csConf.setUserLimit(queueA, 15);
+    csConf.setUserLimitFactor(queueA, 1.5f);
+    csConf.setCapacity(queueB, 50);
+
+    // Test
+    CapacityScheduler capacityScheduler = new CapacityScheduler();
+    RMContextImpl rmContext =
+        new RMContextImpl(null, null, null, null, null, null,
+            new RMContainerTokenSecretManager(csConf),
+            new NMTokenSecretManagerInRM(csConf),
+            new ClientToAMTokenSecretManagerInRM(), null);
+    rmContext.setNodeLabelManager(nodeLabelManager);
+    capacityScheduler.setConf(csConf);
+    capacityScheduler.setRMContext(rmContext);
+    capacityScheduler.init(csConf);
+    capacityScheduler.start();
+    Assert.assertEquals(15,
+        ((LeafQueue)capacityScheduler.getQueue(queueA)).getUserLimit(), DELTA);
+    Assert.assertEquals(1.5,
+        ((LeafQueue)capacityScheduler.getQueue(queueA)).getUserLimitFactor(), DELTA);
+    Assert.assertEquals(20,
+        ((LeafQueue)capacityScheduler.getQueue(queueB)).getUserLimit(), DELTA);
+    Assert.assertEquals(2.0,
+        ((LeafQueue)capacityScheduler.getQueue(queueB)).getUserLimitFactor(), DELTA);
+    ServiceOperations.stopQuietly(capacityScheduler);
+
+    // Use hadoop default value
+    conf = new YarnConfiguration();
+    csConf = new CapacitySchedulerConfiguration(conf);
+    csConf.setQueues(CapacitySchedulerConfiguration.ROOT, new String[] {"a", "b"});
+    csConf.setCapacity(queueA, 50);
+    csConf.setUserLimit(queueA, 15);
+    csConf.setUserLimitFactor(queueA, 1.5f);
+    csConf.setCapacity(queueB, 50);
+
+    // Test
+    capacityScheduler = new CapacityScheduler();
+    rmContext =
+        new RMContextImpl(null, null, null, null, null, null,
+            new RMContainerTokenSecretManager(csConf),
+            new NMTokenSecretManagerInRM(csConf),
+            new ClientToAMTokenSecretManagerInRM(), null);
+    rmContext.setNodeLabelManager(nodeLabelManager);
+    capacityScheduler.setConf(csConf);
+    capacityScheduler.setRMContext(rmContext);
+    capacityScheduler.init(csConf);
+    capacityScheduler.start();
+    Assert.assertEquals(15,
+        ((LeafQueue)capacityScheduler.getQueue(queueA)).getUserLimit(), DELTA);
+    Assert.assertEquals(1.5,
+        ((LeafQueue)capacityScheduler.getQueue(queueA)).getUserLimitFactor(), DELTA);
+    Assert.assertEquals(100,
+        ((LeafQueue)capacityScheduler.getQueue(queueB)).getUserLimit(), DELTA);
+    Assert.assertEquals(1,
+        ((LeafQueue)capacityScheduler.getQueue(queueB)).getUserLimitFactor(), DELTA);
+    ServiceOperations.stopQuietly(capacityScheduler);
+  }
+
 }

@@ -628,8 +628,9 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   }
   
   public int getUserLimit(String queue) {
+    int defaultUserLimit = getInt(PREFIX + USER_LIMIT, DEFAULT_USER_LIMIT);
     int userLimit = getInt(getQueuePrefix(queue) + USER_LIMIT,
-        DEFAULT_USER_LIMIT);
+        defaultUserLimit);
     return userLimit;
   }
 
@@ -682,18 +683,29 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     LOG.debug("here setUserLimit: queuePrefix={}, userLimit={}",
         getQueuePrefix(queue), getUserLimit(queue));
   }
-  
+
+  @VisibleForTesting
+  public void setDefaultUserLimit(int defaultUserLimit) {
+    setInt(PREFIX + USER_LIMIT, defaultUserLimit);
+  }
+
   public float getUserLimitFactor(String queue) {
+    float defaultUserLimitFactor = getFloat(PREFIX + USER_LIMIT_FACTOR, DEFAULT_USER_LIMIT_FACTOR);
     float userLimitFactor = 
-      getFloat(getQueuePrefix(queue) + USER_LIMIT_FACTOR, 
-          DEFAULT_USER_LIMIT_FACTOR);
+      getFloat(getQueuePrefix(queue) + USER_LIMIT_FACTOR,
+          defaultUserLimitFactor);
     return userLimitFactor;
   }
 
   public void setUserLimitFactor(String queue, float userLimitFactor) {
     setFloat(getQueuePrefix(queue) + USER_LIMIT_FACTOR, userLimitFactor); 
   }
-  
+
+  @VisibleForTesting
+  public void setDefaultUserLimitFactor(float defaultUserLimitFactor) {
+    setFloat(PREFIX + USER_LIMIT_FACTOR, defaultUserLimitFactor);
+  }
+
   public QueueState getConfiguredState(String queue) {
     String state = get(getQueuePrefix(queue) + STATE);
     if (state == null) {
