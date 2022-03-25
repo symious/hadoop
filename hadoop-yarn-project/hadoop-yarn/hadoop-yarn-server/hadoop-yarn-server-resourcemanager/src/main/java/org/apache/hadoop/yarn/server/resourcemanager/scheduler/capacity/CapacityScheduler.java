@@ -1791,8 +1791,8 @@ public class CapacityScheduler extends
   CSAssignment allocateContainersToNode(
       CandidateNodeSet<FiCaSchedulerNode> candidates,
       boolean withNodeHeartbeat) {
-    if (rmContext.isWorkPreservingRecoveryEnabled() && !rmContext
-        .isSchedulerReadyForAllocatingContainers()) {
+    if (!rmContext.isSchedulerReadyForAllocatingContainers() &&
+        rmContext.isWorkPreservingRecoveryEnabled()) {
       return null;
     }
 
