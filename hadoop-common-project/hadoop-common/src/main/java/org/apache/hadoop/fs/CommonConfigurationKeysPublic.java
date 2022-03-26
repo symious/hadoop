@@ -1141,5 +1141,40 @@ public class CommonConfigurationKeysPublic {
       "ipc.client.failover.logging.threshold";
   public static final int FAILOVER_SKIP_INFO_LOGGING_THRESHOLD_DEFAULT =
       2;
+
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String
+      HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_FILE_PATH_KEY =
+      "hadoop.security.groups.in-memory.local.path";
+  public static final String
+      HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_FILE_PATH_DEFAULT =
+      "/etc/hadoop/usergroupmapping";
+
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String
+      HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_REFRESH_INTERVAL_KEY =
+      "hadoop.security.groups.in-memory.refresh.interval";
+  public static final long
+      HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_REFRESH_INTERVAL_DEFAULT =
+      300000;
+
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String
+      HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_CHECKSUM_KEY =
+      "hadoop.security.groups.in-memory.checksum";
+  public static final boolean
+      HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_CHECKSUM_DEFAULT = false;
 }
 

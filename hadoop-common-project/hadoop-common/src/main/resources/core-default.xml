@@ -3147,4 +3147,33 @@
       Value 0 means always log to INFO.
     </description>
   </property>
+
+  <property>
+    <name>hadoop.security.groups.in-memory.local.path</name>
+    <value>/etc/hadoop/groups</value>
+    <description>
+      Path pointing to the persistent copy of user:groups mapping. This file is
+      periodically accessed to update the in-memory groups mapping cache used by
+      org.apache.hadoop.security.LocalPersistentBasedGroupsMapping.
+    </description>
+  </property>
+
+  <property>
+    <name>hadoop.security.groups.in-memory.refresh.interval</name>
+    <value>300s</value>
+    <description>
+      Interval between each in-memory cache refresh.
+      Expressed with units (e.g. 100ms, 10s, 1m, etc.), default in milliseconds.
+    </description>
+  </property>
+
+  <property>
+    <name>hadoop.security.groups.in-memory.checksum</name>
+    <value>false</value>
+    <description>
+      Use a checksum file to compare local mappings checksum before loading
+      local mappings to memory. Checksum file path is the path declared in
+      hadoop.security.groups.in-memory.local.path + ".md5"
+    </description>
+  </property>
 </configuration>
