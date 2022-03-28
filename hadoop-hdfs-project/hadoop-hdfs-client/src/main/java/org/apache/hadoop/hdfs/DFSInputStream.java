@@ -66,6 +66,7 @@ import org.apache.hadoop.fs.StreamCapabilities;
 import org.apache.hadoop.hdfs.client.impl.BlockReaderFactory;
 import org.apache.hadoop.hdfs.client.impl.DfsClientConf;
 import org.apache.hadoop.hdfs.DFSUtilClient.CorruptedBlocks;
+import org.apache.hadoop.hdfs.protocol.BlockType;
 import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
@@ -815,6 +816,9 @@ public class DFSInputStream extends FSInputStream
           }
           IOUtilsClient.updateReadStatistics(readStatistics, result, blockReader);
           dfsClient.updateFileSystemReadStats(blockReader.getNetworkDistance(), result);
+          if (readStatistics.getBlockType() == BlockType.STRIPED) {
+            dfsClient.updateFileSystemECReadStats(result);
+          }
           return result;
         } catch (ChecksumException ce) {
           throw ce;
@@ -1154,6 +1158,9 @@ public class DFSInputStream extends FSInputStream
         buf.position(buf.position() + nread);
         IOUtilsClient.updateReadStatistics(readStatistics, nread, reader);
         dfsClient.updateFileSystemReadStats(reader.getNetworkDistance(), nread);
+        if (readStatistics.getBlockType() == BlockType.STRIPED) {
+          dfsClient.updateFileSystemECReadStats(nread);
+        }
         if (nread != len) {
           throw new IOException("truncated return from reader.read(): "
               + "excpected " + len + ", got " + nread);

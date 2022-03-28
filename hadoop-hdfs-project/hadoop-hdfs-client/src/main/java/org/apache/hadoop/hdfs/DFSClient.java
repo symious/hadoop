@@ -242,6 +242,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   private static final DFSHedgedReadMetrics HEDGED_READ_METRIC =
       new DFSHedgedReadMetrics();
   private static ThreadPoolExecutor HEDGED_READ_THREAD_POOL;
+  private static volatile ThreadPoolExecutor STRIPED_READ_THREAD_POOL;
   private final int smallBufferSize;
   private final long serverDefaultsValidityPeriod;
 
@@ -405,6 +406,10 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
 
     if (dfsClientConf.getHedgedReadThreadpoolSize() > 0) {
       this.initThreadsNumForHedgedReads(dfsClientConf.getHedgedReadThreadpoolSize());
+    }
+    if (dfsClientConf.getStripedReadThreadpoolSize() > 0) {
+      this.initThreadsNumForStripedReads(dfsClientConf.
+          getStripedReadThreadpoolSize());
     }
     this.saslClient = new SaslDataTransferClient(
         conf, DataTransferSaslUtil.getSaslPropertiesResolver(conf),
@@ -1095,7 +1100,23 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     checkOpen();
     //    Get block info from namenode
     try (TraceScope ignored = newPathTraceScope("newDFSInputStream", src)) {
-      return new DFSInputStream(this, src, verifyChecksum, null);
+      LocatedBlocks locatedBlocks = getLocatedBlocks(src, 0);
+      return openInternal(locatedBlocks, src, verifyChecksum);
+    }
+  }
+
+  private DFSInputStream openInternal(LocatedBlocks locatedBlocks,
+      String src, boolean verifyChecksum) throws IOException {
+    if (locatedBlocks != null) {
+      ErasureCodingPolicy ecPolicy = locatedBlocks.getErasureCodingPolicy();
+      if (ecPolicy != null) {
+        return new DFSStripedInputStream(this, src,
+            verifyChecksum, ecPolicy, locatedBlocks);
+      }
+      return new DFSInputStream(this, src,
+          verifyChecksum, locatedBlocks);
+    } else {
+      throw new IOException("Cannot open filename " + src);
     }
   }
 
@@ -2994,6 +3015,12 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     }
   }
 
+  void updateFileSystemECReadStats(int nRead) {
+    if (stats != null) {
+      stats.incrementBytesReadErasureCoded(nRead);
+    }
+  }
+
   /**
    * Create hedged reads thread pool, HEDGED_READ_THREAD_POOL, if
    * it does not already exist.
@@ -3027,8 +3054,36 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     LOG.debug("Using hedged reads; pool threads={}", num);
   }
 
+  /**
+   * Create thread pool for parallel reading in striped layout,
+   * STRIPED_READ_THREAD_POOL, if it does not already exist.
+   * @param numThreads Number of threads for striped reads thread pool.
+   */
+  private void initThreadsNumForStripedReads(int numThreads) {
+    assert numThreads > 0;
+    if (STRIPED_READ_THREAD_POOL != null) {
+      return;
+    }
+    synchronized (DFSClient.class) {
+      if (STRIPED_READ_THREAD_POOL == null) {
+        // Only after thread pool is fully constructed then save it to
+        // volatile field.
+        ThreadPoolExecutor threadPool =
+            DFSUtilClient.getThreadPoolExecutor(1,
+                numThreads, 60,
+                "StripedRead-", true);
+        threadPool.allowCoreThreadTimeOut(true);
+        STRIPED_READ_THREAD_POOL = threadPool;
+      }
+    }
+  }
+
   ThreadPoolExecutor getHedgedReadsThreadPool() {
     return HEDGED_READ_THREAD_POOL;
+  }
+
+  ThreadPoolExecutor getStripedReadsThreadPool() {
+    return STRIPED_READ_THREAD_POOL;
   }
 
   boolean isHedgedReadsEnabled() {

@@ -38,6 +38,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.SocketFactory;
 
@@ -73,6 +78,8 @@ import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.net.NodeBase;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.util.Daemon;
+import org.apache.hadoop.util.Preconditions;
 import org.apache.hadoop.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -843,5 +850,70 @@ public class DFSUtilClient {
     public Map<ExtendedBlock, Set<DatanodeInfo>> getCorruptionMap() {
       return corruptionMap;
     }
+  }
+
+  /**
+   * Utility to create a {@link ThreadPoolExecutor}.
+   *
+   * @param corePoolSize - min threads in the pool, even if idle
+   * @param maxPoolSize - max threads in the pool
+   * @param keepAliveTimeSecs - max seconds beyond which excess idle threads
+   *        will be terminated
+   * @param threadNamePrefix - name prefix for the pool threads
+   * @param runRejectedExec - when true, rejected tasks from
+   *        ThreadPoolExecutor are run in the context of calling thread
+   * @return ThreadPoolExecutor
+   */
+  public static ThreadPoolExecutor getThreadPoolExecutor(int corePoolSize,
+      int maxPoolSize, long keepAliveTimeSecs, String threadNamePrefix,
+      boolean runRejectedExec) {
+    return getThreadPoolExecutor(corePoolSize, maxPoolSize, keepAliveTimeSecs,
+        new SynchronousQueue<Runnable>(), threadNamePrefix, runRejectedExec);
+  }
+
+  /**
+   * Utility to create a {@link ThreadPoolExecutor}.
+   *
+   * @param corePoolSize - min threads in the pool, even if idle
+   * @param maxPoolSize - max threads in the pool
+   * @param keepAliveTimeSecs - max seconds beyond which excess idle threads
+   *        will be terminated
+   * @param queue - the queue to use for holding tasks before they are executed.
+   * @param threadNamePrefix - name prefix for the pool threads
+   * @param runRejectedExec - when true, rejected tasks from
+   *        ThreadPoolExecutor are run in the context of calling thread
+   * @return ThreadPoolExecutor
+   */
+  public static ThreadPoolExecutor getThreadPoolExecutor(
+      int corePoolSize, int maxPoolSize, long keepAliveTimeSecs,
+      BlockingQueue<Runnable> queue, final String threadNamePrefix,
+      boolean runRejectedExec) {
+    Preconditions.checkArgument(corePoolSize > 0);
+    ThreadPoolExecutor threadPoolExecutor = new ThreadPoolExecutor(corePoolSize,
+        maxPoolSize, keepAliveTimeSecs, TimeUnit.SECONDS,
+        queue, new Daemon.DaemonFactory() {
+      private final AtomicInteger threadIndex = new AtomicInteger(0);
+
+      @Override
+      public Thread newThread(Runnable r) {
+        Thread t = super.newThread(r);
+        t.setName(threadNamePrefix + threadIndex.getAndIncrement());
+        return t;
+      }
+    });
+    if (runRejectedExec) {
+      threadPoolExecutor.setRejectedExecutionHandler(new ThreadPoolExecutor
+          .CallerRunsPolicy() {
+        @Override
+        public void rejectedExecution(
+            Runnable runnable, ThreadPoolExecutor e) {
+          LOG.info(threadNamePrefix + " task is rejected by " +
+              "ThreadPoolExecutor. Executing it in current thread.");
+          // will run in the current thread
+          super.rejectedExecution(runnable, e);
+        }
+      });
+    }
+    return threadPoolExecutor;
   }
 }
