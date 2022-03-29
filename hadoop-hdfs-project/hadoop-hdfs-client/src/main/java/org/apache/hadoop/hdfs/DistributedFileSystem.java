@@ -517,7 +517,8 @@ public class DistributedFileSystem extends FileSystem
       final FsPermission permission, final EnumSet<CreateFlag> flag,
       final int bufferSize, final short replication, final long blockSize,
       final Progressable progress, final ChecksumOpt checksumOpt,
-      final InetSocketAddress[] favoredNodes) throws IOException {
+      final InetSocketAddress[] favoredNodes, final String ecPolicyName)
+      throws IOException {
     statistics.incrementWriteOps(1);
     storageStatistics.incrementOpCounter(OpType.CREATE);
     Path absF = fixRelativePart(f);
@@ -526,7 +527,7 @@ public class DistributedFileSystem extends FileSystem
       public HdfsDataOutputStream doCall(final Path p) throws IOException {
         final DFSOutputStream out = dfs.create(getPathName(f), permission,
             flag, true, replication, blockSize, progress, bufferSize,
-            checksumOpt, favoredNodes);
+            checksumOpt, favoredNodes, ecPolicyName);
         return dfs.createWrappedOutputStream(out, statistics);
       }
       @Override
@@ -535,7 +536,7 @@ public class DistributedFileSystem extends FileSystem
         if (fs instanceof DistributedFileSystem) {
           DistributedFileSystem myDfs = (DistributedFileSystem)fs;
           return myDfs.create(p, permission, flag, bufferSize, replication,
-              blockSize, progress, checksumOpt, favoredNodes);
+              blockSize, progress, checksumOpt, favoredNodes, ecPolicyName);
         }
         throw new UnsupportedOperationException("Cannot create with" +
             " favoredNodes through a symlink to a non-DistributedFileSystem: "
@@ -572,7 +573,7 @@ public class DistributedFileSystem extends FileSystem
       final FsPermission permission, final EnumSet<CreateFlag> flag,
       final int bufferSize, final short replication, final long blockSize,
       final Progressable progress, final ChecksumOpt checksumOpt,
-      final InetSocketAddress[] favoredNodes)
+      final InetSocketAddress[] favoredNodes, final String ecPolicyName)
       throws IOException {
     statistics.incrementWriteOps(1);
     storageStatistics.incrementOpCounter(OpType.CREATE);
@@ -582,7 +583,7 @@ public class DistributedFileSystem extends FileSystem
       public HdfsDataOutputStream doCall(final Path p) throws IOException {
         final DFSOutputStream out = dfs.create(getPathName(f), permission,
             flag, false, replication, blockSize, progress, bufferSize,
-            checksumOpt, favoredNodes);
+            checksumOpt, favoredNodes, ecPolicyName);
         return dfs.createWrappedOutputStream(out, statistics);
       }
       @Override
@@ -591,7 +592,8 @@ public class DistributedFileSystem extends FileSystem
         if (fs instanceof DistributedFileSystem) {
           DistributedFileSystem myDfs = (DistributedFileSystem)fs;
           return myDfs.createNonRecursive(p, permission, flag, bufferSize,
-              replication, blockSize, progress, checksumOpt, favoredNodes);
+              replication, blockSize, progress, checksumOpt, favoredNodes,
+              ecPolicyName);
         }
         throw new UnsupportedOperationException("Cannot create with" +
             " favoredNodes through a symlink to a non-DistributedFileSystem: "
@@ -2814,6 +2816,7 @@ public class DistributedFileSystem extends FileSystem
       FSDataOutputStream, HdfsDataOutputStreamBuilder> {
     private final DistributedFileSystem dfs;
     private InetSocketAddress[] favoredNodes = null;
+    private String ecPolicyName = null;
 
     /**
      * Construct a HdfsDataOutputStream builder for a file.
@@ -2885,6 +2888,24 @@ public class DistributedFileSystem extends FileSystem
       return this;
     }
 
+    String getEcPolicyName() {
+      return ecPolicyName;
+    }
+
+    /**
+     * Enforce the file to be a striped file with erasure coding policy
+     * 'policyName', no matter what its parent directory's replication
+     * or erasure coding policy is. Don't call this function and
+     * enforceReplicate() in the same builder since they have conflict
+     * of interest.
+     */
+    public HdfsDataOutputStreamBuilder ecPolicyName(
+        @Nonnull final String policyName) {
+      Preconditions.checkNotNull(policyName);
+      ecPolicyName = policyName;
+      return this;
+    }
+
     @VisibleForTesting
     @Override
     protected EnumSet<CreateFlag> getFlags() {
@@ -2904,11 +2925,12 @@ public class DistributedFileSystem extends FileSystem
         if (isRecursive()) {
           return dfs.create(getPath(), getPermission(), getFlags(),
               getBufferSize(), getReplication(), getBlockSize(),
-              getProgress(), getChecksumOpt(), getFavoredNodes());
+              getProgress(), getChecksumOpt(), getFavoredNodes(),
+              getEcPolicyName());
         } else {
           return dfs.createNonRecursive(getPath(), getPermission(), getFlags(),
               getBufferSize(), getReplication(), getBlockSize(), getProgress(),
-              getChecksumOpt(), getFavoredNodes());
+              getChecksumOpt(), getFavoredNodes(), getEcPolicyName());
         }
       } else if (getFlags().contains(CreateFlag.APPEND)) {
         return dfs.append(getPath(), getFlags(), getBufferSize(), getProgress(),

@@ -41,6 +41,8 @@ import java.net.InetSocketAddress;
 @InterfaceStability.Evolving
 public class DatanodeID implements Comparable<DatanodeID> {
   public static final DatanodeID[] EMPTY_ARRAY = {};
+  public static final DatanodeID EMPTY_DATANODE_ID = new DatanodeID(
+      "null", "null", "null", 0, 0, 0, 0);
 
   private String ipAddr;     // IP address
   private ByteString ipAddrBytes; // ipAddr ByteString to save on PB serde

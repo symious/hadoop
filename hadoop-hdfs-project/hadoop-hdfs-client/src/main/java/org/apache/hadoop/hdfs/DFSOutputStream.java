@@ -308,9 +308,8 @@ public class DFSOutputStream extends FSOutputSummer
       Preconditions.checkNotNull(stat, "HdfsFileStatus should not be null!");
       final DFSOutputStream out;
       if (stat.getErasureCodingPolicy() != null) {
-        // TODO change it to DFSStripedOutputStream
-        out = new DFSOutputStream(dfsClient, src, stat,
-            flag, progress, checksum, favoredNodes, true);
+        out = new DFSStripedOutputStream(dfsClient, src, stat,
+            flag, progress, checksum, favoredNodes);
       } else {
         out = new DFSOutputStream(dfsClient, src, stat,
             flag, progress, checksum, favoredNodes, true);
@@ -395,9 +394,8 @@ public class DFSOutputStream extends FSOutputSummer
              dfsClient.newPathTraceScope("newStreamForAppend", src)) {
       DFSOutputStream out;
       if (stat.getErasureCodingPolicy() != null) {
-        // TODO change it to DFSOutputStream
-        out = new DFSOutputStream(dfsClient, src, flags, progress, lastBlock,
-            stat, checksum, favoredNodes);
+        out = new DFSStripedOutputStream(dfsClient, src, flags, progress,
+            lastBlock, stat, checksum, favoredNodes);
       } else {
         out = new DFSOutputStream(dfsClient, src, flags, progress, lastBlock,
             stat, checksum, favoredNodes);
