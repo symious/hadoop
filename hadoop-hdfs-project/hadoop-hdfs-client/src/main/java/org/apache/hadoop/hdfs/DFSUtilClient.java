@@ -33,9 +33,11 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import javax.net.SocketFactory;
 
@@ -55,6 +57,7 @@ import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
+import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
@@ -808,5 +811,37 @@ public class DFSUtilClient {
     String ezpath = ez.getPath();
     return (ezpath.equals("/") ? ezpath : ezpath + Path.SEPARATOR)
         + FileSystem.TRASH_PREFIX + Path.SEPARATOR + ugi.getShortUserName();
+  }
+
+  /**
+   * A utility class as a container to put corrupted blocks, shared by client
+   * and datanode.
+   */
+  public static class CorruptedBlocks {
+    private Map<ExtendedBlock, Set<DatanodeInfo>> corruptionMap;
+
+    /**
+     * Indicate a block replica on the specified datanode is corrupted
+     */
+    public void addCorruptedBlock(ExtendedBlock blk, DatanodeInfo node) {
+      if (corruptionMap == null) {
+        corruptionMap = new HashMap<>();
+      }
+
+      Set<DatanodeInfo> dnSet = corruptionMap.get(blk);
+      if (dnSet == null) {
+        dnSet = new HashSet<>();
+        corruptionMap.put(blk, dnSet);
+      }
+      dnSet.add(node);
+    }
+
+    /**
+     * @return the map that contains all the corruption entries, or null if
+     * there were no corrupted entries
+     */
+    public Map<ExtendedBlock, Set<DatanodeInfo>> getCorruptionMap() {
+      return corruptionMap;
+    }
   }
 }

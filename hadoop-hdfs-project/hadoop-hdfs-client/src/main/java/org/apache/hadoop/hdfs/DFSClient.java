@@ -1946,7 +1946,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
    * Connect to the given datanode's datantrasfer port, and return
    * the resulting IOStreamPair. This includes encryption wrapping, etc.
    */
-  private IOStreamPair connectToDN(DatanodeInfo dn, int timeout,
+  protected IOStreamPair connectToDN(DatanodeInfo dn, int timeout,
       LocatedBlock lb) throws IOException {
     boolean success = false;
     Socket sock = null;
@@ -1982,7 +1982,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
    * @return the inferred checksum type
    * @throws IOException if an error occurs
    */
-  private Type inferChecksumTypeByReading(LocatedBlock lb, DatanodeInfo dn)
+  protected Type inferChecksumTypeByReading(LocatedBlock lb, DatanodeInfo dn)
       throws IOException {
     IOStreamPair pair = connectToDN(dn, dfsClientConf.getSocketTimeout(), lb);
 

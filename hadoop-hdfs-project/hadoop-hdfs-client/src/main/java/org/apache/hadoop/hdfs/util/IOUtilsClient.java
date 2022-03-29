@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hdfs.util;
 
+import org.apache.hadoop.hdfs.BlockReader;
+import org.apache.hadoop.hdfs.ReadStatistics;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -40,6 +42,27 @@ public class IOUtilsClient {
           }
         }
       }
+    }
+  }
+
+  public static void updateReadStatistics(ReadStatistics readStatistics,
+      int nRead, BlockReader blockReader) {
+    updateReadStatistics(readStatistics, nRead, blockReader.isShortCircuit(),
+        blockReader.getNetworkDistance());
+  }
+
+  public static void updateReadStatistics(ReadStatistics readStatistics,
+      int nRead, boolean isShortCircuit, int networkDistance) {
+    if (nRead <= 0) {
+      return;
+    }
+
+    if (isShortCircuit) {
+      readStatistics.addShortCircuitBytes(nRead);
+    } else if (networkDistance == 0) {
+      readStatistics.addLocalBytes(nRead);
+    } else {
+      readStatistics.addRemoteBytes(nRead);
     }
   }
 
