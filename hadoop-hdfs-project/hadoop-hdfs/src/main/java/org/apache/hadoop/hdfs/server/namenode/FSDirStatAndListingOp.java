@@ -464,7 +464,7 @@ class FSDirStatAndListingOp {
     } else {
       return new HdfsLocatedFileStatus(length, isdir, replication, blocksize,
           mtime, atime, permission, owner, group, symlink, path, fileId,
-          locations, childrenNum, feInfo, storagePolicy);
+          locations, childrenNum, feInfo, storagePolicy, null);
     }
   }
 

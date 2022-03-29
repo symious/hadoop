@@ -52,8 +52,19 @@ public class HdfsFileStatus {
   // Used by dir, not including dot and dotdot. Always zero for a regular file.
   private final int childrenNum;
   private final byte storagePolicy;
+  private final ErasureCodingPolicy ecPolicy;
 
   public static final byte[] EMPTY_NAME = new byte[0];
+
+  public HdfsFileStatus(long length, boolean isdir, int block_replication,
+      long blocksize, long modification_time, long access_time,
+      FsPermission permission, String owner, String group, byte[] symlink,
+      byte[] path, long fileId, int childrenNum, FileEncryptionInfo feInfo,
+      byte storagePolicy) {
+    this(length, isdir, block_replication, blocksize, modification_time,
+        access_time, permission, owner, group, symlink, path, fileId,
+        childrenNum, feInfo, storagePolicy, null);
+  }
 
   /**
    * Constructor
@@ -68,13 +79,14 @@ public class HdfsFileStatus {
    * @param group the group of the path
    * @param path the local name in java UTF8 encoding the same as that in-memory
    * @param fileId the file id
+   * @param ecPolicy the file's erasure coding policy info
    * @param feInfo the file's encryption info
    */
   public HdfsFileStatus(long length, boolean isdir, int block_replication,
       long blocksize, long modification_time, long access_time,
       FsPermission permission, String owner, String group, byte[] symlink,
       byte[] path, long fileId, int childrenNum, FileEncryptionInfo feInfo,
-      byte storagePolicy) {
+      byte storagePolicy, ErasureCodingPolicy ecPolicy) {
     this.length = length;
     this.isdir = isdir;
     this.block_replication = (short)block_replication;
@@ -94,6 +106,7 @@ public class HdfsFileStatus {
     this.childrenNum = childrenNum;
     this.feInfo = feInfo;
     this.storagePolicy = storagePolicy;
+    this.ecPolicy = ecPolicy;
   }
 
   /**
@@ -249,6 +262,14 @@ public class HdfsFileStatus {
 
   public final FileEncryptionInfo getFileEncryptionInfo() {
     return feInfo;
+  }
+
+  /**
+   * Get the erasure coding policy if it's set.
+   * @return the erasure coding policy
+   */
+  public ErasureCodingPolicy getErasureCodingPolicy() {
+    return ecPolicy;
   }
 
   public final int getChildrenNum() {

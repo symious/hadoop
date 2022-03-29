@@ -38,6 +38,7 @@ public class LocatedBlocks {
   private final LocatedBlock lastLocatedBlock;
   private final boolean isLastBlockComplete;
   private final FileEncryptionInfo fileEncryptionInfo;
+  private final ErasureCodingPolicy ecPolicy;
 
   public LocatedBlocks() {
     fileLength = 0;
@@ -46,17 +47,27 @@ public class LocatedBlocks {
     lastLocatedBlock = null;
     isLastBlockComplete = false;
     fileEncryptionInfo = null;
+    ecPolicy = null;
+  }
+
+  public LocatedBlocks(long flength, boolean isUnderConstuction,
+      List<LocatedBlock> blks, LocatedBlock lastBlock,
+      boolean isLastBlockCompleted, FileEncryptionInfo feInfo) {
+    this(flength, isUnderConstuction, blks, lastBlock,
+        isLastBlockCompleted, feInfo, null);
   }
 
   public LocatedBlocks(long flength, boolean isUnderConstuction,
     List<LocatedBlock> blks, LocatedBlock lastBlock,
-    boolean isLastBlockCompleted, FileEncryptionInfo feInfo) {
+    boolean isLastBlockCompleted, FileEncryptionInfo feInfo,
+    ErasureCodingPolicy ecPolicy) {
     fileLength = flength;
     blocks = blks;
     underConstruction = isUnderConstuction;
     this.lastLocatedBlock = lastBlock;
     this.isLastBlockComplete = isLastBlockCompleted;
     this.fileEncryptionInfo = feInfo;
+    this.ecPolicy = ecPolicy;
   }
 
   /**
@@ -113,6 +124,13 @@ public class LocatedBlocks {
   }
 
   /**
+   * @return The ECPolicy for ErasureCoded file, null otherwise.
+   */
+  public ErasureCodingPolicy getErasureCodingPolicy() {
+    return ecPolicy;
+  }
+
+  /**
    * Find block containing specified offset.
    *
    * @return block if found, or null otherwise.
@@ -120,7 +138,7 @@ public class LocatedBlocks {
   public int findBlock(long offset) {
     // create fake block of size 0 as a key
     LocatedBlock key = new LocatedBlock(
-        new ExtendedBlock(), new DatanodeInfo[0]);
+        new ExtendedBlock(), DatanodeInfo.EMPTY_ARRAY);
     key.setStartOffset(offset);
     key.getBlock().setNumBytes(1);
     Comparator<LocatedBlock> comp =
@@ -181,6 +199,7 @@ public class LocatedBlocks {
         + "\n  underConstruction=" + underConstruction
         + "\n  blocks=" + blocks
         + "\n  lastLocatedBlock=" + lastLocatedBlock
-        + "\n  isLastBlockComplete=" + isLastBlockComplete + "}";
+        + "\n  isLastBlockComplete=" + isLastBlockComplete
+        + "\n  ecPolicy=" + ecPolicy + "}";
   }
 }

@@ -34,6 +34,7 @@ import "acl.proto";
 import "xattr.proto";
 import "encryption.proto";
 import "inotify.proto";
+import "erasurecoding.proto";
 import "HAServiceProtocol.proto";
 
 /**
@@ -321,6 +322,32 @@ message GetFsStatsResponseProto {
   optional uint64 missing_repl_one_blocks = 7;
   optional uint64 blocks_in_future = 8;
   optional uint64 pending_deletion_blocks = 9;
+}
+
+message GetFsReplicatedBlockStatsRequestProto { // no input paramters
+}
+
+message GetFsReplicatedBlockStatsResponseProto {
+  required uint64 low_redundancy = 1;
+  required uint64 corrupt_blocks = 2;
+  required uint64 missing_blocks = 3;
+  required uint64 missing_repl_one_blocks = 4;
+  required uint64 blocks_in_future = 5;
+  required uint64 pending_deletion_blocks = 6;
+  optional uint64 highest_prio_low_redundancy_blocks = 7;
+
+}
+
+message GetFsECBlockGroupStatsRequestProto { // no input paramters
+}
+
+message GetFsECBlockGroupStatsResponseProto {
+  required uint64 low_redundancy = 1;
+  required uint64 corrupt_blocks = 2;
+  required uint64 missing_blocks = 3;
+  required uint64 blocks_in_future = 4;
+  required uint64 pending_deletion_blocks = 5;
+  optional uint64 highest_prio_low_redundancy_blocks = 6;
 }
 
 enum DatanodeReportTypeProto {  // type of the datanode report
@@ -830,6 +857,10 @@ service ClientNamenodeProtocol {
   rpc recoverLease(RecoverLeaseRequestProto)
       returns(RecoverLeaseResponseProto);
   rpc getFsStats(GetFsStatusRequestProto) returns(GetFsStatsResponseProto);
+  rpc getFsReplicatedBlockStats(GetFsReplicatedBlockStatsRequestProto)
+      returns (GetFsReplicatedBlockStatsResponseProto);
+  rpc getFsECBlockGroupStats(GetFsECBlockGroupStatsRequestProto)
+      returns (GetFsECBlockGroupStatsResponseProto);
   rpc getDatanodeReport(GetDatanodeReportRequestProto)
       returns(GetDatanodeReportResponseProto);
   rpc getDatanodeStorageReport(GetDatanodeStorageReportRequestProto)
@@ -943,6 +974,12 @@ service ClientNamenodeProtocol {
       returns(GetCurrentEditLogTxidResponseProto);
   rpc getEditsFromTxid(GetEditsFromTxidRequestProto)
       returns(GetEditsFromTxidResponseProto);
+  rpc getErasureCodingPolicy(GetErasureCodingPolicyRequestProto)
+      returns(GetErasureCodingPolicyResponseProto);
+  rpc setErasureCodingPolicy(SetErasureCodingPolicyRequestProto)
+      returns(SetErasureCodingPolicyResponseProto);
+  rpc unsetErasureCodingPolicy(UnsetErasureCodingPolicyRequestProto)
+      returns(UnsetErasureCodingPolicyResponseProto);
   rpc getQuotaUsage(GetQuotaUsageRequestProto)
       returns(GetQuotaUsageResponseProto);
   rpc listOpenFiles(ListOpenFilesRequestProto)

@@ -88,7 +88,9 @@ import org.apache.hadoop.hdfs.protocol.CorruptFileBlocks;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
+import org.apache.hadoop.hdfs.protocol.ECBlockGroupStats;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.RollingUpgradeAction;
@@ -100,6 +102,7 @@ import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
 import org.apache.hadoop.hdfs.protocol.OpenFilesIterator;
 import org.apache.hadoop.hdfs.protocol.OpenFilesIterator.OpenFilesType;
+import org.apache.hadoop.hdfs.protocol.ReplicatedBlockStats;
 import org.apache.hadoop.hdfs.protocol.RollingUpgradeInfo;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.hdfs.protocol.SnapshottableDirectoryStatus;
@@ -1144,6 +1147,33 @@ public class RouterRpcServer extends AbstractService
     return clientProto.getStoragePolicy(path);
   }
 
+  @Override // ClientProtocol
+  public ErasureCodingPolicy getErasureCodingPolicy(String src)
+      throws IOException {
+    return clientProto.getErasureCodingPolicy(src);
+  }
+
+  @Override // ClientProtocol
+  public void setErasureCodingPolicy(String src, String ecPolicyName)
+      throws IOException {
+    clientProto.setErasureCodingPolicy(src, ecPolicyName);
+  }
+
+  @Override // ClientProtocol
+  public void unsetErasureCodingPolicy(String src) throws IOException {
+    clientProto.unsetErasureCodingPolicy(src);
+  }
+
+  @Override // ClientProtocol
+  public ECBlockGroupStats getECBlockGroupStats() throws IOException {
+    return clientProto.getECBlockGroupStats();
+  }
+
+  @Override // ClientProtocol
+  public ReplicatedBlockStats getReplicatedBlockStats() throws IOException {
+    return clientProto.getReplicatedBlockStats();
+  }
+
   @Deprecated
   @Override // ClientProtocol
   public BatchedEntries<OpenFileEntry> listOpenFiles(long prevId)
@@ -1625,6 +1655,10 @@ public class RouterRpcServer extends AbstractService
   }
 
   public String refreshFairnessPolicyController() {
-    return rpcClient.refreshFairnessPolicyController(new Configuration());
+    return rpcClient.refreshFairnessPolicyController(new Configuration()); 
+  }
+
+  public RouterClientProtocol getClientProto() {
+    return this.clientProto;
   }
 }

@@ -1045,7 +1045,7 @@ class DataXceiver extends Receiver implements Runnable {
         .setChecksumResponse(OpBlockChecksumResponseProto.newBuilder()             
           .setBytesPerCrc(bytesPerCRC)
           .setCrcPerBlock(crcPerBlock)
-          .setMd5(ByteString.copyFrom(md5.getDigest()))
+          .setBlockChecksum(ByteString.copyFrom(md5.getDigest()))
           .setCrcType(PBHelperClient.convert(checksum.getChecksumType())))
         .build()
         .writeDelimitedTo(out);

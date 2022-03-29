@@ -122,6 +122,7 @@ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.EncryptionZoneIterator;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsBlocksMetadata;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
@@ -133,6 +134,7 @@ import org.apache.hadoop.hdfs.protocol.LastBlockWithStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocol.NSQuotaExceededException;
+import org.apache.hadoop.hdfs.protocol.NoECPolicySetException;
 import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
 import org.apache.hadoop.hdfs.protocol.OpenFilesIterator;
 import org.apache.hadoop.hdfs.protocol.OpenFilesIterator.OpenFilesType;
@@ -1863,7 +1865,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
 
           //read md5
           final MD5Hash md5 = new MD5Hash(
-              checksumData.getMd5().toByteArray());
+              checksumData.getBlockChecksum().toByteArray());
           md5.write(md5out);
 
           // read crc-type
@@ -2811,6 +2813,54 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
       throws IOException {
     checkOpen();
     return new EncryptionZoneIterator(namenode, tracer);
+  }
+
+  public void setErasureCodingPolicy(String src, String ecPolicyName)
+      throws IOException {
+    checkOpen();
+    try (TraceScope ignored =
+             newPathTraceScope("setErasureCodingPolicy", src)) {
+      namenode.setErasureCodingPolicy(src, ecPolicyName);
+    } catch (RemoteException re) {
+      throw re.unwrapRemoteException(AccessControlException.class,
+          SafeModeException.class,
+          UnresolvedPathException.class,
+          FileNotFoundException.class);
+    }
+  }
+
+  public void unsetErasureCodingPolicy(String src) throws IOException {
+    checkOpen();
+    try (TraceScope ignored =
+             newPathTraceScope("unsetErasureCodingPolicy", src)) {
+      namenode.unsetErasureCodingPolicy(src);
+    } catch (RemoteException re) {
+      throw re.unwrapRemoteException(AccessControlException.class,
+          SafeModeException.class,
+          UnresolvedPathException.class,
+          FileNotFoundException.class, NoECPolicySetException.class);
+    }
+  }
+
+  /**
+   * Get the erasure coding policy information for the specified path
+   *
+   * @param src path to get the information for
+   * @return Returns the policy information if file or directory on the path is
+   * erasure coded, null otherwise. Null will be returned if directory or file
+   * has REPLICATION policy.
+   * @throws IOException
+   */
+  public ErasureCodingPolicy getErasureCodingPolicy(String src)
+      throws IOException {
+    checkOpen();
+    try (TraceScope ignored =
+             newPathTraceScope("getErasureCodingPolicy", src)) {
+      return namenode.getErasureCodingPolicy(src);
+    } catch (RemoteException re) {
+      throw re.unwrapRemoteException(FileNotFoundException.class,
+          AccessControlException.class, UnresolvedPathException.class);
+    }
   }
 
   public void setXAttr(String src, String name, byte[] value, 

@@ -39,6 +39,7 @@ public class ContentSummary extends QuotaUsage implements Writable{
   private long snapshotFileCount;
   private long snapshotDirectoryCount;
   private long snapshotSpaceConsumed;
+  private String erasureCodingPolicy;
 
   /** We don't use generics. Instead override spaceConsumed and other methods
       in order to keep backward compatibility. */
@@ -78,6 +79,11 @@ public class ContentSummary extends QuotaUsage implements Writable{
 
     public Builder snapshotSpaceConsumed(long snapshotSpaceConsumed) {
       this.snapshotSpaceConsumed = snapshotSpaceConsumed;
+      return this;
+    }
+
+    public Builder erasureCodingPolicy(String ecPolicy) {
+      this.erasureCodingPolicy = ecPolicy;
       return this;
     }
 
@@ -136,6 +142,7 @@ public class ContentSummary extends QuotaUsage implements Writable{
     private long snapshotFileCount;
     private long snapshotDirectoryCount;
     private long snapshotSpaceConsumed;
+    private String erasureCodingPolicy;
   }
 
   /** Constructor deprecated by ContentSummary.Builder*/
@@ -175,6 +182,7 @@ public class ContentSummary extends QuotaUsage implements Writable{
     this.snapshotFileCount = builder.snapshotFileCount;
     this.snapshotDirectoryCount = builder.snapshotDirectoryCount;
     this.snapshotSpaceConsumed = builder.snapshotSpaceConsumed;
+    this.erasureCodingPolicy = builder.erasureCodingPolicy;
   }
 
   /** @return the length */
@@ -200,6 +208,10 @@ public class ContentSummary extends QuotaUsage implements Writable{
 
   public long getSnapshotSpaceConsumed() {
     return snapshotSpaceConsumed;
+  }
+
+  public String getErasureCodingPolicy() {
+    return erasureCodingPolicy;
   }
 
   @Override
@@ -237,6 +249,7 @@ public class ContentSummary extends QuotaUsage implements Writable{
           getSnapshotFileCount() == right.getSnapshotFileCount() &&
           getSnapshotDirectoryCount() == right.getSnapshotDirectoryCount() &&
           getSnapshotSpaceConsumed() == right.getSnapshotSpaceConsumed() &&
+          getErasureCodingPolicy().equals(right.getErasureCodingPolicy()) &&
           super.equals(to);
     } else {
       return super.equals(to);
@@ -247,7 +260,8 @@ public class ContentSummary extends QuotaUsage implements Writable{
   public int hashCode() {
     long result = getLength() ^ getFileCount() ^ getDirectoryCount()
         ^ getSnapshotLength() ^ getSnapshotFileCount()
-        ^ getSnapshotDirectoryCount() ^ getSnapshotSpaceConsumed();
+        ^ getSnapshotDirectoryCount() ^ getSnapshotSpaceConsumed()
+        ^ getErasureCodingPolicy().hashCode();
     return ((int) result) ^ super.hashCode();
   }
 
@@ -267,6 +281,20 @@ public class ContentSummary extends QuotaUsage implements Writable{
 
   private static final String ALL_HEADER = QUOTA_HEADER + SUMMARY_HEADER;
 
+  /**
+   * Output format:
+   * <--------20-------->
+   * ERASURECODING_POLICY
+   */
+  private static final String ERASURECODING_POLICY_FORMAT = "%20s ";
+
+  private static final String ERASURECODING_POLICY_HEADER_FIELD =
+      "ERASURECODING_POLICY";
+
+  /** The header string. */
+  private static final String ERASURECODING_POLICY_HEADER =
+      String.format(ERASURECODING_POLICY_FORMAT,
+          ERASURECODING_POLICY_HEADER_FIELD);
 
   /** Return the header of the output.
    * if qOption is false, output directory count, file count, and content size;
@@ -279,7 +307,9 @@ public class ContentSummary extends QuotaUsage implements Writable{
     return qOption ? ALL_HEADER : SUMMARY_HEADER;
   }
 
-
+  public static String getErasureCodingPolicyHeader() {
+    return ERASURECODING_POLICY_HEADER;
+  }
 
   /**
    * Returns the names of the fields from the summary header.
@@ -411,5 +441,14 @@ public class ContentSummary extends QuotaUsage implements Writable{
     return humanReadable
       ? StringUtils.TraditionalBinaryPrefix.long2String(size, "", 1)
       : String.valueOf(size);
+  }
+
+  /**
+   * @return Constant-width String representation of Erasure Coding Policy
+   */
+  public String toErasureCodingPolicy() {
+    return String.format(ERASURECODING_POLICY_FORMAT,
+        erasureCodingPolicy.equals("Replicated")
+            ? erasureCodingPolicy : "EC:" + erasureCodingPolicy);
   }
 }

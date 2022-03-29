@@ -768,6 +768,22 @@ public interface ClientProtocol {
   long[] getStats() throws IOException;
 
   /**
+   * Get statistics pertaining to blocks of type {@link BlockType#CONTIGUOUS}
+   * in the filesystem.
+   */
+  @Idempotent
+  @ReadOnly
+  ReplicatedBlockStats getReplicatedBlockStats() throws IOException;
+
+  /**
+   * Get statistics pertaining to blocks of type {@link BlockType#STRIPED}
+   * in the filesystem.
+   */
+  @Idempotent
+  @ReadOnly
+  ECBlockGroupStats getECBlockGroupStats() throws IOException;
+
+  /**
    * Get a report on the system's current datanodes.
    * One DatanodeInfo object is returned for each DataNode.
    * Return live datanodes if type is LIVE; dead datanodes if type is DEAD;
@@ -1543,6 +1559,33 @@ public interface ClientProtocol {
   @Idempotent
   @ReadOnly(isCoordinated = true)
   EventBatchList getEditsFromTxid(long txid) throws IOException;
+
+  /**
+   * Set an erasure coding policy on a specified path.
+   * @param src The path to set policy on.
+   * @param ecPolicyName The erasure coding policy name.
+   */
+  @AtMostOnce
+  void setErasureCodingPolicy(String src, String ecPolicyName)
+      throws IOException;
+
+  /**
+   * Get the information about the EC policy for the path. Null will be returned
+   * if directory or file has REPLICATION policy.
+   *
+   * @param src path to get the info for
+   * @throws IOException
+   */
+  @Idempotent
+  @ReadOnly(isCoordinated = true)
+  ErasureCodingPolicy getErasureCodingPolicy(String src) throws IOException;
+
+  /**
+   * Unset erasure coding policy from a specified path.
+   * @param src The path to unset policy.
+   */
+  @AtMostOnce
+  void unsetErasureCodingPolicy(String src) throws IOException;
 
   /**
    * Get {@link QuotaUsage} rooted at the specified directory.

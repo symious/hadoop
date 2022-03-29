@@ -532,7 +532,7 @@ public class TestPBHelper {
   @Test
   public void testConvertLocatedBlock() {
     LocatedBlock lb = createLocatedBlock();
-    LocatedBlockProto lbProto = PBHelperClient.convert(lb);
+    LocatedBlockProto lbProto = PBHelperClient.convertLocatedBlock(lb);
     LocatedBlock lb2 = PBHelperClient.convert(lbProto);
     compare(lb,lb2);
   }
@@ -540,7 +540,7 @@ public class TestPBHelper {
   @Test
   public void testConvertLocatedBlockNoStorageMedia() {
     LocatedBlock lb = createLocatedBlockNoStorageMedia();
-    LocatedBlockProto lbProto = PBHelperClient.convert(lb);
+    LocatedBlockProto lbProto = PBHelperClient.convertLocatedBlock(lb);
     LocatedBlock lb2 = PBHelperClient.convert(lbProto);
     compare(lb,lb2);
   }
@@ -551,8 +551,8 @@ public class TestPBHelper {
     for (int i=0;i<3;i++) {
       lbl.add(createLocatedBlock());
     }
-    List<LocatedBlockProto> lbpl = PBHelperClient.convertLocatedBlock2(lbl);
-    List<LocatedBlock> lbl2 = PBHelperClient.convertLocatedBlock(lbpl);
+    List<LocatedBlockProto> lbpl = PBHelperClient.convertLocatedBlocks2(lbl);
+    List<LocatedBlock> lbl2 = PBHelperClient.convertLocatedBlocks(lbpl);
     assertEquals(lbl.size(), lbl2.size());
     for (int i=0;i<lbl.size();i++) {
       compare(lbl.get(i), lbl2.get(2));
@@ -565,7 +565,7 @@ public class TestPBHelper {
     for (int i=0;i<3;i++) {
       lbl[i] = createLocatedBlock();
     }
-    LocatedBlockProto [] lbpl = PBHelperClient.convertLocatedBlock(lbl);
+    LocatedBlockProto [] lbpl = PBHelperClient.convertLocatedBlocks(lbl);
     LocatedBlock [] lbl2 = PBHelperClient.convertLocatedBlock(lbpl);
     assertEquals(lbl.length, lbl2.length);
     for (int i=0;i<lbl.length;i++) {

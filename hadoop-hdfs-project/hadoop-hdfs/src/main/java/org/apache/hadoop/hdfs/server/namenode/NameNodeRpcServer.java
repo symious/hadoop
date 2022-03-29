@@ -99,7 +99,9 @@ import org.apache.hadoop.hdfs.protocol.DSQuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
+import org.apache.hadoop.hdfs.protocol.ECBlockGroupStats;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.FSLimitException;
 import org.apache.hadoop.hdfs.protocol.LastBlockWithStatus;
@@ -116,6 +118,7 @@ import org.apache.hadoop.hdfs.protocol.OpenFilesIterator.OpenFilesType;
 import org.apache.hadoop.hdfs.protocol.QuotaByStorageTypeExceededException;
 import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.RecoveryInProgressException;
+import org.apache.hadoop.hdfs.protocol.ReplicatedBlockStats;
 import org.apache.hadoop.hdfs.protocol.RollingUpgradeInfo;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.hdfs.protocol.SnapshottableDirectoryStatus;
@@ -1250,6 +1253,18 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     checkNNStartup();
     namesystem.checkOperation(OperationCategory.READ);
     return namesystem.getStats();
+  }
+
+  @Override // ClientProtocol
+  public ReplicatedBlockStats getReplicatedBlockStats() throws IOException {
+    throw new UnsupportedActionException(
+        "getReplicatedBlockStats is not yet supported in 2.10.");
+  }
+
+  @Override // ClientProtocol
+  public ECBlockGroupStats getECBlockGroupStats() throws IOException {
+    throw new UnsupportedActionException(
+        "getECBlockGroupStats is not yet supported in 2.10.");
   }
 
   @Override // ClientProtocol
@@ -2410,6 +2425,26 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     checkNNStartup();
     namesystem.checkSuperuserPrivilege();
     nn.tracerConfigurationManager.removeSpanReceiver(id);
+  }
+
+  @Override // ClientProtocol
+  public void setErasureCodingPolicy(String src, String ecPolicyName)
+      throws IOException {
+    throw new UnsupportedActionException(
+        "setErasureCodingPolicy is not yet supported in 2.10.");
+  }
+
+  @Override // ClientProtocol
+  public ErasureCodingPolicy getErasureCodingPolicy(String src) throws IOException {
+    checkNNStartup();
+    throw new UnsupportedActionException(
+        "getErasureCodingPolicy is not yet supported in 2.10.");
+  }
+
+  @Override // ClientProtocol
+  public void unsetErasureCodingPolicy(String src) throws IOException {
+    throw new UnsupportedActionException(
+        "unsetErasureCodingPolicy is not yet supported in 2.10.");
   }
 
   @Override // ReconfigurationProtocol

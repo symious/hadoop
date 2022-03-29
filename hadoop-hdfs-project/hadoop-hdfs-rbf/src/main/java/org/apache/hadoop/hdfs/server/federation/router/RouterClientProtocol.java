@@ -50,7 +50,9 @@ import org.apache.hadoop.hdfs.protocol.CorruptFileBlocks;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
+import org.apache.hadoop.hdfs.protocol.ECBlockGroupStats;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
@@ -59,6 +61,7 @@ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
 import org.apache.hadoop.hdfs.protocol.OpenFilesIterator;
+import org.apache.hadoop.hdfs.protocol.ReplicatedBlockStats;
 import org.apache.hadoop.hdfs.protocol.RollingUpgradeInfo;
 import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.hdfs.protocol.SnapshottableDirectoryStatus;
@@ -75,6 +78,7 @@ import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
 import org.apache.hadoop.hdfs.server.namenode.AuditLogger;
 import org.apache.hadoop.hdfs.server.namenode.DefaultAuditLogger;
 import org.apache.hadoop.hdfs.server.namenode.HdfsAuditLogger;
+import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.NameNode.OperationCategory;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
 import org.apache.hadoop.io.EnumSetWritable;
@@ -123,6 +127,8 @@ public class RouterClientProtocol implements ClientProtocol {
    * Identifier for the super group.
    */
   private final String superGroup;
+  /** Erasure coding calls. */
+  private final ErasureCoding erasureCoding;
 
   // Tracks whether the default audit logger is the only configured audit
   // logger; this allows isAuditEnabled() to return false in case the
@@ -144,6 +150,8 @@ public class RouterClientProtocol implements ClientProtocol {
     this.superGroup = conf.get(
         DFSConfigKeys.DFS_PERMISSIONS_SUPERUSERGROUP_KEY,
         DFSConfigKeys.DFS_PERMISSIONS_SUPERUSERGROUP_DEFAULT);
+
+    this.erasureCoding = new ErasureCoding(rpcServer);
 
     this.auditLoggers = RouterRpcServer.getAuditLogger();
     this.isDefaultAuditLogger = auditLoggers.size() == 1
@@ -1919,6 +1927,39 @@ public class RouterClientProtocol implements ClientProtocol {
   }
 
   @Override
+  public ErasureCodingPolicy getErasureCodingPolicy(String src)
+      throws IOException {
+    return erasureCoding.getErasureCodingPolicy(src);
+  }
+
+  @Override
+  public void setErasureCodingPolicy(String src, String ecPolicyName)
+      throws IOException {
+    erasureCoding.setErasureCodingPolicy(src, ecPolicyName);
+  }
+
+  @Override
+  public void unsetErasureCodingPolicy(String src) throws IOException {
+    erasureCoding.unsetErasureCodingPolicy(src);
+  }
+
+  @Override
+  public ECBlockGroupStats getECBlockGroupStats() throws IOException {
+    return erasureCoding.getECBlockGroupStats();
+  }
+
+  @Override
+  public ReplicatedBlockStats getReplicatedBlockStats() throws IOException {
+    rpcServer.checkOperation(NameNode.OperationCategory.READ);
+
+    RemoteMethod method = new RemoteMethod("getReplicatedBlockStats");
+    Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
+    Map<FederationNamespaceInfo, ReplicatedBlockStats> ret = rpcClient
+        .invokeConcurrent(nss, method, true, false, ReplicatedBlockStats.class);
+    return ReplicatedBlockStats.merge(ret.values());
+  }
+
+  @Override
   public BatchedEntries<OpenFileEntry> listOpenFiles(long prevId)
       throws IOException {
     return listOpenFiles(prevId,
@@ -2023,6 +2064,7 @@ public class RouterClientProtocol implements ClientProtocol {
     long quota = 0;
     long spaceConsumed = 0;
     long spaceQuota = 0;
+    String ecPolicy = "";
 
     for (ContentSummary summary : summaries) {
       length += summary.getLength();
@@ -2031,6 +2073,11 @@ public class RouterClientProtocol implements ClientProtocol {
       quota += summary.getQuota();
       spaceConsumed += summary.getSpaceConsumed();
       spaceQuota += summary.getSpaceQuota();
+      // We return from the first response as we assume that the EC policy
+      // of each sub-cluster is same.
+      if (ecPolicy.isEmpty()) {
+        ecPolicy = summary.getErasureCodingPolicy();
+      }
     }
 
     ContentSummary ret = new ContentSummary.Builder()
@@ -2040,6 +2087,7 @@ public class RouterClientProtocol implements ClientProtocol {
         .quota(quota)
         .spaceConsumed(spaceConsumed)
         .spaceQuota(spaceQuota)
+        .erasureCodingPolicy(ecPolicy)
         .build();
     return ret;
   }
@@ -2097,7 +2145,7 @@ public class RouterClientProtocol implements ClientProtocol {
    * @param path Path to check.
    * @return If a path should be in all subclusters.
    */
-  private boolean isPathAll(final String path) {
+  public boolean isPathAll(final String path) {
     if (subclusterResolver instanceof MountTableResolver) {
       try {
         MountTableResolver mountTable = (MountTableResolver)subclusterResolver;

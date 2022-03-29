@@ -223,6 +223,14 @@ public class RouterRpcClient {
   }
 
   /**
+   * Get the active namenode resolver used by this client.
+   * @return Active namenode resolver.
+   */
+  public ActiveNamenodeResolver getNamenodeResolver() {
+    return this.namenodeResolver;
+  }
+
+  /**
    * Shutdown the client.
    */
   public void shutdown() {

@@ -35,13 +35,6 @@ import "hdfs.proto";
 import "HAServiceProtocol.proto";
 
 /**
- * A list of storage IDs.
- */
-message StorageUuidsProto {
-  repeated string storageUuids = 1;
-}
-
-/**
  * Block access token information
  */
 message BlockKeyProto {
