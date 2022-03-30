@@ -1025,4 +1025,92 @@ public class TestProportionalCapacityPreemptionPolicyIntraQueue
         new TestProportionalCapacityPreemptionPolicy.IsPreemptionRequestFor(
             getAppAttemptId(3))));
   }
+
+  @Test
+  public void testIntraQueuePreemptionByQueue() throws IOException {
+
+    /**
+     * Different queue has different intra Preemption policy, Queue structure is:
+     *
+     * <pre>
+     *       root
+     *     /  | | \
+     *    a  b  c  d
+     * </pre>
+     *
+     * Guaranteed resource of a/b/c/d are 11:40:20:29 Total cluster resource =
+     * 100
+     * Scenario:
+     * Queue A and Queue B config to different intra Preemption policy.
+     * Queue A has two run users, user2 is under user limit, will preempt
+     * resources from user1 to meet the demand.
+     * Queue B has few running apps and two high priority apps have demand.
+     * Apps which are running at low priority (4) will preempt few of its
+     * resources to meet the demand.
+     */
+
+    conf.setFloat(CapacitySchedulerConfiguration.
+            INTRAQUEUE_PREEMPTION_MAX_ALLOWABLE_LIMIT,
+        (float) 0.2);
+
+    //set global default inter-queue-preemption policy
+    conf.set(CapacitySchedulerConfiguration.INTRAQUEUE_PREEMPTION_ORDER_POLICY,
+        "userlimit_first");
+
+    String labelsConfig = "=100,true;";
+    String nodesConfig = // n1 has no label
+        "n1= res=100";
+    String queuesConfig =
+        // guaranteed,max,used,pending,reserved
+        "root(=[100 100 79 110 0]);" + // root
+            "-a(=[11 100 11 50 0]);" + // a
+            "-b(=[40 100 38 50 0]);" + // b
+            "-c(=[20 100 10 10 0]);" + // c
+            "-d(=[29 100 20 0 0])"; // d
+
+    //set queue a userlimit_first
+    conf.set("yarn.scheduler.capacity.root.a.inter-queue-preemption-order-policy",
+        "userlimit_first");
+
+    //set queue b priority_first
+    conf.set("yarn.scheduler.capacity.root.b.inter-queue-preemption-order-policy",
+        "priority_first");
+
+    String appsConfig =
+        // queueName\t(priority,resource,host,expression,#repeat,reserved,
+        // pending)
+        "a\t" // app1 in a
+            + "(1,1,n1,,11,false,25,user1);" + // app1 a
+            "a\t" // app2 in a
+            + "(1,1,n1,,0,false,25,user2);" + // app2 a
+            "b\t" // app3 in b
+            + "(4,1,n1,,34,false,20,user3);" + // app3 b
+            "b\t" // app4 in b
+            + "(4,1,n1,,2,false,10,user3);" + // app4 b
+            "b\t" // app4 in b
+            + "(5,1,n1,,1,false,10,user3);" + // app5 b
+            "b\t" // app4 in b
+            + "(6,1,n1,,1,false,10,user3);" + // app6 in b
+            "c\t" // app1 in a
+            + "(1,1,n1,,10,false,10,user4);" + "d\t" // app7 in c
+            + "(1,1,n1,,20,false,0,user5)";
+
+    buildEnv(labelsConfig, nodesConfig, queuesConfig, appsConfig);
+    policy.editSchedule();
+
+    // For queue A,  app2 needs more resource and its well under its user-limit.
+    // Hence preempt resources from app1.
+    verify(eventHandler, times(2)).handle(argThat(
+        new TestProportionalCapacityPreemptionPolicy.IsPreemptionRequestFor(
+            getAppAttemptId(1))));
+
+    // For queue B, app3 and app4 were of lower priority. Hence take 8
+    // containers from them by hitting the intraQueuePreemptionDemand of 20%.
+    verify(eventHandler, times(1)).handle(argThat(
+        new TestProportionalCapacityPreemptionPolicy.IsPreemptionRequestFor(
+            getAppAttemptId(4))));
+    verify(eventHandler, times(7)).handle(argThat(
+        new TestProportionalCapacityPreemptionPolicy.IsPreemptionRequestFor(
+            getAppAttemptId(3))));
+  }
 }

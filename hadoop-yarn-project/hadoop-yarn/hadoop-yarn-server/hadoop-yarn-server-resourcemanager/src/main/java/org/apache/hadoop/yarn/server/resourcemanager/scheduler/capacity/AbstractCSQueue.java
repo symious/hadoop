@@ -98,6 +98,7 @@ public abstract class AbstractCSQueue implements CSQueue {
   Set<String> accessMultiLabelTimes;
   int queuePerAppMaxVcores;
   long queuePerAppMaxMemoryMB;
+  String intraQueuePreemptionOrderPolicy;
   Set<String> resourceTypes;
   final RMNodeLabelsManager labelManager;
   String defaultLabelExpression;
@@ -303,6 +304,10 @@ public abstract class AbstractCSQueue implements CSQueue {
     return queuePerAppMaxMemoryMB;
   }
 
+  public String getIntraQueuePreemptionOrderPolicy() {
+    return intraQueuePreemptionOrderPolicy;
+  }
+
   @Override
   public boolean hasAccess(QueueACL acl, UserGroupInformation user) {
     return authorizer.checkPermission(
@@ -380,6 +385,8 @@ public abstract class AbstractCSQueue implements CSQueue {
           configuration.getAppMaxVcoresPerQueue(getQueuePath());
       this.queuePerAppMaxMemoryMB =
           configuration.getAppMaxMemoryMBPerQueue(getQueuePath());
+      this.intraQueuePreemptionOrderPolicy = configuration
+          .getIntraQueuePreemptionOrderPolicyPerQueue(getQueuePath());
       this.defaultLabelExpression =
           configuration.getDefaultNodeLabelExpression(
               getQueuePath());

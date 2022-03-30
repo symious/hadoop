@@ -169,7 +169,7 @@ public class FifoIntraQueuePreemptionPlugin
 
     // 7. From lowest priority app onwards, calculate toBePreempted resource
     // based on demand.
-    calculateToBePreemptedResourcePerApp(clusterResource, orderedApps,
+    calculateToBePreemptedResourcePerApp(tq, clusterResource, orderedApps,
         Resources.clone(preemptionLimit));
 
     // Save all apps (low to high) to temp queue for further reference
@@ -179,7 +179,8 @@ public class FifoIntraQueuePreemptionPlugin
     // priority level, such cases are to be validated out.
     validateOutSameAppPriorityFromDemand(clusterResource,
         (TreeSet<TempAppPerPartition>) orderedApps, tq.getUsersPerPartition(),
-        context.getIntraQueuePreemptionOrderPolicy());
+        IntraQueuePreemptionOrderPolicy
+            .valueOf(tq.leafQueue.getIntraQueuePreemptionOrderPolicy()));
 
     if (LOG.isDebugEnabled()) {
       LOG.debug("Queue Name:" + tq.queueName + ", partition:" + tq.partition);
@@ -189,7 +190,8 @@ public class FifoIntraQueuePreemptionPlugin
     }
   }
 
-  private void calculateToBePreemptedResourcePerApp(Resource clusterResource,
+  private void calculateToBePreemptedResourcePerApp(TempQueuePerPartition tq,
+      Resource clusterResource,
       TreeSet<TempAppPerPartition> orderedApps, Resource preemptionLimit) {
 
     for (TempAppPerPartition tmpApp : orderedApps) {
@@ -205,10 +207,12 @@ public class FifoIntraQueuePreemptionPlugin
       Resources.subtractFromNonNegative(preemtableFromApp, tmpApp.selected);
       Resources.subtractFromNonNegative(preemtableFromApp, tmpApp.getAMUsed());
 
-      if (context.getIntraQueuePreemptionOrderPolicy()
-            .equals(IntraQueuePreemptionOrderPolicy.USERLIMIT_FIRST)) {
+      if (IntraQueuePreemptionOrderPolicy
+          .valueOf(tq.leafQueue.getIntraQueuePreemptionOrderPolicy())
+          .equals(IntraQueuePreemptionOrderPolicy.USERLIMIT_FIRST)) {
         Resources.subtractFromNonNegative(preemtableFromApp,
-          tmpApp.getFiCaSchedulerApp().getCSLeafQueue().getMinimumAllocation());
+            tmpApp.getFiCaSchedulerApp().getCSLeafQueue()
+                .getMinimumAllocation());
       }
 
       // Calculate toBePreempted from apps as follows:
@@ -264,12 +268,12 @@ public class FifoIntraQueuePreemptionPlugin
       Map<ApplicationAttemptId, Set<RMContainer>> selectedCandidates,
       Resource queueReassignableResource,
       PriorityQueue<TempAppPerPartition> orderedByPriority) {
-
     Comparator<TempAppPerPartition> reverseComp;
     OrderingPolicy<FiCaSchedulerApp> queueOrderingPolicy =
         tq.leafQueue.getOrderingPolicy();
     if (queueOrderingPolicy instanceof FairOrderingPolicy
-        && (context.getIntraQueuePreemptionOrderPolicy()
+        && (IntraQueuePreemptionOrderPolicy
+        .valueOf(tq.leafQueue.getIntraQueuePreemptionOrderPolicy())
             == IntraQueuePreemptionOrderPolicy.USERLIMIT_FIRST)) {
       reverseComp = Collections.reverseOrder(
           new TAFairOrderingComparator(this.rc, clusterResource));
@@ -371,7 +375,8 @@ public class FifoIntraQueuePreemptionPlugin
     OrderingPolicy<FiCaSchedulerApp> orderingPolicy =
         tq.leafQueue.getOrderingPolicy();
     if (orderingPolicy instanceof FairOrderingPolicy
-        && (context.getIntraQueuePreemptionOrderPolicy()
+        && (IntraQueuePreemptionOrderPolicy
+        .valueOf(tq.leafQueue.getIntraQueuePreemptionOrderPolicy())
             == IntraQueuePreemptionOrderPolicy.USERLIMIT_FIRST)) {
       taComparator = new TAFairOrderingComparator(this.rc, clusterResource);
     } else {
@@ -628,7 +633,8 @@ public class FifoIntraQueuePreemptionPlugin
 
     return Resources.lessThanOrEqual(rc, clusterResource,
         Resources.subtract(usedResource, c.getAllocatedResource()), userLimit)
-        && context.getIntraQueuePreemptionOrderPolicy()
+        && IntraQueuePreemptionOrderPolicy
+        .valueOf(tq.leafQueue.getIntraQueuePreemptionOrderPolicy())
             .equals(IntraQueuePreemptionOrderPolicy.USERLIMIT_FIRST);
   }
 }

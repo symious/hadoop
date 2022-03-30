@@ -155,6 +155,30 @@ class MockQueueHierarchy {
         });
         when(leafQueue.getOrderingPolicy()).thenReturn(so);
 
+        //Set intraQueuePreemptionOrderPolicy
+        String intraQueuePreemptionOrderPolicy;
+        String intraQueuePreemptionOrderPolicyPerQueue =
+            conf.get(CapacitySchedulerConfiguration.PREFIX
+                + CapacitySchedulerConfiguration.ROOT + "." + getQueueName(q) +
+                "." + "inter-queue-preemption-order-policy", "");
+
+        String intraQueuePreemptionOrderPolicyGlobal = conf.get(
+            CapacitySchedulerConfiguration.INTRAQUEUE_PREEMPTION_ORDER_POLICY,
+            "userlimit_first");
+
+        if (intraQueuePreemptionOrderPolicyPerQueue.equals("userlimit_first") ||
+            intraQueuePreemptionOrderPolicyPerQueue.equals("priority_first")) {
+          intraQueuePreemptionOrderPolicy =
+              intraQueuePreemptionOrderPolicyPerQueue.toUpperCase();
+        } else {
+          intraQueuePreemptionOrderPolicy =
+              intraQueuePreemptionOrderPolicyGlobal.toUpperCase();
+        }
+
+        when(leafQueue.getIntraQueuePreemptionOrderPolicy())
+            .thenReturn(intraQueuePreemptionOrderPolicy);
+
+
         Map<String, TreeSet<RMContainer>> ignorePartitionContainers =
             new HashMap<>();
         when(leafQueue.getIgnoreExclusivityRMContainers()).thenReturn(

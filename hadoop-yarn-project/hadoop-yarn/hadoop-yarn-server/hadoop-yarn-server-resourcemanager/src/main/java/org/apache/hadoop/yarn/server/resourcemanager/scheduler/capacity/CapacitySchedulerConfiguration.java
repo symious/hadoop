@@ -515,6 +515,32 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   }
 
   /**
+   * Get IntraQueuePreemptionOrderPolicy per queue setting.
+   * @param queue name of the queue
+   * @return setting specified or use global setting if not set
+   */
+  public String getIntraQueuePreemptionOrderPolicyPerQueue(String queue) {
+    String intraQueuePreemptionOrderPolicyPerQueue =
+        get(getQueuePrefix(queue) + "inter-queue-preemption-order-policy", "");
+    String intraQueuePreemptionOrderPolicyGlobal = get(PREEMPTION_CONFIG_PREFIX
+            + INTRA_QUEUE_PREEMPTION_CONFIG_PREFIX + "preemption-order-policy",
+        "userlimit_first");
+
+    LOG.debug(
+        "queue= " + queue + " ,intraQueuePreemptionOrderPolicyPerQueue= " +
+            intraQueuePreemptionOrderPolicyPerQueue +
+            " , intraQueuePreemptionOrderPolicyGlobal= " +
+            intraQueuePreemptionOrderPolicyGlobal);
+
+    if (intraQueuePreemptionOrderPolicyPerQueue.equals("userlimit_first") ||
+        intraQueuePreemptionOrderPolicyPerQueue.equals("priority_first")) {
+      return intraQueuePreemptionOrderPolicyPerQueue.toUpperCase();
+    } else {
+      return intraQueuePreemptionOrderPolicyGlobal.toUpperCase();
+    }
+  }
+
+  /**
    * Get the maximum am resource percent per queue setting.
    * @param queue name of the queue
    * @return per queue setting or defaults to the global am-resource-percent 

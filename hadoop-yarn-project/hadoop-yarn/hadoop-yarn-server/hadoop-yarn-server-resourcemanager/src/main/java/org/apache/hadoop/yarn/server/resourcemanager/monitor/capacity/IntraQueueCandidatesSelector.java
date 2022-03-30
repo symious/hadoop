@@ -268,7 +268,8 @@ public class IntraQueueCandidatesSelector extends PreemptionCandidatesSelector {
 
       // Subtract from respective user's resource usage once a container is
       // selected for preemption.
-      if (ret && preemptionContext.getIntraQueuePreemptionOrderPolicy()
+      if (ret && IntraQueuePreemptionOrderPolicy
+          .valueOf(leafQueue.getIntraQueuePreemptionOrderPolicy())
           .equals(IntraQueuePreemptionOrderPolicy.USERLIMIT_FIRST)) {
         Resources.subtractFrom(rollingUsedResourcePerUser,
             c.getAllocatedResource());
