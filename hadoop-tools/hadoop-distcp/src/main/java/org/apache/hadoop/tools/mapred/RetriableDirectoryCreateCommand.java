@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.tools.mapred;
 
+import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.tools.util.RetriableCommand;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.FileSystem;
@@ -46,11 +48,19 @@ public class RetriableDirectoryCreateCommand extends RetriableCommand {
    */
   @Override
   protected Object doExecute(Object... arguments) throws Exception {
-    assert arguments.length == 2 : "Unexpected argument list.";
+    assert arguments.length == 3 : "Unexpected argument list.";
     Path target = (Path)arguments[0];
     Mapper.Context context = (Mapper.Context)arguments[1];
 
     FileSystem targetFS = target.getFileSystem(context.getConfiguration());
-    return targetFS.mkdirs(target);
+    if (!targetFS.mkdirs(target)) {
+      return false;
+    }
+    if (arguments[2] != null && targetFS instanceof DistributedFileSystem) {
+      ErasureCodingPolicy ecPolicy = (ErasureCodingPolicy)  arguments[2];
+      DistributedFileSystem dfs = (DistributedFileSystem) targetFS;
+      dfs.setErasureCodingPolicy(target, ecPolicy.getName());
+    }
+    return true;
   }
 }

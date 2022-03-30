@@ -55,6 +55,7 @@ public class DFSOpsCountStatistics extends StorageStatistics {
     EXISTS(CommonStatisticNames.OP_EXISTS),
     GET_BYTES_WITH_FUTURE_GS("op_get_bytes_with_future_generation_stamps"),
     GET_CONTENT_SUMMARY(CommonStatisticNames.OP_GET_CONTENT_SUMMARY),
+    GET_EC_POLICY("op_get_ec_policy"),
     GET_FILE_BLOCK_LOCATIONS("op_get_file_block_locations"),
     GET_FILE_CHECKSUM(CommonStatisticNames.OP_GET_FILE_CHECKSUM),
     GET_FILE_LINK_STATUS("op_get_file_link_status"),
@@ -81,6 +82,7 @@ public class DFSOpsCountStatistics extends StorageStatistics {
     RENAME_SNAPSHOT("op_rename_snapshot"),
     RESOLVE_LINK("op_resolve_link"),
     SET_ACL(CommonStatisticNames.OP_SET_ACL),
+    SET_EC_POLICY("op_set_ec_policy"),
     SET_OWNER(CommonStatisticNames.OP_SET_OWNER),
     SET_PERMISSION(CommonStatisticNames.OP_SET_PERMISSION),
     SET_REPLICATION("op_set_replication"),
@@ -88,6 +90,7 @@ public class DFSOpsCountStatistics extends StorageStatistics {
     SET_TIMES(CommonStatisticNames.OP_SET_TIMES),
     SET_XATTR("op_set_xattr"),
     TRUNCATE(CommonStatisticNames.OP_TRUNCATE),
+    UNSET_EC_POLICY("op_unset_ec_policy"),
     UNSET_STORAGE_POLICY("op_unset_storage_policy");
 
     private static final Map<String, OpType> SYMBOL_MAP =

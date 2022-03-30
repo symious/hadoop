@@ -410,7 +410,8 @@ public class TestOptionsParser {
         + "sourceFileListing=abc, sourcePaths=null, targetPath=xyz, "
         + "targetPathExists=true, filtersFile='null', blocksPerChunk=0, "
         + "copyBufferSize=8192, verboseLog=false, "
-        + "fastCopyEnable=false}";
+        + "fastCopyEnable=false, "
+        + "updateRootDirectoryAttribute=false}";
     String optionString = option.toString();
     Assert.assertEquals(val, optionString);
     Assert.assertNotSame(DistCpOptionSwitch.ATOMIC_COMMIT.toString(),

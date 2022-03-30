@@ -120,7 +120,7 @@ public class DistCpOptions {
   private boolean updateRootDirectoryAttribute = false;
 
   public static enum FileAttribute{
-    REPLICATION, BLOCKSIZE, USER, GROUP, PERMISSION, CHECKSUMTYPE, ACL, XATTR, TIMES;
+    REPLICATION, BLOCKSIZE, USER, GROUP, PERMISSION, CHECKSUMTYPE, ACL, XATTR, TIMES, ERASURECODINGPOLICY;
 
     public static FileAttribute getAttribute(char symbol) {
       for (FileAttribute attribute : values()) {

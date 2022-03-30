@@ -83,6 +83,7 @@ import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.RollingUpgradeAction;
@@ -2650,6 +2651,108 @@ public class DistributedFileSystem extends FileSystem
   public DFSInotifyEventInputStream getInotifyEventStream(long lastReadTxid)
       throws IOException {
     return dfs.getInotifyEventStream(lastReadTxid);
+  }
+
+  /**
+   * Set the source path to the specified erasure coding policy.
+   *
+   * @param path     The directory to set the policy
+   * @param ecPolicyName The erasure coding policy name.
+   * @throws IOException
+   */
+  public void setErasureCodingPolicy(final Path path,
+      final String ecPolicyName) throws IOException {
+    statistics.incrementWriteOps(1);
+    storageStatistics.incrementOpCounter(OpType.SET_EC_POLICY);
+    Path absF = fixRelativePart(path);
+    new FileSystemLinkResolver<Void>() {
+      @Override
+      public Void doCall(final Path p) throws IOException {
+        dfs.setErasureCodingPolicy(getPathName(p), ecPolicyName);
+        return null;
+      }
+
+      @Override
+      public Void next(final FileSystem fs, final Path p)
+          throws IOException {
+        if (fs instanceof DistributedFileSystem) {
+          DistributedFileSystem myDfs = (DistributedFileSystem) fs;
+          myDfs.setErasureCodingPolicy(p, ecPolicyName);
+          return null;
+        }
+        throw new UnsupportedOperationException(
+            "Cannot setErasureCodingPolicy through a symlink to a "
+                + "non-DistributedFileSystem: " + path + " -> " + p);
+      }
+    }.resolve(this, absF);
+  }
+
+  /**
+   * Get erasure coding policy information for the specified path.
+   *
+   * @param path The path of the file or directory
+   * @return Returns the policy information if file or directory on the path
+   * is erasure coded, null otherwise. Null will be returned if directory or
+   * file has REPLICATION policy.
+   * @throws IOException
+   */
+  public ErasureCodingPolicy getErasureCodingPolicy(final Path path)
+      throws IOException {
+    statistics.incrementReadOps(1);
+    storageStatistics.incrementOpCounter(OpType.GET_EC_POLICY);
+    Path absF = fixRelativePart(path);
+    return new FileSystemLinkResolver<ErasureCodingPolicy>() {
+      @Override
+      public ErasureCodingPolicy doCall(final Path p)
+          throws IOException {
+        return dfs.getErasureCodingPolicy(getPathName(p));
+      }
+
+      @Override
+      public ErasureCodingPolicy next(final FileSystem fs, final Path p)
+          throws IOException {
+        if (fs instanceof DistributedFileSystem) {
+          DistributedFileSystem myDfs = (DistributedFileSystem) fs;
+          return myDfs.getErasureCodingPolicy(p);
+        }
+        throw new UnsupportedOperationException(
+            "Cannot getErasureCodingPolicy through a symlink to a "
+                + "non-DistributedFileSystem: " + path + " -> " + p);
+      }
+    }.resolve(this, absF);
+  }
+
+  /**
+   * Unset the erasure coding policy from the source path.
+   *
+   * @param path     The directory to unset the policy
+   * @throws IOException
+   */
+  public void unsetErasureCodingPolicy(final Path path)
+      throws IOException {
+    statistics.incrementWriteOps(1);
+    storageStatistics.incrementOpCounter(OpType.UNSET_EC_POLICY);
+    Path absF = fixRelativePart(path);
+    new FileSystemLinkResolver<Void>() {
+      @Override
+      public Void doCall(final Path p) throws IOException {
+        dfs.unsetErasureCodingPolicy(getPathName(p));
+        return null;
+      }
+
+      @Override
+      public Void next(final FileSystem fs, final Path p)
+          throws IOException {
+        if (fs instanceof DistributedFileSystem) {
+          DistributedFileSystem myDfs = (DistributedFileSystem) fs;
+          myDfs.unsetErasureCodingPolicy(p);
+          return null;
+        }
+        throw new UnsupportedOperationException(
+            "Cannot unsetErasureCodingPolicy through a symlink to a "
+                + "non-DistributedFileSystem: " + path + " -> " + p);
+      }
+    }.resolve(this, absF);
   }
 
   public String getTrashRootConfig() {

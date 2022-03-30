@@ -33,6 +33,8 @@ import org.apache.hadoop.fs.FileChecksum;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -248,8 +250,16 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
             getFileType(targetStatus) + ", Source is " + getFileType(sourceCurrStatus));
       }
 
+      ErasureCodingPolicy ecPolicy = null;
+      if (fileAttributes.contains(FileAttribute.ERASURECODINGPOLICY)) {
+        if (sourceFS instanceof DistributedFileSystem) {
+          ecPolicy = ((DistributedFileSystem) sourceFS)
+              .getErasureCodingPolicy(sourcePath);
+        }
+      }
+
       if (sourceCurrStatus.isDirectory()) {
-        createTargetDirsWithRetry(description, target, context);
+        createTargetDirsWithRetry(description, target, context, ecPolicy);
         return;
       }
 
@@ -278,7 +288,7 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
           LOG.debug("copying " + sourceCurrStatus + " " + tmpTarget);
         }
         copyFileWithRetry(description, sourceCurrStatus, tmpTarget,
-            targetStatus, context, action, fileAttributes);
+            targetStatus, context, action, fileAttributes, ecPolicy);
       }
       DistCpUtils.preserve(target.getFileSystem(conf), tmpTarget,
           sourceCurrStatus, fileAttributes, preserveRawXattrs);
@@ -311,12 +321,13 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
   private void copyFileWithRetry(String description,
       CopyListingFileStatus sourceFileStatus, Path target,
       FileStatus targrtFileStatus, Context context, FileAction action,
-      EnumSet<DistCpOptions.FileAttribute> fileAttributes)
+      EnumSet<DistCpOptions.FileAttribute> fileAttributes,
+      ErasureCodingPolicy ecPolicy)
       throws IOException, InterruptedException {
     long bytesCopied;
     try {
       bytesCopied = (Long) new RetriableFileCopyCommand(skipCrc, description,
-          action).execute(sourceFileStatus, target, context, fileAttributes);
+          action).execute(sourceFileStatus, target, context, fileAttributes, ecPolicy);
     } catch (Exception e) {
       context.setStatus("Copy Failure: " + sourceFileStatus.getPath());
       throw new IOException("File copy failed: " + sourceFileStatus.getPath() +
@@ -336,9 +347,10 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
   }
 
   private void createTargetDirsWithRetry(String description,
-                   Path target, Context context) throws IOException {
+      Path target, Context context, ErasureCodingPolicy ecPolicy)
+      throws IOException {
     try {
-      new RetriableDirectoryCreateCommand(description).execute(target, context);
+      new RetriableDirectoryCreateCommand(description).execute(target, context, ecPolicy);
     } catch (Exception e) {
       throw new IOException("mkdir failed for " + target, e);
     }

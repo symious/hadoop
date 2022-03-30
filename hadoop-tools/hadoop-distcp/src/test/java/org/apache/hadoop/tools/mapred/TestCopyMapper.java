@@ -492,6 +492,7 @@ public class TestCopyMapper {
           EnumSet.allOf(DistCpOptions.FileAttribute.class);
       preserveStatus.remove(DistCpOptions.FileAttribute.ACL);
       preserveStatus.remove(DistCpOptions.FileAttribute.XATTR);
+      preserveStatus.remove(DistCpOptions.FileAttribute.ERASURECODINGPOLICY);
 
       context.getConfiguration().set(DistCpConstants.CONF_LABEL_PRESERVE_STATUS,
         DistCpUtils.packAttributes(preserveStatus));
@@ -633,6 +634,7 @@ public class TestCopyMapper {
       preserveStatus.remove(DistCpOptions.FileAttribute.ACL);
       preserveStatus.remove(DistCpOptions.FileAttribute.XATTR);
       preserveStatus.remove(DistCpOptions.FileAttribute.TIMES);
+      preserveStatus.remove(DistCpOptions.FileAttribute.ERASURECODINGPOLICY);
 
       context.getConfiguration().set(DistCpConstants.CONF_LABEL_PRESERVE_STATUS,
         DistCpUtils.packAttributes(preserveStatus));
@@ -709,6 +711,7 @@ public class TestCopyMapper {
           EnumSet.allOf(DistCpOptions.FileAttribute.class);
       preserveStatus.remove(DistCpOptions.FileAttribute.ACL);
       preserveStatus.remove(DistCpOptions.FileAttribute.XATTR);
+      preserveStatus.remove(DistCpOptions.FileAttribute.ERASURECODINGPOLICY);
 
       final Mapper<Text, CopyListingFileStatus, Text, Text>.Context context
               = stubContext.getContext();
