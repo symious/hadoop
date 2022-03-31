@@ -181,6 +181,7 @@ public class ForwardDistributedFileSystem extends DistributedFileSystem {
         upperUri = upperSA.toUri();
         underUri = underSA.toUri();
         underFs = FileSystem.get(underSA.toUri(), conf);
+        setConf(conf);
       } else {
         super.initialize(upperSA.toUri(), conf);
       }
