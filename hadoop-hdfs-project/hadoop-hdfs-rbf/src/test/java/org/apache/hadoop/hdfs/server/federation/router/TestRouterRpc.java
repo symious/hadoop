@@ -869,7 +869,7 @@ public class TestRouterRpc {
     HdfsFileStatus status = routerProtocol.create(
         newRouterFile, new FsPermission("777"), clientName,
         new EnumSetWritable<CreateFlag>(createFlag), true, (short) 1,
-        (long) 1024, CryptoProtocolVersion.supported());
+        (long) 1024, CryptoProtocolVersion.supported(), null);
 
     // Add a block via router (requires client to have same lease)
     LocatedBlock block = routerProtocol.addBlock(

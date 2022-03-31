@@ -682,7 +682,7 @@ public class FastCopy {
         HdfsFileStatus dstFileStatus = dstNamenode.create(destination, srcFileStatus.getPermission(),
             clientName, flagWritable, true,
             srcFileStatus.getReplication(), srcFileStatus.getBlockSize(),
-            CryptoProtocolVersion.supported());
+            CryptoProtocolVersion.supported(), null);
 
         // Instruct each datanode to create a copy of the respective block.
         int blocksAdded = 0;

@@ -1049,7 +1049,7 @@ public class TestEncryptionZones {
         .when(mcp)
         .create(anyString(), (FsPermission) anyObject(), anyString(),
             (EnumSetWritable<CreateFlag>) anyObject(), anyBoolean(),
-            anyShort(), anyLong(), (CryptoProtocolVersion[]) anyObject());
+            anyShort(), anyLong(), (CryptoProtocolVersion[]) anyObject(), null);
   }
 
   // This test only uses mocks. Called from the end of an existing test to

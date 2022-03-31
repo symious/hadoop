@@ -1241,6 +1241,15 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     return permission.applyUMask(dfsClientConf.getUMask());
   }
 
+  public DFSOutputStream create(String src, FsPermission permission,
+      EnumSet<CreateFlag> flag, boolean createParent, short replication,
+      long blockSize, Progressable progress, int buffersize,
+      ChecksumOpt checksumOpt, InetSocketAddress[] favoredNodes)
+      throws IOException {
+    return create(src, permission, flag, createParent, replication, blockSize,
+        progress, buffersize, checksumOpt, favoredNodes, null);
+  }
+
   /**
    * Same as {@link #create(String, FsPermission, EnumSet, boolean, short, long,
    * Progressable, int, ChecksumOpt)} with the addition of favoredNodes that is
@@ -1253,15 +1262,15 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   public DFSOutputStream create(String src, FsPermission permission,
       EnumSet<CreateFlag> flag, boolean createParent, short replication,
       long blockSize, Progressable progress, int buffersize,
-      ChecksumOpt checksumOpt, InetSocketAddress[] favoredNodes)
-      throws IOException {
+      ChecksumOpt checksumOpt, InetSocketAddress[] favoredNodes,
+      String ecPolicyName) throws IOException {
     checkOpen();
     final FsPermission masked = applyUMask(permission);
     LOG.debug("{}: masked={}", src, masked);
     final DFSOutputStream result = DFSOutputStream.newStreamForCreate(this,
         src, masked, flag, createParent, replication, blockSize, progress,
         dfsClientConf.createChecksum(checksumOpt),
-        getFavoredNodesStr(favoredNodes));
+        getFavoredNodesStr(favoredNodes), ecPolicyName);
     beginFileLease(result.getFileId(), result);
     return result;
   }
@@ -1314,7 +1323,8 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     if (result == null) {
       DataChecksum checksum = dfsClientConf.createChecksum(checksumOpt);
       result = DFSOutputStream.newStreamForCreate(this, src, absPermission,
-          flag, createParent, replication, blockSize, progress, checksum, null);
+          flag, createParent, replication, blockSize, progress, checksum,
+          null, null);
     }
     beginFileLease(result.getFileId(), result);
     return result;

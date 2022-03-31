@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InterruptedIOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.EnumSet;
 import java.util.concurrent.atomic.AtomicReference;
@@ -53,6 +54,7 @@ import org.apache.hadoop.hdfs.protocol.datatransfer.PacketHeader;
 import org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
+import org.apache.hadoop.hdfs.server.namenode.NotReplicatedYetException;
 import org.apache.hadoop.hdfs.server.namenode.RetryStartFileException;
 import org.apache.hadoop.hdfs.server.namenode.SafeModeException;
 import org.apache.hadoop.hdfs.util.ByteArrayManager;
@@ -72,6 +74,9 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.Write.RECOVER_LEASE_ON_CLOSE_EXCEPTION_DEFAULT;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.Write.RECOVER_LEASE_ON_CLOSE_EXCEPTION_KEY;
 
 
 /****************************************************************
@@ -113,17 +118,18 @@ public class DFSOutputStream extends FSOutputSummer
   protected final int bytesPerChecksum;
 
   protected DFSPacket currentPacket = null;
-  private DataStreamer streamer;
+  protected DataStreamer streamer;
   protected int packetSize = 0; // write packet size, not including the header.
   protected int chunksPerPacket = 0;
   protected long lastFlushOffset = 0; // offset when flush was invoked
-  private long initialFileSize = 0; // at time of file open
+  protected long initialFileSize = 0; // at time of file open
   private final short blockReplication; // replication factor of file
   protected boolean shouldSyncBlock = false; // force blocks to disk upon close
   private final EnumSet<AddBlockFlag> addBlockFlags;
   protected final AtomicReference<CachingStrategy> cachingStrategy;
   private FileEncryptionInfo fileEncryptionInfo;
   private int writePacketSize;
+  private boolean leaseRecovered = false;
 
   /** Use {@link ByteArrayManager} to create buffer for non-heartbeat packets.*/
   protected DFSPacket createPacket(int packetSize, int chunksPerPkt,
@@ -238,21 +244,25 @@ public class DFSOutputStream extends FSOutputSummer
   /** Construct a new output stream for creating a file. */
   protected DFSOutputStream(DFSClient dfsClient, String src, HdfsFileStatus stat,
       EnumSet<CreateFlag> flag, Progressable progress,
-      DataChecksum checksum, String[] favoredNodes) throws IOException {
+      DataChecksum checksum, String[] favoredNodes,
+      boolean createStreamer) throws IOException {
     this(dfsClient, src, flag, progress, stat, checksum);
     this.shouldSyncBlock = flag.contains(CreateFlag.SYNC_BLOCK);
 
     computePacketChunkSize(dfsClient.getConf().getWritePacketSize(),
         bytesPerChecksum);
 
-    streamer = new DataStreamer(stat, null, dfsClient, src, progress, checksum,
-        cachingStrategy, byteArrayManager, favoredNodes, addBlockFlags);
+    if (createStreamer) {
+      streamer = new DataStreamer(stat, null, dfsClient, src, progress, checksum,
+          cachingStrategy, byteArrayManager, favoredNodes, addBlockFlags);
+    }
   }
 
   static DFSOutputStream newStreamForCreate(DFSClient dfsClient, String src,
       FsPermission masked, EnumSet<CreateFlag> flag, boolean createParent,
       short replication, long blockSize, Progressable progress,
-      DataChecksum checksum, String[] favoredNodes) throws IOException {
+      DataChecksum checksum, String[] favoredNodes,
+      String ecPolicyName) throws IOException {
     try (TraceScope ignored =
              dfsClient.newPathTraceScope("newStreamForCreate", src)) {
       HdfsFileStatus stat = null;
@@ -266,7 +276,7 @@ public class DFSOutputStream extends FSOutputSummer
         try {
           stat = dfsClient.namenode.create(src, masked, dfsClient.clientName,
               new EnumSetWritable<>(flag), createParent, replication,
-              blockSize, SUPPORTED_CRYPTO_VERSIONS);
+              blockSize, SUPPORTED_CRYPTO_VERSIONS, ecPolicyName);
           break;
         } catch (RemoteException re) {
           IOException e = re.unwrapRemoteException(
@@ -296,8 +306,15 @@ public class DFSOutputStream extends FSOutputSummer
         }
       }
       Preconditions.checkNotNull(stat, "HdfsFileStatus should not be null!");
-      final DFSOutputStream out = new DFSOutputStream(dfsClient, src, stat,
-          flag, progress, checksum, favoredNodes);
+      final DFSOutputStream out;
+      if (stat.getErasureCodingPolicy() != null) {
+        // TODO change it to DFSStripedOutputStream
+        out = new DFSOutputStream(dfsClient, src, stat,
+            flag, progress, checksum, favoredNodes, true);
+      } else {
+        out = new DFSOutputStream(dfsClient, src, stat,
+            flag, progress, checksum, favoredNodes, true);
+      }
       out.start();
       return out;
     }
@@ -376,8 +393,15 @@ public class DFSOutputStream extends FSOutputSummer
       throws IOException {
     try (TraceScope ignored =
              dfsClient.newPathTraceScope("newStreamForAppend", src)) {
-      final DFSOutputStream out = new DFSOutputStream(dfsClient, src, flags,
-          progress, lastBlock, stat, checksum, favoredNodes);
+      DFSOutputStream out;
+      if (stat.getErasureCodingPolicy() != null) {
+        // TODO change it to DFSOutputStream
+        out = new DFSOutputStream(dfsClient, src, flags, progress, lastBlock,
+            stat, checksum, favoredNodes);
+      } else {
+        out = new DFSOutputStream(dfsClient, src, flags, progress, lastBlock,
+            stat, checksum, favoredNodes);
+      }
       out.start();
       return out;
     }
@@ -401,38 +425,55 @@ public class DFSOutputStream extends FSOutputSummer
   @Override
   protected synchronized void writeChunk(byte[] b, int offset, int len,
       byte[] checksum, int ckoff, int cklen) throws IOException {
-    dfsClient.checkOpen();
-    checkClosed();
-
-    if (len > bytesPerChecksum) {
-      throw new IOException("writeChunk() buffer size is " + len +
-                            " is larger than supported  bytesPerChecksum " +
-                            bytesPerChecksum);
-    }
-    if (cklen != 0 && cklen != getChecksumSize()) {
-      throw new IOException("writeChunk() checksum size is supposed to be " +
-                            getChecksumSize() + " but found to be " + cklen);
-    }
-
-    if (currentPacket == null) {
-      currentPacket = createPacket(packetSize, chunksPerPacket, getStreamer()
-          .getBytesCurBlock(), getStreamer().getAndIncCurrentSeqno(), false);
-      DFSClient.LOG.debug("DFSClient writeChunk allocating new packet seqno={},"
-              + " src={}, packetSize={}, chunksPerPacket={}, bytesCurBlock={}",
-          currentPacket.getSeqno(), src, packetSize, chunksPerPacket,
-          getStreamer().getBytesCurBlock());
-    }
+    writeChunkPrepare(len, ckoff, cklen);
 
     currentPacket.writeChecksum(checksum, ckoff, cklen);
     currentPacket.writeData(b, offset, len);
     currentPacket.incNumChunks();
     getStreamer().incBytesCurBlock(len);
-
-    // If packet is full, enqueue it for transmission
-    //
     if (currentPacket.getNumChunks() == currentPacket.getMaxChunks() ||
         getStreamer().getBytesCurBlock() == blockSize) {
       enqueueCurrentPacketFull();
+    }
+  }
+
+  protected synchronized void writeChunk(ByteBuffer buffer, int len,
+      byte[] checksum, int ckoff, int cklen) throws IOException {
+    writeChunkPrepare(len, ckoff, cklen);
+
+    currentPacket.writeChecksum(checksum, ckoff, cklen);
+    currentPacket.writeData(buffer, len);
+    currentPacket.incNumChunks();
+    getStreamer().incBytesCurBlock(len);
+    if (currentPacket.getNumChunks() == currentPacket.getMaxChunks() ||
+        getStreamer().getBytesCurBlock() == blockSize) {
+      enqueueCurrentPacketFull();
+    }
+  }
+
+  private synchronized void writeChunkPrepare(int buflen,
+      int ckoff, int cklen) throws IOException {
+    dfsClient.checkOpen();
+    checkClosed();
+
+    if (buflen > bytesPerChecksum) {
+      throw new IOException("writeChunk() buffer size is " + buflen +
+          " is larger than supported  bytesPerChecksum " +
+          bytesPerChecksum);
+    }
+    if (cklen != 0 && cklen != getChecksumSize()) {
+      throw new IOException("writeChunk() checksum size is supposed to be " +
+          getChecksumSize() + " but found to be " + cklen);
+    }
+    if (currentPacket == null) {
+      currentPacket = createPacket(packetSize, chunksPerPacket,
+          getStreamer().getBytesCurBlock(),
+          getStreamer().getAndIncCurrentSeqno(), false);
+      DFSClient.LOG.debug("WriteChunk allocating new packet seqno={},"
+          + " src={}, packetSize={}, chunksPerPacket={}, bytesCurBlock={},"
+          + " output stream={}",
+          currentPacket.getSeqno(), src, packetSize, chunksPerPacket,
+          getStreamer().getBytesCurBlock(), this);
     }
   }
 
@@ -734,18 +775,7 @@ public class DFSOutputStream extends FSOutputSummer
    * received from datanodes.
    */
   protected void flushInternal() throws IOException {
-    long toWaitFor;
-    synchronized (this) {
-      dfsClient.checkOpen();
-      checkClosed();
-      //
-      // If there is data in the current buffer, send it across
-      //
-      getStreamer().queuePacket(currentPacket);
-      currentPacket = null;
-      toWaitFor = getStreamer().getLastQueuedSeqno();
-    }
-
+    long toWaitFor = flushInternalWithoutWaitingAck();
     getStreamer().waitForAckedSeqno(toWaitFor);
   }
 
@@ -827,7 +857,14 @@ public class DFSOutputStream extends FSOutputSummer
   }
 
   protected synchronized void closeImpl() throws IOException {
+    boolean recoverLeaseOnCloseException =
+        dfsClient.getConfiguration().getBoolean(
+            RECOVER_LEASE_ON_CLOSE_EXCEPTION_KEY,
+            RECOVER_LEASE_ON_CLOSE_EXCEPTION_DEFAULT);
     if (isClosed()) {
+      if (!leaseRecovered) {
+        recoverLease(recoverLeaseOnCloseException);
+      }
       LOG.debug("Closing an already closed stream. [Stream:{}, streamer:{}]",
           closed, getStreamer().streamerClosed());
       try {
@@ -862,6 +899,9 @@ public class DFSOutputStream extends FSOutputSummer
       }
       completeFile();
     } catch (ClosedChannelException ignored) {
+    } catch (IOException ioe) {
+      recoverLease(recoverLeaseOnCloseException);
+      throw ioe;
     } finally {
       // Failures may happen when flushing data.
       // Streamers may keep waiting for the new block information.
@@ -872,7 +912,23 @@ public class DFSOutputStream extends FSOutputSummer
     }
   }
 
-  private void completeFile() throws IOException {
+  /**
+   * If recoverLeaseOnCloseException is true and an exception occurs when
+   * closing a file, recover lease.
+   */
+  protected void recoverLease(boolean recoverLeaseOnCloseException) {
+    if (recoverLeaseOnCloseException) {
+      try {
+        dfsClient.endFileLease(fileId);
+        dfsClient.recoverLease(src);
+        leaseRecovered = true;
+      } catch (Exception e) {
+        LOG.warn("Fail to recover lease for {}", src, e);
+      }
+    }
+  }
+
+  void completeFile() throws IOException {
     // get last block before destroying the streamer
     ExtendedBlock lastBlock = getStreamer().getBlock();
     try (TraceScope ignored =
@@ -915,6 +971,7 @@ public class DFSOutputStream extends FSOutputSummer
     long localstart = Time.monotonicNow();
     final DfsClientConf conf = dfsClient.getConf();
     long sleeptime = conf.getBlockWriteLocateFollowingInitialDelayMs();
+    long maxSleepTime = conf.getBlockWriteLocateFollowingMaxDelayMs();
     boolean fileComplete = false;
     int retries = conf.getNumBlockWriteLocateFollowingRetry();
     while (!fileComplete) {
@@ -938,7 +995,7 @@ public class DFSOutputStream extends FSOutputSummer
           }
           retries--;
           Thread.sleep(sleeptime);
-          sleeptime *= 2;
+          sleeptime = calculateDelayForNextRetry(sleeptime, maxSleepTime);
           if (Time.monotonicNow() - localstart > 5000) {
             DFSClient.LOG.info("Could not complete " + src + " retrying...");
           }
@@ -985,6 +1042,18 @@ public class DFSOutputStream extends FSOutputSummer
     return getStreamer().getBlockToken();
   }
 
+  protected long flushInternalWithoutWaitingAck() throws IOException {
+    long toWaitFor;
+    synchronized (this) {
+      dfsClient.checkOpen();
+      checkClosed();
+      getStreamer().queuePacket(currentPacket);
+      currentPacket = null;
+      toWaitFor = getStreamer().getLastQueuedSeqno();
+    }
+    return toWaitFor;
+  }
+
   @Override
   public void setDropBehind(Boolean dropBehind) throws IOException {
     CachingStrategy prevStrategy, nextStrategy;
@@ -1019,5 +1088,80 @@ public class DFSOutputStream extends FSOutputSummer
    */
   protected DataStreamer getStreamer() {
     return streamer;
+  }
+
+  @Override
+  public String toString() {
+    return getClass().getSimpleName() + ":" + streamer;
+  }
+
+  @VisibleForTesting
+  boolean isLeaseRecovered() {
+    return leaseRecovered;
+  }
+
+  static LocatedBlock addBlock(DatanodeInfo[] excludedNodes,
+      DFSClient dfsClient, String src, ExtendedBlock prevBlock,
+      long fileId, String[] favoredNodes,
+      EnumSet<AddBlockFlag> allocFlags) throws IOException {
+    final DfsClientConf conf = dfsClient.getConf();
+    int retries = conf.getNumBlockWriteLocateFollowingRetry();
+    long sleeptime = conf.getBlockWriteLocateFollowingInitialDelayMs();
+    long maxSleepTime = conf.getBlockWriteLocateFollowingMaxDelayMs();
+    long localStart = Time.monotonicNow();
+    while (true) {
+      try {
+        return dfsClient.namenode.addBlock(src, dfsClient.clientName,
+            prevBlock, excludedNodes, fileId, favoredNodes, allocFlags);
+      } catch (RemoteException e) {
+        IOException ue = e.unwrapRemoteException(FileNotFoundException.class,
+            AccessControlException.class,
+            NSQuotaExceededException.class,
+            DSQuotaExceededException.class,
+            QuotaByStorageTypeExceededException.class,
+            UnresolvedPathException.class);
+        if (ue != e) {
+          throw ue; // no need to retry these exceptions
+        }
+
+        if (NotReplicatedYetException.class.getName().equals(e.getClassName())) {
+          if (retries == 0) {
+            throw e;
+          } else {
+            --retries;
+            LOG.info("Exception while adding a block", e);
+            long elapsed = Time.monotonicNow() - localStart;
+            if (elapsed > 5000) {
+              LOG.info("Waiting for replication for " + (elapsed / 1000)
+                  + " seconds");
+            }
+            try {
+              LOG.warn("NotReplicatedYetException sleeping " + src
+                  + " retries left " + retries);
+              Thread.sleep(sleeptime);
+              sleeptime = calculateDelayForNextRetry(sleeptime, maxSleepTime);
+            } catch (InterruptedException ie) {
+              LOG.warn("Caught exception", ie);
+            }
+          }
+        } else {
+          throw e;
+        }
+      }
+    }
+  }
+
+  /**
+   * Calculates the delay for the next retry.
+   * The delay is increased exponentially until the maximum delay is reached.
+   *
+   * @param previousDelay previousDelay delay for the previous retry
+   * @param maxDelay      maxDelay maximum delay
+   * @return              the minimum of the double of the previous delay
+   *                      and the maximum delay
+   */
+  private static long calculateDelayForNextRetry(
+      long previousDelay, long maxDelay) {
+    return Math.min(previousDelay * 2, maxDelay);
   }
 }

@@ -596,7 +596,7 @@ public class NNThroughputBenchmark implements Tool {
       clientProto.create(fileNames[daemonId][inputIdx], FsPermission.getDefault(),
                       clientName, new EnumSetWritable<CreateFlag>(EnumSet
               .of(CreateFlag.CREATE, CreateFlag.OVERWRITE)), true, 
-          replication, BLOCK_SIZE, CryptoProtocolVersion.supported());
+          replication, BLOCK_SIZE, CryptoProtocolVersion.supported(), null);
       long end = Time.now();
       for(boolean written = !closeUponCreate; !written; 
         written = clientProto.complete(fileNames[daemonId][inputIdx],
@@ -1145,7 +1145,7 @@ public class NNThroughputBenchmark implements Tool {
         String fileName = nameGenerator.getNextFileName("ThroughputBench");
         clientProto.create(fileName, FsPermission.getDefault(), clientName,
             new EnumSetWritable<CreateFlag>(EnumSet.of(CreateFlag.CREATE, CreateFlag.OVERWRITE)), true, replication,
-            BLOCK_SIZE, CryptoProtocolVersion.supported());
+            BLOCK_SIZE, CryptoProtocolVersion.supported(), null);
         ExtendedBlock lastBlock = addBlocks(fileName, clientName);
         clientProto.complete(fileName, clientName, lastBlock, HdfsConstants.GRANDFATHER_INODE_ID);
       }

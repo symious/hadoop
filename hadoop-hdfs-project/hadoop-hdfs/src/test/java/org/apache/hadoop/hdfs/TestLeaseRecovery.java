@@ -442,7 +442,7 @@ public class TestLeaseRecovery {
           .create(file, new FsPermission("777"), client.clientName,
               new EnumSetWritable<CreateFlag>(EnumSet.of(CreateFlag.CREATE)),
               true, (short) 1, 1024 * 1024 * 128L,
-              new CryptoProtocolVersion[0]);
+              new CryptoProtocolVersion[0], null);
 
       assertNotNull(NameNodeAdapter.getLeaseHolderForPath(
           cluster.getNameNode(), file));
@@ -565,7 +565,7 @@ public class TestLeaseRecovery {
         .create(file, new FsPermission("777"), client.clientName,
             new EnumSetWritable<CreateFlag>(EnumSet.of(CreateFlag.CREATE)),
             true, (short) 1, 1024 * 1024 * 128L,
-            new CryptoProtocolVersion[0]);
+            new CryptoProtocolVersion[0], null);
     // Add a block to the file
     LocatedBlock blk = client.getNamenode()
         .addBlock(file, client.clientName, null,
@@ -579,7 +579,7 @@ public class TestLeaseRecovery {
       DFSOutputStream s = new DFSOutputStream(client, file, stat,
           EnumSet.of(CreateFlag.CREATE), null,
           DataChecksum.newDataChecksum(DataChecksum.Type.CRC32C, 512),
-          null);
+          null, true);
       s.start();
       s.write(bytesToWrite);
       s.hflush();

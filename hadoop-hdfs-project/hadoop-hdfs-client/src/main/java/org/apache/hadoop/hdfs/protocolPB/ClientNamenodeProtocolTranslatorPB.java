@@ -304,7 +304,7 @@ public class ClientNamenodeProtocolTranslatorPB implements
   public HdfsFileStatus create(String src, FsPermission masked,
       String clientName, EnumSetWritable<CreateFlag> flag,
       boolean createParent, short replication, long blockSize,
-      CryptoProtocolVersion[] supportedVersions)
+      CryptoProtocolVersion[] supportedVersions, String ecPolicyName)
       throws IOException {
     CreateRequestProto.Builder builder = CreateRequestProto.newBuilder()
         .setSrc(src)
@@ -314,6 +314,9 @@ public class ClientNamenodeProtocolTranslatorPB implements
         .setCreateParent(createParent)
         .setReplication(replication)
         .setBlockSize(blockSize);
+    if (ecPolicyName != null) {
+      builder.setEcPolicyName(ecPolicyName);
+    }
     builder.addAllCryptoProtocolVersion(
         PBHelperClient.convert(supportedVersions));
     CreateRequestProto req = builder.build();

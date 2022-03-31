@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.BufferOverflowException;
+import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.Arrays;
 
@@ -112,6 +113,19 @@ class DFSPacket {
       throw new BufferOverflowException();
     }
     System.arraycopy(inarray, off, buf, dataPos, len);
+    dataPos += len;
+  }
+
+  public synchronized void writeData(ByteBuffer inBuffer, int len)
+      throws ClosedChannelException {
+    checkBuffer();
+    len = Math.min(len, inBuffer.remaining());
+    if (dataPos + len > buf.length) {
+      throw new BufferOverflowException();
+    }
+    for (int i = 0; i < len; i++) {
+      buf[dataPos + i] = inBuffer.get();
+    }
     dataPos += len;
   }
 

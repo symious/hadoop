@@ -80,6 +80,7 @@ message CreateRequestProto {
   required uint32 replication = 6; // Short: Only 16 bits used
   required uint64 blockSize = 7;
   repeated CryptoProtocolVersionProto cryptoProtocolVersion = 8;
+  optional string ecPolicyName = 10;
 }
 
 message CreateResponseProto {

@@ -555,9 +555,10 @@ public class RouterRpcServer extends AbstractService
   public HdfsFileStatus create(String src, FsPermission masked,
       String clientName, EnumSetWritable<CreateFlag> flag,
       boolean createParent, short replication, long blockSize,
-      CryptoProtocolVersion[] supportedVersions) throws IOException {
+      CryptoProtocolVersion[] supportedVersions, String ecPolicyName)
+      throws IOException {
     return clientProto.create(src, masked, clientName, flag, createParent,
-        replication, blockSize, supportedVersions);
+        replication, blockSize, supportedVersions, ecPolicyName);
   }
 
   /**

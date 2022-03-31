@@ -30,7 +30,9 @@ import java.util.EnumSet;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.TimeoutException;
 
+import com.google.common.base.Supplier;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -61,7 +63,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.Write.RECOVER_LEASE_ON_CLOSE_EXCEPTION_KEY;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyLong;
 import org.mockito.Mockito;
@@ -369,6 +374,76 @@ public class TestDFSOutputStream {
     IOUtils.copyBytes(is, os, bytes.length);
     os.hsync();
     os.close();
+  }
+
+  @Test
+  public void testExceptionInCloseWithRecoverLease() throws Exception {
+    Configuration conf = new Configuration();
+    conf.setBoolean(RECOVER_LEASE_ON_CLOSE_EXCEPTION_KEY, true);
+    DFSClient client =
+        new DFSClient(cluster.getNameNode(0).getNameNodeAddress(), conf);
+    DFSClient spyClient = Mockito.spy(client);
+    DFSOutputStream dfsOutputStream = spyClient.create(
+        "/testExceptionInCloseWithRecoverLease", FsPermission.getFileDefault(),
+        EnumSet.of(CreateFlag.CREATE), (short) 3,
+        1024, null, 1024, null);
+    DFSOutputStream spyDFSOutputStream = Mockito.spy(dfsOutputStream);
+    doThrow(new IOException("Emulated IOException in close"))
+        .when(spyDFSOutputStream).completeFile();
+    try {
+      spyDFSOutputStream.close();
+      fail();
+    } catch (IOException ioe) {
+      assertTrue(spyDFSOutputStream.isLeaseRecovered());
+      waitForFileClosed("/testExceptionInCloseWithRecoverLease");
+      assertTrue(isFileClosed("/testExceptionInCloseWithRecoverLease"));
+    }
+  }
+
+  @Test
+  public void testExceptionInCloseWithoutRecoverLease() throws Exception {
+    Configuration conf = new Configuration();
+    DFSClient client =
+        new DFSClient(cluster.getNameNode(0)
+            .getNameNodeAddress(), conf);
+    DFSClient spyClient = Mockito.spy(client);
+    DFSOutputStream dfsOutputStream =
+        spyClient.create("/testExceptionInCloseWithoutRecoverLease",
+            FsPermission.getFileDefault(), EnumSet.of(CreateFlag.CREATE),
+            (short) 3, 1024, null, 1024, null);
+    DFSOutputStream spyDFSOutputStream = Mockito.spy(dfsOutputStream);
+    doThrow(new IOException("Emulated IOException in close"))
+        .when(spyDFSOutputStream).completeFile();
+    try {
+      spyDFSOutputStream.close();
+      fail();
+    } catch (IOException ioe) {
+      assertFalse(spyDFSOutputStream.isLeaseRecovered());
+      try {
+        waitForFileClosed("/testExceptionInCloseWithoutRecoverLease");
+      } catch (TimeoutException e) {
+        assertFalse(isFileClosed("/testExceptionInCloseWithoutRecoverLease"));
+      }
+    }
+  }
+
+  private boolean isFileClosed(String path) throws IOException {
+    return cluster.getFileSystem().isFileClosed(new Path(path));
+  }
+
+  private void waitForFileClosed(final String path) throws Exception {
+    GenericTestUtils.waitFor(new Supplier<Boolean>() {
+      @Override
+      public Boolean get() {
+        boolean closed;
+        try {
+          closed = isFileClosed(path);
+        } catch (IOException e) {
+          return false;
+        }
+        return closed;
+      }
+    }, 1000, 5000);
   }
 
   @AfterClass

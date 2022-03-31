@@ -379,6 +379,9 @@ public interface HdfsClientConfigKeys {
     String  EXCLUDE_NODES_CACHE_EXPIRY_INTERVAL_KEY =
         PREFIX + "exclude.nodes.cache.expiry.interval.millis";
     long    EXCLUDE_NODES_CACHE_EXPIRY_INTERVAL_DEFAULT = 10*MINUTE;
+    String RECOVER_LEASE_ON_CLOSE_EXCEPTION_KEY =
+        PREFIX + "recover.lease.on.close.exception";
+    boolean RECOVER_LEASE_ON_CLOSE_EXCEPTION_DEFAULT = false;
 
     interface ByteArrayManager {
       String PREFIX = Write.PREFIX + "byte-array-manager.";
@@ -407,6 +410,9 @@ public interface HdfsClientConfigKeys {
     String  LOCATEFOLLOWINGBLOCK_INITIAL_DELAY_MS_KEY =
         PREFIX + "locateFollowingBlock.initial.delay.ms";
     int     LOCATEFOLLOWINGBLOCK_INITIAL_DELAY_MS_DEFAULT = 400;
+    String  LOCATEFOLLOWINGBLOCK_MAX_DELAY_MS_KEY =
+        PREFIX + "locateFollowingBlock.max.delay.ms";
+    int     LOCATEFOLLOWINGBLOCK_MAX_DELAY_MS_DEFAULT = 60000;
 
     interface ReplaceDatanodeOnFailure {
       String PREFIX = BlockWrite.PREFIX + "replace-datanode-on-failure.";

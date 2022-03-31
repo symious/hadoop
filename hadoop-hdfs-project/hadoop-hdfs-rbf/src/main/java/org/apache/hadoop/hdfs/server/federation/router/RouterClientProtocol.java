@@ -281,7 +281,7 @@ public class RouterClientProtocol implements ClientProtocol {
   public HdfsFileStatus create(String src, FsPermission masked,
       String clientName, EnumSetWritable<CreateFlag> flag,
       boolean createParent, short replication, long blockSize,
-      CryptoProtocolVersion[] supportedVersions)
+      CryptoProtocolVersion[] supportedVersions, String ecPolicyName)
       throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE);
 
@@ -301,9 +301,9 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("create",
         new Class<?>[]{String.class, FsPermission.class, String.class,
             EnumSetWritable.class, boolean.class, short.class,
-            long.class, CryptoProtocolVersion[].class},
+            long.class, CryptoProtocolVersion[].class, String.class},
         createLocation.getDest(), masked, clientName, flag, createParent,
-        replication, blockSize, supportedVersions);
+        replication, blockSize, supportedVersions, ecPolicyName);
     HdfsFileStatus status;
     String operationName = "create";
     String invokeType = null;

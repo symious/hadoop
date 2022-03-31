@@ -195,6 +195,10 @@ abstract public class FSOutputSummer extends OutputStream {
     return sum.getChecksumSize();
   }
 
+  protected DataChecksum getDataChecksum() {
+    return sum;
+  }
+  
   protected TraceScope createWriteTraceScope() {
     return null;
   }

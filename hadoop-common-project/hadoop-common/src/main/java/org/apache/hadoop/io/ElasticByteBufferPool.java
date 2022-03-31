@@ -96,6 +96,8 @@ public final class ElasticByteBufferPool implements ByteBufferPool {
                       ByteBuffer.allocate(length);
     }
     tree.remove(entry.getKey());
+    // HDFS-15240
+    entry.getValue().clear();
     return entry.getValue();
   }
 
