@@ -220,6 +220,12 @@ public class TrashPolicyDefault extends TrashPolicy {
   }
 
   @Override
+  public Path getProtectCurrentTrashDir() {
+    String user = fs.getHomeDirectory().getName();
+    return new Path("/Trash" + Path.SEPARATOR + user, CURRENT);
+  }
+
+  @Override
   public Path getCurrentTrashDir(Path path) throws IOException {
     return new Path(fs.getTrashRoot(path), CURRENT);
   }

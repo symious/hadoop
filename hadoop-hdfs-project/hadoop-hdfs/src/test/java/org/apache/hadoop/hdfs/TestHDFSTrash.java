@@ -132,6 +132,11 @@ public class TestHDFSTrash {
     Configuration testConf = new Configuration(conf);
     testConf.set(CommonConfigurationKeys.FS_TRASH_INTERVAL_KEY, "10");
 
+    cluster.getFileSystem().mkdir(new Path("/Trash"),
+        FsPermission.getDefault());
+    cluster.getFileSystem().setPermission(
+        new Path("/Trash"), FsPermission.getDefault());
+
     Path user1Tmp = new Path(TEST_ROOT, "test-del-u1");
     Path user2Tmp = new Path(TEST_ROOT, "test-del-u2");
 

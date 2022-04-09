@@ -123,6 +123,10 @@ public class FsShell extends Configured implements Tool {
     return getTrash().getCurrentTrashDir();
   }
 
+  public Path getProtectCurrentTrashDir() throws IOException {
+    return getTrash().getProtectCurrentTrashDir();
+  }
+
   /**
    * Returns the current trash location for the path specified
    * @param path to be deleted

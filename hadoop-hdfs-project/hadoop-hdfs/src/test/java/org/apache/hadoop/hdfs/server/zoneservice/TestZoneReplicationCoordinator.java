@@ -64,7 +64,7 @@ public class TestZoneReplicationCoordinator {
     fs.setReplication(new Path(filePath), (short)3);
     ReplicationRule rule = ReplicationRule.parseFromString("/test:3");
     coordinator.addFile(filePath, rule, 2, 1);
-    long timeout = 6000L;
+    long timeout = 12000L;
     ZoneReplicationCoordinator.FileState fileState = coordinator.getNextFinishedFile(timeout);
     Assert.assertNotNull(fileState);
     Assert.assertEquals(filePath, fileState.getFilePath());

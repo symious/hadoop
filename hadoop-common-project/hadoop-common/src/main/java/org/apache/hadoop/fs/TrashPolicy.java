@@ -92,6 +92,9 @@ public abstract class TrashPolicy extends Configured {
    */
   public abstract Path getCurrentTrashDir();
 
+
+  public abstract Path getProtectCurrentTrashDir();
+
   /**
    * Get the current trash directory for path specified based on the Trash
    * Policy

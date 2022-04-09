@@ -530,7 +530,7 @@
       </comparators>
     </test>
 
-    <test>
+    <!--<test>
       <description>Test adding two zones, then deleting one and listing zones. The deleted zone should still be listed, as it's under user's Trash folder'</description>
       <test-commands>
         <command>-fs NAMENODE -rm -r .Trash/Current/*</command>
@@ -551,7 +551,7 @@
           <expected-output>(/test1)\s*(myKey)\s*(/user/).*(/.Trash/Current/test2)\s*(myKey)\s*</expected-output>
         </comparator>
       </comparators>
-    </test>
+    </test>-->
 
     <test>
       <description>Test adding two zones, then permanently deleting one and listing zones.</description>

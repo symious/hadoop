@@ -603,7 +603,7 @@ public class TestDFSAdminWithHA {
     setUpHaCluster(false);
     int exitCode = admin.run(new String[] {"-refreshCallQueue"});
     assertEquals(err.toString().trim(), 0, exitCode);
-    String message = "Refresh call queue successful for.*";
+    String message = "Refresh call queue \\[REFRESH\\] successful for.*";
     assertOutputMatches(message + newLine + message + newLine);
   }
 
@@ -613,7 +613,7 @@ public class TestDFSAdminWithHA {
     cluster.getDfsCluster().shutdownNameNode(1);
     int exitCode = admin.run(new String[] {"-refreshCallQueue"});
     assertNotEquals(err.toString().trim(), 0, exitCode);
-    String message = "Refresh call queue successful for.*" + newLine
+    String message = "Refresh call queue \\[REFRESH\\] successful for.*" + newLine
         + "Refresh call queue failed for.*" + newLine;
     assertOutputMatches(message);
   }
@@ -625,7 +625,7 @@ public class TestDFSAdminWithHA {
     int exitCode = admin.run(new String[] {"-refreshCallQueue"});
     assertNotEquals(err.toString().trim(), 0, exitCode);
     String message = "Refresh call queue failed for.*" + newLine
-        + "Refresh call queue successful for.*" + newLine;
+        + "Refresh call queue \\[REFRESH\\] successful for.*" + newLine;
     assertOutputMatches(message);
   }
 
@@ -715,7 +715,7 @@ public class TestDFSAdminWithHA {
     cluster.getDfsCluster().shutdownNameNode(1);
     int exitCode = admin.run(new String[] {"-listOpenFiles"});
     assertNotEquals(err.toString().trim(), 0, exitCode);
-    String message = ".*" + newLine + "List open files failed." + newLine;
+    String message = "listOpenFiles.*" + newLine;
     assertOutputMatches(message);
   }
 }

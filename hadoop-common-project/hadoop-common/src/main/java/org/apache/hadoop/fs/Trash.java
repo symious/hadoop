@@ -124,6 +124,11 @@ public class Trash extends Configured {
     return trashPolicy.getCurrentTrashDir();
   }
 
+  /** get the current working directory */
+  Path getProtectCurrentTrashDir() throws IOException {
+    return trashPolicy.getProtectCurrentTrashDir();
+  }
+
   /** get the configured trash policy */
   TrashPolicy getTrashPolicy() {
     return trashPolicy;

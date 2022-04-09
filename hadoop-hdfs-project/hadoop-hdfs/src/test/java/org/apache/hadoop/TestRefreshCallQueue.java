@@ -195,7 +195,7 @@ public class TestRefreshCallQueue {
     assertEquals("Mock queue should have no additional constructions",
         lastMockQueueConstructions, mockQueueConstructions);
     try {
-      assertFalse("Puts are routed through LBQ instead of MockQueue",
+      assertTrue("Puts are routed through LBQ instead of MockQueue",
           canPutInMockQueue());
     } catch (IOException ioe) {
       fail("Could not put into queue at all");

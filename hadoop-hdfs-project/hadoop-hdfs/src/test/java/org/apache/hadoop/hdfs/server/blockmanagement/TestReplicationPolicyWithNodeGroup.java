@@ -298,18 +298,18 @@ public class TestReplicationPolicyWithNodeGroup extends BaseReplicationPolicyTes
 
     targets = chooseTarget(1);
     assertEquals(targets.length, 1);
-    assertEquals(storages[0], targets[0]);
+    assertEquals(storages[1], targets[0]);
 
 
     targets = chooseTarget(2);
     assertEquals(targets.length, 2);
-    assertEquals(storages[0], targets[0]);
+    assertEquals(storages[1], targets[0]);
 
     assertFalse(isOnSameRack(targets[0], targets[1]));
 
     targets = chooseTarget(3);
     assertEquals(targets.length, 3);
-    assertEquals(storages[0], targets[0]);
+    assertEquals(storages[1], targets[0]);
 
     assertFalse(isOnSameRack(targets[0], targets[1]));
     assertTrue(isOnSameRack(targets[1], targets[2]));
@@ -317,7 +317,7 @@ public class TestReplicationPolicyWithNodeGroup extends BaseReplicationPolicyTes
 
     targets = chooseTarget(4);
     assertEquals(targets.length, 4);
-    assertEquals(storages[0], targets[0]);
+    assertEquals(storages[1], targets[0]);
 
     assertTrue(isOnSameRack(targets[1], targets[2]) ||
                isOnSameRack(targets[2], targets[3]));

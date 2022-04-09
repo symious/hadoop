@@ -2760,7 +2760,7 @@ public class TestDFSShell {
 
       writeFile(fs, new Path(testdir, "foo"));
       final String testFile = testdir + "/foo";
-      final String trashFile = shell.getCurrentTrashDir() + "/" + testFile;
+      final String trashFile = shell.getProtectCurrentTrashDir() + "/" + testFile;
       String[] argv = new String[] { "-rm", testFile };
       int res = ToolRunner.run(shell, argv);
       assertEquals("rm failed", 0, res);

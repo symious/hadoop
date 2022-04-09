@@ -22,7 +22,7 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.TestBlockStoragePolicy;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
-import org.apache.hadoop.net.Node;
+import org.junit.Assert;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -97,6 +97,7 @@ public class TestReplicationPolicyExcludeSlowNodes
 
       // waiting for slow nodes collector run
       Thread.sleep(3000);
+      Assert.assertEquals(3, DatanodeManager.getSlowNodesUuidSet().size());
 
       // fetch slow nodes
       Set<String> slowPeers = dnManager.getSlowPeersUuidSet();
@@ -109,13 +110,11 @@ public class TestReplicationPolicyExcludeSlowNodes
 
       // mock writer
       DatanodeDescriptor writerDn = dataNodes[0];
-
       // call chooseTarget()
       DatanodeStorageInfo[] targets = namenode.getNamesystem().getBlockManager()
           .getBlockPlacementPolicy().chooseTarget("testFile.txt", 3,
               writerDn, new ArrayList<DatanodeStorageInfo>(), false, null,
               1024, TestBlockStoragePolicy.DEFAULT_STORAGE_POLICY, null);
-
       // assert targets
       assertEquals(3, targets.length);
       for (int i = 0; i < targets.length; i++) {

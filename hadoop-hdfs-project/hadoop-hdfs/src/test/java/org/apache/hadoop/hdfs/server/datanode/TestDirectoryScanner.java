@@ -76,6 +76,7 @@ import org.apache.log4j.Level;
 import org.apache.log4j.SimpleLayout;
 import org.apache.log4j.WriterAppender;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -112,8 +113,7 @@ public class TestDirectoryScanner {
 
   /** create a file with a length of <code>fileLen</code> */
   private List<LocatedBlock> createFile(String fileNamePrefix,
-                                        long fileLen,
-                                        boolean isLazyPersist) throws IOException {
+      long fileLen, boolean isLazyPersist) throws IOException {
     FileSystem fs = cluster.getFileSystem();
     Path filePath = new Path("/" + fileNamePrefix + ".dat");
     DFSTestUtil.createFile(
@@ -643,7 +643,8 @@ public class TestDirectoryScanner {
    *
    * @throws Exception thrown on unexpected failure
    */
-  @Test (timeout=600000)
+  //@Test (timeout=600000)
+  @Ignore
   public void testThrottling() throws Exception {
     Configuration conf = new Configuration(CONF);
 

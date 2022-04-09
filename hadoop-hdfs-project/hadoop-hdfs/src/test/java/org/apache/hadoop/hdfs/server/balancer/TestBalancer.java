@@ -143,9 +143,9 @@ public class TestBalancer {
   }
 
   final static long CAPACITY = 5000L;
-  final static String RACK0 = "/rack0";
-  final static String RACK1 = "/rack1";
-  final static String RACK2 = "/rack2";
+  final static String RACK0 = "/default/rack0";
+  final static String RACK1 = "/default/rack1";
+  final static String RACK2 = "/default/rack2";
   final private static String fileName = "/tmp.txt";
   final static Path filePath = new Path(fileName);
   final static private String username = "balancer";
@@ -894,6 +894,8 @@ public class TestBalancer {
         pBuilder.setIncludedNodes(nodes.getNodesToBeIncluded());
         pBuilder.setRunDuringUpgrade(false);
       }
+      String dataCenterConstraint = racks[0].split("/")[1];
+      pBuilder.setDataCenterConstraint(dataCenterConstraint);
       BalancerParameters p = pBuilder.build();
 
       int expectedExcludedNodes = 0;
@@ -1007,6 +1009,11 @@ public class TestBalancer {
     List <String> args = new ArrayList<String>();
     args.add("-policy");
     args.add("datanode");
+
+    if (!p.getDataCenterConstraint().isEmpty()) {
+      args.add("-dataCenterConstraint");
+      args.add(p.getDataCenterConstraint());
+    }
 
     File excludeHostsFile = null;
     if (!p.getExcludedNodes().isEmpty()) {
@@ -1352,19 +1359,19 @@ public class TestBalancer {
 
   @Test
   public void testBalancerCliParseBlockpools() {
-    String[] parameters = new String[] { "-blockpools", "bp-1,bp-2,bp-3" };
+    String[] parameters = new String[] { "-blockpools", "bp-1,bp-2,bp-3", "-dataCenterConstraint", "/default"};
     BalancerParameters p = Balancer.Cli.parse(parameters);
     assertEquals(3, p.getBlockPools().size());
 
-    parameters = new String[] { "-blockpools", "bp-1" };
+    parameters = new String[] { "-blockpools", "bp-1", "-dataCenterConstraint", "/default"};
     p = Balancer.Cli.parse(parameters);
     assertEquals(1, p.getBlockPools().size());
 
-    parameters = new String[] { "-blockpools", "bp-1,,bp-2" };
+    parameters = new String[] { "-blockpools", "bp-1,,bp-2", "-dataCenterConstraint", "/default" };
     p = Balancer.Cli.parse(parameters);
     assertEquals(3, p.getBlockPools().size());
 
-    parameters = new String[] { "-blockpools", "bp-1," };
+    parameters = new String[] { "-blockpools", "bp-1,", "-dataCenterConstraint", "/default" };
     p = Balancer.Cli.parse(parameters);
     assertEquals(1, p.getBlockPools().size());
   }
@@ -1797,7 +1804,7 @@ public class TestBalancer {
         fs.exists(Balancer.BALANCER_ID_PATH));
 
     // start second balancer
-    final String[] args = { "-policy", "datanode" };
+    final String[] args = { "-policy", "datanode", "-dataCenterConstraint", "/default" };
     final Tool tool = new Cli();
     tool.setConf(conf);
     int exitCode = tool.run(args); // start balancing
@@ -1858,7 +1865,7 @@ public class TestBalancer {
     { // run Balancer with min-block-size=50
       final BalancerParameters p = Balancer.Cli.parse(new String[] {
           "-policy", BalancingPolicy.Node.INSTANCE.getName(),
-          "-threshold", "1"
+          "-threshold", "1", "-dataCenterConstraint", "/default"
       });
       assertEquals(p.getBalancingPolicy(), BalancingPolicy.Node.INSTANCE);
       assertEquals(p.getThreshold(), 1.0, 0.001);
@@ -1879,7 +1886,8 @@ public class TestBalancer {
       final BalancerParameters p = Balancer.Cli.parse(new String[] {
           "-policy", BalancingPolicy.Node.INSTANCE.getName(),
           "-threshold", "1",
-          "-source", StringUtils.join(sourceNodes, ',')
+          "-source", StringUtils.join(sourceNodes, ','),
+          "-dataCenterConstraint", "/default"
       });
       assertEquals(p.getBalancingPolicy(), BalancingPolicy.Node.INSTANCE);
       assertEquals(p.getThreshold(), 1.0, 0.001);
@@ -1897,7 +1905,8 @@ public class TestBalancer {
       final BalancerParameters p = Balancer.Cli.parse(new String[] {
           "-policy", BalancingPolicy.Node.INSTANCE.getName(),
           "-threshold", "1",
-          "-source", StringUtils.join(sourceNodes, ',')
+          "-source", StringUtils.join(sourceNodes, ','),
+          "-dataCenterConstraint", "/default"
       });
       assertEquals(p.getBalancingPolicy(), BalancingPolicy.Node.INSTANCE);
       assertEquals(p.getThreshold(), 1.0, 0.001);
@@ -1917,7 +1926,8 @@ public class TestBalancer {
       final BalancerParameters p = Balancer.Cli.parse(new String[] {
           "-policy", BalancingPolicy.Node.INSTANCE.getName(),
           "-threshold", "1",
-          "-source", StringUtils.join(sourceNodes, ',')
+          "-source", StringUtils.join(sourceNodes, ','),
+          "-dataCenterConstraint", "/default"
       });
       assertEquals(p.getBalancingPolicy(), BalancingPolicy.Node.INSTANCE);
       assertEquals(p.getThreshold(), 1.0, 0.001);

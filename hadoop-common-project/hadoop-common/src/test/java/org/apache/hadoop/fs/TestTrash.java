@@ -181,8 +181,11 @@ public class TestTrash extends TestCase {
       }
       assertTrue(val == 0);
 
- 
-      checkTrash(trashRootFs, trashRoot, fs.makeQualified(myFile));
+      Path protectTrashRoot = shell.getProtectCurrentTrashDir();
+      if (fs instanceof TestLFS) {
+        protectTrashRoot = trashRoot;
+      }
+      checkTrash(trashRootFs, protectTrashRoot, fs.makeQualified(myFile));
     }
 
     // Verify that we can recreate the file
@@ -290,7 +293,11 @@ public class TestTrash extends TestCase {
                            e.getLocalizedMessage());
       }
       assertTrue(val == 0);
-      checkTrash(trashRootFs, trashRoot, myFile);
+      Path protectTrashRoot = shell.getProtectCurrentTrashDir();
+      if (fs instanceof TestLFS) {
+        protectTrashRoot = trashRoot;
+      }
+      checkTrash(trashRootFs, protectTrashRoot, myFile);
 
       args = new String[2];
       args[0] = "-rmr";
@@ -416,7 +423,7 @@ public class TestTrash extends TestCase {
         System.err.println("Exception raised from fs expunge " +
             e.getLocalizedMessage());        
       }
-      
+      fs.delete(shell.getProtectCurrentTrashDir(), true);
       // create a file in that directory.
       myFile = new Path(base, "test/mkdirs/myFile");
       String [] args = new String[] {"-rm", myFile.toString()};
@@ -436,13 +443,17 @@ public class TestTrash extends TestCase {
         assertTrue(val==0);
       }
       // current trash directory
-      Path trashDir = Path.mergePaths(new Path(trashRoot.toUri().getPath()),
+      Path protectTrashRoot = shell.getProtectCurrentTrashDir();
+      if (fs instanceof LocalFileSystem) {
+        protectTrashRoot = trashRoot;
+      }
+      Path trashDir = Path.mergePaths(new Path(protectTrashRoot.toUri().getPath()),
         new Path(myFile.getParent().toUri().getPath()));
       
       System.out.println("Deleting same myFile: myFile.parent=" + myFile.getParent().toUri().getPath() + 
-          "; trashroot="+trashRoot.toUri().getPath() + 
+          "; trashroot=" + protectTrashRoot.toUri().getPath() +
           "; trashDir=" + trashDir.toUri().getPath());
-      
+
       int count = countSameDeletedFiles(fs, trashDir, myFile);
       System.out.println("counted " + count + " files " + myFile.getName() + "* in " + trashDir);
       assertTrue(count==num_runs);
@@ -813,7 +824,11 @@ public class TestTrash extends TestCase {
       assertFalse("The empty directory still exists on file system",
           fileSystem.exists(emptyDir));
       emptyDir = fileSystem.makeQualified(emptyDir);
-      Path dirInTrash = Path.mergePaths(trashRoot, emptyDir);
+      Path protectTrashRoot = trash.getProtectCurrentTrashDir();
+      if (fs instanceof RawLocalFileSystem || fs instanceof LocalFileSystem) {
+        protectTrashRoot = trashRoot;
+      }
+      Path dirInTrash = Path.mergePaths(protectTrashRoot, emptyDir);
       assertTrue("Directory wasn't moved to trash",
           fileSystem.exists(dirInTrash));
       FileStatus[] flist = fileSystem.listStatus(dirInTrash);
@@ -865,7 +880,11 @@ public class TestTrash extends TestCase {
         if(!file.isAbsolute()) {
           file = wrapper.makeQualified(file);
         }
-        Path fileInTrash = Path.mergePaths(trashDir, file);
+        Path protectTrash = trash.getProtectCurrentTrashDir();
+        if (fs instanceof LocalFileSystem) {
+          protectTrash = trashDir;
+        }
+        Path fileInTrash = Path.mergePaths(protectTrash, file);
         FileStatus fstat = wrapper.getFileStatus(fileInTrash);
         assertTrue(String.format("File %s is not moved to trash",
             fileInTrash.toString()),
@@ -966,6 +985,11 @@ public class TestTrash extends TestCase {
     }
 
     @Override
+    public Path getProtectCurrentTrashDir() {
+      return null;
+    }
+
+    @Override
     public Path getCurrentTrashDir(Path path) throws IOException {
       return null;
     }
@@ -1021,6 +1045,11 @@ public class TestTrash extends TestCase {
 
     @Override
     public Path getCurrentTrashDir() {
+      return null;
+    }
+
+    @Override
+    public Path getProtectCurrentTrashDir() {
       return null;
     }
 

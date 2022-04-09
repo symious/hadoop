@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 
+echo "CI_COMMIT_BEFORE_SHA is ${CI_COMMIT_BEFORE_SHA} and CI_COMMIT_SHA is $CI_COMMIT_SHA"
+
 a=$(git diff --stat --name-only $CI_COMMIT_BEFORE_SHA $CI_COMMIT_SHA)
+
+echo "Diff code in ${a}"
 
 declare -A map
 

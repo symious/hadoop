@@ -47,7 +47,7 @@ public class TestNameNodeHttpServer {
       .getTempPath(TestNameNodeHttpServer.class.getSimpleName());
   private static String keystoresDir;
   private static String sslConfDir;
-  private static Configuration conf;
+  public static Configuration conf;
   private static URLConnectionFactory connectionFactory;
 
   @Parameters
@@ -57,7 +57,7 @@ public class TestNameNodeHttpServer {
     return Arrays.asList(params);
   }
 
-  private final HttpConfig.Policy policy;
+  public final HttpConfig.Policy policy;
 
   public TestNameNodeHttpServer(Policy policy) {
     super();

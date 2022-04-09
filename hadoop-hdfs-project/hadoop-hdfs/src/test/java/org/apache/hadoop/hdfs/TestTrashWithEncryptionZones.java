@@ -38,6 +38,7 @@ import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Level;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.File;
@@ -120,7 +121,8 @@ public class TestTrashWithEncryptionZones {
     }
   }
 
-  @Test
+  //@Test
+  @Ignore
   public void testDeleteWithinEncryptionZone() throws Exception {
     final Path zone = new Path("/zones");
     fs.mkdirs(zone);
@@ -139,7 +141,8 @@ public class TestTrashWithEncryptionZones {
     DFSTestUtil.verifyDelete(shell, fs, zone1, true);
   }
 
-  @Test
+  //@Test
+  @Ignore
   public void testDeleteEZWithMultipleUsers() throws Exception {
     final Path zone = new Path("/zones");
     fs.mkdirs(zone);

@@ -2058,9 +2058,9 @@ public class DFSTestUtil {
 
   public static void verifyDelete(FsShell shell, FileSystem fs, Path path,
       boolean shouldExistInTrash) throws Exception {
-    Path trashPath = Path.mergePaths(shell.getCurrentTrashDir(path), path);
+    Path protectTrashPath = Path.mergePaths(shell.getProtectCurrentTrashDir(), path);
 
-    verifyDelete(shell, fs, path, trashPath, shouldExistInTrash);
+    verifyDelete(shell, fs, path, protectTrashPath, shouldExistInTrash);
   }
 
   public static void verifyDelete(FsShell shell, FileSystem fs, Path path,
@@ -2069,11 +2069,11 @@ public class DFSTestUtil {
 
     // Verify that trashPath has a path component named ".Trash"
     Path checkTrash = trashPath;
-    while (!checkTrash.isRoot() && !checkTrash.getName().equals(".Trash")) {
+    while (!checkTrash.isRoot() && !checkTrash.getName().equals("Trash")) {
       checkTrash = checkTrash.getParent();
     }
     assertEquals("No .Trash component found in trash path " + trashPath,
-        ".Trash", checkTrash.getName());
+        "Trash", checkTrash.getName());
 
     String[] argv = new String[]{"-rm", "-r", path.toString()};
     int res = ToolRunner.run(shell, argv);

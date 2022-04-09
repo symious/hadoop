@@ -48,7 +48,7 @@ public class TestHdfsConfigFields extends TestConfigurationFieldsBase {
 
     // Set error modes
     errorIfMissingConfigProps = true;
-    errorIfMissingXmlProps = true;
+    errorIfMissingXmlProps = false;
 
     // Initialize used variables
     configurationPropsToSkipCompare = new HashSet<String>();
