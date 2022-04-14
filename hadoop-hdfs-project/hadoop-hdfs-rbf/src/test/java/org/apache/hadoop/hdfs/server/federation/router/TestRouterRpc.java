@@ -342,6 +342,8 @@ public class TestRouterRpc {
     // /ns1 (from mount table)
     // all items in / of ns0 (default NS)
 
+    // Attach one line to trigger CI on gitlab.
+
     // Collect the mount table entries from the root mount point
     Set<String> requiredPaths = new TreeSet<>();
     FileSubclusterResolver fileResolver =

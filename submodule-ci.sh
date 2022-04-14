@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 
-echo "CI_COMMIT_BEFORE_SHA is ${CI_COMMIT_BEFORE_SHA} and CI_COMMIT_SHA is $CI_COMMIT_SHA"
+export COMMIT_BEFORE_SHA="$(git rev-parse HEAD~1)"
+export COMMIT_SHA="$(git rev-parse HEAD~0)"
 
-a=$(git diff --stat --name-only $CI_COMMIT_BEFORE_SHA $CI_COMMIT_SHA)
+echo "CI_COMMIT_BEFORE_SHA is ${CI_COMMIT_BEFORE_SHA}, CI_COMMIT_SHA is $CI_COMMIT_SHA"
+echo "COMMIT_BEFORE_SHA is $COMMIT_BEFORE_SHA and COMMIT_SHA is $COMMIT_SHA"
+
+a=$(git diff --stat --name-only $COMMIT_BEFORE_SHA $COMMIT_SHA)
 
 echo "Diff code in ${a}"
 
