@@ -118,6 +118,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERV
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_ENABLED_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_AUTO_FAILOVER_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_AUTO_FAILOVER_ENABLED_KEY;
@@ -325,7 +326,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY,
           DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES,
           DFS_LEASE_HARDLIMIT_KEY,
-          DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY));
+          DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY,
+          DFS_NAMENODE_QUOTA_INIT_THREADS_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2203,6 +2205,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigureIPCBackoffEnabled(newVal);
     } else if (property.equals(DFS_HOSTS_MAINTENANCE_ENABLED_KEY)) {
       return reconfMaintenanceEnabled(datanodeManager, property, newVal);
+    } else if (property.equals(DFS_NAMENODE_QUOTA_INIT_THREADS_KEY)) {
+      return reconfigureQuotaInitThreads(newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -2486,6 +2490,19 @@ public class NameNode extends ReconfigurableBase implements
     rpcServer.getClientRpcServer()
         .setClientBackoffEnabled(clientBackoffEnabled);
     return Boolean.toString(clientBackoffEnabled);
+  }
+
+  private String reconfigureQuotaInitThreads(String newVal) {
+    int namenodeQuotaInitThreads;
+    if (newVal == null) {
+       namenodeQuotaInitThreads =
+           DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_DEFAULT;
+    } else {
+      namenodeQuotaInitThreads = Integer.parseInt(newVal);
+    }
+    namenodeQuotaInitThreads = this.namesystem.getFSDirectory()
+        .reConfQuotaInitThreads(namenodeQuotaInitThreads);
+    return String.valueOf(namenodeQuotaInitThreads);
   }
 
   @Override  // ReconfigurableBase

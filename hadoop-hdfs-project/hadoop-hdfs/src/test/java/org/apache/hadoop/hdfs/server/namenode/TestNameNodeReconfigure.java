@@ -24,6 +24,8 @@ import org.junit.Test;
 import org.junit.Before;
 import org.junit.After;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
 import static org.junit.Assert.*;
 
 import org.apache.commons.logging.Log;
@@ -235,6 +237,49 @@ public class TestNameNodeReconfigure {
             + " is not reconfigured correctly",
         1000,
         datanodeManager.getBlockInvalidateLimit());
+  }
+
+  @Test
+  public void testReconfigureQuotaInitThread()
+      throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode();
+    final int oldQuotaInit = nameNode.getNamesystem()
+        .getFSDirectory().getQuotaInitThreads();
+    final int newQuotaInit = oldQuotaInit + 10;
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_QUOTA_INIT_THREADS_KEY,
+        Integer.toString(newQuotaInit));
+    assertEquals(newQuotaInit, nameNode.getNamesystem()
+        .getFSDirectory().getQuotaInitThreads());
+    assertEquals(newQuotaInit, nameNode.getConf().getInt(
+        DFS_NAMENODE_QUOTA_INIT_THREADS_KEY, -1));
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_QUOTA_INIT_THREADS_KEY,
+        Integer.toString(oldQuotaInit));
+    assertEquals(oldQuotaInit, nameNode.getNamesystem()
+        .getFSDirectory().getQuotaInitThreads());
+    assertEquals(oldQuotaInit, nameNode.getConf().getInt(
+        DFS_NAMENODE_QUOTA_INIT_THREADS_KEY, -1));
+
+
+    int maxQuotaInit = DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM + 100;
+    nameNode.reconfigureProperty(DFS_NAMENODE_QUOTA_INIT_THREADS_KEY,
+        Integer.toString(maxQuotaInit));
+    assertEquals(DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM,
+        nameNode.getNamesystem().getFSDirectory().getQuotaInitThreads());
+    assertEquals(DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM,
+        nameNode.getConf().getInt(
+            DFS_NAMENODE_QUOTA_INIT_THREADS_KEY, -1));
+
+    int abnormalQuotaInit = -1;
+    int preOldQuotaInit = nameNode.getNamesystem()
+        .getFSDirectory().getQuotaInitThreads();
+    nameNode.reconfigureProperty(DFS_NAMENODE_QUOTA_INIT_THREADS_KEY,
+        Integer.toString(abnormalQuotaInit));
+    assertEquals(preOldQuotaInit, nameNode.getNamesystem()
+        .getFSDirectory().getQuotaInitThreads());
+    assertEquals(preOldQuotaInit, nameNode.getConf().getInt(
+        DFS_NAMENODE_QUOTA_INIT_THREADS_KEY, -1));
   }
 
   @After
