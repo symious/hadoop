@@ -61,6 +61,7 @@ import org.apache.hadoop.io.MultipleIOException;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.FakeTimer;
 import org.apache.hadoop.util.StringUtils;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -198,6 +199,13 @@ public class TestFsDatasetImpl {
 
     assertEquals(NUM_INIT_VOLUMES, getNumVolumes());
     assertEquals(0, dataset.getNumFailedVolumes());
+  }
+
+  @After
+  public void checkDataSetLockManager() {
+    manager.lockLeakCheck();
+    // make sure no lock Leak.
+    assertNull(manager.getLastException());
   }
 
   @Test
@@ -462,6 +470,7 @@ public class TestFsDatasetImpl {
     FsDatasetImpl spyDataset = spy(dataset);
     FsVolumeImpl mockVolume = mock(FsVolumeImpl.class);
     File badDir = new File(BASE_DIR, "bad").getAbsoluteFile();
+    when(mockVolume.getStorageID()).thenReturn("test");
     badDir.mkdirs();
     doReturn(mockVolume).when(spyDataset)
         .createFsVolume(anyString(), any(File.class), any(StorageType.class));

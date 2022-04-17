@@ -31,6 +31,7 @@ import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeReference;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
 
 public class ExternalVolumeImpl implements FsVolumeSpi {
+  private final String defaultStroageId = "test";
 
   @Override
   public String[] getBlockPoolList() {
@@ -64,7 +65,7 @@ public class ExternalVolumeImpl implements FsVolumeSpi {
 
   @Override
   public String getStorageID() {
-    return null;
+    return defaultStroageId;
   }
 
   @Override
