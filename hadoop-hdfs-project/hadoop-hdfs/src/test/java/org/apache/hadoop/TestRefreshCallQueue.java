@@ -55,6 +55,7 @@ public class TestRefreshCallQueue {
     Random rand = new Random();
     for (; portRetries > 0; --portRetries) {
       // Pick a random port in the range [30000,60000).
+      // Attach a line to trigger CI on gitlab.
       nnPort = 30000 + rand.nextInt(30000);
       config = new Configuration();
       String callQueueConfigKey = "ipc." + nnPort + ".callqueue.impl";

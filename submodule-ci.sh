@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
+export COMMIT_BEFORE_SHA="$(git rev-parse HEAD~1)"
+export COMMIT_SHA="$(git rev-parse HEAD~0)"
+echo "CI_COMMIT_BEFORE_SHA is ${CI_COMMIT_BEFORE_SHA}, CI_COMMIT_SHA is $CI_COMMIT_SHA"
+echo "COMMIT_BEFORE_SHA is $COMMIT_BEFORE_SHA and COMMIT_SHA is $COMMIT_SHA"
 
-a=$(git diff --stat --name-only $CI_COMMIT_BEFORE_SHA $CI_COMMIT_SHA)
+#a=$(git diff --stat --name-only $CI_COMMIT_BEFORE_SHA $CI_COMMIT_SHA)
+a=$(git diff --stat --name-only $COMMIT_BEFORE_SHA $COMMIT_SHA)
 
 declare -A map
 
@@ -332,6 +337,82 @@ hadoop-yarn-server-web-proxy:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-web-proxy/target/surefire-reports/TEST-*.xml
 EOF
      ;;
+     hadoop-hdfs)
+     EMPTY=false
+     cat <<EOF >> "${CI_CONFIG_FILE}"
+hadoop-hdfs:
+  stage: test
+  tags:
+    - yarn
+  script:
+    - cd hadoop-hdfs-project/hadoop-hdfs
+    - mvn test
+    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - hadoop-hdfs-project/hadoop-hdfs/target/surefire-reports/TEST-*.xml
+EOF
+      ;;
+      hadoop-hdfs-client)
+      EMPTY=false
+      cat <<EOF >> "${CI_CONFIG_FILE}"
+hadoop-hdfs-client:
+  stage: test
+  tags:
+    - yarn
+  script:
+    - cd hadoop-hdfs-project/hadoop-hdfs-client
+    - mvn test
+    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - hadoop-hdfs-project/hadoop-hdfs-client/target/surefire-reports/TEST-*.xml
+EOF
+      ;;
+      hadoop-hdfs-httpfs)
+      EMPTY=false
+      cat <<EOF >> "${CI_CONFIG_FILE}"
+hadoop-hdfs-httpfs:
+  stage: test
+  tags:
+    - yarn
+  script:
+    - cd hadoop-hdfs-project/hadoop-hdfs-httpfs
+    - mvn test
+    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - hadoop-hdfs-project/hadoop-hdfs-httpfs/target/surefire-reports/TEST-*.xml
+EOF
+      ;;
+      hadoop-hdfs-rbf)
+      EMPTY=false
+      cat <<EOF >> "${CI_CONFIG_FILE}"
+hadoop-hdfs-rbf:
+  stage: test
+  tags:
+    - yarn
+  script:
+    - cd hadoop-hdfs-project/hadoop-hdfs-rbf
+    - mvn test
+    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - hadoop-hdfs-project/hadoop-hdfs-rbf/target/surefire-reports/TEST-*.xml
+EOF
+      ;;
      *)
      echo default
      ;;

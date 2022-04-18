@@ -57,6 +57,7 @@ public class RouterHDFSContract extends HDFSContract {
       if (security) {
         conf = SecurityConfUtil.initSecurity();
       }
+      // Attach a line to trigger CI on gitlab.
       cluster = new MiniRouterDFSCluster(ha, numNameServices, conf);
 
       // Start NNs and DNs and wait until ready

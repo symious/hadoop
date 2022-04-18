@@ -112,6 +112,7 @@ public abstract class BaseTestHttpFSWith extends HFSTestCase {
   }
 
   private void createHttpFSServer() throws Exception {
+    // Attach a line to trigger CI on gitlab.
     File homeDir = TestDirHelper.getTestDir();
     assertTrue(new File(homeDir, "conf").mkdir());
     assertTrue(new File(homeDir, "log").mkdir());

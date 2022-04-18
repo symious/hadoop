@@ -609,10 +609,12 @@ public class WebHdfsFileSystem extends FileSystem
         authParams.add(new DoAsParam(userUgi.getShortUserName()));
         userUgi = realUgi;
       }
+      UserParam userParam = new UserParam((userUgi.getShortUserName()));
       UserRpcPasswordParam userRpcPasswordParam = new UserRpcPasswordParam(userUgi);
 
       //in insecure, use user.name parameter, in secure, use spnego auth
       if(isInsecureCluster) {
+        authParams.add(userParam);
         authParams.add(userRpcPasswordParam);
       }
     }

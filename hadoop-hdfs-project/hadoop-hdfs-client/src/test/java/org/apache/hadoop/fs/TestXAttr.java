@@ -33,6 +33,7 @@ public class TestXAttr {
   
   @BeforeClass
   public static void setUp() throws Exception {
+    // Attach a line to trigger CI on gitlab.
     byte[] value = {0x31, 0x32, 0x33};
     XATTR = new XAttr.Builder()
       .setName("name")
