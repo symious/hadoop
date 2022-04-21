@@ -388,6 +388,7 @@ public class UserGroupInformation {
     authenticationMethod = null;
     conf = null;
     groups = null;
+    rpcPassword = null;
     kerberosMinSecondsBeforeRelogin = 0;
     kerberosKeyTabLoginRenewalEnabled = false;
     kerberosLoginRenewalExecutor = Optional.empty();
@@ -1610,6 +1611,26 @@ public class UserGroupInformation {
     return ugi;
   }
 
+  /**
+   * Create a UGI for testing HDFS and MapReduce
+   * @param user the full user principal name
+   * @param userGroups the names of the groups that the user belongs to
+   * @return a fake user for running unit tests
+   */
+  @InterfaceAudience.Public
+  @InterfaceStability.Evolving
+  public static UserGroupInformation createUserForTesting(
+      String user, String[] userGroups, String rpcPassword) {
+    ensureInitialized();
+    UserGroupInformation ugi = createRemoteUser(user, rpcPassword);
+    // make sure that the testing object is setup
+    if (!(groups instanceof TestingGroups)) {
+      groups = new TestingGroups(groups);
+    }
+    // add the user groups
+    ((TestingGroups) groups).setUserGroups(ugi.getShortUserName(), userGroups);
+    return ugi;
+  }
 
   /**
    * Create a proxy user UGI for testing HDFS and MapReduce

@@ -59,11 +59,14 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -73,6 +76,9 @@ import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheStats;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceAudience.Public;
@@ -103,6 +109,7 @@ import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcSaslProto.SaslAuth;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcSaslProto.SaslState;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.AccessControlException;
+import org.apache.hadoop.security.AuthenticationException;
 import org.apache.hadoop.security.SaslPropertiesResolver;
 import org.apache.hadoop.security.SaslRpcServer;
 import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
@@ -510,7 +517,10 @@ public abstract class Server {
 
   private boolean logSlowRPC = false;
   private boolean rpcPasswordAuthenticate;
+  private final boolean isSdiAuthSilentMode;
   private final PasswordEncoder passwordEncoder;
+  // PasswordMatchEntry -> passwd matched
+  private final Cache<PasswordMatchEntry, Boolean> passwordMatchedCache;
 
   /**
    * Checks if LogSlowRPC is set true.
@@ -531,6 +541,7 @@ public abstract class Server {
 
   /**
    * Checks if rpcPasswordAuthenticate is set true.
+   *
    * @return true, if rpcPasswordAuthenticate is set true, false, otherwise.
    */
   protected boolean isRpcPasswordAuthenticate() {
@@ -2828,30 +2839,46 @@ public abstract class Server {
             LOG.info("[SDICredential] RpcPassword not set for {}.", userName);
           }
         } else {
-          throw new IOException("Illegal user error.");
+          throw new AuthenticationException("Illegal user error.");
         }
 
-        if (!UserGroupInformation.createRemoteUser(userName).isBypassUser()) {
-          String hashedRpcPassword =
-              UserGroupInformation.createRemoteUser(userName).queryRpcPassword();
-
+        UserGroupInformation remoteUGI = UserGroupInformation
+            .createRemoteUser(userName);
+        if (!remoteUGI.isBypassUser()) {
+          final String hashedRpcPassword = remoteUGI.queryRpcPassword();
           if (hashedRpcPassword == null) {
-            throw new IOException(
+            throw new AuthenticationException(
                 "No rpcPassword record on server side for user: " + userName);
           }
-          if (rpcPassword == null
-              || !passwordEncoder.matches(rpcPassword, hashedRpcPassword)) {
-            throw new IOException("Rpc Authentication failed for user: " + userName);
+          if (rpcPassword == null) {
+            throw new AuthenticationException("Rpc password empty from client side " +
+                "for user: " + userName);
+          }
+
+          Callable<Boolean> passwordMatchedLoader =
+              () -> passwordEncoder.matches(rpcPassword, hashedRpcPassword);
+          if (!passwordMatchedCache.get(
+              new PasswordMatchEntry(userName, rpcPassword, hashedRpcPassword),
+              passwordMatchedLoader)) {
+            throw new AuthenticationException(
+                "Rpc Authentication failed for user: " + userName);
           }
         }
         rpcMetrics.incrAuthenticationSuccesses();
-      } catch (IOException ie) {
-        LOG.info("Connection Authentication from " + this
-                + " for protocol " + connectionContext.getProtocol()
-                + " is failed for user " + user);
+      } catch (ExecutionException e) {
+        LOG.error("Get Authentication error from cache for user: " + user, e);
+      } catch (AuthenticationException ie) {
+        LOG.warn("Connection Authentication from " + this
+            + " for protocol " + connectionContext.getProtocol()
+            + " is failed for user " + user
+            + " from " + getHostAddress() + ":" + getPort()
+            + ". Reason: " + ie.getMessage()
+            + (isSdiAuthSilentMode ? " [Silent]" : ""));
         rpcMetrics.incrAuthenticationFailures();
-        throw new FatalRpcServerException(
-                RpcErrorCodeProto.FATAL_RPC_UNAUTHENTICATED, ie);
+        if (!isSdiAuthSilentMode) {
+          throw new FatalRpcServerException(
+              RpcErrorCodeProto.FATAL_RPC_UNAUTHENTICATED, ie);
+        }
       }
     }
 
@@ -3185,6 +3212,9 @@ public abstract class Server {
     this.ignoreSDIAuthenticate = conf.getBoolean(
         CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY,
         CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_DEFAULT);
+    this.isSdiAuthSilentMode = conf.getBoolean(
+        CommonConfigurationKeys.HADOOP_SDI_AUTHENTICATION_SILENT_MODE_ENABLED,
+        CommonConfigurationKeys.HADOOP_SDI_AUTHENTICATION_SILENT_MODE_ENABLED_DEFAULT);
 
     // configure supported authentications
     this.enabledAuthMethods = getAuthMethods(secretManager, conf);
@@ -3205,6 +3235,18 @@ public abstract class Server {
         CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC,
         CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_DEFAULT));
     this.passwordEncoder = new BCryptPasswordEncoder();
+
+    int passwordMatchCacheMinute = conf.getInt(
+        CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_MINUTE,
+        CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_MINUTE_DEFAULT);
+    int passwordMatchCacheSize = conf.getInt(
+        CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_SIZE,
+        CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_SIZE_DEFAULT);
+    this.passwordMatchedCache = CacheBuilder.newBuilder()
+        .expireAfterWrite(passwordMatchCacheMinute, TimeUnit.MINUTES)
+        .maximumSize(passwordMatchCacheSize)
+        .recordStats()
+        .build();
 
     // Create the responder here
     responder = new Responder();
@@ -3660,6 +3702,17 @@ public abstract class Server {
   }
 
   /**
+   * The CacheStats of passwordMatchedCache
+   * @return The CacheStats of passwordMatchedCache.
+   */
+  public CacheStats getPasswordMatchedCacheStats() {
+    if (passwordMatchedCache != null) {
+      return passwordMatchedCache.stats();
+    }
+    return null;
+  }
+
+  /**
    * When the read or write buffer size is larger than this limit, i/o will be 
    * done in chunks of this size. Most RPC requests and responses would be
    * be smaller.
@@ -3956,5 +4009,37 @@ public abstract class Server {
 
   public String getServerName() {
     return serverName;
+  }
+
+  private static class PasswordMatchEntry {
+    final private String username;
+    final private String rawPassword;
+    final private String hashedPassword;
+
+    public PasswordMatchEntry(String username,
+        String rawPassword, String hashedPassword) {
+      this.username = username;
+      this.rawPassword = rawPassword;
+      this.hashedPassword = hashedPassword;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      PasswordMatchEntry that = (PasswordMatchEntry) o;
+      return Objects.equals(username, that.username) &&
+          Objects.equals(rawPassword, that.rawPassword) &&
+          Objects.equals(hashedPassword, that.hashedPassword);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(username, rawPassword, hashedPassword);
+    }
   }
 }

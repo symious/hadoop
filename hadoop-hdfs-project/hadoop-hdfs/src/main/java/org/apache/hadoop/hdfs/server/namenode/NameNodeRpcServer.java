@@ -19,6 +19,10 @@ package org.apache.hadoop.hdfs.server.namenode;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CLIENT_RPC_SDI_AUTHENTICATION_ENABLED_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CLIENT_RPC_SDI_AUTHENTICATION_ENABLED_KEY;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SERVICE_RPC_SDI_AUTHENTICATION_ENABLED_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SERVICE_RPC_SDI_AUTHENTICATION_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_COUNT_KEY;
@@ -281,6 +285,12 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     int handlerCount = 
       conf.getInt(DFS_NAMENODE_HANDLER_COUNT_KEY, 
                   DFS_NAMENODE_HANDLER_COUNT_DEFAULT);
+    boolean clientRPCSdiAuthEnabled = conf.getBoolean(
+        HADOOP_CLIENT_RPC_SDI_AUTHENTICATION_ENABLED_KEY,
+        HADOOP_CLIENT_RPC_SDI_AUTHENTICATION_ENABLED_DEFAULT);
+    boolean serviceRPCSdiAuthEnabled = conf.getBoolean(
+        HADOOP_SERVICE_RPC_SDI_AUTHENTICATION_ENABLED_KEY,
+        HADOOP_SERVICE_RPC_SDI_AUTHENTICATION_ENABLED_DEFAULT);
 
     RPC.setProtocolEngine(conf, ClientNamenodeProtocolPB.class,
         ProtobufRpcEngine2.class);
@@ -369,6 +379,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
           .setNumHandlers(serviceHandlerCount)
           .setVerbose(false)
           .setSecretManager(namesystem.getDelegationTokenSecretManager())
+          .setRpcPasswordAuthenticate(serviceRPCSdiAuthEnabled)
           .build();
 
       // Add all the RPC protocols that the namenode implements
@@ -431,6 +442,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
           .setPort(lifelineRpcAddr.getPort())
           .setNumHandlers(lifelineHandlerCount)
           .setVerbose(false)
+          .setRpcPasswordAuthenticate(clientRPCSdiAuthEnabled)
           .setSecretManager(namesystem.getDelegationTokenSecretManager())
           .build();
 

@@ -18,19 +18,27 @@
 package org.apache.hadoop.security;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.hadoop.io.MD5Hash;
+import org.apache.hadoop.metrics2.annotation.Metric;
+import org.apache.hadoop.metrics2.annotation.Metrics;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.metrics2.lib.MetricsRegistry;
+import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
+import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
+import org.apache.hadoop.util.hash.MD5FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.io.IOException;
@@ -42,6 +50,8 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_REFRESH_INTERVAL_DEFAULT;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A simple shadow file based implementation of
@@ -56,16 +66,18 @@ public class ShadowFileRpcPasswordMapping extends Configured
   protected static final Logger LOG =
       LoggerFactory.getLogger(ShadowFileRpcPasswordMapping.class);
 
+  /** Metrics to track shadow file activity */
+  static ShadowFileMetrics metrics = ShadowFileMetrics.create();
   private String shadowFile = CommonConfigurationKeys.
       HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_DEFAULT;
-  private static final String EMPTY_PASSWORD = null;
-
+  private boolean checksumEnabled = CommonConfigurationKeys.
+      HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CHECKSUM_ENABLED_DEFAULT;
   private long cacheTimeout = CommonConfigurationKeys.
       HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_SEC_DEFAULT * 1000;
   private long cacheRefreshInterval =
       HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_REFRESH_INTERVAL_DEFAULT * 1000;
   private boolean cacheRefreshAsync;
-  private volatile long lastRefreshTime = -1L;
+  private final AtomicLong lastRefreshTime = new AtomicLong(-1L);
   private static final ScheduledExecutorService scheduledExecutor =
       HadoopExecutors.newSingleThreadScheduledExecutor(
           new ThreadFactoryBuilder().setDaemon(true)
@@ -73,8 +85,35 @@ public class ShadowFileRpcPasswordMapping extends Configured
   private ScheduledFuture<?> refreshTask;
   private CacheRefreshService cacheRefreshService;
 
-  private ConcurrentHashMap<String, RpcPasswordAndBypass> cache =
-      new ConcurrentHashMap<>();
+  private volatile boolean isStartup = true;
+
+  private final AtomicReference<ConcurrentHashMap<String, RpcPasswordAndBypass>>
+      cacheRef = new AtomicReference<>();
+
+  /**
+   * ShadowFileMetrics maintains shadow file related statistics.
+   */
+  @Metrics(about="shadow file related metrics", context="shadowFile")
+  static class ShadowFileMetrics {
+    final MetricsRegistry registry = new MetricsRegistry("ShadowFileMetrics");
+
+    @Metric("Rate of successful shadow file refresh and latency (milliseconds)")
+    MutableRate refreshSuccess;
+    @Metric("Rate of failed shadow file refresh and latency (milliseconds)")
+    MutableRate refreshFailure;
+    @Metric("Refresh total since startup")
+    private MutableGaugeLong refreshTotal;
+    @Metric("Refresh failures since startup")
+    private MutableGaugeLong refreshFailuresTotal;
+    @Metric("Process line failure since startup")
+    private MutableGaugeLong processLineFailuresTotal;
+    @Metric("Count of users")
+    private MutableGaugeLong usersCount;
+
+    static ShadowFileMetrics create() {
+      return DefaultMetricsSystem.instance().register(new ShadowFileMetrics());
+    }
+  }
 
   @Override
   public void setConf(Configuration conf) {
@@ -85,6 +124,11 @@ public class ShadowFileRpcPasswordMapping extends Configured
               HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE,
           CommonConfigurationKeys.
               HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_DEFAULT);
+      checksumEnabled = conf.getBoolean(
+          CommonConfigurationKeys.
+              HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CHECKSUM_ENABLED,
+          CommonConfigurationKeys.
+              HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CHECKSUM_ENABLED_DEFAULT);
       cacheTimeout = conf.getLong(
           CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_SEC,
           CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_SEC_DEFAULT) * 1000;
@@ -124,8 +168,8 @@ public class ShadowFileRpcPasswordMapping extends Configured
       LOG.error("Failed to run cache refresh", e);
     }
     refreshTask = scheduledExecutor
-        .scheduleWithFixedDelay(cacheRefreshService, cacheRefreshInterval, cacheRefreshInterval,
-            TimeUnit.MILLISECONDS);
+        .scheduleWithFixedDelay(cacheRefreshService, cacheRefreshInterval,
+            cacheRefreshInterval, TimeUnit.MILLISECONDS);
   }
 
   /**
@@ -137,33 +181,37 @@ public class ShadowFileRpcPasswordMapping extends Configured
   @Override
   public String getRpcPassword(String userName) {
     try {
-      if ((isTimeout() || cache.size() == 0) && !cacheRefreshAsync) {
+      if (cacheRef.get() == null || cacheRef.get().size() == 0) {
+        cacheRefresh(true);
+      }
+      if (isTimeout() && !cacheRefreshAsync) {
         cacheRefresh(false);
       }
-      if (!cache.containsKey(userName)){
-        return null;
-      }
-      return cache.get(userName).getRpcPassword();
-    } catch (IOException e){
+    } catch (IOException e) {
       LOG.error("Failed to refresh cache!", e);
     }
-    return null;
+    if (!cacheRef.get().containsKey(userName)) {
+      return null;
+    }
+    return cacheRef.get().get(userName).getRpcPassword();
   }
 
   @Override
   public boolean isBypassUser(String user) {
     try {
-      if ((isTimeout() || cache.size() == 0)  && !cacheRefreshAsync) {
+      if (cacheRef.get() == null || cacheRef.get().size() == 0) {
+        cacheRefresh(true);
+      }
+      if (isTimeout() && !cacheRefreshAsync) {
         cacheRefresh(false);
       }
-      if (!cache.containsKey(user)){
-        return false;
-      }
-      return cache.get(user).isBypass();
-    } catch (IOException e){
+    } catch (IOException e) {
       LOG.error("Failed to refresh cache!", e);
     }
-    return false;
+    if (!cacheRef.get().containsKey(user)) {
+      return false;
+    }
+    return cacheRef.get().get(user).isBypass();
   }
 
   class CacheRefreshService implements Runnable {
@@ -179,14 +227,26 @@ public class ShadowFileRpcPasswordMapping extends Configured
 
   @Override
   public void cacheRefresh(boolean force) throws IOException {
-    if (!force){
+    long start = Time.now();
+    if (!force) {
       // If not force refresh, check the timeout again
       if (!isTimeout())
         return;
     }
+    metrics.refreshTotal.incr();
     BufferedReader br = null;
+    ConcurrentHashMap<String, RpcPasswordAndBypass> updateCache =
+        new ConcurrentHashMap<>();
+
+    MD5Hash md5Hash = null;
+    if (checksumEnabled && !isStartup) {
+      md5Hash = checksum();
+      if (md5Hash == null) {
+        refreshFailure("First round checksum not match.", start);
+      }
+    }
+
     try {
-      cache.clear();
       FileInputStream file = new FileInputStream(shadowFile);
       Reader fr = new InputStreamReader(file, StandardCharsets.UTF_8);
       br = new BufferedReader(fr);
@@ -194,39 +254,81 @@ public class ShadowFileRpcPasswordMapping extends Configured
       while ((line = br.readLine()) != null) {
         //process the line
         try {
-          processRow(line);
+          processRow(updateCache, line);
         } catch (IllegalShadowLineException e) {
-          LOG.warn("unable to process shadow line: {}", line, e);
+          metrics.processLineFailuresTotal.incr();
+          LOG.error("Unable to process shadow line: " + line, start);
         }
       }
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Refreshed " + cache.size() + "records from shadowFile.");
-      }
-      lastRefreshTime = Time.now();
-    }catch (IOException e){
-      e.printStackTrace();
-    }finally {
-      if (br != null){
+    } finally {
+      if (br != null) {
         br.close();
       }
     }
+
+    if (checksumEnabled && !isStartup) {
+      MD5Hash fileHash = MD5FileUtils.computeMd5ForFile(new File(shadowFile));
+      if (md5Hash != null && !md5Hash.equals(fileHash)) {
+        refreshFailure("Second round checksum not match", start);
+      }
+    }
+    if (updateCache.isEmpty()) {
+      refreshFailure("New shadowFile is empty", start);
+    }
+    cacheRef.set(updateCache);
+    lastRefreshTime.set(Time.now());
+    LOG.info("Refreshed " + updateCache.size() + " records from shadowFile.");
+    if (isStartup) {
+      isStartup = false;
+    }
+    metrics.refreshSuccess.add(Time.now() - start);
+    metrics.usersCount.set(updateCache.size());
   }
 
-  private void processRow(String string) throws IllegalShadowLineException {
+  private MD5Hash checksum() {
+    MD5Hash fileHash, storedHash;
+    MD5Hash result = null;
+    try {
+      fileHash = MD5FileUtils.computeMd5ForFile(new File(shadowFile));
+      storedHash = MD5FileUtils.readStoredMd5ForFile(
+          new File(shadowFile));
+      if (storedHash == null) {
+        LOG.error("MD5 File not exists: " +
+            MD5FileUtils.getDigestFileForFile(new File(shadowFile)));
+      }
+      if (!fileHash.equals(storedHash)) {
+        return null;
+      }
+      result = fileHash;
+    } catch (IOException e) {
+      LOG.error("Error checksum: " + e.getMessage());
+    }
+    return result;
+  }
+
+  private void processRow(
+      ConcurrentHashMap<String, RpcPasswordAndBypass> cache,
+      String string) throws IllegalShadowLineException {
     // handle comment line
-    if(string.startsWith("#"))
+    if (string.startsWith("#"))
       return;
-    if(string.split(",").length != 3){
+    if (string.split(",").length != 3) {
       throw new IllegalShadowLineException(string);
     }
     String user = string.split(",")[0];
     String shadow = string.split(",")[1];
-    boolean bypass = string.split(",")[2].equalsIgnoreCase("true");
+    boolean bypass = string.split(",")[2]
+        .equalsIgnoreCase("true");
     cache.put(user, new RpcPasswordAndBypass(shadow, bypass));
   }
 
-  private boolean isTimeout(){
-    return Time.now() - lastRefreshTime > cacheTimeout;
+  private boolean isTimeout() {
+    return Time.now() - lastRefreshTime.get() > cacheTimeout;
+  }
+
+  @VisibleForTesting
+  public long getLastRefreshTime() {
+    return lastRefreshTime.get();
   }
 
   private static class IllegalShadowLineException extends IOException {
@@ -234,16 +336,17 @@ public class ShadowFileRpcPasswordMapping extends Configured
       super(message);
     }
 
-    public IllegalShadowLineException(String message, Throwable err) {
-      super(message, err);
-    }
-
     @Override
     public String toString() {
-      final StringBuilder sb =
-          new StringBuilder("IllegalShadowLineException ");
-      sb.append(super.getMessage());
-      return sb.toString();
+      return "IllegalShadowLineException " + super.getMessage();
     }
+  }
+
+  private void refreshFailure(String reason, long start)
+      throws ShadowFileException {
+    lastRefreshTime.set(Time.now());
+    metrics.refreshFailure.add(Time.now() - start);
+    metrics.refreshFailuresTotal.incr();
+    throw new ShadowFileException(reason);
   }
 }

@@ -180,4 +180,3 @@ public abstract class MD5FileUtils {
     return new File(file.getParentFile(), file.getName() + MD5_SUFFIX);
   }
 }
-

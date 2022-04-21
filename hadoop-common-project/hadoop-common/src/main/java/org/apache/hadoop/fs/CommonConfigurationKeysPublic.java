@@ -746,6 +746,50 @@ public class CommonConfigurationKeysPublic {
    * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
    * core-default.xml</a>
    */
+  public static final String
+      HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CHECKSUM_ENABLED=
+      "hadoop.security.rpc-password.shadow.file.checksum.enabled";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final boolean
+      HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CHECKSUM_ENABLED_DEFAULT=
+      false;
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_MINUTE =
+      "hadoop.security.rpc-password.match.cache.expire.minute";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final int
+      HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_MINUTE_DEFAULT = 1;
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_SIZE =
+      "hadoop.security.rpc-password.match.cache.size";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final int
+      HADOOP_SECURITY_RPC_PASSWORD_MATCH_CACHE_SIZE_DEFAULT = 10000;
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
   public static final String  HADOOP_SECURITY_AUTHENTICATION =
     "hadoop.security.authentication";
   /**
@@ -755,6 +799,36 @@ public class CommonConfigurationKeysPublic {
    */
   public static final String HADOOP_SECURITY_AUTHORIZATION =
     "hadoop.security.authorization";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String HADOOP_CLIENT_RPC_SDI_AUTHENTICATION_ENABLED_KEY =
+      "hadoop.client.rpc.sdi.authentication.enabled";
+  public static final boolean HADOOP_CLIENT_RPC_SDI_AUTHENTICATION_ENABLED_DEFAULT = false;
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String HADOOP_SERVICE_RPC_SDI_AUTHENTICATION_ENABLED_KEY =
+      "hadoop.service.rpc.sdi.authentication.enabled";
+  public static final boolean HADOOP_SERVICE_RPC_SDI_AUTHENTICATION_ENABLED_DEFAULT = false;
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String HADOOP_SDI_AUTHENTICATION_SILENT_MODE_ENABLED =
+      "hadoop.sdi.authentication.silent.mode.enabled";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final boolean HADOOP_SDI_AUTHENTICATION_SILENT_MODE_ENABLED_DEFAULT =
+      false;
   /**
    * @see
    * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">

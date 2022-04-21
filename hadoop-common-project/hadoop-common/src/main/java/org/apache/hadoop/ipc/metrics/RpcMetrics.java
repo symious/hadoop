@@ -19,7 +19,8 @@ package org.apache.hadoop.ipc.metrics;
 
 import java.util.concurrent.TimeUnit;
 
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+import com.google.common.cache.CacheStats;
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -123,6 +124,32 @@ public class RpcMetrics {
   MutableCounterLong rpcClientBackoff;
   @Metric("Number of Slow RPC calls")
   MutableCounterLong rpcSlowCalls;
+
+  @Metric("Total request count of PasswordMatchedCached")
+  public long passwordMatchedCacheTotalRequest() {
+    CacheStats cacheStats = passwordMatchedCacheStats();
+    return cacheStats == null ? 0 : cacheStats.requestCount();
+  }
+  @Metric("Hit count of PasswordMatchedCached")
+  public long passwordMatchedCacheHitCount() {
+    CacheStats cacheStats = passwordMatchedCacheStats();
+    return cacheStats == null ? 0 : cacheStats.hitCount();
+  }
+  @Metric("Miss count of PasswordMatchedCached")
+  public long passwordMatchedCacheMissCount() {
+    CacheStats cacheStats = passwordMatchedCacheStats();
+    return cacheStats == null ? 0 : cacheStats.missCount();
+  }
+  @Metric("Eviction count of PasswordMatchedCached")
+  public long passwordMatchedCacheEvictionCount() {
+    CacheStats cacheStats = passwordMatchedCacheStats();
+    return cacheStats == null ? 0 : cacheStats.evictionCount();
+  }
+  @Metric("Load count of PasswordMatchedCached")
+  public long passwordMatchedCacheLoadCount() {
+    CacheStats cacheStats = passwordMatchedCacheStats();
+    return cacheStats == null ? 0 : cacheStats.loadCount();
+  }
 
   @Metric("Number of open connections") public int numOpenConnections() {
     return server.getNumOpenConnections();
@@ -316,6 +343,18 @@ public class RpcMetrics {
 
   public double getDeferredRpcProcessingStdDev() {
     return deferredRpcProcessingTime.lastStat().stddev();
+  }
+
+  public CacheStats passwordMatchedCacheStats() {
+    return server.getPasswordMatchedCacheStats();
+  }
+
+  public long getRpcAuthenticationSuccesses() {
+    return rpcAuthenticationSuccesses.value();
+  }
+
+  public long getRpcAuthenticationFailures() {
+    return rpcAuthenticationFailures.value();
   }
 
   @VisibleForTesting
