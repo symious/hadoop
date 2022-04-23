@@ -4654,6 +4654,12 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
   @Override // FSNamesystemMBean
   @Metric
+  public int getMaxDirectoryItemsAlarmNums() {
+    return this.dir.getMaxDirItemsAlarmNum();
+  }
+
+  @Override // FSNamesystemMBean
+  @Metric
   public long getPendingReplicationBlocks() {
     return blockManager.getPendingReplicationBlocksCount();
   }

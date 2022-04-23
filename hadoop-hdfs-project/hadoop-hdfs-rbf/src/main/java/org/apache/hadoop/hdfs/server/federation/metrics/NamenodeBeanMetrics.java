@@ -563,6 +563,11 @@ public class NamenodeBeanMetrics
     return 0;
   }
 
+  @Override
+  public int getMaxDirectoryItemsAlarmNums() {
+    return 0;
+  }
+
   @Deprecated
   @Override
   public long getTotalFiles() {

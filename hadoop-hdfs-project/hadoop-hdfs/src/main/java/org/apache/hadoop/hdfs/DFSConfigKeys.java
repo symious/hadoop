@@ -427,6 +427,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final int     DFS_NAMENODE_MAX_COMPONENT_LENGTH_DEFAULT = 255;
   public static final String  DFS_NAMENODE_MAX_DIRECTORY_ITEMS_KEY = "dfs.namenode.fs-limits.max-directory-items";
   public static final int     DFS_NAMENODE_MAX_DIRECTORY_ITEMS_DEFAULT = 1024*1024;
+  public static final String  DFS_NAMENODE_ALARM_DIRECTORY_ITEMS_THRESHOLD_KEY =
+      "dfs.namenode.fs-limits.alarm-directory-items.threshold";
+  public static final double  DFS_NAMENODE_ALARM_DIRECTORY_ITEMS_THRESHOLD_DEFUALT = 0.8;
   public static final String  DFS_NAMENODE_MIN_BLOCK_SIZE_KEY = "dfs.namenode.fs-limits.min-block-size";
   public static final long    DFS_NAMENODE_MIN_BLOCK_SIZE_DEFAULT = 1024*1024;
   public static final String  DFS_NAMENODE_MAX_BLOCKS_PER_FILE_KEY = "dfs.namenode.fs-limits.max-blocks-per-file";
