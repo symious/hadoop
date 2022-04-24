@@ -19,6 +19,7 @@
 package org.apache.hadoop.hdfs;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeys.FS_CLIENT_TOPOLOGY_RESOLUTION_ENABLED;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_ROOT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FILE_CLOSE_NUM_COMMITTED_ALLOWED_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_CONTEXT;
 import static org.junit.Assert.assertEquals;
@@ -2158,6 +2159,41 @@ public class TestDistributedFileSystem {
       DataNodeTestUtils.pauseIBR(cluster.getDataNodes().get(1));
       DataNodeTestUtils.pauseIBR(cluster.getDataNodes().get(2));
       LambdaTestUtils.intercept(IOException.class, "", () -> str.close());
+    }
+  }
+
+  @Test
+  public void testGetTrashRootConfig() throws IOException {
+    Configuration conf = new HdfsConfiguration();
+    conf.set(FS_TRASH_ROOT, "/Trash/subdir/${user.name}");
+    MiniDFSCluster cluster = null;
+    try {
+      cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+      DistributedFileSystem fileSys = cluster.getFileSystem();
+      String customTrashRoot = fileSys.getTrashRootConfig();
+      String userName = System.getProperty("user.name");
+      assertEquals("/Trash/subdir/" + userName, customTrashRoot);
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
+
+  @Test
+  public void testGetTrashRootConfigInvalid() throws IOException {
+    Configuration conf = new HdfsConfiguration();
+    conf.set(FS_TRASH_ROOT, "tra/sh");
+    MiniDFSCluster cluster = null;
+    try {
+      cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+      DistributedFileSystem fileSys = cluster.getFileSystem();
+      String customTrashRoot = fileSys.getTrashRootConfig();
+      assertNull(customTrashRoot);
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
     }
   }
 }

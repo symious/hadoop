@@ -102,6 +102,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -621,7 +622,13 @@ public class RouterClientProtocol implements ClientProtocol {
         rpcServer.getLocationsForPath(src, true, false);
     // srcLocations may be trimmed by getRenameDestinations()
     final List<RemoteLocation> locs = new LinkedList<>(srcLocations);
-    RemoteParam dstParam = getRenameDestinations(locs, dst);
+    RemoteParam dstParam;
+    // srcLocations may be trimmed by getRenameDestinations()
+    if (Arrays.asList(options).contains(Options.Rename.TO_TRASH)) {
+      dstParam = getRenameDestinationsForTrash(locs, dst);
+    } else {
+      dstParam = getRenameDestinations(locs, dst);
+    }
     if (locs.isEmpty()) {
       throw new IOException(
           "Rename of " + src + " to " + dst + " is not allowed," +
@@ -635,6 +642,16 @@ public class RouterClientProtocol implements ClientProtocol {
     } else {
       rpcClient.invokeSequential(locs, method, null, null);
     }
+  }
+
+  private RemoteParam getRenameDestinationsForTrash(
+      final List<RemoteLocation> srcLocations, final String dst) {
+    // Directly associate src to dst, skip namespace checking
+    final Map<RemoteLocation, String> dstMap = new HashMap<>();
+    for (RemoteLocation srcLocation: srcLocations) {
+      dstMap.put(srcLocation, dst);
+    }
+    return new RemoteParam(dstMap);
   }
 
   @Override

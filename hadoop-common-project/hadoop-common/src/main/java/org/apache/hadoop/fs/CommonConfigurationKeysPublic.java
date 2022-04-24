@@ -217,6 +217,7 @@ public class CommonConfigurationKeysPublic {
    * core-default.xml</a>
    */
   public static final String  FS_TRASH_INTERVAL_KEY = "fs.trash.interval";
+  public static final String  FS_TRASH_ROOT = "fs.trash.root";
   /** Default value for FS_TRASH_INTERVAL_KEY */
   public static final long    FS_TRASH_INTERVAL_DEFAULT = 0;
   /**

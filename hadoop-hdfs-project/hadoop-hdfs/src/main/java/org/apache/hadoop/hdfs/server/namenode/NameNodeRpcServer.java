@@ -227,6 +227,7 @@ import org.apache.hadoop.tracing.SpanReceiverInfo;
 import org.apache.hadoop.tracing.TraceAdminPB.TraceAdminService;
 import org.apache.hadoop.tracing.TraceAdminProtocolPB;
 import org.apache.hadoop.tracing.TraceAdminProtocolServerSideTranslatorPB;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.VersionInfo;
 import org.apache.hadoop.util.VersionUtil;
 import org.slf4j.Logger;
@@ -1110,12 +1111,73 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     }
     boolean success = false;
     try {
-      namesystem.renameTo(src, dst, cacheEntry != null, options);
+      if (Arrays.asList(options).contains(Options.Rename.TO_TRASH)) {
+        trash(src, dst, cacheEntry, options);
+      } else {
+        namesystem.renameTo(src, dst, cacheEntry != null, options);
+      }
       success = true;
     } finally {
       RetryCache.setState(cacheEntry, success);
     }
     metrics.incrFilesRenamed();
+  }
+
+  /**
+   * Hijacks old format trash destination, converts to new destination, creates
+   * directories as necessary, moves src to trash
+   * @param src source to be moved to trash
+   * @param origDst original trash destination
+   */
+  private void trash(String src, String origDst, CacheEntry cacheEntry,
+      Options.Rename... options) throws IOException {
+    // Client using old path
+    String origDstNorm = new Path(origDst).toString();
+    String[] split = origDstNorm.split("/");
+
+    // Old format is /user/$USER/.Trash/Current/abcxyz....
+    String user = split[2];
+    String ugiuser = getRemoteUser().getUserName();
+    LOG.debug("trash: src=" + src
+        + ", dst=" + origDst
+        + ", user=" + user
+        + ", ugiuser=" + ugiuser);
+
+    // If trash is new format already, use the original dest
+    if (split[1].equals("Trash")) {
+      namesystem.renameTo(src, origDst, cacheEntry != null, options);
+      return;
+    }
+
+    Path trashRoot = new Path("/Trash", user);
+    if (src.startsWith(trashRoot.toString())) {
+      // Already in trash
+      namesystem.delete(src, true, cacheEntry != null);
+      return;
+    }
+
+    Path trashCurrent = new Path(trashRoot, new Path("Current"));
+    Path trashPath = Path.mergePaths(trashCurrent, new Path(src));
+    Path baseTrashPath =
+        Path.mergePaths(trashCurrent, (new Path(src)).getParent());
+    try {
+      if (!mkdirs(baseTrashPath.toString(),
+          new FsPermission(FsAction.ALL, FsAction.NONE, FsAction.NONE),
+          true)) {      // create current
+        LOG.warn("Can't create(mkdir) trash directory: " + baseTrashPath);
+        return;
+      }
+    } catch (IOException e) {
+      LOG.warn("Can't create trash directory: " + baseTrashPath, e);
+    }
+
+    String orig = trashPath.toString();
+    if (getFileInfo(orig) != null) {
+      trashPath = new Path(orig + Time.now());
+    }
+    LOG.debug("trash: old=" + origDst + ", new=" + trashPath);
+    String newDest = trashPath.toUri().getPath();
+    namesystem.renameTo(src, newDest, cacheEntry != null, options);
   }
 
   @Override // ClientProtocol

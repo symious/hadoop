@@ -133,6 +133,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_ROOT;
 import static org.apache.hadoop.fs.impl.PathCapabilitiesSupport.validatePathCapabilityArgs;
 
 /****************************************************************
@@ -3048,6 +3049,29 @@ public class DistributedFileSystem extends FileSystem
     return dfs.getInotifyEventStream(lastReadTxid);
   }
 
+  public String getTrashRootConfig() {
+    Configuration conf = getConf();
+    String[] customTrashRoot = conf.getStrings(FS_TRASH_ROOT);
+    if (customTrashRoot == null) {
+      return null;
+    }
+    try {
+      if (customTrashRoot.length != 1) {
+        throw new IllegalArgumentException(
+            "Invalid value for " + FS_TRASH_ROOT +
+                ", empty string or value contains commas");
+      }
+      String customPath = new Path(customTrashRoot[0]).toUri().getPath();
+      if (!customPath.startsWith("/")) {
+        throw new IllegalArgumentException(
+            FS_TRASH_ROOT + " does not start with slash: " + customPath);
+      }
+      return customPath;
+    } catch (IllegalArgumentException iae) {
+      return null;
+    }
+  }
+
   /**
    * Set the source path to the specified erasure coding policy.
    *
@@ -3314,6 +3338,40 @@ public class DistributedFileSystem extends FileSystem
   }
 
   /**
+   * Get all trash roots of HDFS for current user or for all the users under
+   * custom trash root configuration
+   * @param allUsers return trashRoots of all users if true, used by emptier
+   * @return trash roots of HDFS using custom trash root conf
+   */
+  public Collection<FileStatus> getTrashRootsConfig(boolean allUsers)
+      throws IOException {
+    List<FileStatus> ret = new ArrayList<>();
+    String configuredTrashRoot = getTrashRootConfig();
+    if (configuredTrashRoot == null && !dfs.isHDFSEncryptionEnabled()) {
+      return ret;
+    }
+    if (!allUsers) {
+      Path userTrash = new Path(configuredTrashRoot);
+      if (exists(userTrash)) {
+        ret.add(getFileStatus(userTrash));
+      }
+    } else {
+      Path trashBase = new Path(configuredTrashRoot).getParent();
+      if (exists(trashBase)) {
+        FileStatus[] candidates = listStatus(trashBase);
+        for (FileStatus candidate : candidates) {
+          Path userTrash = candidate.getPath();
+          if (exists(userTrash)) {
+            candidate.setPath(userTrash);
+            ret.add(candidate);
+          }
+        }
+      }
+    }
+    return ret;
+  }
+
+  /**
    * Get all the trash roots of HDFS for current user or for all the users.
    * 1. File deleted from non-encryption zone /user/username/.Trash
    * 2. File deleted from encryption zones
@@ -3324,6 +3382,11 @@ public class DistributedFileSystem extends FileSystem
   @Override
   public Collection<FileStatus> getTrashRoots(boolean allUsers) {
     List<FileStatus> ret = new ArrayList<>();
+    try {
+      ret.addAll(getTrashRootsConfig(allUsers));
+    } catch (IOException ioe) {
+      DFSClient.LOG.warn("Cannot get all trash roots", ioe);
+    }
     // Get normal trash roots
     ret.addAll(super.getTrashRoots(allUsers));
 
