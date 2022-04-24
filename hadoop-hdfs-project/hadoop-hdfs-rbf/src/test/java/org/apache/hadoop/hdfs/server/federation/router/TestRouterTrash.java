@@ -49,6 +49,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_ROOT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_SPECIAL_TRASH_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -84,8 +85,10 @@ public class TestRouterTrash {
     cluster = new StateStoreDFSCluster(
         false, NUM_NAMESPACES, MultipleDestinationMountTableResolver.class);
 
+    Configuration conf = new Configuration();
+    conf.setBoolean(DFS_NAMENODE_ENABLE_SPECIAL_TRASH_KEY, true);
     // Start NNs and DNs and wait until ready
-    cluster.startCluster();
+    cluster.startCluster(conf);
 
     // Build and start a Router with: State Store + Admin + RPC
     Configuration routerConf = new RouterConfigBuilder()

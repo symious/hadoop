@@ -905,6 +905,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.namenode.decommission.backoff.monitor.pending.blocks.per.lock";
   public static final int DFS_NAMENODE_DECOMMISSION_BACKOFF_MONITOR_PENDING_BLOCKS_PER_LOCK_DEFAULT
       = 1000;
+  public static final String  DFS_NAMENODE_ENABLE_SPECIAL_TRASH_KEY =
+      "dfs.namenode.enable.special.trash";
+  public static final boolean DFS_NAMENODE_ENABLE_SPECIAL_TRASH_DEFAULT = false;
   public static final String  DFS_NAMENODE_HANDLER_COUNT_KEY = "dfs.namenode.handler.count";
   public static final int     DFS_NAMENODE_HANDLER_COUNT_DEFAULT = 10;
   public static final String  DFS_NAMENODE_LIFELINE_HANDLER_RATIO_KEY =

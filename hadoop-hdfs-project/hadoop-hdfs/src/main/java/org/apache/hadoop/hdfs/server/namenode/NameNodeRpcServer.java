@@ -23,6 +23,8 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CLIENT_R
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CLIENT_RPC_SDI_AUTHENTICATION_ENABLED_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SERVICE_RPC_SDI_AUTHENTICATION_ENABLED_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SERVICE_RPC_SDI_AUTHENTICATION_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_SPECIAL_TRASH_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_SPECIAL_TRASH_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_COUNT_KEY;
@@ -275,6 +277,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   private final String minimumDataNodeVersion;
 
   private final String defaultECPolicyName;
+  private final boolean enableSpecialTrash;
 
   public NameNodeRpcServer(Configuration conf, NameNode nn)
       throws IOException {
@@ -282,6 +285,9 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     this.namesystem = nn.getNamesystem();
     this.retryCache = namesystem.getRetryCache();
     this.metrics = NameNode.getNameNodeMetrics();
+    this.enableSpecialTrash = conf.getBoolean(
+        DFS_NAMENODE_ENABLE_SPECIAL_TRASH_KEY,
+        DFS_NAMENODE_ENABLE_SPECIAL_TRASH_DEFAULT);
 
     int handlerCount = 
       conf.getInt(DFS_NAMENODE_HANDLER_COUNT_KEY, 
@@ -1111,10 +1117,12 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     }
     boolean success = false;
     try {
-      if (Arrays.asList(options).contains(Options.Rename.TO_TRASH)) {
-        trash(src, dst, cacheEntry, options);
+      boolean logRetryCache = cacheEntry != null;
+      if (this.enableSpecialTrash && Arrays.asList(options)
+          .contains(Options.Rename.TO_TRASH)) {
+        trash(src, dst, logRetryCache, options);
       } else {
-        namesystem.renameTo(src, dst, cacheEntry != null, options);
+        namesystem.renameTo(src, dst, logRetryCache, options);
       }
       success = true;
     } finally {
@@ -1129,7 +1137,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
    * @param src source to be moved to trash
    * @param origDst original trash destination
    */
-  private void trash(String src, String origDst, CacheEntry cacheEntry,
+  private void trash(String src, String origDst, boolean logRetryCache,
       Options.Rename... options) throws IOException {
     // Client using old path
     String origDstNorm = new Path(origDst).toString();
@@ -1138,21 +1146,19 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     // Old format is /user/$USER/.Trash/Current/abcxyz....
     String user = split[2];
     String ugiuser = getRemoteUser().getUserName();
-    LOG.debug("trash: src=" + src
-        + ", dst=" + origDst
-        + ", user=" + user
-        + ", ugiuser=" + ugiuser);
+    LOG.debug("trash: src={}, dst={}, user={}, ugiuser={}.",
+        src, origDst, user, ugiuser);
 
     // If trash is new format already, use the original dest
     if (split[1].equals("Trash")) {
-      namesystem.renameTo(src, origDst, cacheEntry != null, options);
+      namesystem.renameTo(src, origDst, logRetryCache, options);
       return;
     }
 
     Path trashRoot = new Path("/Trash", user);
     if (src.startsWith(trashRoot.toString())) {
       // Already in trash
-      namesystem.delete(src, true, cacheEntry != null);
+      namesystem.delete(src, true, logRetryCache);
       return;
     }
 
@@ -1175,9 +1181,9 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     if (getFileInfo(orig) != null) {
       trashPath = new Path(orig + Time.now());
     }
-    LOG.debug("trash: old=" + origDst + ", new=" + trashPath);
+    LOG.debug("trash: old={}, new={}.", origDst, trashPath);
     String newDest = trashPath.toUri().getPath();
-    namesystem.renameTo(src, newDest, cacheEntry != null, options);
+    namesystem.renameTo(src, newDest, logRetryCache, options);
   }
 
   @Override // ClientProtocol
