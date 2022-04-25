@@ -133,6 +133,14 @@ public class DecayRpcScheduler implements RpcScheduler,
       "decay-scheduler.metrics.top.user.count";
   public static final int DECAYSCHEDULER_METRICS_TOP_USER_COUNT_DEFAULT = 10;
 
+  // Specifies the static users for each queue.
+  public static final String IPC_DECAYSCHEDULER_STATIC_USER_PREFIX =
+      "decay-scheduler.static.user.queue.";
+  public static final String IPC_DECAYSCHEDULER_STATIC_USER_DELIMITER =
+      "decay-scheduler.static.user.delimiter";
+  public static final String
+      IPC_DECAYSCHEDULER_STATIC_USER_DELIMITER_DEFAULT = ",";
+
   public static final Logger LOG =
       LoggerFactory.getLogger(DecayRpcScheduler.class);
 
@@ -148,7 +156,8 @@ public class DecayRpcScheduler implements RpcScheduler,
   private final AtomicLong totalDecayedCallCost = new AtomicLong();
   // The sum of all AtomicLongs in raw callCosts
   private final AtomicLong totalRawCallCost = new AtomicLong();
-
+  // The total call count of static user
+  private final AtomicLongArray staticUserTotalCount;
 
   // Track total call count and response time in current decay window
   private final AtomicLongArray responseTimeCountInCurrWindow;
@@ -166,6 +175,9 @@ public class DecayRpcScheduler implements RpcScheduler,
   // atomically swapped in as a read-only map
   private final AtomicReference<Map<Object, Integer>> scheduleCacheRef =
     new AtomicReference<Map<Object, Integer>>();
+
+  private ConcurrentHashMap<Object, Integer> staticUserMap =
+      new ConcurrentHashMap<Object, Integer>();
 
   // Tune the behavior of the scheduler
   private final long decayPeriodMillis; // How long between each tick
@@ -232,12 +244,15 @@ public class DecayRpcScheduler implements RpcScheduler,
         conf);
     this.backOffResponseTimeThresholds =
         parseBackOffResponseTimeThreshold(ns, conf, numLevels);
+    buildStaticUserMap(ns, conf);
 
     // Setup response time metrics
     responseTimeTotalInCurrWindow = new AtomicLongArray(numLevels);
     responseTimeCountInCurrWindow = new AtomicLongArray(numLevels);
     responseTimeAvgInLastWindow = new AtomicDoubleArray(numLevels);
     responseTimeCountInLastWindow = new AtomicLongArray(numLevels);
+
+    staticUserTotalCount= new AtomicLongArray(numLevels);
 
     topUsersCount =
         conf.getInt(DECAYSCHEDULER_METRICS_TOP_USER_COUNT,
@@ -419,6 +434,31 @@ public class DecayRpcScheduler implements RpcScheduler,
     return conf.getBoolean(ns + "." +
         IPC_DECAYSCHEDULER_BACKOFF_RESPONSETIME_ENABLE_KEY,
         IPC_DECAYSCHEDULER_BACKOFF_RESPONSETIME_ENABLE_DEFAULT);
+  }
+
+  private void buildStaticUserMap(String ns, Configuration conf) {
+    Map<Object, Integer> newStaticUserMap = new HashMap<Object, Integer>();
+    String configuredUser;
+    String delimiter = conf.get(ns + "." +
+            IPC_DECAYSCHEDULER_STATIC_USER_DELIMITER,
+        IPC_DECAYSCHEDULER_STATIC_USER_DELIMITER_DEFAULT);
+    for (int i = 0; i < numLevels; i++) {
+      configuredUser =
+          conf.get(ns + "." + IPC_DECAYSCHEDULER_STATIC_USER_PREFIX + i);
+      if (configuredUser != null && !configuredUser.isEmpty()) {
+        for (String username : configuredUser.split(delimiter)) {
+          if (username.isEmpty()) {
+            continue;
+          }
+          if (newStaticUserMap.containsKey(username)) {
+            LOG.warn("Found duplicated configured users: " + username +
+                ", will overwrite the queue level to " + i);
+          }
+          newStaticUserMap.put(username, i);
+        }
+      }
+    }
+    staticUserMap = new ConcurrentHashMap<>(newStaticUserMap);
   }
 
   /**
@@ -606,6 +646,10 @@ public class DecayRpcScheduler implements RpcScheduler,
   public int getPriorityLevel(Schedulable obj) {
     // First get the identity
     String identity = getIdentity(obj);
+    // First try static users
+    if (isStaticUser(identity)) {
+      return staticUserMap.get(identity);
+    }
     // highest priority users may have a negative priority but their
     // calls will be priority 0.
     return Math.max(0, cachedOrComputedPriorityLevel(identity));
@@ -614,6 +658,10 @@ public class DecayRpcScheduler implements RpcScheduler,
   @VisibleForTesting
   int getPriorityLevel(UserGroupInformation ugi) {
     String identity = getIdentity(newSchedulable(ugi));
+    // First try static users
+    if (isStaticUser(identity)) {
+      return staticUserMap.get(identity);
+    }
     // returns true priority of the user.
     return cachedOrComputedPriorityLevel(identity);
   }
@@ -673,6 +721,11 @@ public class DecayRpcScheduler implements RpcScheduler,
       ProcessingDetails details) {
     String user = identityProvider.makeIdentity(schedulable);
     long processingCost = costProvider.getCost(details);
+    // We don't calculate response time for static user since they are static.
+    if (isStaticUser(user)) {
+      staticUserTotalCount.getAndIncrement(schedulable.getPriorityLevel());
+      return;
+    }
     addCost(user, processingCost);
 
     int priorityLevel = schedulable.getPriorityLevel();
@@ -762,6 +815,10 @@ public class DecayRpcScheduler implements RpcScheduler,
     return totalDecayedCallCost.get();
   }
 
+  private boolean isStaticUser(String username) {
+    return staticUserMap.containsKey(username);
+  }
+
   /**
    * MetricsProxy is a singleton because we may init multiple schedulers and we
    * want to clean up resources when a new scheduler replaces the old one.
@@ -776,12 +833,14 @@ public class DecayRpcScheduler implements RpcScheduler,
     private WeakReference<DecayRpcScheduler> delegate;
     private double[] averageResponseTimeDefault;
     private long[] callCountInLastWindowDefault;
+    private long[] staticUserCallCountDefault;
     private ObjectName decayRpcSchedulerInfoBeanName;
 
     private MetricsProxy(String namespace, int numLevels,
         DecayRpcScheduler drs) {
       averageResponseTimeDefault = new double[numLevels];
       callCountInLastWindowDefault = new long[numLevels];
+      staticUserCallCountDefault = new long[numLevels];
       setDelegate(drs);
       decayRpcSchedulerInfoBeanName =
           MBeans.register(namespace, "DecayRpcScheduler", this);
@@ -830,6 +889,16 @@ public class DecayRpcScheduler implements RpcScheduler,
         return "No Active Scheduler";
       } else {
         return scheduler.getSchedulingDecisionSummary();
+      }
+    }
+
+    @Override
+    public String getStaticDecisionSummary() {
+      DecayRpcScheduler scheduler = delegate.get();
+      if (scheduler == null) {
+        return "No Active Scheduler";
+      } else {
+        return scheduler.getStaticDecisionSummary();
       }
     }
 
@@ -883,6 +952,16 @@ public class DecayRpcScheduler implements RpcScheduler,
     }
 
     @Override
+    public long[] getStaticUserTotalCount() {
+      DecayRpcScheduler scheduler = delegate.get();
+      if (scheduler == null) {
+        return staticUserCallCountDefault;
+      } else {
+        return scheduler.getStaticUserTotalCount();
+      }
+    }
+
+    @Override
     public void getMetrics(MetricsCollector collector, boolean all) {
       DecayRpcScheduler scheduler = delegate.get();
       if (scheduler != null) {
@@ -907,6 +986,15 @@ public class DecayRpcScheduler implements RpcScheduler,
     long[] ret = new long[responseTimeCountInLastWindow.length()];
     for (int i = 0; i < responseTimeCountInLastWindow.length(); i++) {
       ret[i] = responseTimeCountInLastWindow.get(i);
+    }
+    return ret;
+  }
+
+  @Override
+  public long[] getStaticUserTotalCount() {
+    long[] ret = new long[staticUserTotalCount.length()];
+    for (int i = 0; i < staticUserTotalCount.length(); i++) {
+      ret[i] = staticUserTotalCount.get(i);
     }
     return ret;
   }
@@ -1011,6 +1099,19 @@ public class DecayRpcScheduler implements RpcScheduler,
 
   public String getSchedulingDecisionSummary() {
     Map<Object, Integer> decisions = scheduleCacheRef.get();
+    if (decisions == null) {
+      return "{}";
+    } else {
+      try {
+        return WRITER.writeValueAsString(decisions);
+      } catch (Exception e) {
+        return "Error: " + e.getMessage();
+      }
+    }
+  }
+
+  public String getStaticDecisionSummary() {
+    Map<Object, Integer> decisions = staticUserMap;
     if (decisions == null) {
       return "{}";
     } else {
