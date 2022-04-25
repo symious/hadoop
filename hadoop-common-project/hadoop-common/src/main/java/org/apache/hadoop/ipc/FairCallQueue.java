@@ -77,6 +77,8 @@ public class FairCallQueue<E extends Schedulable> extends AbstractQueue<E>
 
   /* Statistic tracking */
   private final ArrayList<AtomicLong> overflowedCalls;
+  private final ArrayList<AtomicLong> borrowedCalls;
+  private final ArrayList<AtomicLong> lentCalls;
 
   /* Failover if queue is filled up */
   private boolean serverFailOverEnabled;
@@ -101,6 +103,8 @@ public class FairCallQueue<E extends Schedulable> extends AbstractQueue<E>
 
     this.queues = new ArrayList<BlockingQueue<E>>(numQueues);
     this.overflowedCalls = new ArrayList<AtomicLong>(numQueues);
+    this.borrowedCalls = new ArrayList<AtomicLong>(numQueues);
+    this.lentCalls = new ArrayList<AtomicLong>(numQueues);
     int queueCapacity = capacity / numQueues;
     int capacityForFirstQueue = queueCapacity + (capacity % numQueues);
     for(int i=0; i < numQueues; i++) {
@@ -110,6 +114,8 @@ public class FairCallQueue<E extends Schedulable> extends AbstractQueue<E>
         this.queues.add(new LinkedBlockingQueue<E>(queueCapacity));
       }
       this.overflowedCalls.add(new AtomicLong(0));
+      this.borrowedCalls.add(new AtomicLong(0));
+      this.lentCalls.add(new AtomicLong(0));
     }
     this.serverFailOverEnabled = conf.getBoolean(
         ns + "." +
@@ -141,6 +147,10 @@ public class FairCallQueue<E extends Schedulable> extends AbstractQueue<E>
     while (e == null) {
       for (int idx = 0; e == null && idx < queues.size(); idx++) {
         e = queues.get(idx).poll();
+        if (e != null && priority != idx) {
+          borrowedCalls.get(priority).getAndIncrement();
+          lentCalls.get(idx).getAndIncrement();
+        }
       }
     }
     return e;
@@ -424,6 +434,26 @@ public class FairCallQueue<E extends Schedulable> extends AbstractQueue<E>
       return obj.getOverflowedCalls();
     }
 
+    @Override
+    public long[] getBorrowedCalls() {
+      FairCallQueue<? extends Schedulable> obj = getCallQueue();
+      if (obj == null) {
+        return new long[]{};
+      }
+
+      return obj.getBorrowedCalls();
+    }
+
+    @Override
+    public long[] getLentCalls() {
+      FairCallQueue<? extends Schedulable> obj = getCallQueue();
+      if (obj == null) {
+        return new long[]{};
+      }
+
+      return obj.getLentCalls();
+    }
+
     @Override public int getRevision() {
       return revisionNumber;
     }
@@ -436,12 +466,18 @@ public class FairCallQueue<E extends Schedulable> extends AbstractQueue<E>
 
       final int[] currentQueueSizes = getQueueSizes();
       final long[] currentOverflowedCalls = getOverflowedCalls();
+      final long[] currentBorrowedCalls = getBorrowedCalls();
+      final long[] currentLentCalls = getLentCalls();
 
       for (int i = 0; i < currentQueueSizes.length; i++) {
         rb.addGauge(Interns.info("FairCallQueueSize_p" + i, "FCQ Queue Size"),
             currentQueueSizes[i]);
         rb.addCounter(Interns.info("FairCallQueueOverflowedCalls_p" + i,
             "FCQ Overflowed Calls"), currentOverflowedCalls[i]);
+        rb.addCounter(Interns.info("FairCallQueueBorrowedCalls_p" + i,
+            "FCQ Borrowed Calls"), currentBorrowedCalls[i]);
+        rb.addCounter(Interns.info("FairCallQueueLentCalls_p" + i,
+            "FCQ Lent Calls"), currentLentCalls[i]);
       }
     }
   }
@@ -461,6 +497,24 @@ public class FairCallQueue<E extends Schedulable> extends AbstractQueue<E>
     long[] calls = new long[numQueues];
     for (int i=0; i < numQueues; i++) {
       calls[i] = overflowedCalls.get(i).get();
+    }
+    return calls;
+  }
+
+  public long[] getBorrowedCalls() {
+    int numQueues = queues.size();
+    long[] calls = new long[numQueues];
+    for (int i=0; i < numQueues; i++) {
+      calls[i] = borrowedCalls.get(i).get();
+    }
+    return calls;
+  }
+
+  public long[] getLentCalls() {
+    int numQueues = queues.size();
+    long[] calls = new long[numQueues];
+    for (int i=0; i < numQueues; i++) {
+      calls[i] = lentCalls.get(i).get();
     }
     return calls;
   }

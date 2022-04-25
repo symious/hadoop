@@ -24,4 +24,6 @@ public interface FairCallQueueMXBean {
   int[] getQueueSizes();
   long[] getOverflowedCalls();
   int getRevision();
+  long[] getBorrowedCalls();
+  long[] getLentCalls();
 }
