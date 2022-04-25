@@ -19,8 +19,11 @@
 package org.apache.hadoop.ipc.protocolPB;
 
 import java.io.IOException;
+import java.util.EnumSet;
 
+import org.apache.hadoop.ipc.ProtobufHelper;
 import org.apache.hadoop.ipc.RefreshCallQueueProtocol;
+import org.apache.hadoop.ipc.RefreshCallQueueProtocol.RefreshCallQueueType;
 import org.apache.hadoop.ipc.proto.RefreshCallQueueProtocolProtos.RefreshCallQueueRequestProto;
 import org.apache.hadoop.ipc.proto.RefreshCallQueueProtocolProtos.RefreshCallQueueResponseProto;
 
@@ -46,7 +49,9 @@ public class RefreshCallQueueProtocolServerSideTranslatorPB implements
       RpcController controller, RefreshCallQueueRequestProto request)
       throws ServiceException {
     try {
-      impl.refreshCallQueue();
+      EnumSet<RefreshCallQueueType> refreshCallQueueTypes =
+          ProtobufHelper.convertRefreshCallQueueTypes(request.getTypesList());
+      impl.refreshCallQueue(refreshCallQueueTypes);
     } catch (IOException e) {
       throw new ServiceException(e);
     }

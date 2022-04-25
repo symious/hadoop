@@ -18,6 +18,7 @@
 package org.apache.hadoop.ipc;
 
 import java.io.IOException;
+import java.util.EnumSet;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -44,5 +45,35 @@ public interface RefreshCallQueueProtocol {
    * @throws IOException
    */
   @Idempotent
+  @Deprecated
   void refreshCallQueue() throws IOException;
+
+  @Idempotent
+  void refreshCallQueue(EnumSet<RefreshCallQueueType> types) throws IOException;
+
+  /**
+   * Different RefreshCallQueue types.
+   */
+  enum RefreshCallQueueType {
+    REFRESH((short) 0x01),
+    RELOAD((short) 0x02);
+
+    private final short mode;
+    RefreshCallQueueType(short mode) {
+      this.mode = mode;
+    }
+
+    public short getMode() {
+      return mode;
+    }
+
+    public static RefreshCallQueueType valueOf(short num) {
+      for (RefreshCallQueueType type : RefreshCallQueueType.values()) {
+        if (type.getMode() == num) {
+          return type;
+        }
+      }
+      return null;
+    }
+  }
 }

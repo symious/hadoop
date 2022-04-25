@@ -20,6 +20,7 @@ package org.apache.hadoop.ipc.protocolPB;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.EnumSet;
 
 import org.apache.hadoop.ipc.ProtobufHelper;
 import org.apache.hadoop.ipc.ProtocolMetaInterface;
@@ -27,7 +28,6 @@ import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RpcClientUtil;
 import org.apache.hadoop.ipc.RefreshCallQueueProtocol;
 import org.apache.hadoop.ipc.proto.RefreshCallQueueProtocolProtos.RefreshCallQueueRequestProto;
-import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolPB;
 
 import org.apache.hadoop.thirdparty.protobuf.RpcController;
 import org.apache.hadoop.thirdparty.protobuf.ServiceException;
@@ -53,11 +53,27 @@ public class RefreshCallQueueProtocolClientSideTranslatorPB implements
     RPC.stopProxy(rpcProxy);
   }
 
+  @Deprecated
   @Override
   public void refreshCallQueue() throws IOException {
     try {
       rpcProxy.refreshCallQueue(NULL_CONTROLLER,
           VOID_REFRESH_CALL_QUEUE_REQUEST);
+    } catch (ServiceException se) {
+      throw ProtobufHelper.getRemoteException(se);
+    }
+  }
+
+  @Override
+  public void refreshCallQueue(EnumSet<RefreshCallQueueType> types)
+      throws IOException {
+    RefreshCallQueueRequestProto.Builder req =
+        RefreshCallQueueRequestProto.newBuilder();
+    if (types != null) {
+      req.addAllTypes(ProtobufHelper.convertRefreshCallQueueTypes(types));
+    }
+    try {
+      rpcProxy.refreshCallQueue(NULL_CONTROLLER, req.build());
     } catch (ServiceException se) {
       throw ProtobufHelper.getRemoteException(se);
     }

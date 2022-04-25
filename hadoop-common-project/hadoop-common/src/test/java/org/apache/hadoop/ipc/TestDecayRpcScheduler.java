@@ -401,4 +401,24 @@ public class TestDecayRpcScheduler {
     scheduler.addResponseTime("ignored", mockCall, emptyProcessingDetails);
     return priority;
   }
+
+  @Test
+  @SuppressWarnings("deprecation")
+  public void testReload() {
+    // First assign user to queue.0
+    Configuration conf = new Configuration();
+    conf.set("prefix_new." +
+            DecayRpcScheduler.IPC_DECAYSCHEDULER_STATIC_USER_PREFIX + 0,
+        "user");
+    scheduler = new DecayRpcScheduler(2, "prefix_new", conf);
+    assertEquals(0, scheduler.getPriorityLevel(mockCall("user")));
+
+    // Reload and assign user to queue.1
+    conf = new Configuration();
+    conf.set("prefix_new." +
+            DecayRpcScheduler.IPC_DECAYSCHEDULER_STATIC_USER_PREFIX + 1,
+        "user");
+    scheduler.reload(conf);
+    assertEquals(1, scheduler.getPriorityLevel(mockCall("user")));
+  }
 }

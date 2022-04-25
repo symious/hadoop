@@ -1158,4 +1158,12 @@ public class DecayRpcScheduler implements RpcScheduler,
     MetricsProxy.removeInstance(namespace);
     decayRpcSchedulerDetailedMetrics.shutdown();
   }
+
+  @Override
+  public void reload(Configuration conf) {
+    // Reload static user
+    LOG.info("Original Static Users: " + staticUserMap);
+    buildStaticUserMap(this.namespace, conf);
+    LOG.info("Reloaded Static Users: " + staticUserMap);
+  }
 }

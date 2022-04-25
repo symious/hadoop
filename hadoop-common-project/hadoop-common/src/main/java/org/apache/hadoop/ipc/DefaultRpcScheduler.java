@@ -46,4 +46,8 @@ public class DefaultRpcScheduler implements RpcScheduler {
   @Override
   public void stop() {
   }
+
+  @Override
+  public void reload(Configuration conf) {
+  }
 }
