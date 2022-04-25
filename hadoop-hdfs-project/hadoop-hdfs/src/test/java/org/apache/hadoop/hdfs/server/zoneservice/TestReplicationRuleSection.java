@@ -50,6 +50,15 @@ public class TestReplicationRuleSection {
     } catch (IllegalArgumentException e) {
       assertTrue(e.getMessage().contains("must starts with"));
     }
+
+    // replica value cannot be negative
+    stringSection = "/sg_dc:-1";
+    try {
+      ReplicationRuleSection.parseFromString(stringSection);
+      fail("IllegalArgumentException expected!");
+    } catch (IllegalArgumentException e) {
+      assertTrue(e.getMessage().contains("negative"));
+    }
   }
 
   @Test

@@ -74,8 +74,13 @@ public class ReplicationRuleSection {
           "dataCenter in ReplicationRuleSection must starts with '" + ROOT + "'");
     }
 
-    return new ReplicationRuleSection(
-        fields[0], Short.parseShort(fields[1]));
+    short r = Short.parseShort(fields[1]);
+    if (r < 0) {
+      throw new IllegalArgumentException(
+          "replica value cannot be negative!");
+    }
+
+    return new ReplicationRuleSection(fields[0], r);
   }
 
   public String getDataCenter() {

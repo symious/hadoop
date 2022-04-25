@@ -79,6 +79,7 @@ public class ZoneMover {
   private Result result;
   private final Thread fetcher = new Thread(new Fetcher());
   private static int checkUpdateInterval = 0;
+  private static final String DC_SEPARATOR = ",";
 
   public ZoneMover(NameNodeConnector nnc, Configuration conf,
       AtomicInteger retryCount) {
@@ -272,6 +273,7 @@ public class ZoneMover {
   public static int run(Configuration conf, URI namenode, List<Path> paths,
       ReplicationRule rule, Map<String, ReplicationRule> pathRuleMap)
       throws IOException, InterruptedException {
+    checkDataCenterValues(conf, rule, pathRuleMap);
     LOG.info("Start to apply rule: " + rule + " to namenode:" + namenode + ", path: " + paths);
 
     NameNodeConnector nnc = null;
@@ -393,6 +395,7 @@ public class ZoneMover {
   private static int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
       URI namenode, List<Path> paths, ReplicationRule rule,
       Map<String, ReplicationRule> pathRuleMap) throws IOException {
+    checkDataCenterValues(conf, rule, pathRuleMap);
     Class<? extends StoreDriver> driverClass = conf.getClass(
         DFS_ZONESERVICE_STORE_DRIVER_CLASS,
         DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT,
@@ -557,6 +560,40 @@ public class ZoneMover {
       }
     }
     return items;
+  }
+
+  static void checkDataCenterValues(Configuration conf, Collection<ReplicationRule> rules)
+      throws IllegalArgumentException {
+    // get valid datacenters from configuration
+    String datacenters = conf.get(
+        DFSConfigKeys.DFS_ZONEMOVER_VALID_DATACENTERS_KEY,
+        DFSConfigKeys.DFS_ZONEMOVER_VALID_DATACENTERS_DEFAULT);
+    Set<String> validDataCenters = new HashSet<>
+        (Arrays.asList(datacenters.trim().split(DC_SEPARATOR)));
+    validDataCenters.remove("");
+
+    // check datacenters in rules
+    for (ReplicationRule rule: rules) {
+      for (ReplicationRuleSection section: rule.getSections()) {
+        if (!validDataCenters.contains(section.getDataCenter())) {
+          throw new IllegalArgumentException(
+              section.getDataCenter() + " is NOT a valid DataCenter!");
+        }
+      }
+    }
+  }
+
+  static void checkDataCenterValues(Configuration conf,
+      ReplicationRule rule, Map<String, ReplicationRule> pathRuleMap)
+      throws IllegalArgumentException {
+    Set<ReplicationRule> rules = new HashSet<>();
+    if (rule != null) {
+      rules.add(rule);
+    }
+    if (pathRuleMap != null) {
+      rules.addAll(pathRuleMap.values());
+    }
+    checkDataCenterValues(conf, rules);
   }
 
   static class ZoneMoveItem {
@@ -760,11 +797,21 @@ public class ZoneMover {
       }
 
       if (xattrSetEnable) {
+        boolean needSet = true;
         try {
-          if (ruleUtil.hasRuleInXAttr(fullPath) &&
-              ruleUtil.getRuleFromXAttr(fullPath).equals(rule)) {
-            LOG.info("This file already has the replicationRule: " + fullPath);
-          } else {
+          if (ruleUtil.hasRuleInXAttr(fullPath)) {
+            try {
+              if (ruleUtil.getRuleFromXAttr(fullPath).equals(rule)) {
+                LOG.info("This file already has the replicationRule: " + fullPath);
+                needSet = false;
+              }
+            } catch (IllegalArgumentException e) {
+              LOG.warn("Found an invalid rule in NameNode, will update it: file={}, content={}",
+                  fullPath, ruleUtil.getStringFromRuleKey(fullPath));
+            }
+          }
+
+          if (needSet) {
             ruleUtil.setRuleToXAttr(fullPath, rule);
             LOG.info("Added replicationRule to: " + fullPath);
           }

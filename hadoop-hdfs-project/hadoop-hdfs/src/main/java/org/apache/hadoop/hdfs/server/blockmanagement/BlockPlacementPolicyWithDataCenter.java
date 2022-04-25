@@ -485,8 +485,11 @@ public class BlockPlacementPolicyWithDataCenter extends
 
     // Replicate to datacenters without enough replicas
     for (ReplicationRuleSection section: rule.getSections()) {
+      if (section.getReplica() <= 0) {
+        continue;
+      }
       List<DatanodeStorageInfo> storages = dcMap.get(section.getDataCenter());
-      if (section.getReplica() > storages.size()) {
+      if ((storages != null) && (section.getReplica() > storages.size())) {
         int n = Math.min(numOfReplicas, section.getReplica() - storages.size());
         Node base = (writer != null && NetworkTopologyUtil.getDataCenter(writer)
             .equals(section.getDataCenter())) ?

@@ -83,7 +83,12 @@ public class FSDirXAttrReplicationRuleOp {
         try {
           String value = XAttrCodec.encodeValue(xAttr.getValue(), XAttrCodec.TEXT);
           if (!rules.containsKey(value)) {
-            rules.put(value, ReplicationRule.parseFromString(value.replace("\"", "")));
+            try {
+              rules.put(value, ReplicationRule.parseFromString(value.replace("\"", "")));
+            } catch (IllegalArgumentException e) {
+              LOG.warn(String.format("Illegal ReplicationRule: %s", value.replace("\"", "")));
+              return null;
+            }
           }
           return rules.get(value);
         } catch (IOException e) {
