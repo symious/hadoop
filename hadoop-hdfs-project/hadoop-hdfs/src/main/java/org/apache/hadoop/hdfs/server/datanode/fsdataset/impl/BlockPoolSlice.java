@@ -53,6 +53,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CachingGetSpaceUsed;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.GetSpaceUsed;
+import org.apache.hadoop.fs.HardLink;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.protocol.Block;
@@ -1080,5 +1081,17 @@ class BlockPoolSlice {
   public static void reInitializeAddReplicaThreadPool() {
     addReplicaThreadPool.shutdown();
     addReplicaThreadPool = null;
+  }
+
+  public File hardLinkOneBlock(File src, File srcMeta, Block dstBlock)
+      throws IOException {
+    File dstMeta = new File(tmpDir, DatanodeUtil.getMetaName(dstBlock.getBlockName(),
+        dstBlock.getGenerationStamp()));
+    HardLink.createHardLink(srcMeta, dstMeta);
+
+    File dstBlockFile = new File(tmpDir, dstBlock.getBlockName());
+    HardLink.createHardLink(src, dstBlockFile);
+
+    return dstBlockFile;
   }
 }

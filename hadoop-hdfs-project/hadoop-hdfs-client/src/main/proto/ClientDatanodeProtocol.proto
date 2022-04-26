@@ -222,6 +222,15 @@ message DiskBalancerSettingResponseProto {
   required string value = 1;
 }
 
+message CopyBlockRequestProto {
+  required ExtendedBlockProto srcBlock = 1;
+  required ExtendedBlockProto dstBlock = 2;
+  required DatanodeInfoProto dstDn = 3;
+}
+
+message CopyBlockResponseProto {
+}
+
 /**
  * Protocol used from client to the Datanode.
  * See the request and response for details of rpc call.
@@ -305,4 +314,7 @@ service ClientDatanodeProtocolService {
    */
   rpc getDiskBalancerSetting(DiskBalancerSettingRequestProto)
       returns(DiskBalancerSettingResponseProto);
+
+  rpc copyBlock(CopyBlockRequestProto)
+      returns(CopyBlockResponseProto);
 }

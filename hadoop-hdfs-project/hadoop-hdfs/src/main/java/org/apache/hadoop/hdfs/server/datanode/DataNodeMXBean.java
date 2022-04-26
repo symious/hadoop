@@ -120,6 +120,12 @@ public interface DataNodeMXBean {
   public int getXmitsInProgress();
 
   /**
+   * Returns an estimate of the number of hard-link replication tasks
+   * running currently.
+   */
+  public int getXlinksInprogress();
+
+  /**
    * Gets the network error counts on a per-Datanode basis.
    */
   public Map<String, Map<String, Long>> getDatanodeNetworkCounts();

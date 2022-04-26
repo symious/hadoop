@@ -551,4 +551,42 @@ public class TestDistCpSystem {
     String[] args2 = new String[]{rootStr, tgtStr2};
     Assert.assertThat(ToolRunner.run(conf, new DistCp(), args2), is(0));
   }
+
+  @Test
+  public void testDistCpWithFastCopy() throws Exception {
+    FileEntry[] srcfiles = {
+        new FileEntry(SRCDAT, true),
+        new FileEntry(SRCDAT + "/file", false)
+    };
+
+    final String testRoot = "/testFastCopyDir";
+    final String testSrc = testRoot + "/" + SRCDAT;
+    final String testDst = testRoot + "/" + DSTDAT;
+
+    String nnUri = FileSystem.getDefaultUri(conf).toString();
+    DistributedFileSystem fs =
+        (DistributedFileSystem) FileSystem.get(URI.create(nnUri), conf);
+    fs.mkdirs(new Path(testRoot));
+    fs.mkdirs(new Path(testSrc));
+    fs.mkdirs(new Path(testDst));
+    createFiles(fs, testRoot, srcfiles, -1);
+
+    FileStatus[] srcstats = getFileStatus(fs, testRoot, srcfiles);
+    for (int i = 0; i < srcfiles.length; i++) {
+      fs.setOwner(srcstats[i].getPath(), "u" + i, null);
+    }
+    String[] args = new String[] {
+        "-fastCopyEnable",
+        nnUri + testSrc,
+        nnUri + testDst,
+    };
+
+    ToolRunner.run(conf, new DistCp(), args);
+
+    FileStatus[] dststat = getFileStatus(fs, testDst, srcfiles);
+
+    this.compareFiles(fs,  srcstats[srcstats.length-1],
+        dststat[dststat.length-1]);
+    deldir(fs, testRoot);
+  }
 }

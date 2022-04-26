@@ -289,7 +289,7 @@ public class TestDistCpOptions {
         "atomicWorkPath=null, logPath=null, sourceFileListing=abc, " +
         "sourcePaths=null, targetPath=xyz, filtersFile='null', " +
         "blocksPerChunk=0, copyBufferSize=8192, verboseLog=false, " +
-        "directWrite=false, useiterator=false}";
+        "directWrite=false, useiterator=false, fastCopyEnable=false}";
     String optionString = option.toString();
     Assert.assertEquals(val, optionString);
     Assert.assertNotSame(DistCpOptionSwitch.ATOMIC_COMMIT.toString(),
@@ -534,6 +534,49 @@ public class TestDistCpOptions {
     final Path logPath = new Path("hdfs://localhost:8020/logs");
     builder.withLogPath(logPath).withVerboseLog(true);
     Assert.assertTrue(builder.build().shouldVerboseLog());
+  }
+
+  @Test
+  public void testFastCopyEnable() {
+    DistCpOptions.Builder builder = new DistCpOptions.Builder(
+        Collections.singletonList(
+            new Path("hdfs://localhost:8020/source")),
+        new Path("hdfs://localhost:8020/target/"))
+        .withFastCopy(true);
+    Assert.assertTrue(builder.build().shouldFastCopy());
+    try {
+      builder.withSyncFolder(true);
+      builder.withAppend(true);
+      builder.build();
+      fail("Couldn't use fast copy with append");
+    } catch (IllegalArgumentException e) {
+      assertExceptionContains("Couldn't use fast copy with append", e);
+    }
+
+    try {
+      builder.withAppend(false);
+      builder.withUseDiff("s1", "s2");
+      builder.build();
+      fail("Couldn't use fast copy with append");
+    } catch (IllegalArgumentException e) {
+      assertExceptionContains("Couldn't use fast copy with diff", e);
+    }
+
+    DistCpOptions.Builder builder2 = new DistCpOptions.Builder(
+        Collections.singletonList(
+            new Path("hdfs://localhost:8020/source2")),
+        new Path("hdfs://localhost:8020/target2/"))
+        .withFastCopy(true);
+    Assert.assertTrue(builder2.build().shouldFastCopy());
+
+    try {
+      builder2.withSyncFolder(true);
+      builder2.withUseRdiff("s1", "s2");
+      builder2.build();
+      fail("Couldn't use fast copy with append");
+    } catch (IllegalArgumentException e) {
+      assertExceptionContains("Couldn't use fast copy with rdiff", e);
+    }
   }
 
   @Test

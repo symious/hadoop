@@ -1592,5 +1592,10 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
     }
     return Collections.unmodifiableSet(replicas);
   }
+
+  @Override
+  public void hardLinkOneBlock(ExtendedBlock srcBlock, ExtendedBlock dstBlock) {
+    throw new UnsupportedOperationException();
+  }
 }
 

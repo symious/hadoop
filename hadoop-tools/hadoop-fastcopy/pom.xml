@@ -13,26 +13,21 @@
   limitations under the License. See accompanying LICENSE file.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
-                      https://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                      http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>3.3.sdi-035-SNAPSHOT</version>
+    <version>3.3.sdi-029-SNAPSHOT</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
-  <artifactId>hadoop-distcp</artifactId>
-  <version>3.3.sdi-035-SNAPSHOT</version>
-  <description>Apache Hadoop Distributed Copy</description>
-  <name>Apache Hadoop Distributed Copy</name>
+  <artifactId>hadoop-fastcopy</artifactId>
+  <version>3.3.sdi-029-SNAPSHOT</version>
+  <description>Apache Hadoop FastCopy</description>
+  <name>Apache Hadoop FastCopy</name>
   <packaging>jar</packaging>
-
-  <properties>
-    <file.encoding>UTF-8</file.encoding>
-    <downloadSources>true</downloadSources>
-  </properties>
 
   <dependencies>
     <dependency>
@@ -47,50 +42,13 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-annotations</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-app</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-hs</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-core</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
-      <scope>provided</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
-      <scope>test</scope>
-      <type>test-jar</type>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-hdfs-client</artifactId>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-hdfs</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-hdfs</artifactId>
-      <scope>test</scope>
-      <type>test-jar</type>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
@@ -100,23 +58,18 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-fastcopy</artifactId>
-      <scope>provided</scope>
+      <artifactId>hadoop-hdfs</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-fastcopy</artifactId>
+      <artifactId>hadoop-hdfs</artifactId>
       <scope>test</scope>
       <type>test-jar</type>
     </dependency>
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.assertj</groupId>
-      <artifactId>assertj-core</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -157,14 +110,6 @@
               <name>hadoop.log.dir</name>
               <value>target/test/logs</value>
             </property>
-            <property>
-              <name>org.apache.commons.logging.Log</name>
-              <value>org.apache.commons.logging.impl.SimpleLog</value>
-            </property>
-            <property>
-              <name>org.apache.commons.logging.simplelog.defaultlog</name>
-              <value>warn</value>
-            </property>
           </systemProperties>
         </configuration>
       </plugin>
@@ -180,17 +125,6 @@
               <outputDirectory>${project.build.directory}/lib</outputDirectory>
             </configuration>
           </execution>
-          <execution>
-            <id>deplist</id>
-            <phase>compile</phase>
-            <goals>
-              <goal>list</goal>
-            </goals>
-            <configuration>
-              <!-- referenced by a built-in command -->
-              <outputFile>${project.basedir}/target/hadoop-tools-deps/${project.artifactId}.tools-builtin.txt</outputFile>
-            </configuration>
-          </execution>
         </executions>
       </plugin>
       <plugin>
@@ -199,7 +133,7 @@
         <configuration>
           <archive>
             <manifest>
-              <mainClass>org.apache.hadoop.tools.DistCp</mainClass>
+              <mainClass>org.apache.hadoop.tools.FastCopy</mainClass>
             </manifest>
           </archive>
         </configuration>
@@ -236,4 +170,5 @@
       </plugin>
     </plugins>
   </build>
+
 </project>

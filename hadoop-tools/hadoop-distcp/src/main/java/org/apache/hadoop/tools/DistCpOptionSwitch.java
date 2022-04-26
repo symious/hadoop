@@ -226,6 +226,12 @@ public enum DistCpOptionSwitch {
           + " strings for paths to be excluded from the copy.")),
 
   /**
+   * Use fast copy.
+   */
+  FAST_COPY_ENABLE(DistCpConstants.CONF_LABEL_FAST_COPY_ENABLE,
+      new Option("fastCopyEnable", false, "Use fast copy if this argument set.")),
+
+  /**
    * Write directly to the final location, avoiding the creation and rename
    * of temporary files.
    * This is typically useful in cases where the target filesystem

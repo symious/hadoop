@@ -199,4 +199,14 @@ public interface ClientDatanodeProtocol {
    * @throws IOException - Throws if there is no such key
    */
   String getDiskBalancerSetting(String key) throws IOException;
+
+  /**
+   * Copy block from source to destination.
+   * @param src the source block.
+   * @param dst the destination block.
+   * @param dstDn the destination datanode.
+   * @throws IOException
+   */
+  void copyBlock(ExtendedBlock src, ExtendedBlock dst, DatanodeInfo dstDn)
+      throws IOException;
 }

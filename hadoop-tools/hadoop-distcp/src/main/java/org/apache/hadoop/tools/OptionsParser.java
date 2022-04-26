@@ -114,6 +114,8 @@ public class OptionsParser {
             !command.hasOption(DistCpOptionSwitch.BLOCKING.getSwitch()))
         .withVerboseLog(
             command.hasOption(DistCpOptionSwitch.VERBOSE_LOG.getSwitch()))
+        .withFastCopy(
+            command.hasOption(DistCpOptionSwitch.FAST_COPY_ENABLE.getSwitch()))
         .withDirectWrite(
             command.hasOption(DistCpOptionSwitch.DIRECT_WRITE.getSwitch()))
         .withUseIterator(

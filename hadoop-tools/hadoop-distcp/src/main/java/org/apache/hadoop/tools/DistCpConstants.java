@@ -139,6 +139,12 @@ public final class DistCpConstants {
   public static final String CONF_LABEL_BLOCKS_PER_CHUNK =
       "distcp.blocks.per.chunk";
 
+  /**
+   * Conf label for fast copy.
+   */
+  public static final String CONF_LABEL_FAST_COPY_ENABLE
+      = "distcp.fast.copy.enable";
+
   public static final String CONF_LABEL_USE_ITERATOR = "distcp.use.iterator";
   /**
    * Constants for DistCp return code to shell / consumer of ToolRunner's run

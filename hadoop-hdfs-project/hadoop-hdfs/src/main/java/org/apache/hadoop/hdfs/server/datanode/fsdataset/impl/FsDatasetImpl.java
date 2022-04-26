@@ -48,6 +48,7 @@ import javax.management.NotCompliantMBeanException;
 import javax.management.ObjectName;
 import javax.management.StandardMBean;
 
+import org.apache.hadoop.hdfs.server.datanode.LocalReplicaInPipeline;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 import org.apache.hadoop.HadoopIllegalArgumentException;
@@ -3430,6 +3431,41 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         }
       }
     }
+  }
+
+  @Override
+  public void hardLinkOneBlock(ExtendedBlock srcBlock, ExtendedBlock dstBlock)
+      throws IOException {
+    BlockLocalPathInfo blpi = getBlockLocalPathInfo(srcBlock);
+    File src = new File(blpi.getBlockPath());
+    File srcMeta = new File(blpi.getMetaPath());
+
+    FsVolumeImpl fsVolume = getVolume(srcBlock);
+    if (fsVolume == null) {
+      throw new IOException("Can't found the FsVolumeImpl for " + srcBlock);
+    }
+
+    if (fsVolume.getAvailable() < dstBlock.getNumBytes()) {
+      throw new DiskOutOfSpaceException(
+          "Insufficient space for hardlink block " + srcBlock);
+    }
+
+    BlockPoolSlice dstBPS = fsVolume.getBlockPoolSlice(
+        dstBlock.getBlockPoolId());
+
+    File dstBlockTmpFile = dstBPS.hardLinkOneBlock(src, srcMeta,
+        dstBlock.getLocalBlock());
+
+    LocalReplicaInPipeline tmpReplicaInfo = new LocalReplicaInPipeline(
+        dstBlock.getBlockId(), dstBlock.getGenerationStamp(),
+        fsVolume, dstBlockTmpFile.getParentFile(),
+        srcBlock.getNumBytes());
+    File dstBlockFinalFile = dstBPS.addFinalizedBlock(
+        dstBlock.getLocalBlock(), tmpReplicaInfo);
+
+    ReplicaInfo replicaInfo = new FinalizedReplica(dstBlock.getLocalBlock(),
+        getVolume(srcBlock), dstBlockFinalFile.getParentFile());
+    volumeMap.add(dstBlock.getBlockPoolId(), replicaInfo);
   }
 }
 

@@ -155,6 +155,11 @@ public final class DistCpOptions {
 
   private final int copyBufferSize;
 
+  /**
+   * Use fast copy.
+   */
+  private final boolean fastCopyEnable;
+
   /** Whether data should be written directly to the target paths. */
   private final boolean directWrite;
 
@@ -225,6 +230,8 @@ public final class DistCpOptions {
     this.directWrite = builder.directWrite;
 
     this.useIterator = builder.useIterator;
+
+    this.fastCopyEnable = builder.fastCopyEnable;
   }
 
   public Path getSourceFileListing() {
@@ -344,6 +351,10 @@ public final class DistCpOptions {
     return copyBufferSize;
   }
 
+  public boolean shouldFastCopy() {
+    return this.fastCopyEnable;
+  }
+
   public boolean shouldVerboseLog() {
     return verboseLog;
   }
@@ -413,6 +424,9 @@ public final class DistCpOptions {
 
     DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.USE_ITERATOR,
         String.valueOf(useIterator));
+
+    DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.FAST_COPY_ENABLE,
+        String.valueOf(fastCopyEnable));
   }
 
   /**
@@ -451,6 +465,7 @@ public final class DistCpOptions {
         ", verboseLog=" + verboseLog +
         ", directWrite=" + directWrite +
         ", useiterator=" + useIterator +
+        ", fastCopyEnable=" + fastCopyEnable +
         '}';
   }
 
@@ -499,6 +514,8 @@ public final class DistCpOptions {
 
     private int copyBufferSize =
             DistCpConstants.COPY_BUFFER_SIZE_DEFAULT;
+
+    private boolean fastCopyEnable = false;
 
     private boolean directWrite = false;
 
@@ -612,6 +629,21 @@ public final class DistCpOptions {
       if (verboseLog && logPath == null) {
         throw new IllegalArgumentException(
             "-v is valid only with -log option");
+      }
+
+      if (fastCopyEnable && append) {
+        throw new IllegalArgumentException(
+            "Couldn't use fast copy with append");
+      }
+
+      if (fastCopyEnable && useDiff) {
+        throw new IllegalArgumentException(
+            "Couldn't use fast copy with diff");
+      }
+
+      if (fastCopyEnable && useRdiff) {
+        throw new IllegalArgumentException(
+            "Couldn't use fast copy with rdiff");
       }
     }
 
@@ -764,6 +796,11 @@ public final class DistCpOptions {
 
     public Builder withUseIterator(boolean useItr) {
       this.useIterator = useItr;
+      return this;
+    }
+
+    public Builder withFastCopy(boolean fastCopyEnable) {
+      this.fastCopyEnable = fastCopyEnable;
       return this;
     }
   }
