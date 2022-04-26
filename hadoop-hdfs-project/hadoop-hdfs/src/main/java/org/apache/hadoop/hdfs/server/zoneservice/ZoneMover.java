@@ -819,6 +819,9 @@ public class ZoneMover {
           LOG.warn(e.toString());
           return;
         }
+      } else if (status.getReplication() != rule.getReplica()) {
+        LOG.warn("Ignore replica not consistent file: {}", fullPath);
+        return;
       }
 
       if (status.getReplication() < rule.getReplica()) {
