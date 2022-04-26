@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.federation.router;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.server.federation.fairness.RefreshFairnessPolicyControllerHandler.HANDLER_IDENTIFIER;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -34,6 +35,7 @@ import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.proto.RouterProtocolProtos.RouterAdminProtocolService;
 import org.apache.hadoop.hdfs.protocolPB.RouterAdminProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.RouterAdminProtocolServerSideTranslatorPB;
+import org.apache.hadoop.hdfs.server.federation.fairness.RefreshFairnessPolicyControllerHandler;
 import org.apache.hadoop.hdfs.server.federation.resolver.ActiveNamenodeResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamespaceInfo;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
@@ -68,6 +70,7 @@ import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RPC.Server;
 import org.apache.hadoop.ipc.RefreshCallQueueProtocol;
+import org.apache.hadoop.ipc.RefreshRegistry;
 import org.apache.hadoop.ipc.proto.RefreshCallQueueProtocolProtos;
 import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolPB;
 import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolServerSideTranslatorPB;
@@ -166,6 +169,8 @@ public class RouterAdminServer extends AbstractService
 
     DFSUtil.addPBProtocol(conf, RefreshCallQueueProtocolPB.class,
         refreshCallQueueService, adminServer);
+
+    registerRefreshFairnessPolicyControllerHandler();
   }
 
   /**
@@ -455,6 +460,12 @@ public class RouterAdminServer extends AbstractService
 
     Configuration conf = new Configuration();
     router.getRpcServer().getServer().refreshCallQueue(conf, types);
+  }
+
+
+  private void registerRefreshFairnessPolicyControllerHandler() {
+    RefreshRegistry.defaultRegistry()
+        .register(HANDLER_IDENTIFIER, new RefreshFairnessPolicyControllerHandler(router));
   }
 
   /**

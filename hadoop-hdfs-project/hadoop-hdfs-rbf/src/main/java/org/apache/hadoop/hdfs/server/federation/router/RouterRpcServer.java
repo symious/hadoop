@@ -404,7 +404,7 @@ public class RouterRpcServer extends AbstractService
   }
 
   /**
-   * Get the active namenode resolver
+   * Get the active namenode resolver.
    */
   public ActiveNamenodeResolver getNamenodeResolver() {
     return namenodeResolver;
@@ -1622,5 +1622,9 @@ public class RouterRpcServer extends AbstractService
 
   private static void setAuditLog(List<AuditLogger> auditLoggers) {
     RouterRpcServer.auditLoggers = auditLoggers;
+  }
+
+  public String refreshFairnessPolicyController() {
+    return rpcClient.refreshFairnessPolicyController(new Configuration());
   }
 }
