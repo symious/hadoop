@@ -282,6 +282,10 @@ public final class CopyListingFileStatus implements Writable {
     return isSplit()? getChunkLength() : getLen();
   }
 
+  public long getBlocksCount() {
+    return (long) Math.ceil((getSizeToCopy() * 1.0D) / (getBlockSize()));
+  }
+
   @Override
   public void write(DataOutput out) throws IOException {
     Text.writeString(out, getPath().toString(), Text.DEFAULT_MAX_LEN);

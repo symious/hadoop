@@ -32,6 +32,12 @@
     </property>
 
     <property>
+        <name>distcp.block.strategy.impl</name>
+        <value>org.apache.hadoop.tools.mapred.UniformBlockInputFormat</value>
+        <description>Implementation of static input format based on blocks count</description>
+    </property>
+
+    <property>
         <name>mapred.reducer.new-api</name>
         <value>true</value>
     </property>

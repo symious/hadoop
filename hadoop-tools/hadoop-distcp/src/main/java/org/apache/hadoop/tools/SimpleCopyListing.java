@@ -74,6 +74,7 @@ public class SimpleCopyListing extends CopyListing {
   private long totalPaths = 0;
   private long totalDirs = 0;
   private long totalBytesToCopy = 0;
+  private long totalBlocksToCopy = 0;
   private int numListstatusThreads = 1;
   private final int fileStatusLimit;
   private final boolean randomizeFileListing;
@@ -497,6 +498,11 @@ public class SimpleCopyListing extends CopyListing {
     return totalBytesToCopy;
   }
 
+  @Override
+  protected long getBlocksToCopy() {
+    return totalBlocksToCopy;
+  }
+
   /** {@inheritDoc} */
   @Override
   protected long getNumberOfPaths() {
@@ -644,6 +650,7 @@ public class SimpleCopyListing extends CopyListing {
 
     if (!fileStatus.isDirectory()) {
       totalBytesToCopy += fileStatus.getSizeToCopy();
+      totalBlocksToCopy += fileStatus.getBlocksCount();
     } else {
       totalDirs++;
     }

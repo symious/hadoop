@@ -92,6 +92,11 @@ public class TestCopyListing extends SimpleCopyListing {
   }
 
   @Override
+  protected long getBlocksToCopy() {
+    return 0;
+  }
+
+  @Override
   protected long getNumberOfPaths() {
     return 0;
   }

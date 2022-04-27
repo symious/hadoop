@@ -88,6 +88,7 @@ public abstract class CopyListing extends Configured {
 
     config.set(DistCpConstants.CONF_LABEL_LISTING_FILE_PATH, pathToListFile.toString());
     config.setLong(DistCpConstants.CONF_LABEL_TOTAL_BYTES_TO_BE_COPIED, getBytesToCopy());
+    config.setLong(DistCpConstants.CONF_LABEL_TOTAL_BLOCKS_TO_BE_COPIED, getBlocksToCopy());
     config.setLong(DistCpConstants.CONF_LABEL_TOTAL_NUMBER_OF_RECORDS, getNumberOfPaths());
 
     validateFinalListing(pathToListFile, distCpContext);
@@ -120,6 +121,14 @@ public abstract class CopyListing extends Configured {
    * @return total bytes to copy
    */
   protected abstract long getBytesToCopy();
+
+  /**
+   * Return the total blocks that distCp should copy for the source paths
+   * This doesn't consider whether file is same should be skipped during copy
+   *
+   * @return total blocks to copy
+   */
+  protected abstract long getBlocksToCopy();
 
   /**
    * Return the total number of paths to distcp, includes directories as well
