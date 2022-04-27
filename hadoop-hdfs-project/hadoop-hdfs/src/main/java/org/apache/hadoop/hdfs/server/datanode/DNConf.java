@@ -39,6 +39,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_PROCESS_COMMANDS
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_PROCESS_COMMANDS_THRESHOLD_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ENCRYPT_DATA_OVERWRITE_DOWNSTREAM_DERIVED_QOP_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ENCRYPT_DATA_OVERWRITE_DOWNSTREAM_DERIVED_QOP_KEY;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CHECKSUM_EC_SOCKET_TIMEOUT_DEFAULT;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CHECKSUM_EC_SOCKET_TIMEOUT_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SOCKET_TIMEOUT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_MAX_LOCKED_MEMORY_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_MAX_LOCKED_MEMORY_KEY;
@@ -84,6 +86,7 @@ public class DNConf {
   final int socketTimeout;
   final int socketWriteTimeout;
   final int socketKeepaliveTimeout;
+  final int ecChecksumSocketTimeout;
   private final int transferSocketSendBufferSize;
   private final int transferSocketRecvBufferSize;
   private final boolean tcpNoDelay;
@@ -145,6 +148,9 @@ public class DNConf {
     socketKeepaliveTimeout = getConf().getInt(
         DFSConfigKeys.DFS_DATANODE_SOCKET_REUSE_KEEPALIVE_KEY,
         DFSConfigKeys.DFS_DATANODE_SOCKET_REUSE_KEEPALIVE_DEFAULT);
+    ecChecksumSocketTimeout = getConf().getInt(
+        DFS_CHECKSUM_EC_SOCKET_TIMEOUT_KEY,
+        DFS_CHECKSUM_EC_SOCKET_TIMEOUT_DEFAULT);
     this.transferSocketSendBufferSize = getConf().getInt(
         DFSConfigKeys.DFS_DATANODE_TRANSFER_SOCKET_SEND_BUFFER_SIZE_KEY,
         DFSConfigKeys.DFS_DATANODE_TRANSFER_SOCKET_SEND_BUFFER_SIZE_DEFAULT);
@@ -370,6 +376,15 @@ public class DNConf {
    */
   public int getSocketWriteTimeout() {
     return socketWriteTimeout;
+  }
+
+  /**
+   * Returns socket timeout for computing the checksum of EC blocks
+   *
+   * @return int socket timeout
+   */
+  public int getEcChecksumSocketTimeout() {
+    return ecChecksumSocketTimeout;
   }
 
   /**
