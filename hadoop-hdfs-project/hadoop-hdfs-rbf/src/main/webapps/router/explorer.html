@@ -182,28 +182,6 @@
           </div>
         </form>
       </div>
-      <div class="col-xs-3 col-md-3">
-        <button type="button" class="btn btn-default" data-toggle="modal"
-          aria-label="New Directory" data-target="#btn-create-directory"
-          title="Create Directory" id="btn-create-dir">
-            <span class="glyphicon glyphicon-folder-open"></span>
-        </button>
-        <button type="button" class="btn btn-default" data-toggle="modal"
-          data-target="#modal-upload-file" title="Upload Files" id="btn-upload-files">
-            <span class="glyphicon glyphicon-cloud-upload"></span>
-        </button>
-        <button class="btn btn-default dropdown-toggle" type="button"
-          data-toggle="dropdown" title="Cut & Paste">
-        <span class="glyphicon glyphicon-list-alt"></span></button>
-        <ul class="dropdown-menu cut-paste">
-          <li><a id="explorer-cut">Cut</a></li>
-          <li><a id="explorer-paste">Paste</a></li>
-        </ul>
-        <button type="button" class="btn btn-default"  data-toggle="modal"
-          aria-label="Parent Directory" title="Parent Directory" id="parentDir">
-           <span class="glyphicon glyphicon-level-up"></span>
-        </button>
-      </div>
     </div>
 
       <br />
@@ -288,7 +266,7 @@
             <td><span class="explorer-replication-links">{replication}</span></td>
             <td>{blockSize|fmt_bytes}</td>
             <td><a inode-type="{type}" class="explorer-browse-links">{pathSuffix}</a></td>
-            <td><span class="glyphicon glyphicon-trash"></span></td>
+            <td></td>
           </tr>
           {/FileStatus}
         </tbody>
