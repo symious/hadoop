@@ -289,7 +289,8 @@ public class TestDistCpOptions {
         "atomicWorkPath=null, logPath=null, sourceFileListing=abc, " +
         "sourcePaths=null, targetPath=xyz, filtersFile='null', " +
         "blocksPerChunk=0, copyBufferSize=8192, verboseLog=false, " +
-        "directWrite=false, useiterator=false, fastCopyEnable=false}";
+        "directWrite=false, useiterator=false, fastCopyEnable=false, " +
+        "updateRootDirectoryAttribute=false}";
     String optionString = option.toString();
     Assert.assertEquals(val, optionString);
     Assert.assertNotSame(DistCpOptionSwitch.ATOMIC_COMMIT.toString(),
@@ -579,6 +580,16 @@ public class TestDistCpOptions {
     } catch (IllegalArgumentException e) {
       assertExceptionContains("Couldn't use fast copy with rdiff", e);
     }
+  }
+
+  @Test
+  public void testUpdateRootDirectoryAttribute() {
+    DistCpOptions options = new DistCpOptions.Builder(
+        Collections.singletonList(
+            new Path("hdfs://localhost:8020/source")),
+        new Path("hdfs://localhost:8020/target/"))
+        .withUpdateRootDirectoryAttribute(true).build();
+    Assert.assertTrue(options.shouldUpdateRootDirectoryAttrs());
   }
 
   @Test

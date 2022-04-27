@@ -313,6 +313,9 @@ public class CopyCommitter extends FileOutputCommitter {
     final boolean preserveRawXattrs =
         conf.getBoolean(DistCpConstants.CONF_LABEL_PRESERVE_RAWXATTRS, false);
 
+    final boolean updateRootDirectoryAttributes = conf.getBoolean(
+        DistCpConstants.CONF_LABEL_UPDATE_ROOT_DIRECTORY_ATTRIBUTE, false);
+
     Path sourceListing = new Path(conf.get(DistCpConstants.CONF_LABEL_LISTING_FILE_PATH));
     FileSystem clusterFS = sourceListing.getFileSystem(conf);
     SequenceFile.Reader sourceReader = new SequenceFile.Reader(conf,
@@ -336,9 +339,11 @@ public class CopyCommitter extends FileOutputCommitter {
 
         Path targetFile = new Path(targetRoot.toString() + "/" + srcRelPath);
         //
-        // Skip the root folder when syncOrOverwrite is true.
+        // Skip the root folder when skipRootDirectoryAttributes is true.
         //
-        if (targetRoot.equals(targetFile) && syncOrOverwrite) continue;
+        boolean skipRootDirectoryAttributes =
+            syncOrOverwrite && !updateRootDirectoryAttributes;
+        if (targetRoot.equals(targetFile) && skipRootDirectoryAttributes) continue;
 
         FileSystem targetFS = targetFile.getFileSystem(conf);
         DistCpUtils.preserve(targetFS, targetFile, srcFileStatus, attributes,

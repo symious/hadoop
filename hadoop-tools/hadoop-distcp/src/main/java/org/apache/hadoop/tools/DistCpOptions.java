@@ -160,6 +160,8 @@ public final class DistCpOptions {
    */
   private final boolean fastCopyEnable;
 
+  private final boolean updateRootDirectoryAttribute;
+
   /** Whether data should be written directly to the target paths. */
   private final boolean directWrite;
 
@@ -232,6 +234,8 @@ public final class DistCpOptions {
     this.useIterator = builder.useIterator;
 
     this.fastCopyEnable = builder.fastCopyEnable;
+
+    this.updateRootDirectoryAttribute = builder.updateRootDirectoryAttribute;
   }
 
   public Path getSourceFileListing() {
@@ -355,6 +359,10 @@ public final class DistCpOptions {
     return this.fastCopyEnable;
   }
 
+  public boolean shouldUpdateRootDirectoryAttrs() {
+    return this.updateRootDirectoryAttribute;
+  }
+
   public boolean shouldVerboseLog() {
     return verboseLog;
   }
@@ -427,6 +435,9 @@ public final class DistCpOptions {
 
     DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.FAST_COPY_ENABLE,
         String.valueOf(fastCopyEnable));
+
+    DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.UPDATE_ROOT_DIRECTORY_ATTRIBUTE,
+        String.valueOf(updateRootDirectoryAttribute));
   }
 
   /**
@@ -466,6 +477,7 @@ public final class DistCpOptions {
         ", directWrite=" + directWrite +
         ", useiterator=" + useIterator +
         ", fastCopyEnable=" + fastCopyEnable +
+        ", updateRootDirectoryAttribute=" + updateRootDirectoryAttribute +
         '}';
   }
 
@@ -516,6 +528,8 @@ public final class DistCpOptions {
             DistCpConstants.COPY_BUFFER_SIZE_DEFAULT;
 
     private boolean fastCopyEnable = false;
+
+    private boolean updateRootDirectoryAttribute = false;
 
     private boolean directWrite = false;
 
@@ -645,6 +659,8 @@ public final class DistCpOptions {
         throw new IllegalArgumentException(
             "Couldn't use fast copy with rdiff");
       }
+
+      // just ignore validate the updateRootDirectoryAttribute
     }
 
     @VisibleForTesting
@@ -801,6 +817,12 @@ public final class DistCpOptions {
 
     public Builder withFastCopy(boolean fastCopyEnable) {
       this.fastCopyEnable = fastCopyEnable;
+      return this;
+    }
+
+    public Builder withUpdateRootDirectoryAttribute(
+        boolean updateRootDirectoryAttribute) {
+      this.updateRootDirectoryAttribute = updateRootDirectoryAttribute;
       return this;
     }
   }

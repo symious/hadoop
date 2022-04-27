@@ -57,6 +57,8 @@ public final class DistCpConstants {
   public static final String CONF_LABEL_PRESERVE_STATUS = "distcp.preserve.status";
   public static final String CONF_LABEL_PRESERVE_RAWXATTRS =
       "distcp.preserve.rawxattrs";
+  public static final String CONF_LABEL_UPDATE_ROOT_DIRECTORY_ATTRIBUTE =
+      "distcp.update.root.directory.attribute";
   public static final String CONF_LABEL_SYNC_FOLDERS = "distcp.sync.folders";
   public static final String CONF_LABEL_DELETE_MISSING = "distcp.delete.missing.source";
   public static final String CONF_LABEL_TRACK_MISSING =

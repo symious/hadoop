@@ -116,6 +116,8 @@ public class OptionsParser {
             command.hasOption(DistCpOptionSwitch.VERBOSE_LOG.getSwitch()))
         .withFastCopy(
             command.hasOption(DistCpOptionSwitch.FAST_COPY_ENABLE.getSwitch()))
+        .withUpdateRootDirectoryAttribute(
+            command.hasOption(DistCpOptionSwitch.UPDATE_ROOT_DIRECTORY_ATTRIBUTE.getSwitch()))
         .withDirectWrite(
             command.hasOption(DistCpOptionSwitch.DIRECT_WRITE.getSwitch()))
         .withUseIterator(

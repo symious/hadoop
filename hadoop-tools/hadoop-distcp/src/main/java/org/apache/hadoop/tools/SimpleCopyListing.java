@@ -622,10 +622,12 @@ public class SimpleCopyListing extends CopyListing {
       DistCpContext context) throws IOException {
     boolean syncOrOverwrite = context.shouldSyncFolder() ||
         context.shouldOverwrite();
+    boolean skipRoot = syncOrOverwrite &&
+        !context.shouldUpdateRootDirectoryAttrs();
     for (CopyListingFileStatus fs : fileStatus) {
       if (fs.getPath().equals(sourcePathRoot) &&
-          fs.isDirectory() && syncOrOverwrite) {
-        // Skip the root-paths when syncOrOverwrite
+          fs.isDirectory() && skipRoot) {
+        // Skip the root-paths when syncOrOverwrite & update root is not set.
         LOG.debug("Skip {}", fs.getPath());
         return;
       }

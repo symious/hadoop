@@ -231,6 +231,10 @@ public enum DistCpOptionSwitch {
   FAST_COPY_ENABLE(DistCpConstants.CONF_LABEL_FAST_COPY_ENABLE,
       new Option("fastCopyEnable", false, "Use fast copy if this argument set.")),
 
+  UPDATE_ROOT_DIRECTORY_ATTRIBUTE(DistCpConstants.CONF_LABEL_UPDATE_ROOT_DIRECTORY_ATTRIBUTE,
+      new Option("updateRootDirectoryAttribute", false,
+          "Update root directory attributes (eg permissions, ownership ...)")),
+
   /**
    * Write directly to the final location, avoiding the creation and rename
    * of temporary files.

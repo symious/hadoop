@@ -79,6 +79,10 @@ public class DistCpContext {
     return options.shouldSyncFolder();
   }
 
+  public boolean shouldUpdateRootDirectoryAttrs() {
+    return options.shouldUpdateRootDirectoryAttrs();
+  }
+
   public boolean shouldDeleteMissing() {
     return options.shouldDeleteMissing();
   }
