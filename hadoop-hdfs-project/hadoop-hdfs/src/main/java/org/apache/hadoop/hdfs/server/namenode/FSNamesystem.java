@@ -2134,8 +2134,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     }
     if (success) {
       getEditLog().logSync();
-      logAuditEvent(true, operationName, src);
     }
+    logAuditEvent(success, operationName, src);
     return success;
   }
 
@@ -2179,7 +2179,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         removeBlocks(toRemoveBlocks);
         toRemoveBlocks.clear();
       }
-      logAuditEvent(true, operationName, src, null, r.getFileStatus());
+      logAuditEvent(r.getResult(), operationName, src, null, r.getFileStatus());
     } catch (AccessControlException e) {
       logAuditEvent(false, operationName, src);
       throw e;
@@ -2968,7 +2968,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     if (toRemovedBlocks != null) {
       removeBlocks(toRemovedBlocks); // Incremental deletion of blocks
     }
-    logAuditEvent(true, operationName, src);
+    logAuditEvent(ret, operationName, src);
     return ret;
   }
 
@@ -3070,16 +3070,19 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   boolean isFileClosed(final String src) throws IOException {
     final String operationName = "isFileClosed";
     checkOperation(OperationCategory.READ);
+    boolean fileClosed = false;
     readLock();
     try {
       checkOperation(OperationCategory.READ);
-      return FSDirStatAndListingOp.isFileClosed(dir, src);
+      fileClosed = FSDirStatAndListingOp.isFileClosed(dir, src);
     } catch (AccessControlException e) {
       logAuditEvent(false, operationName, src);
       throw e;
     } finally {
       readUnlock(operationName);
     }
+    logAuditEvent(fileClosed, operationName, src);
+    return fileClosed;
   }
 
   /**

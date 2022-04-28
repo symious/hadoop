@@ -344,7 +344,7 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("recoverLease",
         new Class<?>[] {String.class, String.class}, new RemoteParam(),
         clientName);
-    Object result;
+    boolean result;
     String operationName = "recoverLease";
     String invokeType = null;
     try {
@@ -355,8 +355,8 @@ public class RouterClientProtocol implements ClientProtocol {
       logAuditEvent(false, operationName, invokeType, src);
       throw e;
     }
-    logAuditEvent(true, operationName, invokeType, src);
-    return (boolean) result;
+    logAuditEvent(result, operationName, invokeType, src);
+    return result;
   }
 
   @Override
@@ -368,7 +368,7 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("setReplication",
         new Class<?>[] {String.class, short.class}, new RemoteParam(),
         replication);
-    Object result;
+    boolean result;
     String operationName = "setReplication";
     String invokeType = null;
     try {
@@ -379,8 +379,8 @@ public class RouterClientProtocol implements ClientProtocol {
       logAuditEvent(false, operationName, invokeType, src);
       throw e;
     }
-    logAuditEvent(true, operationName, invokeType, src);
-    return (boolean) result;
+    logAuditEvent(result, operationName, invokeType, src);
+    return result;
   }
 
   @Override
@@ -613,7 +613,7 @@ public class RouterClientProtocol implements ClientProtocol {
       logAuditEvent(false, operation, invokeType, src, dst, null);
       throw e;
     }
-    logAuditEvent(true, operation, invokeType, src, dst, null);
+    logAuditEvent(result, operation, invokeType, src, dst, null);
     return result;
   }
 
@@ -745,7 +745,7 @@ public class RouterClientProtocol implements ClientProtocol {
       logAuditEvent(false, operationName, invokeType, src);
       throw e;
     }
-    logAuditEvent(false, operationName, invokeType, src);
+    logAuditEvent(result, operationName, invokeType, src);
     return result;
   }
 
@@ -774,7 +774,7 @@ public class RouterClientProtocol implements ClientProtocol {
       logAuditEvent(false, operationName, invokeType, src);
       throw e;
     }
-    logAuditEvent(true, operationName, invokeType, src);
+    logAuditEvent(result, operationName, invokeType, src);
     return result;
   }
 
@@ -801,7 +801,7 @@ public class RouterClientProtocol implements ClientProtocol {
         logAuditEvent(false, operationName, invokeType, src);
         throw e;
       }
-      logAuditEvent(true, operationName, invokeType, src);
+      logAuditEvent(result, operationName, invokeType, src);
       return result;
     }
 
@@ -828,7 +828,7 @@ public class RouterClientProtocol implements ClientProtocol {
       logAuditEvent(false, operationName, invokeType, src);
       throw e;
     }
-    logAuditEvent(true, operationName, invokeType, src);
+    logAuditEvent(result, operationName, invokeType, src);
     return result;
   }
 
@@ -978,9 +978,12 @@ public class RouterClientProtocol implements ClientProtocol {
           date = dates.get(src);
         }
         ret = getMountPointStatus(src, children.size(), date);
+        LOG.info("Will build the HdfsFileStatus for {} with " +
+            "children mount points, and status is {}.", src, ret);
       } else if (children != null) {
         // The src is a mount point, but there are no files or directories
         ret = getMountPointStatus(src, 0, 0);
+        LOG.info("Will build the HdfsFileStatus for {} by itself.", src);
       }
     }
 
@@ -1007,7 +1010,7 @@ public class RouterClientProtocol implements ClientProtocol {
       logAuditEvent(false, operationName, invokeType, src);
       throw e;
     }
-    logAuditEvent(true, operationName, invokeType, src);
+    logAuditEvent(result, operationName, invokeType, src);
     return result;
   }
 
@@ -1666,7 +1669,7 @@ public class RouterClientProtocol implements ClientProtocol {
       logAuditEvent(false, operationName, invokeType, src);
       throw e;
     }
-    logAuditEvent(false, operationName, invokeType, src);
+    logAuditEvent(true, operationName, invokeType, src);
     return result;
   }
 
