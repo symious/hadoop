@@ -38,7 +38,6 @@ import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
 import org.apache.hadoop.hdfs.server.zoneservice.AuditLogger;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
-import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRuleSection;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneChecker;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneMover;
 
@@ -56,7 +55,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -72,19 +70,11 @@ public class ZoneServiceRestAPI {
   private static final String defaultRatio = "-1";
   private static final String defaultMode = "batch";
   private static final String defaultNull = "N/A";
-  private static final String DC_SEPARATOR = ",";
   private static final Configuration conf = new Configuration();
   private static final int maxThread = conf.getInt(
       DFSConfigKeys.DFS_ZONESERVICE_THREADS_KEY,
       DFSConfigKeys.DFS_ZONESERVICE_THREADS_DEFAULT);
   private static final Semaphore semaphore = new Semaphore(maxThread);
-
-  private final String datacenters = conf.get(
-      DFSConfigKeys.DFS_ZONEMOVER_VALID_DATACENTERS_KEY,
-      DFSConfigKeys.DFS_ZONEMOVER_VALID_DATACENTERS_DEFAULT);
-  private final Set<String> validDataCenters = new HashSet<>
-      (Arrays.asList(datacenters.trim().split(DC_SEPARATOR)));
-
   public Class<? extends StoreDriver> driverClass = conf.getClass(
       DFS_ZONESERVICE_STORE_DRIVER_CLASS,
       DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT,
@@ -94,7 +84,6 @@ public class ZoneServiceRestAPI {
 
   public ZoneServiceRestAPI() {
     driver.init(conf, "ReplicationRuleServlet");
-    validDataCenters.remove("");
   }
 
   /**
@@ -367,11 +356,6 @@ public class ZoneServiceRestAPI {
    */
   protected ResultCode setBatchProcess(String nameSpace, String path,
       String replicaRule) {
-    //Check rule valid for input
-    if (checkRuleInvalid(replicaRule)) {
-      return ResultCode.ILLEGAL_ARGUMENTS;
-    }
-
     Date startTime = new Date();
     String currentMethod =
         Thread.currentThread().getStackTrace()[1].getMethodName();
@@ -443,11 +427,6 @@ public class ZoneServiceRestAPI {
    */
   protected ResultCode createUpdateMap(String nameSpace, String path,
       String replicaRule, boolean allowCreate) {
-    //Check rule valid for input
-    if (checkRuleInvalid(replicaRule)) {
-      return ResultCode.ILLEGAL_ARGUMENTS;
-    }
-
     Date startTime = new Date();
     try {
       String threadName = "monitor_" + nameSpace;
@@ -516,23 +495,6 @@ public class ZoneServiceRestAPI {
           ResultCode.IO_EXCEPTION.getMsg(), "monitor");
       return ResultCode.IO_EXCEPTION;
     }
-  }
-
-  private boolean checkRuleInvalid(String rule) {
-    try {
-      //Check replica valid
-      ReplicationRule replicationRule = ReplicationRule.parseFromString(rule);
-
-      //Check DC valid
-      for (ReplicationRuleSection section: replicationRule.getSections()) {
-        if (!validDataCenters.contains(section.getDataCenter())) {
-          return true;
-        }
-      }
-    } catch (IllegalArgumentException e) {
-      return true;
-    }
-    return false;
   }
 
   private URI getNamespaceUri(String namespace, Configuration conf)
