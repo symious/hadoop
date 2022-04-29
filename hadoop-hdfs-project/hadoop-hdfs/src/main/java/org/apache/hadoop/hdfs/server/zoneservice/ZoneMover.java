@@ -275,6 +275,9 @@ public class ZoneMover {
       throws IOException, InterruptedException {
     checkDataCenterValues(conf, rule, pathRuleMap);
     LOG.info("Start to apply rule: " + rule + " to namenode:" + namenode + ", path: " + paths);
+    if (paths.isEmpty()) {
+      return ExitStatus.SUCCESS.getExitCode();
+    }
 
     NameNodeConnector nnc = null;
     ZoneMover zs = null;
@@ -396,6 +399,9 @@ public class ZoneMover {
       URI namenode, List<Path> paths, ReplicationRule rule,
       Map<String, ReplicationRule> pathRuleMap) throws IOException {
     checkDataCenterValues(conf, rule, pathRuleMap);
+    if (paths.isEmpty()) {
+      return ExitStatus.SUCCESS.getExitCode();
+    }
     Class<? extends StoreDriver> driverClass = conf.getClass(
         DFS_ZONESERVICE_STORE_DRIVER_CLASS,
         DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT,
