@@ -84,6 +84,7 @@ public class RpcPassword {
                         ShadowFileRpcPasswordMapping.class,
                         RpcPasswordMappingServiceProvider.class),
           conf);
+    impl.start();
 
     cacheTimeout =
       conf.getLong(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_SECS,

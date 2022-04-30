@@ -309,6 +309,15 @@
 </property>
 
 <property>
+  <name>hadoop.security.rpc-password.cache.refresh.async</name>
+  <value>false</value>
+  <description>
+    Whether to refresh RPC passwords asynchronously. If true,
+    will spawn a background thread to refresh RPC passwords at regular intervals.
+  </description>
+</property>
+
+<property>
   <name>hadoop.security.credential.clear-text-fallback</name>
   <value>true</value>
   <description>

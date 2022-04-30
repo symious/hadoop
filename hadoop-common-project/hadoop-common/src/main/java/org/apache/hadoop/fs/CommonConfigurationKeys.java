@@ -227,7 +227,14 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
       "hadoop.security.token.service.use_ip";
   public static final boolean HADOOP_SECURITY_TOKEN_SERVICE_USE_IP_DEFAULT =
       true;
-
+  public static final String HADOOP_SECURITY_RPC_PASSWORD_CACHE_REFRESH_ASYNC =
+      "hadoop.security.rpc-password.cache.refresh.async";
+  public static final boolean
+      HADOOP_SECURITY_RPC_PASSWORD_CACHE_REFRESH_ASYNC_DEFAULT = false;
+  public static final String HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_REFRESH_INTERVAL =
+      "hadoop.security.rpc-password.cache.refresh.interval";
+  public static final Long
+      HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_REFRESH_INTERVAL_DEFAULT = 300L;
   /**
    * @see
    * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
