@@ -38,7 +38,7 @@ public class TestFastCopy {
   private DistributedFileSystem srcDFS = null;
   private DistributedFileSystem dstDFS = null;
 
-  private long BLOCKSIZE = 1024;
+  private long BLOCKSIZE = 1024 * 1024;
   private short REPLICATION = 2;
 
   private Path file0 = new Path("/testFastCopy/NoBlocks");
@@ -70,6 +70,7 @@ public class TestFastCopy {
     } catch (Exception e) {
       cluster.shutdown();
       cluster = null;
+      throw e;
     }
   }
 
