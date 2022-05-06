@@ -243,6 +243,15 @@ public class DistributedFileSystem extends FileSystem
   }
 
   /**
+   * Returns the slowdatanodes cache metrics object for this client.
+   *
+   * @return object of DFSSlowDatanodeCacheMetrics
+   */
+  public DFSSlowDatanodeCacheMetrics getSlowDatanodeCacheMetrics() {
+    return dfs.getSlowDatanodeCacheMetricsMetric();
+  }
+
+  /**
    * Checks that the passed URI belongs to this filesystem and returns
    * just the path component. Expects a URI with an absolute path.
    *

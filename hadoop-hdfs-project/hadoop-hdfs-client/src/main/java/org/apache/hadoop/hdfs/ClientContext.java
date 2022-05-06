@@ -24,7 +24,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
@@ -141,6 +144,53 @@ public class ClientContext {
   private final int clientShortCircuitNum;
   private Configuration configuration;
 
+  /**
+   * Whether to avoid slow datanodes when reading or not.
+   */
+  private boolean avoidSlowDataNodesForRead = false;
+
+  /**
+   * Cache slow datanodes for a specific amount of time.
+   */
+  private SlowNodeCache slowNodeCache = null;
+
+  private static final DFSSlowDatanodeCacheMetrics
+      SLOW_DATANODE_CACHE_METRICS_METRIC = new DFSSlowDatanodeCacheMetrics();
+
+  public interface SlowNodeCache {
+    boolean isSlowNode(DatanodeInfo datanodeInfo);
+    void addSlowNode(DatanodeInfo datanodeInfo);
+    long size();
+  }
+
+  public class SlowNodeCacheImpl implements SlowNodeCache {
+    private Cache<String, Boolean> cache;
+
+    public SlowNodeCacheImpl(int expireAfterWrite, int maxSize) {
+      this.cache = CacheBuilder
+          .newBuilder()
+          .maximumSize(maxSize)
+          .expireAfterWrite(expireAfterWrite, TimeUnit.MILLISECONDS)
+          .concurrencyLevel(4)
+          .build();
+    }
+
+    @Override
+    public boolean isSlowNode(DatanodeInfo datanodeInfo) {
+      return this.cache.getIfPresent(datanodeInfo.getDatanodeUuid()) != null;
+    }
+
+    @Override
+    public void addSlowNode(DatanodeInfo datanodeInfo) {
+      this.cache.put(datanodeInfo.getDatanodeUuid(), true);
+    }
+
+    @Override
+    public long size() {
+      return this.cache.size();
+    }
+  }
+
   private ClientContext(String name, DfsClientConf conf,
       Configuration config) {
     final ShortCircuitConf scConf = conf.getShortCircuitConf();
@@ -164,6 +214,11 @@ public class ClientContext {
     this.byteArrayManager = ByteArrayManager.newInstance(
         conf.getWriteByteArrayManagerConf());
     this.deadNodeDetectionEnabled = conf.isDeadNodeDetectionEnabled();
+    this.avoidSlowDataNodesForRead = conf.isAvoidSlowDataNodesForReadEnabled();
+    if(avoidSlowDataNodesForRead && slowNodeCache == null) {
+      slowNodeCache = new SlowNodeCacheImpl(conf.getSlowNodeCacheExpiryMillis(),
+          conf.getSlowNodeCacheSize());
+    }
     initTopologyResolution(config);
   }
 
@@ -232,6 +287,10 @@ public class ClientContext {
             ", Requested: " + requested);
       }
     }
+  }
+
+  DFSSlowDatanodeCacheMetrics getSlowDatanodeCacheMetricsMetric() {
+    return SLOW_DATANODE_CACHE_METRICS_METRIC;
   }
 
   public String getConfString() {
@@ -324,5 +383,19 @@ public class ClientContext {
       deadNodeDetector.shutdown();
       deadNodeDetector = null;
     }
+  }
+
+  /**
+   * @return the avoidSlowDataNodesForRead
+   */
+  public boolean isAvoidSlowDataNodesForRead() {
+    return avoidSlowDataNodesForRead;
+  }
+
+  /**
+   * Obtain SlowNodeDetector of the current client.
+   */
+  public SlowNodeCache getSlowNodeCache() {
+    return slowNodeCache;
   }
 }
