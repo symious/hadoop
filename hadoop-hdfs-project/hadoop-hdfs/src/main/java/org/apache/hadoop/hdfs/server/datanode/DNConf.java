@@ -107,7 +107,7 @@ public class DNConf {
   private final long lifelineIntervalMs;
   final long blockReportInterval;
   final long blockReportSplitThreshold;
-  final boolean peerStatsEnabled;
+  volatile boolean peerStatsEnabled;
   final boolean diskStatsEnabled;
   final long outliersReportIntervalMs;
   final long ibrInterval;
@@ -481,6 +481,10 @@ public class DNConf {
   }
 
   public void setVolFailuresTolerated(int volFailuresTolerated) {
-    this.volFailuresTolerated = volFailuresTolerated;
+    this.volFailuresTolerated = volFailuresTolerated; 
+  }
+
+  void setPeerStatsEnabled(boolean enablePeerStats) {
+    peerStatsEnabled = enablePeerStats;
   }
 }
