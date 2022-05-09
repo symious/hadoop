@@ -108,8 +108,8 @@ public class DNConf {
   final long blockReportInterval;
   final long blockReportSplitThreshold;
   volatile boolean peerStatsEnabled;
-  final boolean diskStatsEnabled;
-  final long outliersReportIntervalMs;
+  volatile boolean diskStatsEnabled;
+  volatile long outliersReportIntervalMs;
   final long ibrInterval;
   final long initialBlockReportDelayMs;
   final long cacheReportInterval;
@@ -486,5 +486,16 @@ public class DNConf {
 
   void setPeerStatsEnabled(boolean enablePeerStats) {
     peerStatsEnabled = enablePeerStats;
+  }
+
+  public void setFileIoProfilingSamplingPercentage(int samplingPercentage) {
+    diskStatsEnabled = Util.isDiskStatsEnabled(samplingPercentage);
+  }
+
+  public void setOutliersReportIntervalMs(String reportIntervalMs) {
+    dn.getConf().set(DFS_DATANODE_OUTLIERS_REPORT_INTERVAL_KEY, reportIntervalMs);
+    outliersReportIntervalMs = getConf().getTimeDuration(
+        DFS_DATANODE_OUTLIERS_REPORT_INTERVAL_KEY,
+        DFS_DATANODE_OUTLIERS_REPORT_INTERVAL_DEFAULT, TimeUnit.MILLISECONDS);
   }
 }
