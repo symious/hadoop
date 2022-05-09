@@ -531,7 +531,8 @@ class DataStreamer extends Daemon {
   private static final int CONGESTION_BACK_OFF_MAX_TIME_IN_MS =
       CONGESTION_BACKOFF_MEAN_TIME_IN_MS * 10;
   private int lastCongestionBackoffTime;
-  private int markSlowNodeAsBadNodeThreshold;
+  private final boolean treatSlowNodeAsBadNode;
+  private final int treatSlowNodeAsBadNodeThreshold;
 
   protected final LoadingCache<DatanodeInfo, DatanodeInfo> excludedNodes;
   private final String[] favoredNodes;
@@ -560,7 +561,8 @@ class DataStreamer extends Daemon {
     this.excludedNodes = initExcludedNodes(conf.getExcludedNodesCacheExpiry());
     this.errorState = new ErrorState(conf.getDatanodeRestartTimeout());
     this.addBlockFlags = flags;
-    this.markSlowNodeAsBadNodeThreshold = conf.getMarkSlowNodeAsBadNodeThreshold();
+    this.treatSlowNodeAsBadNode = conf.getTreatSlowNodeAsBadNode();
+    this.treatSlowNodeAsBadNodeThreshold = conf.getTreatSlowNodeAsBadNodeThreshold();
   }
 
   /**
@@ -1270,15 +1272,15 @@ class DataStreamer extends Daemon {
         slowNodeMap.remove(discontinuousNode);
       }
 
-      if (!slowNodeMap.isEmpty()) {
+      if (treatSlowNodeAsBadNode && !slowNodeMap.isEmpty()) {
         for (Map.Entry<DatanodeInfo, Integer> entry : slowNodeMap.entrySet()) {
-          if (entry.getValue() >= markSlowNodeAsBadNodeThreshold) {
+          if (entry.getValue() >= treatSlowNodeAsBadNodeThreshold) {
             DatanodeInfo slowNode = entry.getKey();
             int index = getDatanodeIndex(slowNode);
             if (index >= 0) {
               errorState.setBadNodeIndex(index);
               throw new IOException("Receive reply from slowNode " + slowNode +
-                  " for continuous " + markSlowNodeAsBadNodeThreshold +
+                  " for continuous " + treatSlowNodeAsBadNodeThreshold +
                   " times, treating it as badNode");
             }
             slowNodeMap.remove(entry.getKey());
