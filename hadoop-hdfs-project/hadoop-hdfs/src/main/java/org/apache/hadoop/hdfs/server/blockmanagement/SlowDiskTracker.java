@@ -198,7 +198,7 @@ public class SlowDiskTracker {
       return this.slowDiskID;
     }
 
-    double getMaxLatency() {
+    public double getMaxLatency() {
       double maxLatency = 0;
       for (double latency : latencyMap.values()) {
         if (latency > maxLatency) {
