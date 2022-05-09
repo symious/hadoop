@@ -1640,11 +1640,8 @@ public class DataNode extends ReconfigurableBase
     startMetricsLogger();
 
     if (dnConf.diskStatsEnabled) {
-      int maxSlowDisksToExclude = getConf().getInt(
-          DFSConfigKeys.DFS_DATANODE_MAX_SLOWDISKS_TO_EXCLUDE_KEY,
-          DFSConfigKeys.DFS_DATANODE_MAX_SLOWDISKS_TO_EXCLUDE_DEFAULT);
       diskMetrics = new DataNodeDiskMetrics(this,
-          dnConf.outliersReportIntervalMs, maxSlowDisksToExclude);
+          dnConf.outliersReportIntervalMs, getConf());
     }
   }
 

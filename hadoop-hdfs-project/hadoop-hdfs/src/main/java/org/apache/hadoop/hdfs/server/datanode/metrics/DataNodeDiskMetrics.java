@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.metrics;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.blockmanagement.SlowDiskTracker;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -68,6 +69,15 @@ public class DataNodeDiskMetrics {
   private boolean overrideStatus = true;
 
   /**
+   * Minimum number of disks to run outlier detection.
+   */
+  private final long minOutlierDetectionDisks;
+  /**
+   * Threshold in milliseconds below which a disk is definitely not slow.
+   */
+  private final long lowThresholdMs;
+
+  /**
    * The number of slow disks that needs to be excluded.
    */
   private final int maxSlowDisksToExclude;
@@ -77,12 +87,20 @@ public class DataNodeDiskMetrics {
   private List<String> slowDisksToExclude = new ArrayList<>();
 
   public DataNodeDiskMetrics(DataNode dn, long diskOutlierDetectionIntervalMs,
-      int maxSlowDisksToExclude) {
+      Configuration conf) {
     this.dn = dn;
     this.detectionInterval = diskOutlierDetectionIntervalMs;
-    this.maxSlowDisksToExclude = maxSlowDisksToExclude;
-    slowDiskDetector = new OutlierDetector(MIN_OUTLIER_DETECTION_DISKS,
-        SLOW_DISK_LOW_THRESHOLD_MS);
+    minOutlierDetectionDisks =
+        conf.getLong(DFSConfigKeys.DFS_DATANODE_MIN_OUTLIER_DETECTION_DISKS_KEY,
+            DFSConfigKeys.DFS_DATANODE_MIN_OUTLIER_DETECTION_DISKS_DEFAULT);
+    lowThresholdMs =
+        conf.getLong(DFSConfigKeys.DFS_DATANODE_SLOWDISK_LOW_THRESHOLD_MS_KEY,
+            DFSConfigKeys.DFS_DATANODE_SLOWDISK_LOW_THRESHOLD_MS_DEFAULT);
+    slowDiskDetector =
+        new OutlierDetector(minOutlierDetectionDisks, lowThresholdMs);
+    this.maxSlowDisksToExclude = conf.getInt(
+        DFSConfigKeys.DFS_DATANODE_MAX_SLOWDISKS_TO_EXCLUDE_KEY,
+        DFSConfigKeys.DFS_DATANODE_MAX_SLOWDISKS_TO_EXCLUDE_DEFAULT);
     shouldRun = true;
     startDiskOutlierDetectionThread();
   }
