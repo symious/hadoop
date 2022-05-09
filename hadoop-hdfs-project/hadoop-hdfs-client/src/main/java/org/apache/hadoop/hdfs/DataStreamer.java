@@ -38,6 +38,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -525,10 +526,12 @@ class DataStreamer extends Daemon {
   // List of congested data nodes. The stream will back off if the DataNodes
   // are congested
   private final List<DatanodeInfo> congestedNodes = new ArrayList<>();
+  private final Map<DatanodeInfo, Integer> slowNodeMap = new HashMap<>();
   private static final int CONGESTION_BACKOFF_MEAN_TIME_IN_MS = 5000;
   private static final int CONGESTION_BACK_OFF_MAX_TIME_IN_MS =
       CONGESTION_BACKOFF_MEAN_TIME_IN_MS * 10;
   private int lastCongestionBackoffTime;
+  private int markSlowNodeAsBadNodeThreshold;
 
   protected final LoadingCache<DatanodeInfo, DatanodeInfo> excludedNodes;
   private final String[] favoredNodes;
@@ -557,6 +560,7 @@ class DataStreamer extends Daemon {
     this.excludedNodes = initExcludedNodes(conf.getExcludedNodesCacheExpiry());
     this.errorState = new ErrorState(conf.getDatanodeRestartTimeout());
     this.addBlockFlags = flags;
+    this.markSlowNodeAsBadNodeThreshold = conf.getMarkSlowNodeAsBadNodeThreshold();
   }
 
   /**
@@ -1135,12 +1139,17 @@ class DataStreamer extends Daemon {
           long seqno = ack.getSeqno();
           // processes response status from datanodes.
           ArrayList<DatanodeInfo> congestedNodesFromAck = new ArrayList<>();
+          ArrayList<DatanodeInfo> slownodesFromAck = new ArrayList<>();
           for (int i = ack.getNumOfReplies()-1; i >=0  && dfsClient.clientRunning; i--) {
             final Status reply = PipelineAck.getStatusFromHeader(ack
                 .getHeaderFlag(i));
             if (PipelineAck.getECNFromHeader(ack.getHeaderFlag(i)) ==
                 PipelineAck.ECN.CONGESTED) {
               congestedNodesFromAck.add(targets[i]);
+            }
+            if (PipelineAck.getSLOWFromHeader(ack.getHeaderFlag(i)) ==
+                PipelineAck.SLOW.SLOW) {
+              slownodesFromAck.add(targets[i]);
             }
             // Restart will not be treated differently unless it is
             // the local node or the only one in the pipeline.
@@ -1169,6 +1178,15 @@ class DataStreamer extends Daemon {
               congestedNodes.clear();
               lastCongestionBackoffTime = 0;
             }
+          }
+
+          if (slownodesFromAck.isEmpty()) {
+            if (!slowNodeMap.isEmpty()) {
+              slowNodeMap.clear();
+            }
+          } else {
+            markSlowNode(slownodesFromAck);
+            LOG.debug("SlowNodeMap content: {}.", slowNodeMap);
           }
 
           assert seqno != PipelineAck.UNKOWN_SEQNO :
@@ -1237,9 +1255,50 @@ class DataStreamer extends Daemon {
       }
     }
 
+    void markSlowNode(List<DatanodeInfo> slownodesFromAck) throws IOException {
+      Set<DatanodeInfo> discontinuousNodes = new HashSet<>(slowNodeMap.keySet());
+      for (DatanodeInfo slowNode : slownodesFromAck) {
+        if (!slowNodeMap.containsKey(slowNode)) {
+          slowNodeMap.put(slowNode, 1);
+        } else {
+          int oldCount = slowNodeMap.get(slowNode);
+          slowNodeMap.put(slowNode, ++oldCount);
+        }
+        discontinuousNodes.remove(slowNode);
+      }
+      for (DatanodeInfo discontinuousNode : discontinuousNodes) {
+        slowNodeMap.remove(discontinuousNode);
+      }
+
+      if (!slowNodeMap.isEmpty()) {
+        for (Map.Entry<DatanodeInfo, Integer> entry : slowNodeMap.entrySet()) {
+          if (entry.getValue() >= markSlowNodeAsBadNodeThreshold) {
+            DatanodeInfo slowNode = entry.getKey();
+            int index = getDatanodeIndex(slowNode);
+            if (index >= 0) {
+              errorState.setBadNodeIndex(index);
+              throw new IOException("Receive reply from slowNode " + slowNode +
+                  " for continuous " + markSlowNodeAsBadNodeThreshold +
+                  " times, treating it as badNode");
+            }
+            slowNodeMap.remove(entry.getKey());
+          }
+        }
+      }
+    }
+
     void close() {
       responderClosed = true;
       this.interrupt();
+    }
+
+    int getDatanodeIndex(DatanodeInfo datanodeInfo) {
+      for (int i = 0; i < targets.length; i++) {
+        if (targets[i].equals(datanodeInfo)) {
+          return i;
+        }
+      }
+      return -1;
     }
   }
 

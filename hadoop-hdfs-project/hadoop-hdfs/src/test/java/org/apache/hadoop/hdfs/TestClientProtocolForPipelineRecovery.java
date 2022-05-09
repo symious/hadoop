@@ -39,6 +39,7 @@ import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.BlockWrite;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.protocol.datatransfer.PipelineAck;
 import org.apache.hadoop.hdfs.protocolPB.DatanodeProtocolClientSideTranslatorPB;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeDescriptor;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.BlockUCState;
@@ -798,6 +799,58 @@ public class TestClientProtocolForPipelineRecovery {
       if (cluster != null) {
         cluster.shutdown();
       }
+    }
+  }
+
+  @Test
+  public void testPipelineRecoveryWithSlowNode() throws Exception {
+    final int oneWriteSize = 5000;
+
+    final int threshold = 3;
+    Configuration conf = new HdfsConfiguration();
+    conf.setInt(HdfsClientConfigKeys.DFS_CLIENT_MARK_SLOWNODE_AS_BADNODE_THRESHOLD_KEY, threshold);
+
+    // Need 4 datanodes to verify the replaceDatanode during pipeline recovery
+    final MiniDFSCluster cluster =
+        new MiniDFSCluster.Builder(conf).numDataNodes(4).build();
+    DataNodeFaultInjector old = DataNodeFaultInjector.get();
+
+    try {
+      DistributedFileSystem fs = cluster.getFileSystem();
+      Path fileName = new Path("/f");
+      FSDataOutputStream o = fs.create(fileName);
+      // Flush to get the pipeline created.
+      o.writeBytes("hello");
+      o.hflush();
+      DFSOutputStream dfsO = (DFSOutputStream) o.getWrappedStream();
+      final DatanodeInfo[] pipeline = dfsO.getStreamer().getNodes();
+      final String lastDn = pipeline[2].getXferAddr(false);
+
+      DataNodeFaultInjector.set(new DataNodeFaultInjector() {
+        @Override
+        public void markSlow(String mirrorAddr, int[] replies) {
+          if (!lastDn.equals(mirrorAddr)) {
+            // Only fail for last DN
+            return;
+          }
+          assert(replies.length == 2);
+          replies[1] = PipelineAck.setSLOWForHeader(replies[1], PipelineAck.SLOW.SLOW);
+        }
+      });
+
+      int count = 0;
+      Random r = new Random();
+      byte[] b = new byte[oneWriteSize];
+      while (count < threshold) {
+        r.nextBytes(b);
+        o.write(b);
+        count++;
+        o.hflush();
+      }
+      Assert.assertNotEquals(lastDn, dfsO.getStreamer().getNodes()[2].getXferAddr(false));
+    } finally {
+      DataNodeFaultInjector.set(old);
+      cluster.shutdown();
     }
   }
 }
