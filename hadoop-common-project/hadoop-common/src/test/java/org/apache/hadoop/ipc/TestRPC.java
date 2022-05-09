@@ -1057,7 +1057,7 @@ public class TestRPC extends TestRpcBase {
     conf.set(CommonConfigurationKeys.
         RPC_METRICS_PERCENTILES_INTERVALS_KEY, "" + interval);
 
-    server = setupTestServer(conf, 5);
+    server = setupTestServer(conf, 1);
     String testUser = "testUser";
     UserGroupInformation anotherUser =
         UserGroupInformation.createRemoteUser(testUser);
@@ -1102,6 +1102,10 @@ public class TestRPC extends TestRpcBase {
           UserGroupInformation.getCurrentUser().getShortUserName();
       assertTrue(actualUserVsCon.contains("\"" + proxyUser + "\":1"));
       assertTrue(actualUserVsCon.contains("\"" + testUser + "\":1"));
+
+      String actualHandlerOps = MetricsAsserts
+          .getStringMetric("NumHandlerProcessedCalls", rpcMetrics);
+      assertEquals(actualHandlerOps, "[3000]");
 
       proxy.lockAndSleep(null, newSleepRequest(5));
       rpcMetrics = getMetrics(server.getRpcMetrics().name());

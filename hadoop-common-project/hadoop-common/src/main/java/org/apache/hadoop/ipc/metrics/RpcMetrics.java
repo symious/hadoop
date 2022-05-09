@@ -168,6 +168,11 @@ public class RpcMetrics {
     return server.getNumDroppedConnections();
   }
 
+  @Metric("Number of handler processed calls")
+  public String numHandlerProcessedCalls() {
+    return server.getHandlerProcessedCalls();
+  }
+
   // Public instrumentation methods that could be extracted to an
   // abstract class if we decide to do custom instrumentation classes a la
   // JobTrackerInstrumentation. The methods with //@Override comment are

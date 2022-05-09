@@ -72,6 +72,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicLongArray;
 
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
@@ -516,6 +517,7 @@ public abstract class Server {
   private Map<Integer, Listener> auxiliaryListenerMap;
   private Responder responder = null;
   private Handler[] handlers = null;
+  private AtomicLongArray handlerProcessedCalls = null;
 
   private boolean logSlowRPC = false;
   private boolean rpcPasswordAuthenticate;
@@ -3035,7 +3037,9 @@ public abstract class Server {
 
   /** Handles queued calls . */
   private class Handler extends Thread {
+    int id;
     public Handler(int instanceNumber) {
+      this.id = instanceNumber;
       this.setDaemon(true);
       this.setName("IPC Server handler "+ instanceNumber +
           " on default port " + port);
@@ -3111,6 +3115,7 @@ public abstract class Server {
         } finally {
           CurCall.set(null);
           IOUtils.cleanupWithLogger(LOG, traceScope);
+          handlerProcessedCalls.getAndAdd(id, 1);
           if (call != null) {
             updateMetrics(call, startTimeNanos, connDropped);
             ProcessingDetails.LOG.debug(
@@ -3252,6 +3257,7 @@ public abstract class Server {
     // set the server port to the default listener port.
     this.port = listener.getAddress().getPort();
     connectionManager = new ConnectionManager();
+    this.handlerProcessedCalls = new AtomicLongArray(handlerCount);
     this.rpcMetrics = RpcMetrics.create(this, conf);
     this.rpcDetailedMetrics = RpcDetailedMetrics.create(this.port);
     this.tcpNoDelay = conf.getBoolean(
@@ -3693,7 +3699,23 @@ public abstract class Server {
    */
   public long getNumDroppedConnections() {
     return connectionManager.getDroppedConnections();
+  }
 
+  /**
+   * The number of processed calls of each handler
+   * @return the number of dropped rpc connections
+   */
+  public String getHandlerProcessedCalls() {
+    ObjectMapper mapper = new ObjectMapper();
+    try {
+      Long[] arr = new Long[handlerProcessedCalls.length()];
+      for (int i = 0; i < handlerProcessedCalls.length(); i++) {
+        arr[i] = handlerProcessedCalls.get(i);
+      }
+      return mapper.writeValueAsString(arr);
+    } catch (IOException ignored) {
+    }
+    return null;
   }
 
   /**
