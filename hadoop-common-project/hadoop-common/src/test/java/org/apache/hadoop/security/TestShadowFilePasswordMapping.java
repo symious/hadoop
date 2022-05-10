@@ -19,34 +19,21 @@ package org.apache.hadoop.security;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
-import org.apache.hadoop.test.GenericTestUtils;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import static org.mockito.Mockito.mock;
 
 public class TestShadowFilePasswordMapping {
-  private static final Logger TESTLOG =
-      LoggerFactory.getLogger(TestShadowFilePasswordMapping.class);
-
-  private final GenericTestUtils.LogCapturer shellMappingLog =
-      GenericTestUtils.LogCapturer.captureLogs(
-          ShellBasedUnixGroupsMapping.LOG);
 
   private final static String TEST_SHADOW_FILE_1 = "shadow1";
   private final static String TEST_SHADOW_FILE_2 = "shadow2";
 
   @Test
-  public void testCacheRefresh() throws IOException {
+  public void testCacheRefresh() throws IOException, InterruptedException {
     ShadowFileRpcPasswordMapping mapping = new ShadowFileRpcPasswordMapping();
     Configuration conf = new Configuration();
     ClassLoader classLoader = getClass().getClassLoader();
@@ -66,7 +53,7 @@ public class TestShadowFilePasswordMapping {
     File shadowFile2 = new File(classLoader.getResource(TEST_SHADOW_FILE_2).getFile());
     conf.set(CommonConfigurationKeys.
         HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, shadowFile2.getAbsolutePath());
-    System.out.println(shadowFile1.getAbsolutePath());
+    System.out.println(shadowFile2.getAbsolutePath());
     mapping.setConf(conf);
 
     mapping.cacheRefresh(true);
@@ -74,6 +61,21 @@ public class TestShadowFilePasswordMapping {
     assertEquals(mapping.getRpcPassword("a"), "aaaShadow2");
     assertNull(mapping.getRpcPassword("b"));
     assertEquals(mapping.getRpcPassword("c"), "cccShadow2");
+
+    //Test cache refresh async
+    conf.set(CommonConfigurationKeys.
+        HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, shadowFile1.getAbsolutePath());
+    conf.setBoolean(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_REFRESH_ASYNC, true);
+    conf.setLong(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_REFRESH_INTERVAL, 8);
+    System.out.println(shadowFile1.getAbsolutePath());
+    mapping.setConf(conf);
+    mapping.start();
+
+    Thread.sleep(900);
+
+    assertEquals(mapping.getRpcPassword("a"), "aaaShadow1");
+    assertNull(mapping.getRpcPassword("b"));
+    assertEquals(mapping.getRpcPassword("c"), "cccShadow1");
   }
 }
 

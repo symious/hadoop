@@ -55,5 +55,10 @@ public interface RpcPasswordMappingServiceProvider {
    * @throws IOException
    */
   void cacheRefresh(boolean force) throws IOException;
+
+  /**
+   * Start service
+   */
+  public void start();
 }
 
