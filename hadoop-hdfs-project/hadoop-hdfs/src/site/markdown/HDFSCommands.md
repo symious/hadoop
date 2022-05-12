@@ -418,6 +418,7 @@ Usage:
           [-safemode enter | leave | get]
           [-nameservice disable | enable <nameservice>]
           [-getDisabledNameservices]
+          [-refreshRouterArgs <host:ipc_port> <key> [arg1..argn]]
 
 | COMMAND\_OPTION | Description |
 |:---- |:---- |
@@ -430,6 +431,7 @@ Usage:
 | `-safemode` `enter` `leave` `get` | Manually set the Router entering or leaving safe mode. The option *get* will be used for verifying if the Router is in safe mode state. |
 | `-nameservice` `disable` `enable` *nameservice* | Disable/enable  a name service from the federation. If disabled, requests will not go to that name service. |
 | `-getDisabledNameservices` | Get the name services that are disabled in the federation. |
+| `refreshRouterArgs` \<host:ipc\_port\> \<key\> [arg1..argn] | To trigger a runtime-refresh of the resource specified by \<key\> on \<host:ipc\_port\>. For example, to enable white list checking, we just need to send a refresh command other than restart the router server. |
 
 The commands for managing Router-based federation. See [Mount table management](../hadoop-hdfs-rbf/HDFSRouterFederation.html#Mount_table_management) for more info.
 

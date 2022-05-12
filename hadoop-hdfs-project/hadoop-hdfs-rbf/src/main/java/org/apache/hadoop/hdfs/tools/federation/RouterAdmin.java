@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,8 +30,10 @@ import java.util.Map;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
@@ -67,7 +70,10 @@ import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RefreshCallQueueProtocol.RefreshCallQueueType;
+import org.apache.hadoop.ipc.RefreshResponse;
 import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.ipc.protocolPB.GenericRefreshProtocolClientSideTranslatorPB;
+import org.apache.hadoop.ipc.protocolPB.GenericRefreshProtocolPB;
 import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolClientSideTranslatorPB;
 import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolPB;
 import org.apache.hadoop.net.NetUtils;
@@ -120,7 +126,8 @@ public class RouterAdmin extends Configured implements Tool {
         + "\t[-nameservice enable | disable <nameservice>]\n"
         + "\t[-getDisabledNameservices]\n"
         + "\t[-refresh]\n"
-        + "\t[-refreshCallQueue] [-reload]\n";
+        + "\t[-refreshCallQueue] [-reload]\n"
+        + "\t[-refreshRouterArgs <host:ipc_port> <key> [arg1..argn]]\n";
 
     System.out.println(usage);
   }
@@ -176,6 +183,12 @@ public class RouterAdmin extends Configured implements Tool {
       }
     } else if ("-nameservice".equalsIgnoreCase(cmd)) {
       if (argv.length < 3) {
+        System.err.println("Not enough parameters specificed for cmd " + cmd);
+        printUsage();
+        return exitCode;
+      }
+    } else if ("-refreshRouterArgs".equalsIgnoreCase(cmd)) {
+      if (argv.length < 2) {
         System.err.println("Not enough parameters specificed for cmd " + cmd);
         printUsage();
         return exitCode;
@@ -245,6 +258,8 @@ public class RouterAdmin extends Configured implements Tool {
         }
       } else if ("-refreshCallQueue".equals(cmd)) {
         exitCode = refreshCallQueue(argv);
+      } else if ("-refreshRouterArgs".equals(cmd)) {
+        exitCode = genericRefresh(argv, i);
       } else {
         printUsage();
         return exitCode;
@@ -891,6 +906,61 @@ public class RouterAdmin extends Configured implements Tool {
           " unsuccessfully for " + hostport);
     }
     return returnCode;
+  }
+
+  public int genericRefresh(String[] argv, int i) throws IOException {
+    String hostport = argv[i++];
+    String identifier = argv[i++];
+    String[] args = Arrays.copyOfRange(argv, i, argv.length);
+
+    // Get the current configuration
+    Configuration conf = getConf();
+
+    // for security authorization
+    // server principal for this call
+    // should be NN's one.
+    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_SERVICE_USER_NAME_KEY,
+        conf.get(DFSConfigKeys.DFS_NAMENODE_KERBEROS_PRINCIPAL_KEY, ""));
+
+    // Create the client
+    Class<?> xface = GenericRefreshProtocolPB.class;
+    InetSocketAddress address = NetUtils.createSocketAddr(hostport);
+    UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+
+    RPC.setProtocolEngine(conf, xface, ProtobufRpcEngine.class);
+    GenericRefreshProtocolPB proxy = (GenericRefreshProtocolPB)RPC.getProxy(
+        xface, RPC.getProtocolVersion(xface), address, ugi, conf,
+        NetUtils.getDefaultSocketFactory(conf), 0);
+
+    Collection<RefreshResponse> responses = null;
+    try (GenericRefreshProtocolClientSideTranslatorPB xlator =
+             new GenericRefreshProtocolClientSideTranslatorPB(proxy)) {
+      // Refresh
+      responses = xlator.refresh(identifier, args);
+
+      int returnCode = 0;
+
+      // Print refresh responses
+      System.out.println("Refresh Responses:\n");
+      for (RefreshResponse response : responses) {
+        System.out.println(response.toString());
+
+        if (returnCode == 0 && response.getReturnCode() != 0) {
+          // This is the first non-zero return code, so we should return this
+          returnCode = response.getReturnCode();
+        } else if (returnCode != 0 && response.getReturnCode() != 0) {
+          // Then now we have multiple non-zero return codes,
+          // so we merge them into -1
+          returnCode = -1;
+        }
+      }
+      return returnCode;
+    } finally {
+      if (responses == null) {
+        System.out.println("Failed to get response.\n");
+        return -1;
+      }
+    }
   }
 
   /**

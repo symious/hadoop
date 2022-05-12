@@ -23,6 +23,7 @@ import static org.apache.hadoop.hdfs.server.federation.fairness.RefreshFairnessP
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.Set;
 
@@ -66,11 +67,16 @@ import org.apache.hadoop.hdfs.server.federation.store.protocol.UpdateMountTableE
 import org.apache.hadoop.hdfs.server.federation.store.protocol.UpdateMountTableEntryResponse;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
+import org.apache.hadoop.ipc.GenericRefreshProtocol;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RPC.Server;
 import org.apache.hadoop.ipc.RefreshCallQueueProtocol;
 import org.apache.hadoop.ipc.RefreshRegistry;
+import org.apache.hadoop.ipc.RefreshResponse;
+import org.apache.hadoop.ipc.proto.GenericRefreshProtocolProtos;
+import org.apache.hadoop.ipc.protocolPB.GenericRefreshProtocolPB;
+import org.apache.hadoop.ipc.protocolPB.GenericRefreshProtocolServerSideTranslatorPB;
 import org.apache.hadoop.ipc.proto.RefreshCallQueueProtocolProtos;
 import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolPB;
 import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolServerSideTranslatorPB;
@@ -89,7 +95,7 @@ import com.google.protobuf.BlockingService;
  */
 public class RouterAdminServer extends AbstractService
     implements MountTableManager, RouterStateManager, NameserviceManager,
-    RefreshCallQueueProtocol {
+    RefreshCallQueueProtocol, GenericRefreshProtocol {
 
   private static final Logger LOG =
       LoggerFactory.getLogger(RouterAdminServer.class);
@@ -167,8 +173,16 @@ public class RouterAdminServer extends AbstractService
         RefreshCallQueueProtocolProtos.RefreshCallQueueProtocolService.
         newReflectiveBlockingService(refreshCallQueueXlator);
 
+    GenericRefreshProtocolServerSideTranslatorPB genericRefreshXlator =
+        new GenericRefreshProtocolServerSideTranslatorPB(this);
+    BlockingService genericRefreshService =
+        GenericRefreshProtocolProtos.GenericRefreshProtocolService.
+            newReflectiveBlockingService(genericRefreshXlator);
+
     DFSUtil.addPBProtocol(conf, RefreshCallQueueProtocolPB.class,
         refreshCallQueueService, adminServer);
+    DFSUtil.addPBProtocol(conf, GenericRefreshProtocolPB.class,
+        genericRefreshService, adminServer);
 
     registerRefreshFairnessPolicyControllerHandler();
   }
@@ -506,5 +520,11 @@ public class RouterAdminServer extends AbstractService
    */
   public static String getSuperGroup(){
     return superGroup;
+  }
+
+  @Override // GenericRefreshProtocol
+  public Collection<RefreshResponse> refresh(String identifier, String[] args) {
+    // Let the registry handle as needed
+    return RefreshRegistry.defaultRegistry().dispatch(identifier, args);
   }
 }
