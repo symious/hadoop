@@ -26,11 +26,13 @@ import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.AuthorizationException;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.logaggregation.ContainerLogAggregationType;
 import org.apache.hadoop.yarn.logaggregation.ContainerLogsRequest;
 import org.apache.hadoop.yarn.logaggregation.filecontroller.LogAggregationFileControllerFactory;
+import org.apache.hadoop.yarn.server.metrics.LogWebServiceMetrics;
 import org.apache.hadoop.yarn.webapp.ForbiddenException;
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
 import org.apache.hadoop.yarn.webapp.util.YarnWebServiceUtils;
@@ -58,6 +60,9 @@ import java.util.Set;
 public final class LogWebServiceUtils {
   private static final Logger LOG =
       LoggerFactory.getLogger(LogWebServiceUtils.class);
+
+  private static final LogWebServiceMetrics METRICS =
+      LogWebServiceMetrics.getInstance();
 
   private LogWebServiceUtils() {
   }
@@ -117,8 +122,10 @@ public final class LogWebServiceUtils {
         Set<String> logTypes = new HashSet<>();
         logTypes.add(logFile);
         request.setLogTypes(logTypes);
+        long startTime = Time.monotonicNow();
         boolean findLogs = factory.getFileControllerForRead(appId, appOwner)
             .readAggregatedLogs(request, os);
+        METRICS.addReadHDFSLatency(Time.monotonicNow() - startTime);
         if (!findLogs) {
           os.write(("Can not find logs for container:" + containerIdStr)
               .getBytes(Charset.forName("UTF-8")));

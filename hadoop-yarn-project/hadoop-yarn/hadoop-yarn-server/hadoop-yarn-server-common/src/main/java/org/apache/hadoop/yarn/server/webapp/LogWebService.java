@@ -36,6 +36,7 @@ import org.apache.hadoop.http.JettyUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.client.AuthenticatedURL;
 import org.apache.hadoop.security.authentication.client.AuthenticationException;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.api.records.timelineservice.TimelineEntity;
@@ -45,6 +46,7 @@ import org.apache.hadoop.yarn.logaggregation.filecontroller.LogAggregationFileCo
 import org.apache.hadoop.yarn.server.metrics.AppAttemptMetricsConstants;
 import org.apache.hadoop.yarn.server.metrics.ApplicationMetricsConstants;
 import org.apache.hadoop.yarn.server.metrics.ContainerMetricsConstants;
+import org.apache.hadoop.yarn.server.metrics.LogWebServiceMetrics;
 import org.apache.hadoop.yarn.webapp.YarnJacksonJaxbJsonProvider;
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
 import org.slf4j.Logger;
@@ -87,6 +89,9 @@ public class LogWebService implements AppInfoProvider {
 
   private final LogServlet logServlet;
   private volatile Client webTimelineClient;
+
+  private static final LogWebServiceMetrics METRICS =
+      LogWebServiceMetrics.getInstance();
 
   static {
     init();
@@ -419,8 +424,12 @@ public class LogWebService implements AppInfoProvider {
           ContainerId.fromString(containerIdStr).getApplicationAttemptId()
               .getApplicationId().toString());
     }
-    return logServlet.getLogFile(req, containerIdStr, filename, format, start,
+    long startTime = Time.monotonicNow();
+    Response response = logServlet.getLogFile(req, containerIdStr, filename, format, start,
         size, nmId, redirectedFromNode, clusterId, manualRedirection);
+    long latency = Time.monotonicNow() - startTime;
+    METRICS.addGetLogsLatency(latency);
+    return response;
   }
 
   @VisibleForTesting protected Set<TimelineEntity> getEntities(String path,
