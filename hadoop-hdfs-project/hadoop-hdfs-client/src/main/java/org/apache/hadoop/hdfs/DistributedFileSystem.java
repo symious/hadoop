@@ -3643,4 +3643,13 @@ public class DistributedFileSystem extends FileSystem
       throws IOException {
     return new FileSystemMultipartUploaderBuilder(this, basePath);
   }
+
+  protected void closeBasicFileSystem() throws IOException {
+    super.close();
+  }
+
+  protected void renameBasicFileSystem(final Path src, final Path dst,
+      final Options.Rename... options) throws IOException {
+    super.rename(src, dst, options);
+  }
 }
