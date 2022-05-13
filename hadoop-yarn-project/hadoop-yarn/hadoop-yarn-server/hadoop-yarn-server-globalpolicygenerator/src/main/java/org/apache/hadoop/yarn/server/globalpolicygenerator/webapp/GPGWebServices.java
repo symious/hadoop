@@ -107,9 +107,7 @@ public class GPGWebServices{
     response.setContentType(null);
   }
 
-  /**
-   * Performs an invocation of the the remote RMWebService.
-   */
+  //Performs an invocation of the the remote RMWebService.
   public static <T> T invokeRMWebService(String webAddr,
       String path, final Class<T> returnType, String deSelectParam) {
     Client client = Client.create();

@@ -49,9 +49,7 @@ public final class GPGUtils {
   private GPGUtils() {
   }
 
-  /**
-   * Performs an invocation of the the remote RMWebService.
-   */
+  //Performs an invocation of the the remote RMWebService.
   public static <T> T invokeRMWebService(Configuration conf, String webAddr,
       String path, final Class<T> returnType, String deSelectParam) {
     Client client = Client.create();
@@ -81,9 +79,7 @@ public final class GPGUtils {
     }
   }
 
-  /**
-   * Performs an invocation of the the remote RMWebService.
-   */
+  //Performs an invocation of the the remote RMWebService.
   public static <T> T invokeRMWebService(Configuration conf, String webAddr,
       String path, final Class<T> returnType) {
     return invokeRMWebService(conf, webAddr, path, returnType, null);

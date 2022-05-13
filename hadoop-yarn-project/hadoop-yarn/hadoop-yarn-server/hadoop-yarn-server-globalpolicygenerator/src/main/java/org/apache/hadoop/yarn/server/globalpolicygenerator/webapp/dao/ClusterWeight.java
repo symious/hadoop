@@ -23,9 +23,8 @@ import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
 
-/**
- * Simple class representing a key-value pair <cluster,weight>,eg:<cluster1,1>.
- */
+//Simple class representing a key-value pair <cluster,weight>,eg:<cluster1,1>.
+
 @XmlRootElement(name = "policy-requests")
 @XmlAccessorType(XmlAccessType.FIELD)
 public class ClusterWeight {
