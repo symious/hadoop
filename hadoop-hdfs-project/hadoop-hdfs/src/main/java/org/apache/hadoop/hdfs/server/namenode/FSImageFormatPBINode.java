@@ -292,12 +292,6 @@ public final class FSImageFormatPBINode {
       }
     }
 
-    private void fillUpInodeList(ArrayList<INode> inodeList, INode inode) {
-      if(inode.isFile()) {
-        inodeList.add(inode);
-      }
-    }
-
     private void addToCacheAndBlockMap(final ArrayList<INode> inodeList) {
       final ArrayList<INode> inodes = new ArrayList<>(inodeList);
       nameCacheUpdateExecutor.submit(
@@ -384,7 +378,9 @@ public final class FSImageFormatPBINode {
           synchronized(this) {
             dir.addToInodeMap(n);
           }
-          fillUpInodeList(inodeList, n);
+          if(n.isFile()) {
+            inodeList.add(n);
+          }
         }
         cntr++;
         if (counter != null) {
