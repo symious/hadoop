@@ -171,6 +171,9 @@ public class EditLogTailer {
    */
   private final long maxTxnsPerLock;
 
+  private volatile boolean onlyDurableTxns =
+      DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT;
+
   public EditLogTailer(FSNamesystem namesystem, Configuration conf) {
     this.tailerThread = new EditLogTailerThread();
     this.conf = conf;
@@ -259,6 +262,25 @@ public class EditLogTailer {
 
     LOG.debug("logRollPeriodMs=" + logRollPeriodMs +
         " sleepTime=" + sleepTimeMs);
+
+    boolean confOnlyDurableTxns = conf.getBoolean(
+        DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
+        DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT);
+    setOnlyDurableTxns(confOnlyDurableTxns);
+  }
+
+  public boolean setOnlyDurableTxns(boolean newValue) {
+    if (this.onlyDurableTxns != newValue) {
+      LOG.info("Will change onlyDurableTxns from "
+          + this.onlyDurableTxns + " to " + newValue);
+      this.onlyDurableTxns = newValue;
+    }
+    return this.onlyDurableTxns;
+  }
+
+  @VisibleForTesting
+  public boolean isOnlyDurableTxns() {
+    return this.onlyDurableTxns;
   }
 
   public void start() {
@@ -316,6 +338,11 @@ public class EditLogTailer {
 
   @VisibleForTesting
   public long doTailEdits() throws IOException, InterruptedException {
+     return doTailEdits(true);
+  }
+
+  public long doTailEdits(boolean onlyDurableTxns)
+      throws IOException, InterruptedException {
     // Write lock needs to be interruptible here because the 
     // transitionToActive RPC takes the write lock before calling
     // tailer.stop() -- so if we're not interruptible, it will
@@ -332,7 +359,7 @@ public class EditLogTailer {
       Collection<EditLogInputStream> streams;
       try {
         streams = editLog.selectInputStreams(lastTxnId + 1, 0,
-            null, inProgressOk, true);
+            null, inProgressOk, onlyDurableTxns);
       } catch (IOException ioe) {
         // This is acceptable. If we try to tail edits in the middle of an edits
         // log roll, i.e. the last one has been finalized but the new inprogress
@@ -487,7 +514,7 @@ public class EditLogTailer {
           // state updates.
           namesystem.cpLockInterruptibly();
           try {
-            editsTailed = doTailEdits();
+            editsTailed = doTailEdits(onlyDurableTxns);
           } finally {
             namesystem.cpUnlock();
           }

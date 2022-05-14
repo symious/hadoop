@@ -22,8 +22,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DATA_DIR_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY;
 
 import com.google.common.base.Supplier;
 import com.google.common.collect.Lists;
@@ -367,10 +366,10 @@ public class TestDFSAdmin {
     final List<String> outs = Lists.newArrayList();
     final List<String> errs = Lists.newArrayList();
     getReconfigurableProperties("namenode", address, outs, errs);
-    assertEquals(19, outs.size());
-    assertEquals(DFS_HEARTBEAT_INTERVAL_KEY, outs.get(1));
-    assertEquals(DFS_HOSTS_MAINTENANCE_ENABLED_KEY, outs.get(2));
-    assertEquals(DFS_IMAGE_PARALLEL_LOAD_KEY, outs.get(3));
+    assertEquals(20, outs.size());
+    assertEquals(DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY, outs.get(1));
+    assertEquals(DFS_HEARTBEAT_INTERVAL_KEY, outs.get(2));
+    assertEquals(DFS_HOSTS_MAINTENANCE_ENABLED_KEY, outs.get(3));
     assertEquals(errs.size(), 0);
   }
 

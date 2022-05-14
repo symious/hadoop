@@ -54,6 +54,7 @@ import org.apache.hadoop.hdfs.server.common.MetricsLoggerTask;
 import org.apache.hadoop.hdfs.server.common.Storage.StorageDirectory;
 import org.apache.hadoop.hdfs.server.namenode.ha.ActiveState;
 import org.apache.hadoop.hdfs.server.namenode.ha.BootstrapStandby;
+import org.apache.hadoop.hdfs.server.namenode.ha.EditLogTailer;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAContext;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAState;
 import org.apache.hadoop.hdfs.server.namenode.ha.StandbyState;
@@ -120,6 +121,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_C
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_AUTO_FAILOVER_ENABLED_DEFAULT;
@@ -330,7 +332,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_LEASE_HARDLIMIT_KEY,
           DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY,
           DFS_NAMENODE_QUOTA_INIT_THREADS_KEY,
-          DFS_IMAGE_PARALLEL_LOAD_KEY));
+          DFS_IMAGE_PARALLEL_LOAD_KEY,
+          DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2212,6 +2215,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigureQuotaInitThreads(newVal);
     } else if (property.equals(DFS_IMAGE_PARALLEL_LOAD_KEY)) {
       return reconfigureParallelLoad(newVal);
+    } else if (property.equals(DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY)) {
+      return reconfigureTailEditsOnlyDurableTxns(newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -2519,6 +2524,24 @@ public class NameNode extends ReconfigurableBase implements
     }
     FSImageFormatProtobuf.refreshParallelSaveAndLoad(enableParallelLoad);
     return Boolean.toString(enableParallelLoad);
+  }
+
+  private String reconfigureTailEditsOnlyDurableTxns(String newVal) {
+    boolean onlyDurableTxns;
+    if (newVal == null) {
+      onlyDurableTxns = DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT;
+    } else {
+      onlyDurableTxns = Boolean.parseBoolean(newVal);
+    }
+    EditLogTailer editLogTailer = this.namesystem.getEditLogTailer();
+    if (editLogTailer == null) {
+      LOG.warn("EditLogTailer is null and cannot support to reconfigure "
+          + DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY
+          + " and will just set this key in conf.");
+    } else {
+      onlyDurableTxns = editLogTailer.setOnlyDurableTxns(onlyDurableTxns);
+    }
+    return String.valueOf(onlyDurableTxns);
   }
 
   @Override  // ReconfigurableBase
