@@ -44,6 +44,12 @@ final class BalancerParameters {
    * Whether to run the balancer during upgrade.
    */
   private final boolean runDuringUpgrade;
+  /**
+   * Data center constraint for balancer
+   */
+  private final String dataCenterConstraint;
+  static final String ROOT_BASE = "/";
+  static final String PATH_SEPARATOR = "/";
 
   private final boolean runAsService;
 
@@ -63,6 +69,7 @@ final class BalancerParameters {
     this.blockpools = builder.blockpools;
     this.runDuringUpgrade = builder.runDuringUpgrade;
     this.runAsService = builder.runAsService;
+    this.dataCenterConstraint = builder.dataCenterConstraint;
   }
 
   BalancingPolicy getBalancingPolicy() {
@@ -101,6 +108,10 @@ final class BalancerParameters {
     return this.runAsService;
   }
 
+  String getDataCenterConstraint() {
+    return this.dataCenterConstraint;
+  }
+
   @Override
   public String toString() {
     return String.format("%s.%s [%s," + " threshold = %s,"
@@ -124,6 +135,7 @@ final class BalancerParameters {
     private Set<String> sourceNodes = Collections.<String> emptySet();
     private Set<String> blockpools = Collections.<String> emptySet();
     private boolean runDuringUpgrade = false;
+    private String dataCenterConstraint = "";
     private boolean runAsService = false;
 
     Builder() {
@@ -171,6 +183,22 @@ final class BalancerParameters {
 
     Builder setRunAsService(boolean asService) {
       this.runAsService = asService;
+      return this;
+    }
+
+    Builder setDataCenterConstraint(String dataCenterConstraint)
+        throws IllegalArgumentException{
+      if (dataCenterConstraint.substring(1).split(PATH_SEPARATOR).length != 1) {
+        throw new IllegalArgumentException(
+            "Please correct the data center format, like '/DC'");
+      }
+      if (dataCenterConstraint.startsWith(PATH_SEPARATOR)) {
+        this.dataCenterConstraint =
+            ROOT_BASE + dataCenterConstraint.substring(1);
+      } else {
+        this.dataCenterConstraint =
+            ROOT_BASE + dataCenterConstraint;
+      }
       return this;
     }
 

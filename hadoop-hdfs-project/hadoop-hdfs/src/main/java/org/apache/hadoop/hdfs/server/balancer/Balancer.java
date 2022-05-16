@@ -36,6 +36,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.slf4j.Logger;
@@ -199,6 +201,8 @@ public class Balancer {
       + "\tWhether to run the balancer during an ongoing HDFS upgrade."
       + "This is usually not desired since it will not affect used space "
       + "on over-utilized machines."
+      + "\n\t[-dataCenterConstraint <data-center-constraint>]"
+      + "\tConstraint balance scope into specific data center."
       + "\n\t[-asService]\tRun as a long running service.";
 
   @VisibleForTesting
@@ -231,7 +235,12 @@ public class Balancer {
       ) throws UnsupportedActionException {
     BlockPlacementPolicies placementPolicies =
         new BlockPlacementPolicies(conf, null, null, null);
-    if (!(placementPolicies.getPolicy(CONTIGUOUS) instanceof
+    BlockPlacementPolicy contiguousPolicy = placementPolicies.getPolicy(CONTIGUOUS);
+    if (contiguousPolicy instanceof BlockPlacementPolicyWithDataCenter) {
+      LOG.info("Block placement policy of Namenode is " +
+          "BlockPlacementPolicyWithDataCenter, " +
+          "balancer will use BlockPlacementPolicyWithDefault.");
+    } else if (!(contiguousPolicy instanceof
         BlockPlacementPolicyDefault)) {
       throw new UnsupportedActionException(
           "Balancer without BlockPlacementPolicyDefault");
@@ -320,10 +329,10 @@ public class Balancer {
     this.nnc = theblockpool;
     this.dispatcher =
         new Dispatcher(theblockpool, p.getIncludedNodes(),
-            p.getExcludedNodes(), movedWinWidth, moverThreads,
-            dispatcherThreads, maxConcurrentMovesPerNode, getBlocksSize,
-            getBlocksMinBlockSize, blockMoveTimeout, maxNoMoveInterval,
-            maxIterationTime, conf);
+            p.getExcludedNodes(), p.getDataCenterConstraint(), movedWinWidth,
+            moverThreads, dispatcherThreads, maxConcurrentMovesPerNode,
+            getBlocksSize, getBlocksMinBlockSize, blockMoveTimeout,
+            maxNoMoveInterval, maxIterationTime, conf);
     this.threshold = p.getThreshold();
     this.policy = p.getBalancingPolicy();
     this.sourceNodes = p.getSourceNodes();
@@ -737,6 +746,7 @@ public class Balancer {
     LOG.info("included nodes = " + p.getIncludedNodes());
     LOG.info("excluded nodes = " + p.getExcludedNodes());
     LOG.info("source nodes = " + p.getSourceNodes());
+    LOG.info("data center constraint = " + p.getDataCenterConstraint());
     checkKeytabAndInit(conf);
     System.out.println("Time Stamp               Iteration#"
         + "  Bytes Already Moved  Bytes Left To Move  Bytes Being Moved"
@@ -917,6 +927,7 @@ public class Balancer {
     static BalancerParameters parse(String[] args) {
       Set<String> excludedNodes = null;
       Set<String> includedNodes = null;
+      boolean isSetDataCenter = false;
       BalancerParameters.Builder b = new BalancerParameters.Builder();
 
       if (args != null) {
@@ -982,6 +993,18 @@ public class Balancer {
                   + "upgrade. Most users will not want to run the balancer "
                   + "during an upgrade since it will not affect used space "
                   + "on over-utilized machines.");
+            } else if ("-dataCenterConstraint".equalsIgnoreCase(args[i])) {
+              checkArgument(++i < args.length,
+                  "Data center constraint is missing: args = " +
+                      Arrays.toString(args));
+              try {
+                b.setDataCenterConstraint(args[i]);
+                isSetDataCenter = true;
+              } catch(IllegalArgumentException e) {
+                System.err.println("Illegal data center constraint: " +
+                    args[i]);
+                throw e;
+              }
             } else if ("-asService".equalsIgnoreCase(args[i])) {
               b.setRunAsService(true);
               LOG.info("Balancer will run as a long running service");
@@ -990,6 +1013,8 @@ public class Balancer {
                   + Arrays.toString(args));
             }
           }
+          checkArgument(isSetDataCenter,
+              "Please set the data center constraint for balancer.");
           checkArgument(excludedNodes == null || includedNodes == null,
               "-exclude and -include options cannot be specified together.");
         } catch(RuntimeException e) {

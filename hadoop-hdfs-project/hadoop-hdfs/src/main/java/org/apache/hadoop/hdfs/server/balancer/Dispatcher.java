@@ -105,6 +105,8 @@ public class Dispatcher {
   /** Restrict to the following nodes. */
   private final Set<String> includedNodes;
 
+  private final String dataCenterConstraint;
+
   private final Collection<Source> sources = new HashSet<Source>();
   private final Collection<StorageGroup> targets = new HashSet<StorageGroup>();
 
@@ -1009,13 +1011,14 @@ public class Dispatcher {
       Set<String> excludedNodes, long movedWinWidth, int moverThreads,
       int dispatcherThreads, int maxConcurrentMovesPerNode,
       int maxNoMoveInterval, Configuration conf) {
-    this(nnc, includedNodes, excludedNodes, movedWinWidth,
+    this(nnc, includedNodes, excludedNodes, "/", movedWinWidth,
         moverThreads, dispatcherThreads, maxConcurrentMovesPerNode,
         0L, 0L, 0, maxNoMoveInterval, -1, conf);
   }
 
   Dispatcher(NameNodeConnector nnc, Set<String> includedNodes,
-      Set<String> excludedNodes, long movedWinWidth, int moverThreads,
+      Set<String> excludedNodes, String dataCenterConstraint,
+      long movedWinWidth, int moverThreads,
       int dispatcherThreads, int maxConcurrentMovesPerNode,
       long getBlocksSize, long getBlocksMinBlockSize, int blockMoveTimeout,
       int maxNoMoveInterval, long maxIterationTime, Configuration conf) {
@@ -1023,6 +1026,7 @@ public class Dispatcher {
     this.excludedNodes = excludedNodes;
     this.includedNodes = includedNodes;
     this.movedBlocks = new MovedBlocks<StorageGroup>(movedWinWidth);
+    this.dataCenterConstraint = dataCenterConstraint;
 
     this.cluster = NetworkTopology.getInstance(conf);
 
@@ -1044,7 +1048,14 @@ public class Dispatcher {
     this.connectToDnViaHostname = conf.getBoolean(
         HdfsClientConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME,
         HdfsClientConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME_DEFAULT);
-    placementPolicies = new BlockPlacementPolicies(conf, null, cluster, null);
+    Configuration newConf = new Configuration(conf);
+    if ("org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter"
+        .equals(conf.get(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY))) {
+      newConf.set(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+          "org.apache.hadoop.hdfs.server.blockmanagement." +
+              "BlockPlacementPolicyDefault");
+    }
+    placementPolicies = new BlockPlacementPolicies(newConf, null, cluster, null);
     this.maxIterationTime = maxIterationTime;
   }
 
@@ -1096,6 +1107,9 @@ public class Dispatcher {
   }
 
   private boolean shouldIgnore(DatanodeInfo dn) {
+    // ignore nodes not in specific data center
+    final boolean outOfDataCenter = !Util.isInDataCenter(
+        dataCenterConstraint, dn);
     // ignore out-of-service nodes
     final boolean outOfService = !dn.isInService();
     // ignore nodes in exclude list
@@ -1103,7 +1117,7 @@ public class Dispatcher {
     // ignore nodes not in the include list (if include list is not empty)
     final boolean notIncluded = !Util.isIncluded(includedNodes, dn);
 
-    if (outOfService || excluded || notIncluded) {
+    if (outOfDataCenter || outOfService || excluded || notIncluded) {
       if (LOG.isTraceEnabled()) {
         LOG.trace("Excluding datanode " + dn
             + ": outOfService=" + outOfService
@@ -1378,6 +1392,11 @@ public class Dispatcher {
   }
 
   static class Util {
+    /** @return true if data node is in constrained data center */
+    static boolean isInDataCenter(String dataCenterConstraint, DatanodeInfo dn) {
+      return dn.getNetworkLocation().startsWith(dataCenterConstraint);
+    }
+
     /** @return true if data node is part of the excludedNodes. */
     static boolean isExcluded(Set<String> excludedNodes, DatanodeInfo dn) {
       return isIn(excludedNodes, dn);

@@ -131,9 +131,9 @@ public class TestBalancer {
   }
 
   final static long CAPACITY = 5000L;
-  final static String RACK0 = "/rack0";
-  final static String RACK1 = "/rack1";
-  final static String RACK2 = "/rack2";
+  final static String RACK0 = "/defaultCenter/rack0";
+  final static String RACK1 = "/defaultCenter/rack1";
+  final static String RACK2 = "/defaultCenter/rack2";
   final private static String fileName = "/tmp.txt";
   final static Path filePath = new Path(fileName);
   final static private String username = "balancer";
@@ -868,6 +868,8 @@ public class TestBalancer {
     List <String> args = new ArrayList<String>();
     args.add("-policy");
     args.add("datanode");
+    args.add("-dataCenterConstraint");
+    args.add("/defaultCenter");
 
     File excludeHostsFile = null;
     if (!p.getExcludedNodes().isEmpty()) {
@@ -1200,19 +1202,19 @@ public class TestBalancer {
 
   @Test
   public void testBalancerCliParseBlockpools() {
-    String[] parameters = new String[] { "-blockpools", "bp-1,bp-2,bp-3" };
+    String[] parameters = new String[] { "-blockpools", "bp-1,bp-2,bp-3", "-dataCenterConstraint", "/defaultCenter"};
     BalancerParameters p = Balancer.Cli.parse(parameters);
     assertEquals(3, p.getBlockPools().size());
 
-    parameters = new String[] { "-blockpools", "bp-1" };
+    parameters = new String[] { "-blockpools", "bp-1", "-dataCenterConstraint", "/defaultCenter"};
     p = Balancer.Cli.parse(parameters);
     assertEquals(1, p.getBlockPools().size());
 
-    parameters = new String[] { "-blockpools", "bp-1,,bp-2" };
+    parameters = new String[] { "-blockpools", "bp-1,,bp-2", "-dataCenterConstraint", "/defaultCenter"};
     p = Balancer.Cli.parse(parameters);
     assertEquals(3, p.getBlockPools().size());
 
-    parameters = new String[] { "-blockpools", "bp-1," };
+    parameters = new String[] { "-blockpools", "bp-1,", "-dataCenterConstraint", "/defaultCenter"};
     p = Balancer.Cli.parse(parameters);
     assertEquals(1, p.getBlockPools().size());
   }
@@ -1529,7 +1531,8 @@ public class TestBalancer {
         fs.exists(Balancer.BALANCER_ID_PATH));
 
     // start second balancer
-    final String[] args = { "-policy", "datanode" };
+    final String[] args = { "-policy", "datanode",
+        "-dataCenterConstraint", "/defaultCenter"};
     final Tool tool = new Cli();
     tool.setConf(conf);
     int exitCode = tool.run(args); // start balancing
