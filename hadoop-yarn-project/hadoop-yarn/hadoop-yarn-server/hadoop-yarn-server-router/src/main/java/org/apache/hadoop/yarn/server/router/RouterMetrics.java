@@ -73,6 +73,15 @@ public final class RouterMetrics {
   @Metric("Number of operations to hit permit limits")
   private MutableCounterLong proxyOpPermitRejected;
 
+  @Metric("Number of concurrent operation cluster running tasks")
+  private MutableGaugeInt numRunningTasks;
+
+  @Metric("Number of concurrent operation cluster pending tasks")
+  private MutableGaugeLong numPendingTasks;
+
+  @Metric("Number of concurrent operation cluster running threads")
+  private MutableGaugeInt numRunningThreads;
+
 
   /**
    * Provide quantile counters for all latencies.
@@ -279,4 +288,27 @@ public final class RouterMetrics {
     return proxyOpPermitRejected.value();
   }
 
+  public void setNumRunningTasks(int numRunningTasks) {
+    this.numRunningTasks.set(numRunningTasks);
+  }
+
+  public int getNumRunningTasks() {
+    return numRunningTasks.value();
+  }
+
+  public void setNumPendingTasks(long numPendingTasks) {
+    this.numPendingTasks.set(numPendingTasks);
+  }
+
+  public long getNumPendingTasks() {
+    return numPendingTasks.value();
+  }
+
+  public void setNumRunningThreads(int numRunningThreads) {
+    this.numRunningThreads.set(numRunningThreads);
+  }
+
+  public int getNumRunningThreads() {
+    return numRunningThreads.value();
+  }
 }

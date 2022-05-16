@@ -240,6 +240,32 @@ public class FederationClientInterceptor
 
     routerRpcRequestCache = RouterRpcRequestCache.getInstance();
     this.cache = routerRpcRequestCache.getCache();
+
+    Runnable monitorThreadPoolTask = () -> {
+      while (true) {
+        int numRunningTasks = executorService.getActiveCount();
+        long numPendingTasks = executorService.getTaskCount() -
+            executorService.getCompletedTaskCount();
+        int numRunningThreads = executorService.getPoolSize();
+        routerMetrics.setNumRunningTasks(numRunningTasks);
+        routerMetrics.setNumPendingTasks(numPendingTasks);
+        routerMetrics.setNumRunningThreads(numRunningThreads);
+        if (LOG.isDebugEnabled()) {
+          LOG.debug(
+              "numRunningTasks: " + numRunningTasks + " ,numPendingTasks: " +
+                  numPendingTasks + " currentPoolSize: " +
+                  executorService.getPoolSize() + " ,largestPoolSize: " +
+                  executorService.getLargestPoolSize() + " ,maxPoolSize: " +
+                  executorService.getMaximumPoolSize());
+        }
+        try {
+          Thread.sleep(1000);
+        } catch (InterruptedException e) {
+          LOG.error("monitorThreadPoolTask InterruptedException", e);
+        }
+      }
+    };
+    new Thread(monitorThreadPoolTask).start();
   }
 
   /**
