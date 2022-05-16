@@ -22,6 +22,7 @@ import static org.apache.hadoop.metrics2.impl.MsInfo.SessionId;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
 import org.apache.hadoop.hdfs.server.protocol.DataNodeUsageReport;
 import org.apache.hadoop.hdfs.server.protocol.DataNodeUsageReportUtil;
 import org.apache.hadoop.metrics2.MetricsSystem;
@@ -36,7 +37,12 @@ import org.apache.hadoop.metrics2.lib.MutableGaugeInt;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.metrics2.lib.MutableRatesWithAggregation;
 import org.apache.hadoop.metrics2.source.JvmMetrics;
+import org.apache.hadoop.net.DNSToSwitchMapping;
+import org.apache.hadoop.net.ScriptBasedMapping;
+import org.apache.hadoop.util.ReflectionUtils;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -71,13 +77,35 @@ public class DataNodeMetrics {
   @Metric MutableCounterLong blocksUncached;
   @Metric MutableCounterLong readsFromLocalClient;
   @Metric MutableCounterLong readsFromRemoteClient;
+  @Metric MutableCounterLong readsFromLocalRack;
+  @Metric MutableCounterLong readsFromLocalDataCenter;
+  @Metric MutableCounterLong readsFromRemoteDataCenter;
   @Metric MutableCounterLong writesFromLocalClient;
   @Metric MutableCounterLong writesFromRemoteClient;
+  @Metric MutableCounterLong writesFromLocalRack;
+  @Metric MutableCounterLong writesFromLocalDataCenter;
+  @Metric MutableCounterLong writesFromRemoteDataCenter;
   @Metric MutableCounterLong blocksGetLocalPathInfo;
+  @Metric("Bytes read by local client")
+  MutableCounterLong localBytesRead;
   @Metric("Bytes read by remote client")
   MutableCounterLong remoteBytesRead;
+  @Metric("Bytes read by rack-local client")
+  MutableCounterLong localRackBytesRead;
+  @Metric("Bytes read by datacenter-local client")
+  MutableCounterLong localDataCenterBytesRead;
+  @Metric("Bytes read by datacenter-off client")
+  MutableCounterLong remoteDataCenterBytesRead;
+  @Metric("Bytes written by local client")
+  MutableCounterLong localBytesWritten;
   @Metric("Bytes written by remote client")
   MutableCounterLong remoteBytesWritten;
+  @Metric("Bytes written by rack-local client")
+  MutableCounterLong localRackBytesWritten;
+  @Metric("Bytes written by datacenter-local client")
+  MutableCounterLong localDataCenterBytesWritten;
+  @Metric("Bytes written by datacenter-off client")
+  MutableCounterLong remoteDataCenterBytesWritten;
 
   // RamDisk metrics on read/write
   @Metric MutableCounterLong ramDiskBlocksWrite;
@@ -182,10 +210,12 @@ public class DataNodeMetrics {
 
   final String name;
   JvmMetrics jvmMetrics = null;
+  private final DNSToSwitchMapping dnsToSwitchMapping;
+  private static final String LOCAL_HOST = "127.0.0.1";
   private DataNodeUsageReportUtil dnUsageReportUtil;
 
   public DataNodeMetrics(String name, String sessionId, int[] intervals,
-      final JvmMetrics jvmMetrics) {
+      final JvmMetrics jvmMetrics, final DNSToSwitchMapping switchMapping) {
     this.name = name;
     this.jvmMetrics = jvmMetrics;    
     registry.tag(SessionId, sessionId);
@@ -228,6 +258,7 @@ public class DataNodeMetrics {
           "Time between the RamDisk block write and disk persist in ms",
           "ops", "latency", interval);
     }
+    this.dnsToSwitchMapping = switchMapping;
   }
 
   public static DataNodeMetrics create(Configuration conf, String dnName) {
@@ -241,9 +272,12 @@ public class DataNodeMetrics {
     // Percentile measurement is off by default, by watching no intervals
     int[] intervals = 
         conf.getInts(DFSConfigKeys.DFS_METRICS_PERCENTILES_INTERVALS_KEY);
+    DNSToSwitchMapping switchMapping = ReflectionUtils.newInstance(
+        conf.getClass(DFSConfigKeys.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
+            ScriptBasedMapping.class, DNSToSwitchMapping.class), conf);
     
     return ms.register(name, null, new DataNodeMetrics(name, sessionId,
-        intervals, jm));
+        intervals, jm, switchMapping));
   }
 
   public String name() { return name; }
@@ -400,14 +434,83 @@ public class DataNodeMetrics {
     }
   }
 
-  public void incrReadsFromClient(boolean local, long size) {
+  private boolean isLocal(String localHostAddress,
+      String remoteHostAddress) {
+    return remoteHostAddress.equals(LOCAL_HOST) ||
+        localHostAddress.equals(remoteHostAddress);
+  }
 
+  private void internalUpdateBytes(String localHostAddress,
+      String remoteHostAddress, long size, boolean forRead) {
+    MutableCounterLong localCount = forRead ?
+        readsFromLocalClient : writesFromLocalClient;
+    MutableCounterLong localBytes = forRead ?
+        localBytesRead : localBytesWritten;
+    MutableCounterLong remoteCount = forRead ?
+        readsFromRemoteClient : writesFromRemoteClient;
+    MutableCounterLong remoteBytes = forRead ?
+        remoteBytesRead : remoteBytesWritten;
+    MutableCounterLong localRackCount = forRead ?
+        readsFromLocalRack : writesFromLocalRack;
+    MutableCounterLong localRackBytes = forRead ?
+        localRackBytesRead : localRackBytesWritten;
+    MutableCounterLong localCenterCount = forRead ?
+        readsFromLocalDataCenter : writesFromLocalDataCenter;
+    MutableCounterLong localCenterBytes = forRead ?
+        localDataCenterBytesRead : localDataCenterBytesWritten;
+    MutableCounterLong remoteCenterCount = forRead ?
+        readsFromRemoteDataCenter : writesFromRemoteDataCenter;
+    MutableCounterLong remoteCenterBytes = forRead ?
+        remoteDataCenterBytesRead :  remoteDataCenterBytesWritten;
+
+    // locality: node-local
+    if (isLocal(localHostAddress, remoteHostAddress)) {
+      localCount.incr();
+      localBytes.incr(size);
+    } else {
+      remoteCount.incr();
+      remoteBytes.incr(size);
+
+      List<String> names = new ArrayList<>();
+      names.add(localHostAddress);
+      names.add(remoteHostAddress);
+      List<String> racks = dnsToSwitchMapping.resolve(names);
+      String localLocation = racks.get(0);
+      String remoteLocation = racks.get(1);
+      // locality: rack-local
+      if (localLocation.equals(remoteLocation)) {
+        localRackCount.incr();
+        localRackBytes.incr(size);
+      } else if (DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation)
+          .equals(DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation))) {
+        // locality: datacenter-local
+        localCenterCount.incr();
+        localCenterBytes.incr(size);
+      } else {
+        // locality: datacenter-off
+        remoteCenterCount.incr();
+        remoteCenterBytes.incr(size);
+      }
+    }
+  }
+
+  public void incrWritesFromClient(String localHostAddress,
+      String remoteHostAddress, long size) {
+    internalUpdateBytes(localHostAddress, remoteHostAddress, size, false);
+  }
+
+  public void incrReadsFromClient(boolean local, long size) {
     if (local) {
       readsFromLocalClient.incr();
     } else {
       readsFromRemoteClient.incr();
       remoteBytesRead.incr(size);
     }
+  }
+
+  public void incrReadsFromClient(String localHostAddress,
+      String remoteHostAddress, long size) {
+    internalUpdateBytes(localHostAddress, remoteHostAddress, size, true);
   }
 
   public void incrVolumeFailures(int size) {

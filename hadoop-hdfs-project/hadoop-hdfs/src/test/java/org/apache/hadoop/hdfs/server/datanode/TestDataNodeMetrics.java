@@ -29,6 +29,9 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.management.ManagementFactory;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -71,6 +74,27 @@ import javax.management.ObjectName;
 public class TestDataNodeMetrics {
   private static final Logger LOG =
       LoggerFactory.getLogger(TestDataNodeMetrics.class);
+  Set<String> LOCALITY_METRICS = new HashSet<>(Arrays.asList(
+      "WritesFromLocalClient",
+      "LocalBytesWritten",
+      "WritesFromRemoteClient",
+      "RemoteBytesWritten",
+      "WritesFromLocalRack",
+      "LocalRackBytesWritten",
+      "WritesFromLocalDataCenter",
+      "LocalDataCenterBytesWritten",
+      "WritesFromRemoteDataCenter",
+      "RemoteDataCenterBytesWritten",
+      "ReadsFromLocalClient",
+      "LocalBytesRead",
+      "ReadsFromRemoteClient",
+      "RemoteBytesRead",
+      "ReadsFromLocalRack",
+      "LocalRackBytesRead",
+      "ReadsFromLocalDataCenter",
+      "LocalDataCenterBytesRead",
+      "ReadsFromRemoteDataCenter",
+      "RemoteDataCenterBytesRead"));
 
   @Test
   public void testDataNodeMetrics() throws Exception {
@@ -551,5 +575,60 @@ public class TestDataNodeMetrics {
     assertCounter("HeartbeatsForns1-nn0NumOps", 1L, rb);
     assertCounter("HeartbeatsForns1-nn1NumOps", 1L, rb);
     assertCounter("HeartbeatsNumOps", 4L, rb);
+  }
+
+  @Test
+  public void testNodeLocalMetrics() throws Exception {
+    Configuration conf = new HdfsConfiguration();
+    SimulatedFSDataset.setFactory(conf);
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).build();
+    try {
+      cluster.waitActive();
+      FileSystem fs = cluster.getFileSystem();
+      Path testFile = new Path("/testNodeLocalMetrics.txt");
+      long file_len = 10;
+      DFSTestUtil.createFile(fs, testFile, file_len, (short)1, 1L);
+      DFSTestUtil.readFile(fs, testFile);
+      List<DataNode> datanodes = cluster.getDataNodes();
+      assertEquals(datanodes.size(), 1);
+      DataNode datanode = datanodes.get(0);
+      MetricsRecordBuilder rb = getMetrics(datanode.getMetrics().name());
+      logLocalityMetrics(rb);
+
+      // Write related metrics
+      assertCounter("WritesFromLocalClient", 1L, rb);
+      assertCounter("LocalBytesWritten", file_len, rb);
+
+      // Read related metrics
+      assertCounter("ReadsFromLocalClient", 1L, rb);
+      assertCounter("LocalBytesRead", file_len, rb);
+
+      // Zero metrics
+      Set<String> excluded = new HashSet<>(Arrays.asList(
+          "WritesFromLocalClient",
+          "LocalBytesWritten",
+          "ReadsFromLocalClient",
+          "LocalBytesRead"));
+      assertZeroLocalityMetrics(rb, excluded);
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
+
+  private void logLocalityMetrics(MetricsRecordBuilder rb) {
+    for (String metric: LOCALITY_METRICS) {
+      LOG.info(metric + ": " + getLongCounter(metric, rb));
+    }
+  }
+
+  private void assertZeroLocalityMetrics(
+      MetricsRecordBuilder rb, Set<String> excluded) {
+    for (String metric: LOCALITY_METRICS) {
+      if (!excluded.contains(metric)) {
+        assertCounter(metric, 0L, rb);
+      }
+    }
   }
 }

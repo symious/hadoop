@@ -420,6 +420,12 @@ class DataXceiver extends Receiver implements Runnable {
                     "Not verifying {}", slotId);
         }
         success = true;
+        // update metrics
+        datanode.metrics.addReadBlockOp(elapsed());
+        // Skip checksum size here as datanode does not split the block
+        // to chunks and do checksum for each chunk.
+        datanode.metrics.incrReadsFromClient(peer.getLocalHostAddress(),
+            peer.getRemoteHostAddress(), blk.getNumBytes());
       }
     } finally {
       if ((!success) && (registeredSlotId != null)) {
@@ -666,7 +672,9 @@ class DataXceiver extends Receiver implements Runnable {
 
     //update metrics
     datanode.metrics.addReadBlockOp(elapsed());
-    datanode.metrics.incrReadsFromClient(peer.isLocal(), read);
+    //datanode.metrics.incrReadsFromClient(peer.isLocal(), read);
+    datanode.metrics.incrReadsFromClient(
+        peer.getLocalHostAddress(), peer.getRemoteHostAddress(), read);
   }
 
   @Override
@@ -958,7 +966,9 @@ class DataXceiver extends Receiver implements Runnable {
 
     //update metrics
     datanode.getMetrics().addWriteBlockOp(elapsed());
-    datanode.getMetrics().incrWritesFromClient(peer.isLocal(), size);
+    //datanode.getMetrics().incrWritesFromClient(peer.isLocal(), size);
+    datanode.getMetrics().incrWritesFromClient(
+        peer.getLocalHostAddress(), peer.getRemoteHostAddress(), size);
   }
 
   @Override
