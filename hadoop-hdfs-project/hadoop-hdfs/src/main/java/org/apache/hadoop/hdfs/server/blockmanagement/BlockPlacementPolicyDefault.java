@@ -101,7 +101,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   protected boolean considerLoad;
   private boolean considerLoadByStorageType;
   protected volatile double considerLoadFactor;
-  private boolean preferLocalNode;
+  protected boolean preferLocalNode;
   private boolean dataNodePeerStatsEnabled;
   private boolean excludeSlowNodesEnabled;
   protected NetworkTopology clusterMap;
@@ -733,7 +733,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     }
   }
 
-  private DatanodeStorageInfo chooseFromNextRack(Node next,
+  protected DatanodeStorageInfo chooseFromNextRack(Node next,
       Set<Node> excludedNodes,
       long blocksize,
       int maxNodesPerRack,

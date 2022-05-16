@@ -556,7 +556,7 @@ public class NetworkTopology {
    *                          could be chosen, excluding excludedNodes
    * @return the chosen node, or null if none can be chosen
    */
-  private Node chooseRandom(final InnerNode parentNode,
+  protected Node chooseRandom(final InnerNode parentNode,
       final Node excludedScopeNode, final Collection<Node> excludedNodes,
       final int totalInScopeNodes, final int availableNodes) {
     if (totalInScopeNodes < availableNodes) {
