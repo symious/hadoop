@@ -257,11 +257,18 @@ public class BlockPlacementPolicyWithDataCenter extends
       throws NotEnoughReplicasException {
 
     if ((base == null) || !scope.equals(NodeBase.ROOT)) {
-      LOG.debug("(base.loc={}, base.name={}," +
-              " numOfReplicas={}, scope={}, results.size={}.",
-          base == null ? null : base.getNetworkLocation(),
-          base == null ? null : base.getName(),
-          numOfReplicas, scope, results.size());
+      if (base == null) {
+        LOG.warn("(base.loc={}, base.name={}," +
+                " numOfReplicas={}, scope={}, results.size={}.",
+             null, null,
+            numOfReplicas, scope, results.size());
+      } else {
+        LOG.warn("(base.loc={}, base.name={}," +
+                " numOfReplicas={}, scope={}, results.size={}.",
+            base.getNetworkLocation(), base.getName(),
+            numOfReplicas, scope, results.size());
+      }
+
       return chooseRandom(numOfReplicas, scope, excludedNodes, blockSize,
           maxNodesPerRack, results, avoidStaleNodes, storageTypes);
     }

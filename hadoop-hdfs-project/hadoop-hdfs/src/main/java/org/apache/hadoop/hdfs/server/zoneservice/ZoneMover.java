@@ -340,8 +340,9 @@ public class ZoneMover {
 
     // generate ZoneMoveItem
     List<ZoneMoveItem> items = new ArrayList<>();
-    for (String sdc: sources.keySet()) {
-      short x = sources.get(sdc);
+    for (Map.Entry<String, Short> sourceEntry: sources.entrySet()) {
+      String sdc = sourceEntry.getKey();
+      short x = sourceEntry.getValue();
       for (String tdc: new HashSet<>(targets.keySet())) {
         short y = targets.get(tdc);
         if (x == y) {

@@ -251,11 +251,12 @@ public class ZoneChecker {
     if (rule1.isEmpty()) {
       return rule2;
     }
-    for (ReplicationRule key : rule2.keySet()) {
+    for (Map.Entry<ReplicationRule, List<String>> entry : rule2.entrySet()) {
+      ReplicationRule key = entry.getKey();
       if (rule1.containsKey(key)) {
-        rule1.get(key).addAll(rule2.get(key));
+        rule1.get(key).addAll(entry.getValue());
       } else {
-        rule1.put(key, rule2.get(key));
+        rule1.put(key, entry.getValue());
       }
     }
     return rule1;
@@ -263,9 +264,10 @@ public class ZoneChecker {
 
   private static void printResult(Map<ReplicationRule, List<String>> map) {
     System.out.println("Zone checker result: ");
-    for (ReplicationRule replicationRule: map.keySet()) {
+    for (Map.Entry<ReplicationRule, List<String>> entry: map.entrySet()) {
+      ReplicationRule replicationRule = entry.getKey();
       System.out.println(replicationRule.toString() + ":");
-      for (String path: map.get(replicationRule)) {
+      for (String path: entry.getValue()) {
         System.out.println("  " + path);
       }
     }
