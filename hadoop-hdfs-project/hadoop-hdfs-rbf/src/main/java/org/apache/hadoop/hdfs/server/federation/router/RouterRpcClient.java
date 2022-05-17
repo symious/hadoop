@@ -1569,7 +1569,7 @@ public class RouterRpcClient {
 
   /**
    * Refreshes/changes the fairness policy controller implementation if possible
-   * and returns the controller class name
+   * and returns the controller class name.
    * @param conf Configuration
    * @return New controller class name if successfully refreshed, else old controller class name
    */

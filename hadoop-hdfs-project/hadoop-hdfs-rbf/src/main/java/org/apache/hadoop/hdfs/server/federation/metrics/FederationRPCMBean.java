@@ -117,6 +117,12 @@ public interface FederationRPCMBean {
   String getProxyOpPermitRejectedPerNs();
 
   /**
+   * JSON representation of max handler count per ns.
+   * @return JSON string representation.
+   */
+  String getPermitCapacityPerNs();
+
+  /**
    * Get the number of operations accepted of each namespace.
    * @return Number of operations accepted of each namespace.
    */

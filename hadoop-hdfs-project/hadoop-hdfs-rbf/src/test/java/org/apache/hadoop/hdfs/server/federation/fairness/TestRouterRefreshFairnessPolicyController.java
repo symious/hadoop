@@ -53,13 +53,15 @@ public class TestRouterRefreshFairnessPolicyController {
   private static final Logger LOG =
       LoggerFactory.getLogger(TestRouterRefreshFairnessPolicyController.class);
   private final GenericTestUtils.LogCapturer controllerLog =
-      GenericTestUtils.LogCapturer.captureLogs(AbstractRouterRpcFairnessPolicyController.LOG);
+      GenericTestUtils.LogCapturer.captureLogs(
+          AbstractRouterRpcFairnessPolicyController.LOG);
 
   private StateStoreDFSCluster cluster;
 
   @BeforeClass
   public static void setLogLevel() {
-    GenericTestUtils.setLogLevel(AbstractRouterRpcFairnessPolicyController.LOG, Level.DEBUG);
+    GenericTestUtils.setLogLevel(AbstractRouterRpcFairnessPolicyController.LOG,
+        Level.DEBUG);
   }
 
   @After
@@ -77,7 +79,8 @@ public class TestRouterRefreshFairnessPolicyController {
 
     // Handlers concurrent:ns0 = 3:3
     conf.setClass(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
-        StaticRouterRpcFairnessPolicyController.class, RouterRpcFairnessPolicyController.class);
+        StaticRouterRpcFairnessPolicyController.class,
+        RouterRpcFairnessPolicyController.class);
     conf.setInt(RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_KEY, 9);
     // Allow metrics
     conf.setBoolean(RBFConfigKeys.DFS_ROUTER_METRICS_ENABLE, true);
@@ -91,38 +94,54 @@ public class TestRouterRefreshFairnessPolicyController {
     cluster.waitClusterUp();
   }
 
+  @After
+  public void destroyController() {
+    cluster.getRandomRouter().getRouterRpcClient()
+        .getRouterRpcFairnessPolicyController().shutdown();
+  }
+
   @Test
   public void testRefreshNonexistentHandlerClass() {
-    MiniRouterDFSCluster.RouterContext routerContext = cluster.getRandomRouter();
-    routerContext.getConf().set(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
-        "org.apache.hadoop.hdfs.server.federation.fairness.ThisControllerDoesNotExist");
-    assertEquals(StaticRouterRpcFairnessPolicyController.class.getCanonicalName(),
+    MiniRouterDFSCluster.RouterContext routerContext =
+        cluster.getRandomRouter();
+    routerContext.getConf()
+        .set(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
+            "org.apache.hadoop.hdfs.server.federation.fairness.ThisControllerDoesNotExist");
+    assertEquals(
+        StaticRouterRpcFairnessPolicyController.class.getCanonicalName(),
         routerContext.getRouterRpcClient()
             .refreshFairnessPolicyController(routerContext.getConf()));
   }
 
   @Test
   public void testRefreshClassDoesNotImplementControllerInterface() {
-    MiniRouterDFSCluster.RouterContext routerContext = cluster.getRandomRouter();
+    MiniRouterDFSCluster.RouterContext routerContext =
+        cluster.getRandomRouter();
     routerContext.getConf()
-        .set(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS, "java.lang.String");
-    assertEquals(StaticRouterRpcFairnessPolicyController.class.getCanonicalName(),
+        .set(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
+            "java.lang.String");
+    assertEquals(
+        StaticRouterRpcFairnessPolicyController.class.getCanonicalName(),
         routerContext.getRouterRpcClient()
             .refreshFairnessPolicyController(routerContext.getConf()));
   }
 
   @Test
   public void testRefreshSuccessful() {
-    MiniRouterDFSCluster.RouterContext routerContext = cluster.getRandomRouter();
+    MiniRouterDFSCluster.RouterContext routerContext =
+        cluster.getRandomRouter();
 
-    routerContext.getConf().set(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
-        StaticRouterRpcFairnessPolicyController.class.getCanonicalName());
-    assertEquals(StaticRouterRpcFairnessPolicyController.class.getCanonicalName(),
+    routerContext.getConf()
+        .set(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
+            StaticRouterRpcFairnessPolicyController.class.getCanonicalName());
+    assertEquals(
+        StaticRouterRpcFairnessPolicyController.class.getCanonicalName(),
         routerContext.getRouterRpcClient()
             .refreshFairnessPolicyController(routerContext.getConf()));
 
-    routerContext.getConf().set(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
-        NoRouterRpcFairnessPolicyController.class.getCanonicalName());
+    routerContext.getConf()
+        .set(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
+            NoRouterRpcFairnessPolicyController.class.getCanonicalName());
     assertEquals(NoRouterRpcFairnessPolicyController.class.getCanonicalName(),
         routerContext.getRouterRpcClient()
             .refreshFairnessPolicyController(routerContext.getConf()));
@@ -130,8 +149,10 @@ public class TestRouterRefreshFairnessPolicyController {
 
   @Test
   public void testConcurrentRefreshRequests() throws InterruptedException {
-    final MiniRouterDFSCluster.RouterContext routerContext = cluster.getRandomRouter();
-    final RouterRpcClient client = Mockito.spy(routerContext.getRouterRpcClient());
+    final MiniRouterDFSCluster.RouterContext routerContext =
+        cluster.getRandomRouter();
+    final RouterRpcClient client =
+        Mockito.spy(routerContext.getRouterRpcClient());
     controllerLog.clearOutput();
 
     // Spawn 100 concurrent refresh requests
@@ -162,8 +183,10 @@ public class TestRouterRefreshFairnessPolicyController {
   @Test
   public void testRefreshStaticChangeHandlers() throws Exception {
     // Setup and mock
-    final MiniRouterDFSCluster.RouterContext routerContext = cluster.getRandomRouter();
-    final RouterRpcClient client = Mockito.spy(routerContext.getRouterRpcClient());
+    final MiniRouterDFSCluster.RouterContext routerContext =
+        cluster.getRandomRouter();
+    final RouterRpcClient client =
+        Mockito.spy(routerContext.getRouterRpcClient());
     final long sleepTime = 3000;
     Mockito.doAnswer(new Answer() {
       @Override
@@ -176,23 +199,27 @@ public class TestRouterRefreshFairnessPolicyController {
         Mockito.any(Class.class), Mockito.any(Method.class), Mockito.any());
 
     // No calls yet
-    assertEquals("{}",
-        routerContext.getRouterRpcServer().getRPCMetrics().getProxyOpPermitAcceptedPerNs());
+    assertEquals("{}", routerContext.getRouterRpcServer().getRPCMetrics()
+        .getProxyOpPermitAcceptedPerNs());
     List<Thread> preRefreshInvocations = makeDummyInvocations(client, 4, "ns0");
 
     Thread.sleep(2000);
     // 3 permits acquired, calls will take 3s to finish and release permits
     // 1 invocation rejected
     assertEquals("{\"ns0\":3}",
-        routerContext.getRouterRpcServer().getRPCMetrics().getProxyOpPermitAcceptedPerNs());
+        routerContext.getRouterRpcServer().getRPCMetrics()
+            .getProxyOpPermitAcceptedPerNs());
     assertEquals("{\"ns0\":1}",
-        routerContext.getRouterRpcServer().getRPCMetrics().getProxyOpPermitRejectedPerNs());
+        routerContext.getRouterRpcServer().getRPCMetrics()
+            .getProxyOpPermitRejectedPerNs());
 
     Configuration conf = routerContext.getConf();
     final int newNs0Permits = 2;
     final int newNs1Permits = 4;
-    conf.setInt(DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX + "ns0", newNs0Permits);
-    conf.setInt(DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX + "ns1", newNs1Permits);
+    conf.setInt(DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX + "ns0",
+        newNs0Permits);
+    conf.setInt(DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX + "ns1",
+        newNs1Permits);
     Thread threadRefreshController = new Thread(new Runnable() {
       @Override
       public void run() {
@@ -211,8 +238,10 @@ public class TestRouterRefreshFairnessPolicyController {
     // Make 4 calls to ns0 and 6 calls to ns1 so that each will fail twice
     StaticRouterRpcFairnessPolicyController controller =
         (StaticRouterRpcFairnessPolicyController) client.getRouterRpcFairnessPolicyController();
-    List<Thread> ns0Invocations = makeDummyInvocations(client, newNs0Permits + 2, "ns0");
-    List<Thread> ns1Invocations = makeDummyInvocations(client, newNs1Permits + 2, "ns1");
+    List<Thread> ns0Invocations =
+        makeDummyInvocations(client, newNs0Permits + 2, "ns0");
+    List<Thread> ns1Invocations =
+        makeDummyInvocations(client, newNs1Permits + 2, "ns1");
 
     // Wait for these threads to finish
     for (Thread thread : ns0Invocations) {
@@ -222,13 +251,87 @@ public class TestRouterRefreshFairnessPolicyController {
       thread.join();
     }
     assertEquals("{\"ns0\":5,\"ns1\":4}",
-        routerContext.getRouterRpcServer().getRPCMetrics().getProxyOpPermitAcceptedPerNs());
+        routerContext.getRouterRpcServer().getRPCMetrics()
+            .getProxyOpPermitAcceptedPerNs());
     assertEquals("{\"ns0\":3,\"ns1\":2}",
-        routerContext.getRouterRpcServer().getRPCMetrics().getProxyOpPermitRejectedPerNs());
+        routerContext.getRouterRpcServer().getRPCMetrics()
+            .getProxyOpPermitRejectedPerNs());
   }
 
-  private List<Thread> makeDummyInvocations(final RouterRpcClient client, final int nThreads,
-      final String namespace) {
+  @Test(timeout = 10000)
+  public void testRefreshStaticDynamic() throws Exception {
+    // Setup and mock
+    MiniRouterDFSCluster.RouterContext routerContext =
+        cluster.getRandomRouter();
+    RouterRpcClient client = Mockito.spy(routerContext.getRouterRpcClient());
+    Mockito.doAnswer(new Answer() {
+      @Override
+      public Object answer(InvocationOnMock invocationOnMock) throws Throwable {
+        return null;
+      }
+    }).when(client).invokeMethod(Mockito.any(UserGroupInformation.class),
+        Mockito.anyListOf(FederationNamenodeContext.class),
+        Mockito.any(Class.class), Mockito.any(Method.class), Mockito.any());
+
+    // 3:3:3, static controller
+    assertEquals("{\"concurrent\":3,\"ns0\":3,\"ns1\":3}",
+        client.getRouterRpcFairnessPolicyController()
+            .getAvailableHandlerOnPerNs());
+
+    // Refresh to dynamic
+    routerContext.getConf()
+        .set(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
+            DynamicRouterRpcFairnessPolicyController.class.getCanonicalName());
+    routerContext.getConf().setLong(
+        RBFConfigKeys.DFS_ROUTER_DYNAMIC_FAIRNESS_CONTROLLER_REFRESH_INTERVAL_SECONDS_KEY,
+        3);
+    client.refreshFairnessPolicyController(routerContext.getConf());
+
+    // Newly created state, 3:3:3
+    DynamicRouterRpcFairnessPolicyController controller =
+        (DynamicRouterRpcFairnessPolicyController) client.getRouterRpcFairnessPolicyController();
+    synchronized (controller.getResizerService()) {
+      assertEquals("{\"concurrent\":3,\"ns0\":3,\"ns1\":3}", controller.getAvailableHandlerOnPerNs());
+      makeDummySynchronizedInvocations(client, 2, "ns0");
+      makeDummySynchronizedInvocations(client, 1, "ns1");
+    }
+    Thread.sleep(4000);
+    // With dummy metrics, new handler cap is 6:3:1
+    assertEquals("{\"concurrent\":1,\"ns0\":6,\"ns1\":3}", controller.getAvailableHandlerOnPerNs());
+
+    // Refresh to static
+    routerContext.getConf()
+        .set(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
+            StaticRouterRpcFairnessPolicyController.class.getCanonicalName());
+    client.refreshFairnessPolicyController(routerContext.getConf());
+    assertEquals("{\"concurrent\":3,\"ns0\":3,\"ns1\":3}",
+        client.getRouterRpcFairnessPolicyController()
+            .getAvailableHandlerOnPerNs());
+
+    // Refresh to dynamic again
+    routerContext.getConf()
+        .set(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
+            DynamicRouterRpcFairnessPolicyController.class.getCanonicalName());
+    routerContext.getConf().setLong(
+        RBFConfigKeys.DFS_ROUTER_DYNAMIC_FAIRNESS_CONTROLLER_REFRESH_INTERVAL_SECONDS_KEY,
+        2);
+    client.refreshFairnessPolicyController(routerContext.getConf());
+    controller =
+        (DynamicRouterRpcFairnessPolicyController) client.getRouterRpcFairnessPolicyController();
+    synchronized (controller.getResizerService()) {
+      makeDummySynchronizedInvocations(client, 1, "ns0");
+      makeDummySynchronizedInvocations(client, 1, "ns1");
+    }
+    Thread.sleep(2500);
+    // With dummy metrics, new handler cap is 4:4:1
+    assertEquals("{\"concurrent\":1,\"ns0\":4,\"ns1\":4}",
+        client.getRouterRpcFairnessPolicyController()
+            .getAvailableHandlerOnPerNs());
+
+  }
+
+  private List<Thread> makeDummyInvocations(final RouterRpcClient client,
+      final int nThreads, final String namespace) {
     final RemoteMethod dummyMethod = Mockito.mock(RemoteMethod.class);
     List<Thread> threadAcquirePermits = new ArrayList<>();
     for (int i = 0; i < nThreads; i++) {
@@ -246,5 +349,13 @@ public class TestRouterRefreshFairnessPolicyController {
       threadAcquirePermit.start();
     }
     return threadAcquirePermits;
+  }
+
+  private void makeDummySynchronizedInvocations(RouterRpcClient client,
+      final int nInvos, final String namespace) throws IOException {
+    RemoteMethod dummyMethod = Mockito.mock(RemoteMethod.class);
+    for (int i = 0; i < nInvos; i++) {
+      client.invokeSingle(namespace, dummyMethod);
+    }
   }
 }
