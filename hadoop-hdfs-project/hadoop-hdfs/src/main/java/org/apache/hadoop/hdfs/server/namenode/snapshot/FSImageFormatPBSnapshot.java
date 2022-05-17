@@ -35,6 +35,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.hdfs.server.namenode.XAttrStorage;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.permission.PermissionStatus;
@@ -231,8 +232,9 @@ public class FSImageFormatPBSnapshot {
           }
           XAttrFeature xAttrs = null;
           if (fileInPb.hasXAttrs()) {
-            xAttrs = new XAttrFeature(FSImageFormatPBINode.Loader.loadXAttrs(
-                fileInPb.getXAttrs(), state.getStringTable()));
+            xAttrs = XAttrStorage.createXAttrFeature(
+                FSImageFormatPBINode.Loader.loadXAttrs(
+                    fileInPb.getXAttrs(), state.getStringTable()));
           }
 
           boolean isStriped =
@@ -363,8 +365,9 @@ public class FSImageFormatPBSnapshot {
           }
           XAttrFeature xAttrs = null;
           if (dirCopyInPb.hasXAttrs()) {
-            xAttrs = new XAttrFeature(FSImageFormatPBINode.Loader.loadXAttrs(
-                dirCopyInPb.getXAttrs(), state.getStringTable()));
+            xAttrs = XAttrStorage.createXAttrFeature(
+                FSImageFormatPBINode.Loader.loadXAttrs(
+                    dirCopyInPb.getXAttrs(), state.getStringTable()));
           }
 
           long modTime = dirCopyInPb.getModificationTime();
