@@ -98,6 +98,7 @@ public class ZoneMover {
   private final Map<String, Short> ruleMap;
   private final AtomicInteger retryCount;
   private final DFSClient dfs;
+  private static final long DELAY_AFTER_CHOOSE_FAIL = 2 * 1000;
 
   ZoneMover(NameNodeConnector nnc, Configuration conf,
       ReplicationRule rule, AtomicInteger retryCount) {
@@ -210,6 +211,9 @@ public class ZoneMover {
     // retryCount starts from 0 and ends at retryMaxAttempts
     AtomicInteger retryCount = new AtomicInteger(0);
     final long sleepTime = calculateSleepTime(conf);
+    final boolean exitEvenHasProgress = conf.getBoolean(
+        DFSConfigKeys.DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS,
+        DFSConfigKeys.DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS_DEFAULT);
 
     try {
       // Set maxNotChangedIterations to 1 as ZoneMover does not need to loop
@@ -235,6 +239,15 @@ public class ZoneMover {
             System.err.println("ZoneMover failed. Exiting with status " + r + "... ");
           }
           // must be an error statue, return
+          return r.getExitCode();
+        } else if (exitEvenHasProgress) {
+          // If we apply a replication rule to a path with a lot of data,
+          // for example, more than 1 PB. Some replicas may encounter
+          // moving failure but most succeed. At this case, the ExitStatus will
+          // be IN_PROGRESS. It will cost a lot of time to go through all files
+          // once more. We can exit here and rerun ZoneMover or not based on the
+          // number of failing cases in the log.
+          LOG.info("ZoneMover has progress in this round. Exiting ... ");
           return r.getExitCode();
         }
         zs.resetTargetsStatus();
@@ -698,7 +711,26 @@ public class ZoneMover {
           "source: {}, targetDataCenter: {}, targetTypes: {}, " +
           "excluded: {}.", db, source, targetDataCenter,
           targetTypes, excluded);
+      handleChooseFail(targetDataCenter, targetTypes);
       return false;
+    }
+
+    void handleChooseFail(String targetDataCenter, Set<StorageType> targetTypes) {
+      for (StorageType t: targetTypes) {
+        final List<StorageGroup> targets = storages.getTargetStorages(t, targetDataCenter);
+        int total = 0;
+        for (StorageGroup target: targets) {
+          total += target.getDDatanode().getPendingSize();
+        }
+        LOG.info("Average pending size for targetDataCenter: " + targetDataCenter +
+            ", storageType: " + t + ", datanodes.num: "+ targets.size() +
+            " is " + total / targets.size());
+      }
+      try {
+        Thread.sleep(DELAY_AFTER_CHOOSE_FAIL);
+      } catch (InterruptedException e) {
+        // ignore
+      }
     }
   }
 

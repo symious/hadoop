@@ -129,7 +129,7 @@ public class Dispatcher {
 
   private final long getBlocksSize;
   private final long getBlocksMinBlockSize;
-  private final long blockMoveTimeout;
+  protected final long blockMoveTimeout;
   /**
    * If no block can be moved out of a {@link Source} after this configured
    * amount of time, the Source should give up choosing the next possible move.
@@ -441,7 +441,7 @@ public class Dispatcher {
     }
 
     /** Check whether to continue waiting for response */
-    private boolean stopWaitingForResponse(long startTime) {
+    protected boolean stopWaitingForResponse(long startTime) {
       return source.isIterationOver() ||
           (blockMoveTimeout > 0 &&
           (Time.monotonicNow() - startTime > blockMoveTimeout));
@@ -646,6 +646,8 @@ public class Dispatcher {
     private Map<Long, Set<DatanodeInfo>> blockPinningFailures = new HashMap<>();
     private volatile boolean hasSuccess = false;
     private ExecutorService moveExecutor;
+    // a datanode may go dead during the move process
+    protected volatile boolean isAlive = true;
 
     @Override
     public String toString() {
@@ -752,6 +754,16 @@ public class Dispatcher {
     public void resetStatus() {
       this.hasFailure = false;
       this.hasSuccess = false;
+    }
+
+    public void setDead() {
+      if (this.isAlive) {
+        this.isAlive = false;
+      }
+    }
+
+    public int getPendingSize() {
+      return this.pendings.size();
     }
   }
 

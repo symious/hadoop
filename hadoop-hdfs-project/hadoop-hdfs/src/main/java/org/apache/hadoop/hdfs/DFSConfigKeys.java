@@ -762,6 +762,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONEMOVER_MONITOR_CHECK_INTERVAL_KEY =
       "dfs.zonemover.monitorCheckInterval";
   public static final long    DFS_ZONEMOVER_MONITOR_CHECK_INTERVAL_DEFAULT = 1000L * 60 * 2;
+  public static final String  DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS =
+      "dfs.zonemover.exitEvenHasProgress";
+  public static final boolean DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS_DEFAULT = true;
 
   // StoragePolicySatisfier (SPS) related configurations
   public static final String  DFS_STORAGE_POLICY_SATISFIER_MODE_KEY =

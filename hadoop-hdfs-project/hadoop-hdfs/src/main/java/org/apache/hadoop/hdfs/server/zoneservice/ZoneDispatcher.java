@@ -25,6 +25,7 @@ import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.datatransfer.IOStreamPair;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
+import org.apache.hadoop.hdfs.security.token.block.InvalidBlockTokenException;
 import org.apache.hadoop.hdfs.server.balancer.Dispatcher;
 import org.apache.hadoop.hdfs.server.balancer.KeyManager;
 import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
@@ -32,6 +33,7 @@ import org.apache.hadoop.hdfs.server.balancer.Dispatcher.DDatanode.StorageGroup;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,7 +44,9 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.ConnectException;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -57,6 +61,7 @@ public class ZoneDispatcher extends Dispatcher {
       ZoneDispatcher.class);
   private final int blockDispatchAttempts;
   private final long blockDispatchRetryInterval;
+  private static final long DELAY_AFTER_DATANODE_ERRORS = 10 * 60 * 1000;
 
   /** Constructor called by ZoneMover. */
   public ZoneDispatcher(NameNodeConnector nnc, Set<String> includedNodes,
@@ -163,8 +168,31 @@ public class ZoneDispatcher extends Dispatcher {
             nnc.addBytesMoved(reportedBlock.getNumBytes());
             LOG.info("Successfully moved " + this + " at round " + i);
             return;
-          } catch (IOException e) {
+          } catch (SocketTimeoutException|ConnectException|InvalidBlockTokenException e) {
+            // for InvalidBlockTokenException, please refer HDFS-13441
             LOG.warn("Failed to move " + this, e);
+            LOG.warn("Found a problem datanode: " +
+                target.getDDatanode().getDatanodeInfo());
+            target.getDDatanode().setHasFailure();
+            target.getDDatanode().activateDelay(DELAY_AFTER_DATANODE_ERRORS);
+            return;
+          } catch (IOException e) {
+            // If the attempt encounters "IOException: Block move timed out",
+            // it may encounter ReplicaAlreadyExistsException when retrying
+            // if the first attempt actually succeed in the target datanode.
+            if (e.getMessage().contains("ReplicaAlreadyExistsException")) {
+              LOG.info("Ignore ReplicaAlreadyExistsException for " + this);
+              return;
+            }
+            LOG.warn("Failed to move " + this, e);
+            if (e.getMessage().contains("SocketTimeoutException") ||
+                e.getMessage().contains("ConnectException") ||
+                e.getMessage().contains("InvalidBlockTokenException")) {
+              LOG.warn("Found a problem datanode: " + proxySource.getDatanodeInfo());
+              target.getDDatanode().setHasFailure();
+              proxySource.activateDelay(DELAY_AFTER_DATANODE_ERRORS);
+              return;
+            }
             // Proxy or target may have some issues, delay before using these nodes
             // further in order to avoid a potential storm of "threads quota
             // exceeded" warnings when the dispatcher gets out of sync with work
@@ -235,6 +263,12 @@ public class ZoneDispatcher extends Dispatcher {
         IOUtils.closeSocket(sock);
       }
     }
+
+    @Override
+    protected boolean stopWaitingForResponse(long startTime) {
+      return (blockMoveTimeout > 0 &&
+          (Time.monotonicNow() - startTime > blockMoveTimeout));
+    }
   }
 
   /** A node that can be the sources of a block move */
@@ -254,8 +288,10 @@ public class ZoneDispatcher extends Dispatcher {
   public static class ZoneDDatanode extends DDatanode {
     // limit concurrent moves on each target datanode
     private final Semaphore permits;
+    private final int maxConcurrentMoves;
     private ZoneDDatanode(DatanodeInfo datanode, int maxConcurrentMoves) {
       super(datanode, maxConcurrentMoves);
+      this.maxConcurrentMoves = maxConcurrentMoves;
       this.permits = new Semaphore(maxConcurrentMoves, true);
     }
 
@@ -265,6 +301,19 @@ public class ZoneDispatcher extends Dispatcher {
           storageType, maxSize2Move, this);
       put(storageType, zs, sourceMap);
       return zs;
+    }
+
+    @Override
+    public synchronized boolean addPendingBlock(PendingMove pendingBlock) {
+      if (!isAlive) {
+        return false;
+      }
+      int MAX_WAITING_MULTIPLE = 2;
+      // avoid too many tasks waiting for the permit of this node
+      if (getPendingSize() >= maxConcurrentMoves * MAX_WAITING_MULTIPLE) {
+        return false;
+      }
+      return super.addPendingBlock(pendingBlock);
     }
   }
 
