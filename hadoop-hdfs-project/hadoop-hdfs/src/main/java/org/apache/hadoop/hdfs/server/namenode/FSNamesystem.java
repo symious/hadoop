@@ -4935,6 +4935,13 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     logAuditEvent(true, operationName, null);
   }
 
+  boolean refreshTopology(String ipAddr) throws IOException {
+    checkOperation(OperationCategory.UNCHECKED);
+    checkSuperuserPrivilege();
+    return getBlockManager().getDatanodeManager()
+        .refreshTopology(new HdfsConfiguration(), ipAddr);
+  }
+
   void setBalancerBandwidth(long bandwidth) throws IOException {
     String operationName = "setBalancerBandwidth";
     checkOperation(OperationCategory.WRITE);

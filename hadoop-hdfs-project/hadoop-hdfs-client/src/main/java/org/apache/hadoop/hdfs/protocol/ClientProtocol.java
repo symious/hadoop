@@ -960,6 +960,14 @@ public interface ClientProtocol {
   boolean restoreFailedStorage(String arg) throws IOException;
 
   /**
+   * Tells the namenode to refresh cluster's network topology.
+   * @param ipAddr the hostname/IP-address of the node to refresh
+   * @throws IOException
+   */
+  @Idempotent
+  boolean refreshTopology(String ipAddr) throws IOException;
+
+  /**
    * Tells the namenode to reread the hosts and exclude files.
    * @throws IOException
    */
