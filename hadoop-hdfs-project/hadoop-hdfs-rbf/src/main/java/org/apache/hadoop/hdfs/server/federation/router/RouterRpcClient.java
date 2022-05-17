@@ -1393,7 +1393,8 @@ public class RouterRpcClient {
         }
       } else if (autoMsyncPeriodMs == 0) {
         invokeMethod(ugi, namenodes, ClientProtocol.class, mSyncMethod);
-      } else if (Time.monotonicNow() - lastMsyncTimes.get(ns).get() > autoMsyncPeriodMs) {
+      } else if (Time.monotonicNow() - lastMsyncTimes.get(ns).get() > autoMsyncPeriodMs
+          || needSyncForwardThisRequest()) {
         invokeMethod(ugi, namenodes, ClientProtocol.class, mSyncMethod);
         lastMsyncTimes.get(ns).set(Time.monotonicNow());
       }
@@ -1595,5 +1596,14 @@ public class RouterRpcClient {
       return routerRpcFairnessPolicyController.getClass().getCanonicalName();
     }
     return null;
+  }
+
+  /**
+   * @return if true then RBF need to synchronously forward this read request.
+   */
+  public boolean needSyncForwardThisRequest() {
+    CallerContext currentContext = CallerContext.getCurrent();
+    return currentContext != null && currentContext.getContext() != null
+        && currentContext.getContext().contains("needSyncObserverRead");
   }
 }
