@@ -2111,6 +2111,23 @@ public class DatanodeManager {
       }
 
       @Override
+      public int getDataCenterNumDatanodesInService(String dataCenter) {
+        return heartbeatManager.getDataCenterNumDatanodesInService(dataCenter);
+      }
+
+      @Override
+      public double getDataCenterInServiceXceiverAverage(String dataCenter) {
+        double avgLoad = 0;
+        final int nodes = getDataCenterNumDatanodesInService(dataCenter);
+        if (nodes != 0) {
+          final int xceivers = heartbeatManager
+              .getDataCenterInServiceXceiverCount(dataCenter);
+          avgLoad = (double)xceivers/nodes;
+        }
+        return avgLoad;
+      }
+
+      @Override
       public Map<StorageType, StorageTypeStats> getStorageTypeStats() {
         return heartbeatManager.getStorageTypeStats();
       }

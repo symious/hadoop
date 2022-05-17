@@ -106,7 +106,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   private boolean excludeSlowNodesEnabled;
   protected NetworkTopology clusterMap;
   protected Host2NodesMap host2datanodeMap;
-  private FSClusterStats stats;
+  protected FSClusterStats stats;
   protected long heartbeatInterval;   // interval for DataNode heartbeats
   private long staleInterval;   // interval used to identify stale DataNodes
   
@@ -1016,7 +1016,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
    * @param node the datanode whose storage types are to be taken into account.
    * @return the InServiceXceiverAverage count.
    */
-  private double getInServiceXceiverAverage(DatanodeDescriptor node) {
+  protected double getInServiceXceiverAverage(DatanodeDescriptor node) {
     double inServiceXceiverCount;
     if (considerLoadByStorageType) {
       inServiceXceiverCount =

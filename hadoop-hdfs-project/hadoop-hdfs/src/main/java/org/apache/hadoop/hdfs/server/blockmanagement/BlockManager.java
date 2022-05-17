@@ -5187,6 +5187,11 @@ public class BlockManager implements BlockStatsMXBean {
     return  datanodeManager.getDatanodeStatistics().getStorageTypeStats();
   }
 
+  @Override
+  public Map<String, DataCenterStats> getDataCenterStats() {
+    return  datanodeManager.getDatanodeStatistics().getDataCenterStats();
+  }
+
   /**
    * Initialize replication queues.
    */

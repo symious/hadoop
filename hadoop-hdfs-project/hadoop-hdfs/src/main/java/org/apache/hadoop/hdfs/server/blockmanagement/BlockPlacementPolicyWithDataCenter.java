@@ -300,4 +300,13 @@ public class BlockPlacementPolicyWithDataCenter extends
         .chooseRandomWithStorageTypeTwoTrial(
             scope, excludedNodes, type);
   }
+
+  @Override
+  protected double getInServiceXceiverAverage(DatanodeDescriptor node) {
+    double inServiceXceiverCount;
+    String dataCenter = DFSNetworkTopologyWithDataCenter
+        .getDataCenter(node.getNetworkLocation());
+    inServiceXceiverCount = stats.getDataCenterInServiceXceiverAverage(dataCenter);
+    return inServiceXceiverCount;
+  }
 }
