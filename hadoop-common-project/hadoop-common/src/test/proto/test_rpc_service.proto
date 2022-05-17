@@ -47,6 +47,7 @@ service TestProtobufRpcProto {
   rpc sendPostponed(EmptyRequestProto) returns (EmptyResponseProto);
   rpc getCurrentUser(EmptyRequestProto) returns (UserResponseProto);
   rpc getServerRemoteUser(EmptyRequestProto) returns (UserResponseProto);
+  rpc getProxyHostname(GetProxyHostnameRequestProto) returns (GetProxyHostnameResponseProto);
 }
 
 service TestProtobufRpc2Proto {

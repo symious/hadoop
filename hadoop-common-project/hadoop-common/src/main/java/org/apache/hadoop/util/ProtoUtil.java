@@ -186,12 +186,13 @@ public abstract class ProtoUtil {
       RpcRequestHeaderProto.OperationProto operation, int callId,
       int retryCount, byte[] uuid) {
     return makeRpcRequestHeader(rpcKind, operation, callId, retryCount, uuid,
-        null);
+        null, null);
   }
 
   public static RpcRequestHeaderProto makeRpcRequestHeader(RPC.RpcKind rpcKind,
       RpcRequestHeaderProto.OperationProto operation, int callId,
-      int retryCount, byte[] uuid, AlignmentContext alignmentContext) {
+      int retryCount, byte[] uuid, String proxyHostname,
+      AlignmentContext alignmentContext) {
     RpcRequestHeaderProto.Builder result = RpcRequestHeaderProto.newBuilder();
     result.setRpcKind(convert(rpcKind)).setRpcOp(operation).setCallId(callId)
         .setRetryCount(retryCount).setClientId(ByteString.copyFrom(uuid));
@@ -220,6 +221,11 @@ public abstract class ProtoUtil {
     // Add alignment context if it is not null
     if (alignmentContext != null) {
       alignmentContext.updateRequestState(result);
+    }
+
+    // Add proxy hostname if it is not null
+    if (proxyHostname != null) {
+      result.setProxyHostname(proxyHostname);
     }
 
     return result.build();

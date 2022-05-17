@@ -406,6 +406,22 @@ public abstract class Server {
     return (call != null ) ? call.getHostInetAddress() : null;
   }
 
+  public static InetAddress getProxyHostIp() {
+    Call call = CurCall.get();
+    if (call == null) {
+      return null;
+    }
+    InetAddress address = null;
+    if (call.proxyHostname != null) {
+      try {
+        address = InetAddress.getByName(call.proxyHostname);
+      } catch (UnknownHostException e) {
+        LOG.warn("unknown hostname: " + call.proxyHostname);
+      }
+    }
+    return address;
+  }
+
   /**
    * Returns the SASL qop for the current call, if the current call is
    * set, and the SASL negotiation is done. Otherwise return null
@@ -445,6 +461,14 @@ public abstract class Server {
    */
   public static String getRemoteAddress() {
     InetAddress addr = getRemoteIp();
+    return (addr == null) ? null : addr.getHostAddress();
+  }
+
+  /** Returns proxy address as a string when invoked inside an RPC.
+   *  Returns null in case of an error.
+   */
+  public static String getProxyHostAddress() {
+    InetAddress addr = getProxyHostIp();
     return (addr == null) ? null : addr.getHostAddress();
   }
 
@@ -851,6 +875,7 @@ public abstract class Server {
     // the priority level assigned by scheduler, 0 by default
     private long clientStateId;
     private boolean isCallCoordinated;
+    private final String proxyHostname;
 
     Call() {
       this(RpcConstants.INVALID_CALL_ID, RpcConstants.INVALID_RETRY_COUNT,
@@ -859,21 +884,28 @@ public abstract class Server {
 
     Call(Call call) {
       this(call.callId, call.retryCount, call.rpcKind, call.clientId,
-          call.traceScope, call.callerContext);
+          call.traceScope, call.callerContext, call.proxyHostname);
     }
 
     Call(int id, int retryCount, RPC.RpcKind kind, byte[] clientId) {
-      this(id, retryCount, kind, clientId, null, null);
+      this(id, retryCount, kind, clientId, null, null, null);
     }
 
     @VisibleForTesting // primarily TestNamenodeRetryCache
     public Call(int id, int retryCount, Void ignore1, Void ignore2,
         RPC.RpcKind kind, byte[] clientId) {
-      this(id, retryCount, kind, clientId, null, null);
+      this(id, retryCount, kind, clientId, null, null, null);
+    }
+
+    @VisibleForTesting
+    public Call(int id, int retryCount, Void ignore1, Void ignore2,
+        RPC.RpcKind kind, byte[] clientId, String proxyHostname) {
+      this(id, retryCount, kind, clientId, null, null, proxyHostname);
     }
 
     Call(int id, int retryCount, RPC.RpcKind kind, byte[] clientId,
-        TraceScope traceScope, CallerContext callerContext) {
+        TraceScope traceScope, CallerContext callerContext,
+        String proxyHostname) {
       this.callId = id;
       this.retryCount = retryCount;
       this.timestampNanos = Time.monotonicNowNanos();
@@ -884,6 +916,7 @@ public abstract class Server {
       this.callerContext = callerContext;
       this.clientStateId = Long.MIN_VALUE;
       this.isCallCoordinated = false;
+      this.proxyHostname = proxyHostname;
     }
 
     /**
@@ -1050,7 +1083,14 @@ public abstract class Server {
     RpcCall(Connection connection, int id, int retryCount,
         Writable param, RPC.RpcKind kind, byte[] clientId,
         TraceScope traceScope, CallerContext context) {
-      super(id, retryCount, kind, clientId, traceScope, context);
+      this(connection, id, retryCount, param, kind, clientId, traceScope,
+          context, null);
+    }
+
+    RpcCall(Connection connection, int id, int retryCount,
+        Writable param, RPC.RpcKind kind, byte[] clientId,
+        TraceScope traceScope, CallerContext context, String proxyHostname) {
+      super(id, retryCount, kind, clientId, traceScope, context, proxyHostname);
       this.connection = connection;
       this.rpcRequest = param;
     }
@@ -2761,10 +2801,19 @@ public abstract class Server {
                 .build();
       }
 
+      String proxyHostname = null;
+      if (header.hasProxyHostname()) {
+        proxyHostname = header.getProxyHostname();
+        if (proxyHostname.equals("")) {
+          proxyHostname = null;
+        }
+      }
+
       RpcCall call = new RpcCall(this, header.getCallId(),
           header.getRetryCount(), rpcRequest,
           ProtoUtil.convert(header.getRpcKind()),
-          header.getClientId().toByteArray(), traceScope, callerContext);
+          header.getClientId().toByteArray(), traceScope,
+          callerContext, proxyHostname);
 
       // Save the priority level assignment by the scheduler
       call.setPriorityLevel(callQueue.getPriorityLevel(call));

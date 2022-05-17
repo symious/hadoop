@@ -66,8 +66,10 @@ import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
 import org.apache.hadoop.io.retry.RetryPolicies;
 import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.io.retry.RetryPolicy.RetryAction.RetryDecision;
+import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.RetriableException;
+import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.net.ConnectTimeoutException;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -115,6 +117,8 @@ public class RouterRpcClient {
   private final RetryPolicy retryPolicy;
   /** Optional perf monitor. */
   private final RouterRpcMonitor rpcMonitor;
+
+  private final boolean addProxyHostname;
 
   /** Pattern to parse a stack trace line. */
   private static final Pattern STACK_TRACE_PATTERN =
@@ -173,6 +177,9 @@ public class RouterRpcClient {
     this.retryPolicy = RetryPolicies.failoverOnNetworkException(
         RetryPolicies.TRY_ONCE_THEN_FAIL, maxFailoverAttempts, maxRetryAttempts,
         failoverSleepBaseMillis, failoverSleepMaxMillis);
+    this.addProxyHostname=
+        conf.getBoolean(RBFConfigKeys.DFS_ROUTER_PROXY_HOSTNAME_ENABLE,
+            RBFConfigKeys.DFS_ROUTER_PROXY_HOSTNAME_ENABLED_DEFAULT);
   }
 
   /**
@@ -405,6 +412,7 @@ public class RouterRpcClient {
           + router.getRouterId());
     }
 
+    appendProxyHostname();
     Object ret = null;
     if (rpcMonitor != null) {
       rpcMonitor.proxyOp();
@@ -516,6 +524,12 @@ public class RouterRpcClient {
       throw new ConnectException(msg);
     } else {
       throw new StandbyException(msg);
+    }
+  }
+
+  private void appendProxyHostname() {
+    if (addProxyHostname) {
+      Client.setProxyHostname(Server.getRemoteAddress());
     }
   }
 

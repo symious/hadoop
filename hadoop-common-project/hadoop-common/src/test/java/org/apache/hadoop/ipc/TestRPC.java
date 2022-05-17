@@ -396,6 +396,24 @@ public class TestRPC extends TestRpcBase {
   }
 
   @Test
+  public void testProxyHostname() throws Exception {
+    Server server = null;
+    TestRpcService proxy = null;
+    try {
+      server = setupTestServer(conf, -1);
+      // create a client
+      proxy = getClient(addr, conf);
+      String hostname = "10.10.10.10";
+      Client.setProxyHostname(hostname);
+      String proxyHostname = proxy.getProxyHostname(
+          null, newGetProxyHostnameRequest()).getMessage();
+      assertEquals(hostname, proxyHostname);
+    } finally {
+      stop(server, proxy);
+    }
+  }
+
+  @Test
   public void testSlowRpc() throws IOException, ServiceException {
     Server server;
     TestRpcService proxy = null;

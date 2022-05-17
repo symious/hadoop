@@ -177,6 +177,14 @@
   </property>
 
   <property>
+    <name>dfs.federation.router.proxy.hostname.enable</name>
+    <value>false</value>
+    <description>
+      Enable router to add the hostname of the client in the RPC header.
+    </description>
+  </property>
+
+  <property>
     <name>dfs.federation.router.metrics.class</name>
     <value>org.apache.hadoop.hdfs.server.federation.metrics.FederationRPCPerformanceMonitor</value>
     <description>

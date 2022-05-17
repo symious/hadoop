@@ -298,6 +298,21 @@ public class TestRpcBase {
     }
 
     @Override
+    public TestProtos.GetProxyHostnameResponseProto getProxyHostname(
+        RpcController controller,
+        TestProtos.GetProxyHostnameRequestProto request) {
+      String proxyHostname = Server.getProxyHostAddress();
+      return newProxyHostnameResponse(proxyHostname);
+    }
+
+    private TestProtos.GetProxyHostnameResponseProto newProxyHostnameResponse(
+        String hostname) {
+      return TestProtos.GetProxyHostnameResponseProto.newBuilder()
+          .setMessage(hostname)
+          .build();
+    }
+
+    @Override
     public TestProtos.EchoResponseProto echo(
         RpcController unused, TestProtos.EchoRequestProto request)
         throws ServiceException {
@@ -553,5 +568,9 @@ public class TestRpcBase {
       return AuthMethod.TOKEN;
     }
     return null;
+  }
+
+  protected static TestProtos.GetProxyHostnameRequestProto newGetProxyHostnameRequest() {
+    return TestProtos.GetProxyHostnameRequestProto.newBuilder().build();
   }
 }

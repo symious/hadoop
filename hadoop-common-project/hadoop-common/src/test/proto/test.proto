@@ -100,3 +100,10 @@ message SleepResponseProto2 {
   optional int64 receive_time = 1;
   optional int64 response_time = 2;
 }
+
+message GetProxyHostnameRequestProto{
+}
+
+message GetProxyHostnameResponseProto{
+  required string message = 1;
+}
