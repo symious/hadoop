@@ -2586,7 +2586,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * {@link ClientProtocol#create}, except it returns valid file status upon
    * success
    */
-  HdfsFileStatus startFile(String src, PermissionStatus permissions,
+  public HdfsFileStatus startFile(String src, PermissionStatus permissions,
       String holder, String clientMachine, EnumSet<CreateFlag> flag,
       boolean createParent, short replication, long blockSize,
       CryptoProtocolVersion[] supportedVersions, String ecPolicyName,

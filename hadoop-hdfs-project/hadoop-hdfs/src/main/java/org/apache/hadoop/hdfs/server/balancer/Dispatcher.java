@@ -95,10 +95,10 @@ public class Dispatcher {
    * the period of time to delay the usage of a DataNode after hitting
    * errors when using it for migrating data
    */
-  private static long delayAfterErrors = 10 * 1000;
+  protected static long delayAfterErrors = 10 * 1000;
 
-  private final NameNodeConnector nnc;
-  private final SaslDataTransferClient saslClient;
+  protected final NameNodeConnector nnc;
+  protected final SaslDataTransferClient saslClient;
 
   /** Set of datanodes to be excluded. */
   private final Set<String> excludedNodes;
@@ -117,14 +117,14 @@ public class Dispatcher {
   private final StorageGroupMap<StorageGroup> storageGroupMap
       = new StorageGroupMap<StorageGroup>();
 
-  private NetworkTopology cluster;
+  protected NetworkTopology cluster;
 
-  private final ExecutorService dispatchExecutor;
+  protected final ExecutorService dispatchExecutor;
 
   private final Allocator moverThreadAllocator;
 
   /** The maximum number of concurrent blocks moves at a datanode */
-  private final int maxConcurrentMovesPerNode;
+  protected final int maxConcurrentMovesPerNode;
   private final int maxMoverThreads;
 
   private final long getBlocksSize;
@@ -136,9 +136,9 @@ public class Dispatcher {
    */
   private final int maxNoMoveInterval;
 
-  private final int ioFileBufferSize;
+  protected final int ioFileBufferSize;
 
-  private final boolean connectToDnViaHostname;
+  protected final boolean connectToDnViaHostname;
   private BlockPlacementPolicies placementPolicies;
 
   private long maxIterationTime;
@@ -236,12 +236,12 @@ public class Dispatcher {
 
   /** This class keeps track of a scheduled reportedBlock move */
   public class PendingMove {
-    private DBlock reportedBlock;
-    private Source source;
-    private DDatanode proxySource;
-    private StorageGroup target;
+    public DBlock reportedBlock;
+    protected Source source;
+    protected DDatanode proxySource;
+    protected StorageGroup target;
 
-    private PendingMove(Source source, StorageGroup target) {
+    protected PendingMove(Source source, StorageGroup target) {
       this.source = source;
       this.target = target;
     }
@@ -266,7 +266,7 @@ public class Dispatcher {
      * 
      * @return true if a block and its proxy are chosen; false otherwise
      */
-    private boolean chooseBlockAndProxy() {
+    public boolean chooseBlockAndProxy() {
       // source and target must have the same storage type
       final StorageType t = source.getStorageType();
       // iterate all source's blocks until find a good one
@@ -309,7 +309,7 @@ public class Dispatcher {
      * 
      * @return true if a proxy is found; otherwise false
      */
-    private boolean chooseProxySource() {
+    protected boolean chooseProxySource() {
       final DatanodeInfo targetDN = target.getDatanodeInfo();
       // if source and target are same nodes then no need of proxy
       if (source.getDatanodeInfo().equals(targetDN) && addTo(source)) {
@@ -340,7 +340,7 @@ public class Dispatcher {
     }
 
     /** add to a proxy source for specific reportedBlock movement */
-    private boolean addTo(StorageGroup g) {
+    protected boolean addTo(StorageGroup g) {
       final DDatanode dn = g.getDDatanode();
       if (dn.addPendingBlock(this)) {
         proxySource = dn;
@@ -350,7 +350,7 @@ public class Dispatcher {
     }
 
     /** Dispatch the move to the proxy source & wait for the response. */
-    private void dispatch() {
+    public void dispatch() {
       Socket sock = new Socket();
       DataOutputStream out = null;
       DataInputStream in = null;
@@ -433,7 +433,7 @@ public class Dispatcher {
     }
 
     /** Send a reportedBlock replace request to the output stream */
-    private void sendRequest(DataOutputStream out, ExtendedBlock eb,
+    protected void sendRequest(DataOutputStream out, ExtendedBlock eb,
         Token<BlockTokenIdentifier> accessToken) throws IOException {
       new Sender(out).replaceBlock(eb, target.storageType, accessToken,
           source.getDatanodeInfo().getDatanodeUuid(), proxySource.datanode,
@@ -448,7 +448,7 @@ public class Dispatcher {
     }
 
     /** Receive a reportedBlock copy response from the input stream */
-    private void receiveResponse(DataInputStream in) throws IOException {
+    protected void receiveResponse(DataInputStream in) throws IOException {
       long startTime = Time.monotonicNow();
       BlockOpResponseProto response =
           BlockOpResponseProto.parseFrom(vintPrefixed(in));
@@ -466,7 +466,7 @@ public class Dispatcher {
     }
 
     /** reset the object */
-    private void reset() {
+    protected void reset() {
       reportedBlock = null;
       source = null;
       proxySource = null;
@@ -523,7 +523,7 @@ public class Dispatcher {
   }
 
   /** The class represents a desired move. */
-  static class Task {
+  public static class Task {
     private final StorageGroup target;
     private long size; // bytes scheduled to move
 
@@ -555,7 +555,7 @@ public class Dispatcher {
         return storageType;
       }
 
-      private DDatanode getDDatanode() {
+      public DDatanode getDDatanode() {
         return DDatanode.this;
       }
 
@@ -592,7 +592,7 @@ public class Dispatcher {
         scheduledSize = 0L;
       }
 
-      private PendingMove addPendingMove(DBlock block, final PendingMove pm) {
+      public PendingMove addPendingMove(DBlock block, final PendingMove pm) {
         if (getDDatanode().addPendingBlock(pm)) {
           if (pm.markMovedIfGoodBlock(block, getStorageType())) {
             incScheduledSize(pm.reportedBlock.getNumBytes());
@@ -635,7 +635,7 @@ public class Dispatcher {
     }
 
     final DatanodeInfo datanode;
-    private final EnumMap<StorageType, Source> sourceMap
+    protected final EnumMap<StorageType, Source> sourceMap
         = new EnumMap<StorageType, Source>(StorageType.class);
     private final EnumMap<StorageType, StorageGroup> targetMap
         = new EnumMap<StorageType, StorageGroup>(StorageType.class);
@@ -652,7 +652,7 @@ public class Dispatcher {
       return getClass().getSimpleName() + ":" + datanode;
     }
 
-    private DDatanode(DatanodeInfo datanode, int maxConcurrentMoves) {
+    protected DDatanode(DatanodeInfo datanode, int maxConcurrentMoves) {
       this.datanode = datanode;
       this.pendings = new ArrayList<PendingMove>(maxConcurrentMoves);
     }
@@ -676,7 +676,7 @@ public class Dispatcher {
       }
     }
 
-    private static <G extends StorageGroup> void put(StorageType storageType,
+    protected static <G extends StorageGroup> void put(StorageType storageType,
         G g, EnumMap<StorageType, G> map) {
       final StorageGroup existing = map.put(storageType, g);
       Preconditions.checkState(existing == null);
@@ -694,7 +694,7 @@ public class Dispatcher {
       return s;
     }
 
-    synchronized private void activateDelay(long delta) {
+    synchronized public void activateDelay(long delta) {
       delayUntil = Time.monotonicNow() + delta;
       LOG.info(this + " activateDelay " + delta/1000.0 + " seconds");
     }
@@ -713,7 +713,7 @@ public class Dispatcher {
     }
 
     /** Add a scheduled block move to the node */
-    synchronized boolean addPendingBlock(PendingMove pendingBlock) {
+    synchronized public boolean addPendingBlock(PendingMove pendingBlock) {
       if (!isDelayActive()) {
         return pendings.add(pendingBlock);
       }
@@ -721,11 +721,11 @@ public class Dispatcher {
     }
 
     /** Remove a scheduled block move from the node */
-    synchronized boolean removePendingBlock(PendingMove pendingBlock) {
+    public synchronized boolean removePendingBlock(PendingMove pendingBlock) {
       return pendings.remove(pendingBlock);
     }
 
-    void setHasFailure() {
+    public void setHasFailure() {
       this.hasFailure = true;
     }
 
@@ -745,8 +745,13 @@ public class Dispatcher {
       return blockPinningFailures;
     }
 
-    void setHasSuccess() {
+    public void setHasSuccess() {
       this.hasSuccess = true;
+    }
+
+    public void resetStatus() {
+      this.hasFailure = false;
+      this.hasSuccess = false;
     }
   }
 
@@ -763,7 +768,7 @@ public class Dispatcher {
      */
     private final List<DBlock> srcBlocks = new ArrayList<DBlock>();
 
-    private Source(StorageType storageType, long maxSize2Move, DDatanode dn) {
+    protected Source(StorageType storageType, long maxSize2Move, DDatanode dn) {
       dn.super(storageType, maxSize2Move);
     }
 
@@ -879,7 +884,7 @@ public class Dispatcher {
      * 
      * @return a move that's good for the source to dispatch immediately.
      */
-    private PendingMove chooseNextMove() {
+    protected PendingMove chooseNextMove() {
       for (Iterator<Task> i = tasks.iterator(); i.hasNext();) {
         final Task task = i.next();
         final DDatanode target = task.target.getDDatanode();
@@ -1016,7 +1021,7 @@ public class Dispatcher {
         0L, 0L, 0, maxNoMoveInterval, -1, conf);
   }
 
-  Dispatcher(NameNodeConnector nnc, Set<String> includedNodes,
+  public Dispatcher(NameNodeConnector nnc, Set<String> includedNodes,
       Set<String> excludedNodes, String dataCenterConstraint,
       long movedWinWidth, int moverThreads,
       int dispatcherThreads, int maxConcurrentMovesPerNode,
@@ -1319,7 +1324,7 @@ public class Dispatcher {
    * 2. the block does not have a replica/internalBlock on the target;
    * 3. doing the move does not reduce the number of racks that the block has
    */
-  private boolean isGoodBlockCandidate(StorageGroup source, StorageGroup target,
+  protected boolean isGoodBlockCandidate(StorageGroup source, StorageGroup target,
       StorageType targetStorageType, DBlock block) {
     if (source.equals(target)) {
       return false;
@@ -1351,7 +1356,7 @@ public class Dispatcher {
   }
 
   // Check if the move will violate the block placement policy.
-  private boolean isGoodBlockCandidateForPlacementPolicy(StorageGroup source,
+  protected boolean isGoodBlockCandidateForPlacementPolicy(StorageGroup source,
      StorageGroup target, DBlock block) {
     List<DatanodeInfo> datanodeInfos = new ArrayList<>();
     synchronized (block) {

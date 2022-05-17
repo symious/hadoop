@@ -65,6 +65,7 @@ function hadoop_usage
   hadoop_add_subcommand "storagepolicies" admin "list/get/set/satisfyStoragePolicy block storage policies"
   hadoop_add_subcommand "sps" daemon "run external storagepolicysatisfier"
   hadoop_add_subcommand "version" client "print the version"
+  hadoop_add_subcommand "zonemover" client "run a utility to migrate replicas between datacenters"
   hadoop_add_subcommand "zkfc" daemon "run the ZK Failover Controller daemon"
   hadoop_generate_usage "${HADOOP_SHELL_EXECNAME}" false
 }
@@ -208,6 +209,12 @@ function hdfscmd_case
     ;;
     version)
       HADOOP_CLASSNAME=org.apache.hadoop.util.VersionInfo
+    ;;
+    zonemover)
+      HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneMover
+    ;;
+    zonechecker)
+      HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneChecker
     ;;
     zkfc)
       HADOOP_SUBCMD_SUPPORTDAEMONIZATION="true"

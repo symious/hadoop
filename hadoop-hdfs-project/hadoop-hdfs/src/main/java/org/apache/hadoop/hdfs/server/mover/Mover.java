@@ -219,7 +219,7 @@ public class Mover {
     return db;
   }
 
-  private static long getMaxRemaining(DatanodeStorageReport report, StorageType t) {
+  public static long getMaxRemaining(DatanodeStorageReport report, StorageType t) {
     long max = 0L;
     for(StorageReport r : report.getStorageReports()) {
       if (r.getStorage().getStorageType() == t) {
@@ -547,7 +547,7 @@ public class Mover {
     }
   }
 
-  static class MLocation {
+  public static class MLocation {
     final DatanodeInfo datanode;
     final StorageType storageType;
     final long size;
@@ -558,7 +558,7 @@ public class Mover {
       this.size = size;
     }
     
-    static List<MLocation> toLocations(LocatedBlock lb) {
+    public static List<MLocation> toLocations(LocatedBlock lb) {
       final DatanodeInfo[] datanodeInfos = lb.getLocations();
       final StorageType[] storageTypes = lb.getStorageTypes();
       final long size = lb.getBlockSize();
@@ -567,6 +567,14 @@ public class Mover {
         locations.add(new MLocation(datanodeInfos[i], storageTypes[i], size));
       }
       return locations;
+    }
+
+    public DatanodeInfo getDatanode() {
+      return datanode;
+    }
+
+    public StorageType getStorageType() {
+      return storageType;
     }
   }
 
@@ -823,35 +831,35 @@ public class Mover {
     }
   }
 
-  private static class Result {
+  public static class Result {
 
     private boolean hasRemaining;
     private boolean noBlockMoved;
     private boolean retryFailed;
 
-    Result() {
+    public Result() {
       hasRemaining = false;
       noBlockMoved = true;
       retryFailed = false;
     }
 
-    boolean isHasRemaining() {
+    public boolean isHasRemaining() {
       return hasRemaining;
     }
 
-    boolean isNoBlockMoved() {
+    public boolean isNoBlockMoved() {
       return noBlockMoved;
     }
 
-    void updateHasRemaining(boolean hasRemaining) {
+    public void updateHasRemaining(boolean hasRemaining) {
       this.hasRemaining |= hasRemaining;
     }
 
-    void setNoBlockMoved(boolean noBlockMoved) {
+    public void setNoBlockMoved(boolean noBlockMoved) {
       this.noBlockMoved = noBlockMoved;
     }
 
-    void setRetryFailed() {
+    public void setRetryFailed() {
       this.retryFailed = true;
     }
 
@@ -862,7 +870,7 @@ public class Mover {
      *         cannot be scheduled. Otherwise, return IN_PROGRESS since there
      *         must be some remaining moves.
      */
-    ExitStatus getExitStatus() {
+    public ExitStatus getExitStatus() {
       if (retryFailed) {
         return ExitStatus.NO_MOVE_PROGRESS;
       } else {

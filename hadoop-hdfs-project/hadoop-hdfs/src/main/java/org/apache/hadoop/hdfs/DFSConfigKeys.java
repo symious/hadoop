@@ -744,6 +744,25 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_MOVER_MAX_NO_MOVE_INTERVAL_KEY = "dfs.mover.max-no-move-interval";
   public static final int    DFS_MOVER_MAX_NO_MOVE_INTERVAL_DEFAULT = 60*1000; // One minute
 
+  // ZoneMover related keys
+  public static final String  DFS_ZONEMOVER_MOVEDWINWIDTH_KEY = "dfs.zonemover.movedWinWidth";
+  public static final long    DFS_ZONEMOVER_MOVEDWINWIDTH_DEFAULT = 5400*1000L;
+  public static final String  DFS_ZONEMOVER_RETRY_MAX_ATTEMPTS_KEY =
+      "dfs.zonemover.retry.max.attempts";
+  public static final int     DFS_ZONEMOVER_RETRY_MAX_ATTEMPTS_DEFAULT = 1;
+  public static final String  DFS_ZONEMOVER_DISPATCHERTHREADS_KEY =
+      "dfs.zonemover.dispatcherThreads";
+  public static final int     DFS_ZONEMOVER_DISPATCHERTHREADS_DEFAULT = 200;
+  public static final String  DFS_ZONEMOVER_BLOCK_DISPATCH_ATTEMPTS_KEY =
+      "dfs.zonemover.blockDispatchAttempts";
+  public static final int     DFS_ZONEMOVER_BLOCK_DISPATCH_ATTEMPTS_DEFAULT = 3;
+  public static final String  DFS_ZONEMOVER_BLOCK_DISPATCH_RETRY_INTERVAL_KEY =
+      "dfs.zonemover.blockDispatchRetryInterval";
+  public static final long    DFS_ZONEMOVER_BLOCK_DISPATCH_RETRY_INTERVAL_DEFAULT = 1000L;
+  public static final String  DFS_ZONEMOVER_MONITOR_CHECK_INTERVAL_KEY =
+      "dfs.zonemover.monitorCheckInterval";
+  public static final long    DFS_ZONEMOVER_MONITOR_CHECK_INTERVAL_DEFAULT = 1000L * 60 * 2;
+
   // StoragePolicySatisfier (SPS) related configurations
   public static final String  DFS_STORAGE_POLICY_SATISFIER_MODE_KEY =
       "dfs.storage.policy.satisfier.mode";
