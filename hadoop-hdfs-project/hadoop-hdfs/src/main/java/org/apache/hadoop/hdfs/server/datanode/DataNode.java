@@ -3403,6 +3403,13 @@ public class DataNode extends ReconfigurableBase
     setConf(new Configuration());
     refreshNamenodes(getConf());
   }
+
+  @Override // ClientDatanodeProtocol
+  public void refreshDatanodeTopology() throws IOException {
+    checkSuperuserPrivilege();
+    LOG.info("refreshDatanodeTopology command received, clearing ...");
+    metrics.clearTopologyCache();
+  }
   
   @Override // ClientDatanodeProtocol
   public void deleteBlockPool(String blockPoolId, boolean force)

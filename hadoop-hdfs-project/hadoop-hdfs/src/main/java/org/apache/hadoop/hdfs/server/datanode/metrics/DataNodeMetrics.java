@@ -616,6 +616,12 @@ public class DataNodeMetrics {
     blocksDeletedInPendingIBR.incr();
   }
 
+  public void clearTopologyCache() {
+    if (dnsToSwitchMapping != null) {
+      dnsToSwitchMapping.reloadCachedMappings();
+    }
+  }
+
   public void incrECReconstructionTasks() {
     ecReconstructionTasks.incr();
   }
