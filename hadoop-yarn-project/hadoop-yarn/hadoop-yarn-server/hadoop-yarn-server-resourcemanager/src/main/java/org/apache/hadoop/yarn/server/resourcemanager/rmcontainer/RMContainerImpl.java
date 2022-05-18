@@ -73,9 +73,6 @@ import org.apache.hadoop.yarn.state.StateMachineFactory;
 import org.apache.hadoop.yarn.util.resource.Resources;
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
 
-import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.MAX_MEMORY_MB_PER_APPLICATION_SUFFIX;
-import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.MAX_VCORES_PER_APPLICATION_SUFFIX;
-import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.getQueuePrefix;
 
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class RMContainerImpl implements RMContainer {
@@ -101,6 +98,8 @@ public class RMContainerImpl implements RMContainer {
     .addTransition(RMContainerState.NEW,
         EnumSet.of(RMContainerState.RUNNING, RMContainerState.COMPLETED),
         RMContainerEventType.RECOVER, new ContainerRecoveredTransition())
+    .addTransition(RMContainerState.NEW, RMContainerState.RELEASED,
+        RMContainerEventType.RELEASED, new ReleaseOnNewTransition())
 
     // Transitions from RESERVED state
     .addTransition(RMContainerState.RESERVED, RMContainerState.RESERVED,
@@ -707,6 +706,16 @@ public class RMContainerImpl implements RMContainer {
             container.nodeId, container.getContainerId()));
 
       }
+    }
+  }
+
+  private static class ReleaseOnNewTransition extends BaseTransition {
+
+    @Override
+    public void transition(RMContainerImpl container, RMContainerEvent event) {
+      CapacityScheduler cs = (CapacityScheduler)container.rmContext.getScheduler();
+      LeafQueue queue = (LeafQueue) cs.getQueue(container.getQueueName());
+      queue.incrementNumContainers();
     }
   }
 

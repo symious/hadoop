@@ -252,6 +252,13 @@ public abstract class AbstractCSQueue implements CSQueue {
     return numContainers;
   }
 
+  public void incrementNumContainers() {
+    ++numContainers;
+    if (parent != null) {
+      ((AbstractCSQueue)parent).incrementNumContainers();
+    }
+  }
+
   @Override
   public QueueState getState() {
     return state;
