@@ -2268,7 +2268,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         removeBlocks(toRemoveBlocks);
         toRemoveBlocks.clear();
       }
-      logAuditEvent(true, operationName, src, null, r.getFileStatus());
+      logAuditEvent(r.getResult(), operationName, src, null, r.getFileStatus());
     } catch (AccessControlException e) {
       logAuditEvent(false, operationName, src);
       throw e;
@@ -2344,8 +2344,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     }
     if (success) {
       getEditLog().logSync();
-      logAuditEvent(true, operationName, src);
     }
+    logAuditEvent(success, operationName, src);
     return success;
   }
 
@@ -3110,6 +3110,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       NameNode.stateChangeLog.info("DIR* completeFile: " + src
           + " is closed by " + holder);
     }
+    logAuditEvent(success, "complete", src);
     return success;
   }
 
@@ -3192,8 +3193,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     boolean success = ret.success;
     if (success) {
       getEditLog().logSync();
-      logAuditEvent(true, operationName, src, dst, ret.auditStat);
     }
+    logAuditEvent(success, operationName, src, dst, ret.auditStat);
     return success;
   }
 
@@ -3228,7 +3229,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       collectedBlocks.clear();
     }
 
-    logAuditEvent(true, operationName + " (options=" +
+    logAuditEvent(res.success, operationName + " (options=" +
         Arrays.toString(options) + ")", src, dst, res.auditStat);
   }
 
@@ -3392,9 +3393,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       logAuditEvent(false, operationName, src);
       throw e;
     }
-    if (success) {
-      logAuditEvent(true, operationName, src);
-    }
+
+    logAuditEvent(success, operationName, src);
     return success;
   }
 
@@ -4859,7 +4859,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     if (saved) {
       LOG.info("New namespace image has been created");
     }
-    logAuditEvent(true, operationName, null);
+    logAuditEvent(saved, operationName, null);
     return saved;
   }
   
@@ -4890,7 +4890,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       writeUnlock(operationName);
       cpUnlock();
     }
-    logAuditEvent(true, operationName, null);
+    logAuditEvent(val, operationName, null);
     return val;
   }
 
@@ -8088,8 +8088,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     }
     if (success) {
       getEditLog().logSync();
-      logAuditEvent(true, operationName, ecPolicyName);
     }
+    logAuditEvent(success, operationName, ecPolicyName);
     return success;
   }
 
@@ -8123,8 +8123,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     }
     if (success) {
       getEditLog().logSync();
-      logAuditEvent(true, operationName, ecPolicyName);
     }
+    logAuditEvent(success, operationName, ecPolicyName);
     return success;
   }
 
