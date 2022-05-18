@@ -53,6 +53,7 @@ import org.apache.hadoop.hdfs.server.namenode.snapshot.FileDiffList;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.FileWithSnapshotFeature;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.DiffList;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.hdfs.util.LongBitFormat;
 import org.apache.hadoop.util.StringUtils;
 import static org.apache.hadoop.io.erasurecode.ErasureCodeConstants.REPLICATION_POLICY_ID;
@@ -610,6 +611,12 @@ public class INodeFile extends INodeWithAdditionalFields
     }
 
     return id;
+  }
+
+  @Override
+  public ReplicationRule getReplicationRule(FSDirectory fsd) {
+    return FSDirXAttrReplicationRuleOp.getRuleFromInodeFile(
+        fsd, this);
   }
 
   private void setStoragePolicyID(byte storagePolicyId) {

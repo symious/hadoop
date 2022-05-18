@@ -27,7 +27,6 @@ import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -64,17 +63,13 @@ public class TestZoneMoverKafkaTrigger {
 
   @Test
   public void testCheckPaths() {
-    List<Path> pathList1 = new ArrayList<>();
-    List<Path> pathList2 = Arrays.asList(new Path("/test1"),
+    List<Path> pathList = Arrays.asList(new Path("/test1"),
         new Path("/test2"), new Path("/test3"));
-    ZoneMoverKafkaTrigger zoneMoverTrigger1 =
-        new ZoneMoverKafkaTrigger(getConf(), pathList1);
-    ZoneMoverKafkaTrigger zoneMoverTrigger2 =
-        new ZoneMoverKafkaTrigger(getConf(), pathList2);
+    ZoneMoverKafkaTrigger zoneMoverTrigger =
+        new ZoneMoverKafkaTrigger(getConf(), pathList);
     String pathLoc1 = "/test2/test.file";
     String pathLoc2 = "/test4/test.file";
-    assertFalse(zoneMoverTrigger1.checkPaths(pathLoc2));
-    assertTrue(zoneMoverTrigger2.checkPaths(pathLoc1));
-    assertFalse(zoneMoverTrigger2.checkPaths(pathLoc2));
+    assertTrue(zoneMoverTrigger.checkPaths(pathLoc1));
+    assertFalse(zoneMoverTrigger.checkPaths(pathLoc2));
   }
 }

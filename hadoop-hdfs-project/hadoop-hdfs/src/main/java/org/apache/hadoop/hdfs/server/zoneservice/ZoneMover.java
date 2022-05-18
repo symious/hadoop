@@ -48,6 +48,7 @@ import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneDispatcher.ZoneSource;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneDispatcher.ZoneDDatanode;
 import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Tool;
@@ -72,6 +73,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -88,21 +90,25 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ZoneMover {
   private static final Logger LOG = LoggerFactory.getLogger(ZoneMover.class);
   private static final String ROOT = "/";
-  private static final Path ZONEMOVER_ID_PATH =
-      new Path("/system/zonemover.id");
+  private static final String ZONEMOVER_ID_PATH = "/system/zonemover.id";
   private final ZoneDispatcher dispatcher;
   private final StorageMap storages;
   private final List<Path> targetPaths;
   private final int retryMaxAttempts;
-  private final ReplicationRule rule;
-  private final Map<String, Short> ruleMap;
+  private ReplicationRule globalRule = null;
+  private Map<String, ReplicationRule> pathRuleMap = null;
   private final AtomicInteger retryCount;
   private final DFSClient dfs;
   private static final long DELAY_AFTER_CHOOSE_FAIL = 2 * 1000;
   private final Processor processor = new Processor();
+  private final ReplicationRuleUtil ruleUtil;
+  private final boolean xattrSetEnable;
+  private final ZoneReplicationCoordinator coordinator;
+  private Result result;
+  private final Thread fetcher = new Thread(new Fetcher());
 
-  ZoneMover(NameNodeConnector nnc, Configuration conf,
-      ReplicationRule rule, AtomicInteger retryCount) {
+  public ZoneMover(NameNodeConnector nnc, Configuration conf,
+                   AtomicInteger retryCount) {
     final long movedWinWidth = conf.getLong(
         DFSConfigKeys.DFS_ZONEMOVER_MOVEDWINWIDTH_KEY,
         DFSConfigKeys.DFS_ZONEMOVER_MOVEDWINWIDTH_DEFAULT);
@@ -115,8 +121,6 @@ public class ZoneMover {
     this.retryMaxAttempts = conf.getInt(
         DFSConfigKeys.DFS_ZONEMOVER_RETRY_MAX_ATTEMPTS_KEY,
         DFSConfigKeys.DFS_ZONEMOVER_RETRY_MAX_ATTEMPTS_DEFAULT);
-    this.rule = rule;
-    this.ruleMap = rule.toMap();
     this.retryCount = retryCount;
     final int blockDispatchAttempts = conf.getInt(
         DFSConfigKeys.DFS_ZONEMOVER_BLOCK_DISPATCH_ATTEMPTS_KEY,
@@ -124,21 +128,40 @@ public class ZoneMover {
     final long blockDispatchRetryInterval = conf.getLong(
         DFSConfigKeys.DFS_ZONEMOVER_BLOCK_DISPATCH_RETRY_INTERVAL_KEY,
         DFSConfigKeys.DFS_ZONEMOVER_BLOCK_DISPATCH_RETRY_INTERVAL_DEFAULT);
-    this.dispatcher = new ZoneDispatcher(nnc, Collections.emptySet(),
-        Collections.emptySet(), movedWinWidth, dispatcherThreads,
-        maxConcurrentMovesPerNode, conf, blockDispatchAttempts,
-        blockDispatchRetryInterval);
+    this.dispatcher = new ZoneDispatcher(nnc, Collections.<String> emptySet(),
+        Collections.<String> emptySet(), movedWinWidth, dispatcherThreads,
+        maxConcurrentMovesPerNode, conf,
+        blockDispatchAttempts, blockDispatchRetryInterval);
     this.dfs = this.dispatcher.getDistributedFileSystem().getClient();
     this.storages = new StorageMap();
     this.targetPaths = nnc.getTargetPaths();
+    this.ruleUtil = new ReplicationRuleUtil(this.dispatcher.getDistributedFileSystem());
+    this.xattrSetEnable = conf.getBoolean(
+        DFSConfigKeys.DFS_ZONEMOVER_XATTR_SET_ENABLE_KEY,
+        DFSConfigKeys.DFS_ZONEMOVER_XATTR_SET_ENABLE_DEFAULT);
+    this.coordinator = new ZoneReplicationCoordinator(
+        conf, this.dispatcher.getDistributedFileSystem());
+    fetcher.start();
+  }
+
+  public ZoneMover(NameNodeConnector nnc, Configuration conf,
+                   ReplicationRule rule, AtomicInteger retryCount) {
+    this(nnc, conf, retryCount);
+    this.globalRule = rule;
+  }
+
+  public ZoneMover(NameNodeConnector nnc, Configuration conf,
+                   Map<String, ReplicationRule> pathRuleMap, AtomicInteger retryCount) {
+    this(nnc, conf, retryCount);
+    this.pathRuleMap = pathRuleMap;
   }
 
   /**
    * Check if zonemover is compatible with the block placement policy
    * used by the NameNode.
    */
-  private static void checkReplicationPolicyCompatibility(
-      Configuration conf) throws UnsupportedActionException {
+  private static void checkReplicationPolicyCompatibility(Configuration conf
+  ) throws UnsupportedActionException {
     String clazz = conf.get(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY);
     if (clazz == null || !clazz.equals(
         BlockPlacementPolicyWithDataCenter.class.getName())) {
@@ -149,7 +172,7 @@ public class ZoneMover {
 
   DBlock newDBlock(Block block, List<MLocation> locations) {
     final DBlock db = new DBlock(block);
-    for (MLocation ml : locations) {
+    for(MLocation ml : locations) {
       StorageGroup source = storages.getSource(ml);
       if (source != null) {
         db.addLocation(source);
@@ -161,7 +184,7 @@ public class ZoneMover {
   void init() throws IOException {
     LOG.info("Initializing ...");
     final List<DatanodeStorageReport> reports = dispatcher.init();
-    LOG.info("Datanode reports size: {}.", reports.size());
+    LOG.info("Datanode reports size: " + reports.size());
     for (DatanodeStorageReport r: reports) {
       final ZoneDDatanode dn = dispatcher.newZoneDDatanode(r.getDatanodeInfo());
       for (StorageType t: StorageType.getMovableTypes()) {
@@ -183,10 +206,44 @@ public class ZoneMover {
     }
   }
 
-  ExitStatus run(String path) {
+  /* Note that this method does not call waitForCheckCompletion.
+   * It is generally running in monitor mode.
+   */
+  ExitStatus run(String path) throws IllegalArgumentException {
     Result result = new Result();
-    processor.processPath(path, result);
+    this.result = result;
+    if (this.globalRule != null) {
+      processor.processPath(path, this.globalRule, result);
+    } else {
+      processor.processPath(path, getPathRule(path), result);
+    }
+
     return result.getExitStatus();
+  }
+
+  /**
+   * Get the corresponding rule for the path.
+   * @param path to apply a rule
+   * @return the corresponding rule
+   */
+  ReplicationRule getPathRule(String path) throws IllegalArgumentException {
+    String matchPath = "";
+    for (Map.Entry<String, ReplicationRule> entry: pathRuleMap.entrySet()) {
+      String key = entry.getKey();
+      if (path.startsWith(key)) {
+        // A sub path may have different a rule with its parent path.
+        // For example, if "/test" and "/test/abc" have different rules,
+        // "/test/abc/1.txt" should use the rule of "/test/abc".
+        if (key.length() > matchPath.length()) {
+          matchPath = key;
+        }
+      }
+    }
+    if (matchPath.length() > 0) {
+      return pathRuleMap.get(matchPath);
+    } else {
+      throw new IllegalArgumentException("No rule for path: " + path);
+    }
   }
 
   /* release resources */
@@ -204,15 +261,43 @@ public class ZoneMover {
   /**
    * Run with prepared arguments.
    * @param conf configuration
-   * @param nameNode URI of the NameNode
+   * @param namenode URI of the NameNode
    * @param paths paths to apply the rule
    * @param rule the rule to apply
    * @return a ExitStatus code
    */
-  static int run(Configuration conf, URI nameNode, List<Path> paths,
-      ReplicationRule rule) throws IOException, InterruptedException {
-    LOG.info("Start to apply rule: {} for {} in nameNode {}.",
-        rule, paths, nameNode);
+  public static int run(Configuration conf, URI namenode, List<Path> paths,
+                        ReplicationRule rule) throws IOException, InterruptedException {
+    return ZoneMover.run(conf, namenode, paths, rule, null);
+  }
+
+  /**
+   * Run with prepared arguments.
+   * @param conf configuration
+   * @param namenode URI of the NameNode
+   * @param paths paths to apply the rule
+   * @param pathRuleMap map of paths and rules
+   * @return a ExitStatus code
+   */
+  public static int run(Configuration conf, URI namenode, List<Path> paths,
+                        Map<String, ReplicationRule> pathRuleMap) throws IOException, InterruptedException {
+    return ZoneMover.run(conf, namenode, paths, null, pathRuleMap);
+  }
+
+  /**
+   * Run with prepared arguments.
+   * @param conf configuration
+   * @param namenode URI of the NameNode
+   * @param paths paths to apply the rule
+   * @param rule the rule to apply
+   * @param pathRuleMap map of paths and rules
+   * @return a ExitStatus code
+   */
+  public static int run(Configuration conf, URI namenode, List<Path> paths,
+                        ReplicationRule rule, Map<String, ReplicationRule> pathRuleMap)
+      throws IOException, InterruptedException {
+    LOG.info("Start to apply rule: " + rule + " to namenode:" + namenode + ", path: " + paths);
+
     NameNodeConnector nnc = null;
     ZoneMover zs = null;
     // retryCount starts from 0 and ends at retryMaxAttempts
@@ -225,14 +310,18 @@ public class ZoneMover {
     try {
       // Set maxNotChangedIterations to 1 as ZoneMover does not need to loop
       nnc = new NameNodeConnector(ZoneMover.class.getSimpleName(),
-          nameNode, ZONEMOVER_ID_PATH, paths, conf, 1);
-      zs = new ZoneMover(nnc, conf, rule, retryCount);
+          namenode, getIdPath(RunMode.BATCH), paths, conf, 1);
+      if (rule != null) {
+        zs = new ZoneMover(nnc, conf, rule, retryCount);
+      } else {
+        zs = new ZoneMover(nnc, conf, pathRuleMap, retryCount);
+      }
       zs.init();
       int round = 0;
 
       while (true) {
         round += 1;
-        LOG.info("Start round {} ...", round);
+        LOG.info("Start round " + round + " ...");
         final ExitStatus r= zs.run();
         if (r == ExitStatus.SUCCESS) {
           break;
@@ -282,24 +371,83 @@ public class ZoneMover {
    * @param rule the rule to apply
    * @return a ExitStatus code
    */
-  static int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
-      URI namenode, List<Path> paths, ReplicationRule rule)
-      throws IOException, InterruptedException {
-    NameNodeConnector nnc = new NameNodeConnector(ZoneMover.class.getSimpleName(),
-        namenode, ZONEMOVER_ID_PATH, paths, conf, 1);
-    ZoneMover zs = new ZoneMover(nnc, conf, rule, new AtomicInteger(0));
-    zs.init();
-    while (zoneMoverTrigger.hasNext()) {
-      String curPath = zoneMoverTrigger.getNext();
+  public static int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
+                        URI namenode, List<Path> paths, ReplicationRule rule)
+      throws IOException, InterruptedException{
+    return run(zoneMoverTrigger, conf, namenode, paths, rule, null);
+  }
 
-      // process the path
-      LOG.debug("Check path: " + curPath);
-      ExitStatus exitStatus = zs.run(curPath);
-      if (exitStatus != ExitStatus.SUCCESS) {
-        LOG.warn("Monitor process file fail: " + curPath);
+  /**
+   * Run with prepared arguments for monitorByTrigger mode.
+   * @param zoneMoverTrigger trigger for ZoneMover monitor
+   * @param conf configuration
+   * @param namenode URI of the NameNode
+   * @param paths paths to apply the rule
+   * @param pathRuleMap map of paths and rules
+   * @return a ExitStatus code
+   */
+  public static int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
+                        URI namenode, List<Path> paths, Map<String, ReplicationRule> pathRuleMap)
+      throws IOException, InterruptedException {
+    return run(zoneMoverTrigger, conf, namenode, paths, null, pathRuleMap);
+  }
+
+  /**
+   * Run with prepared arguments for monitorByTrigger mode.
+   * @param zoneMoverTrigger trigger for ZoneMover monitor
+   * @param conf configuration
+   * @param namenode URI of the NameNode
+   * @param paths paths to apply the rule
+   * @param rule the rule to apply
+   * @param pathRuleMap map of paths and rules
+   * @return a ExitStatus code
+   */
+  private static int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
+                         URI namenode, List<Path> paths, ReplicationRule rule,
+                         Map<String, ReplicationRule> pathRuleMap)
+      throws IOException, InterruptedException {
+    NameNodeConnector nnc = null;
+    ZoneMover zs = null;
+    try {
+      nnc = new NameNodeConnector(ZoneMover.class.getSimpleName(),
+          namenode, getIdPath(RunMode.MONITOR), paths, conf, 1);
+      if (rule != null) {
+        zs = new ZoneMover(nnc, conf, rule, new AtomicInteger(0));
+      } else {
+        zs = new ZoneMover(nnc, conf, pathRuleMap, new AtomicInteger(0));
+      }
+      zs.init();
+      while (zoneMoverTrigger.hasNext()) {
+        String curPath = zoneMoverTrigger.getNext();
+
+        // process the path
+        LOG.debug("Check path: " + curPath);
+        try {
+          ExitStatus exitStatus = zs.run(curPath);
+          if (exitStatus != ExitStatus.SUCCESS) {
+            LOG.warn("Monitor process file fail: " + curPath);
+          }
+        } catch (IllegalArgumentException e) {
+          LOG.warn(e.toString());
+        }
+      }
+    } finally {
+      if (nnc != null) {
+        IOUtils.cleanupWithLogger(LOG, nnc);
+      }
+      if (zs != null) {
+        zs.shutdown();
       }
     }
     return ExitStatus.SUCCESS.getExitCode();
+  }
+
+  private static Path getIdPath(RunMode mode) {
+    return new Path(String.format("%s.%s.%s.%s",
+        ZONEMOVER_ID_PATH,
+        mode.toString().toLowerCase(),
+        NetUtils.getLocalHostname(),
+        Time.now()));
   }
 
   private static long calculateSleepTime(final Configuration conf) {
@@ -331,13 +479,12 @@ public class ZoneMover {
     }
     return distribution;
   }
-
   /**
    * Check if a block already satisfies the rule.
    */
-  boolean isBlockSatisfyRule(LocatedBlock block) {
-    return rule.equals(ReplicationRule.parseFromMap(
-        getBlockDistribution(block)));
+  boolean isBlockSatisfyRule(LocatedBlock block, ReplicationRule rule) {
+    return rule.equals(
+        ReplicationRule.parseFromMap(getBlockDistribution(block)));
   }
 
   /**
@@ -347,7 +494,7 @@ public class ZoneMover {
       List<LocatedBlock> blocks) {
     boolean consistent = true;
     Map<String, Short> distribution = null;
-    for (LocatedBlock block : blocks) {
+    for (LocatedBlock block: blocks) {
       if (distribution == null) {
         distribution = getBlockDistribution(block);
       } else {
@@ -359,16 +506,16 @@ public class ZoneMover {
     }
     return consistent;
   }
-
   /**
    * Get {@link ZoneMoveItem} list for the block.
    */
-  List<ZoneMoveItem> getZoneMoveItems(final LocatedBlock block) {
+  List<ZoneMoveItem> getZoneMoveItems(final LocatedBlock block, ReplicationRule rule) {
     // calculate sources and targets
     Map<String, Short> distribution = getBlockDistribution(block);
     Map<String, Short> sources = new HashMap<>();
     Map<String, Short> targets = new HashMap<>();
     Set<String> dcs = new HashSet<>();
+    Map<String, Short> ruleMap = rule.toMap();
     dcs.addAll(distribution.keySet());
     dcs.addAll(ruleMap.keySet());
     for (String dc: dcs) {
@@ -503,7 +650,7 @@ public class ZoneMover {
         EnumMap<StorageType, List<StorageGroup>> em =
             new EnumMap<>(StorageType.class);
         for(StorageType t : StorageType.getMovableTypes()) {
-          em.put(t, new LinkedList<>());
+          em.put(t, new LinkedList<StorageGroup>());
         }
         dcTargetStorageTypeMap.put(datacenter, em);
       }
@@ -511,12 +658,27 @@ public class ZoneMover {
     }
   }
 
-  private class Processor {
+  enum RunMode {BATCH, MONITOR}
+  class Processor {
+
     private Result processPath() {
-      Result result = new Result();
-      for (Path target : targetPaths) {
-        processPath(target.toUri().getPath(), result);
+      result = new Result();
+      for (Path target: targetPaths) {
+        if (globalRule != null) {
+          processPath(target.toUri().getPath(), globalRule, result);
+        } else {
+          String path = target.toUri().getPath();
+          processor.processPath(path, getPathRule(path), result);
+        }
       }
+
+      coordinator.waitForCheckCompletion();
+      try {
+        fetcher.join();
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+
       // wait for pending move to finish and retry the failed migration
       boolean hasFailed = Dispatcher.waitForMoveCompletion(storages.targets.values());
       boolean hasSuccess = Dispatcher.checkForSuccess(storages.targets.values());
@@ -539,14 +701,12 @@ public class ZoneMover {
       if (hasFailed) {
         result.updateHasRemaining(true);
       }
-
       return result;
     }
 
-    private void processPath(String fullPath, Result result) {
-      LOG.info("Processing path: {} ...", fullPath);
-      byte[] lastReturnedName = HdfsFileStatus.EMPTY_NAME;
-      while (true) {
+    private void processPath(String fullPath, ReplicationRule rule, Result result) {
+      LOG.info("Processing path: " + fullPath + " ...");
+      for (byte[] lastReturnedName = HdfsFileStatus.EMPTY_NAME;;) {
         final DirectoryListing children;
         try {
           children = dfs.listPaths(fullPath, lastReturnedName, true);
@@ -559,7 +719,7 @@ public class ZoneMover {
           return;
         }
         for (HdfsFileStatus child : children.getPartialListing()) {
-          processRecursively(fullPath, child, result);
+          processRecursively(fullPath, child, rule, result);
         }
         if (children.hasMore()) {
           lastReturnedName = children.getLastName();
@@ -570,65 +730,119 @@ public class ZoneMover {
     }
 
     private void processRecursively(String parent,
-        HdfsFileStatus status, Result result) {
+                                    HdfsFileStatus status, ReplicationRule rule, Result result) {
       String fullPath = status.getFullName(parent);
       if (status.isDir()) {
         if (!fullPath.endsWith(Path.SEPARATOR)) {
           fullPath = fullPath + Path.SEPARATOR;
         }
-        processPath(fullPath, result);
+        processPath(fullPath, rule, result);
       } else if (!status.isSymlink()) { // file
-        processFile(fullPath, (HdfsLocatedFileStatus) status, result);
+        processFile(fullPath, (HdfsLocatedFileStatus) status, rule, result);
       }
     }
 
-    private void processFile(String fullPath,
-        HdfsLocatedFileStatus status, Result result) {
-      LOG.info("Processing file: {} ...", fullPath);
-      if (status.getReplication() != rule.getReplica()) {
-        LOG.warn("Will skip replication inconsistent file {}," +
-            " and current replicate is {} and rule replicate is {}.",
-            fullPath, status.getReplication(), rule.getReplica());
-        return;
-      }
+    private void processFile(String fullPath, HdfsLocatedFileStatus status,
+                             ReplicationRule rule, Result result) {
+      LOG.info("Processing file: " + fullPath + " ....");
 
       final LocatedBlocks locatedBlocks = status.getLocatedBlocks();
-      int n = locatedBlocks.locatedBlockCount();
-      if (n == 0) {
-        LOG.info("Will skip empty file {}.", fullPath);
+      if (status.getLen() == 0) {
+        LOG.info("Skip empty file: " + fullPath);
         return;
       }
 
       if (!locatedBlocks.isLastBlockComplete()) {
-        LOG.info("Skip uncompleted file: {}.", fullPath);
+        LOG.info("Skip uncompleted file: " + fullPath);
         return;
       }
 
+      if (xattrSetEnable) {
+        try {
+          if (ruleUtil.hasRuleInXAttr(fullPath) &&
+              ruleUtil.getRuleFromXAttr(fullPath).equals(rule)) {
+            LOG.info("This file already has the replicationRule: " + fullPath);
+          } else {
+            ruleUtil.setRuleToXAttr(fullPath, rule);
+            LOG.info("Added replicationRule to: " + fullPath);
+          }
+        } catch (IOException e) {
+          LOG.warn(e.toString());
+          return;
+        }
+      }
 
+      if (status.getReplication() < rule.getReplica()) {
+        LOG.debug("factor < rule.replication file: " + fullPath);
+        // For cases like changing "/Telin-3:3" to "/Telin-3:3,/Telin-4:2",
+        // ZoneMover does not need to wait for NameNode to schedule replication.
+        // For cases like changing "/Telin-3:3" to "/Telin-3:2,/Telin-4:3",
+        // ZoneMover needs to wait for NameNode to schedule first and then
+        // do redistribution. If ZoneMover does not wait, it will increase
+        // the number of inter-dc block replications.
+        if (isFileNeedMove(locatedBlocks, rule)) {
+          coordinator.addFile(fullPath, rule,
+              rule.getReplica() - status.getReplication(),
+              locatedBlocks.getLocatedBlocks().size());
+        }
+      } else if (status.getReplication() > rule.getReplica()) {
+        LOG.debug("factor > rule.replication file: " + fullPath);
+        // For cases like changing "/Telin-3:3,/Telin-4:2" -> "/Telin-3:3",
+        // ZoneMover does not need to wait.
+        // For cases like changing "/Telin-3:3" to "/Telin-3:1,/Telin-4:1",
+        // ZoneMover needs to wait. Otherwise, NameNode may schedule the
+        // datanode to delete the replica first, which is also used as the
+        // proxy of replaceBlock scheduled by ZoneMover.
+        if (isFileNeedMove(locatedBlocks, rule)) {
+          coordinator.addFile(fullPath, rule,
+              rule.getReplica() - status.getReplication(),
+              locatedBlocks.getLocatedBlocks().size());
+        }
+      } else {
+        processFileBlocks(fullPath, status, rule, result);
+      }
+    }
+
+    private boolean isFileNeedMove(LocatedBlocks locatedBlocks, ReplicationRule rule) {
+      for (LocatedBlock block: locatedBlocks.getLocatedBlocks()) {
+        if (!getZoneMoveItems(block, rule).isEmpty()) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    private void processFileBlocks(String fullPath,
+        HdfsLocatedFileStatus status, ReplicationRule rule, Result result) {
+      final LocatedBlocks locatedBlocks = status.getLocatedBlocks();
       // Cannot just check the first and last block, as the dispatching action
       // is parallel and asynchronous. The movement of any blocks of a file
       // may fail but other blocks succeed.
       if (areBlocksDistributionConsistent(locatedBlocks.getLocatedBlocks())) {
-        processConsistentBlocks(locatedBlocks, result, fullPath);
+        // get the first block
+        LocatedBlock firstBlock = locatedBlocks.get(0);
+        if (isBlockSatisfyRule(firstBlock, rule)) {
+          LOG.info("Skip the file as all blocks already satisfy the rule: " + fullPath);
+          return;
+        }
+        processConsistentBlocks(locatedBlocks, rule, result);
       } else {
-        processInconsistentBlocks(locatedBlocks, result);
+        processInconsistentBlocks(locatedBlocks, rule, result);
       }
     }
 
     /**
      * Process blocks have the same datacenter distribution.
      */
-    private void processConsistentBlocks(LocatedBlocks locatedBlocks,
-        Result result, String fullPath) {
+    private void processConsistentBlocks(
+        LocatedBlocks locatedBlocks, ReplicationRule rule, Result result) {
       LocatedBlock firstBlock = locatedBlocks.get(0);
-      if (isBlockSatisfyRule(firstBlock)) {
-        LOG.info("Skip the file as it already " +
-            "satisfies the rule: {}.", fullPath);
+      if (isBlockSatisfyRule(firstBlock, rule)) {
         return;
       }
-      List<ZoneMoveItem> moveItems = getZoneMoveItems(firstBlock);
+      List<ZoneMoveItem> moveItems = getZoneMoveItems(firstBlock, rule);
       int n = locatedBlocks.locatedBlockCount();
-      for (int i = 0; i < n; i++) {
+      for (int i=0; i<n; i++) {
         LocatedBlock block = locatedBlocks.get(i);
         if (scheduleMoves4Block(block, moveItems)) {
           result.setNoBlockMoved(false);
@@ -642,14 +856,14 @@ public class ZoneMover {
      * Process blocks have different datacenter distributions.
      */
     private void processInconsistentBlocks(
-        LocatedBlocks locatedBlocks, Result result) {
+        LocatedBlocks locatedBlocks, ReplicationRule rule, Result result) {
       int n = locatedBlocks.locatedBlockCount();
       for (int i=0; i<n; i++) {
         LocatedBlock block = locatedBlocks.get(i);
-        if (isBlockSatisfyRule(block)) {
+        if (isBlockSatisfyRule(block, rule)) {
           continue;
         }
-        if (scheduleMoves4Block(block, getZoneMoveItems(block))) {
+        if (scheduleMoves4Block(block, getZoneMoveItems(block, rule))) {
           result.setNoBlockMoved(false);
         } else {
           result.updateHasRemaining(true);
@@ -714,9 +928,8 @@ public class ZoneMover {
       return excluded;
     }
 
-    boolean scheduleMoveReplica(DBlock db, ZoneSource source,
-        String targetDataCenter, Set<StorageType> targetTypes,
-        Set<StorageGroup> excluded) {
+    boolean scheduleMoveReplica(DBlock db, ZoneSource source, String targetDataCenter,
+                                Set<StorageType> targetTypes, Set<StorageGroup> excluded) {
       return chooseTargetInDataCenter(
           db, source, targetDataCenter, targetTypes, excluded);
     }
@@ -724,12 +937,11 @@ public class ZoneMover {
     /**
      * Choose a storage in the datacenter.
      */
-    boolean chooseTargetInDataCenter(DBlock db, ZoneSource source,
-        String targetDataCenter, Set<StorageType> targetTypes,
-        Set<StorageGroup> excluded) {
+    boolean chooseTargetInDataCenter(
+        DBlock db, ZoneSource source, String targetDataCenter,
+        Set<StorageType> targetTypes, Set<StorageGroup> excluded) {
       for (StorageType t: targetTypes) {
-        final List<StorageGroup> targets =
-            storages.getTargetStorages(t, targetDataCenter);
+        final List<StorageGroup> targets = storages.getTargetStorages(t, targetDataCenter);
         Collections.shuffle(targets);
         for (StorageGroup target: targets) {
           if (excluded.contains(target)) {
@@ -743,10 +955,9 @@ public class ZoneMover {
           }
         }
       }
-      LOG.warn("chosseTargeInDataCenter failed with block: {}, " +
-          "source: {}, targetDataCenter: {}, targetTypes: {}, " +
-          "excluded: {}.", db, source, targetDataCenter,
-          targetTypes, excluded);
+      LOG.warn("chooseTargetInDataCenter failed with block: " +
+          db + ", source: " + source + ", targetDataCenter: " + targetDataCenter +
+          ",targetTypes: " + targetTypes + ", excluded: " + excluded);
       handleChooseFail(targetDataCenter, targetTypes);
       return false;
     }
@@ -758,14 +969,35 @@ public class ZoneMover {
         for (StorageGroup target: targets) {
           total += target.getDDatanode().getPendingSize();
         }
-        LOG.info("Average pending size for targetDataCenter: " + targetDataCenter +
-            ", storageType: " + t + ", datanodes.num: "+ targets.size() +
-            " is " + total / targets.size());
+        if (targets.size() > 0) {
+          LOG.info("Average pending size for targetDataCenter: " + targetDataCenter +
+              ", storageType: " + t + ", datanodes.num: "+ targets.size() +
+              " is " + total / targets.size());
+        } else {
+          LOG.warn("targets.size = 0 !");
+        }
       }
       try {
         Thread.sleep(DELAY_AFTER_CHOOSE_FAIL);
       } catch (InterruptedException e) {
         // ignore
+      }
+    }
+  }
+
+  class Fetcher implements Runnable {
+    @Override
+    public void run() {
+      ZoneReplicationCoordinator.FileState fileState;
+      while (true) {
+        try {
+          fileState = coordinator.getNextFinishedFile();
+        } catch (NoSuchElementException e) {
+          LOG.info("No more files!");
+          return;
+        }
+        processor.processFileBlocks(fileState.getFilePath(),
+            fileState.getFileStatus(), fileState.getRule(), result);
       }
     }
   }
@@ -776,38 +1008,53 @@ public class ZoneMover {
         + "\n\t-path <path>\tthe path to apply the rule"
         + "\n\t-pathFile <pathFile>\t the file contains paths to apply the rule"
         + "\n\t-rule <rule>\tthe replication rule"
+        + "\n\t-pathRuleFile <pathRuleFile> the file contains path and rule mappings."
+        + "\n\t               Path and rule are separated by space in each line."
         + "\n\t-monitor\tenable monitor mode"
         + "\n\t-monitorByTrigger\tenable monitor mode with trigger";
 
     private static Options buildCliOptions() {
       Options options = new Options();
-      Option option = new Option(null, "namespace",
-          true, "the namespace to apply the rule");
+      Option option = new Option(
+          null, "namespace", true, "the namespace to apply the rule");
       options.addOption(option);
 
       OptionGroup pathGroup = new OptionGroup();
       pathGroup.setRequired(true);
-      option = new Option(null, "path",
-          true, "the path to apply the rule");
+      // For commons-cli 1.2, options with "longOpt" but without "opt"
+      // in an OptionGroup do not have the "mutually exclusive" feature.
+      // So "opt" and "longOpt" are same below. This has been fixed
+      // in commons-cli 1.5.0 .
+      option = new Option("path", "path", true, "the path to apply the rule");
       pathGroup.addOption(option);
-      option = new Option(null, "pathFile", true,
+      option = new Option("pathFile", "pathFile", true,
           "the file contains paths to apply the rule");
       pathGroup.addOption(option);
+      Option pathRuleOption = new Option("pathRuleFile", "pathRuleFile", true,
+          "the file contains path and rule mappings");
+      pathGroup.addOption(pathRuleOption);
       options.addOptionGroup(pathGroup);
 
-      option = new Option(null, "rule",
-          true, "the replication rule");
-      option.setRequired(true);
+      option = new Option(null, "rule", true, "the replication rule");
       options.addOption(option);
 
-      option = new Option(null, "monitor",
-          false, "enable monitor mode");
+      option = new Option(null, "monitor", false, "enable monitor mode");
       options.addOption(option);
 
-      option = new Option(null, "monitorByTrigger",
-          false, "enable monitor by trigger");
+      option = new Option(null, "monitorByTrigger", false, "enable monitor by trigger");
       options.addOption(option);
       return options;
+    }
+
+    private static void additionalOptionsCheck(CommandLine line)
+        throws IllegalArgumentException {
+      // As commons-cli 1.2 does not support adding one option
+      // to two OptionGroups, we need to check this in a trick way.
+      if ((line.hasOption("rule") && line.hasOption("pathRuleFile")) ||
+          (!line.hasOption("rule") && !line.hasOption("pathRuleFile"))) {
+        throw new IllegalArgumentException
+            ("'-rule' and '-pathRuleFile' CAN and MUST specify one");
+      }
     }
 
     /**
@@ -826,10 +1073,10 @@ public class ZoneMover {
       }
 
       String namespace = line.getOptionValue("namespace");
-      for (URI nameNode: namenodes) {
-        LOG.info("Get nameNode: {}.", nameNode);
-        if (nameNode.getAuthority().equals(namespace)) {
-          return nameNode;
+      for (URI namenode: namenodes) {
+        LOG.info("Get namenode: " + namenode);
+        if (namenode.getAuthority().equals(namespace)) {
+          return namenode;
         }
       }
       throw new IllegalArgumentException(
@@ -841,17 +1088,14 @@ public class ZoneMover {
      */
     private static ReplicationRule getRule(CommandLine line)
         throws IllegalArgumentException {
-      return ReplicationRule.parseFromString(
-          line.getOptionValue("rule"));
+      return ReplicationRule.parseFromString(line.getOptionValue("rule"));
     }
 
     private static List<Path> getPaths(CommandLine line)
         throws IllegalArgumentException, IOException {
       List<String> rawPaths;
       if (line.hasOption("path")) {
-        rawPaths = new ArrayList<>(
-            Collections.singletonList(
-                line.getOptionValue("path")));
+        rawPaths = new ArrayList<>(Collections.singletonList(line.getOptionValue("path")));
       } else {
         rawPaths = readPathFile(line.getOptionValue("pathFile"));
       }
@@ -865,17 +1109,42 @@ public class ZoneMover {
       return paths;
     }
 
-    private static List<String> readPathFile(String file)
-        throws IOException {
+    private static List<Path> getPaths(Map<String, ReplicationRule> pathRuleMap) {
+      Set<String> stringPaths = pathRuleMap.keySet();
+      List<Path> paths = new ArrayList<>();
+      for (String path: stringPaths) {
+        if (!path.startsWith(ROOT)) {
+          throw new IllegalArgumentException("Invalid path: " + path);
+        }
+        paths.add(new Path(path));
+      }
+      return paths;
+    }
+
+    private static Map<String, ReplicationRule> getPathRuleMap(CommandLine line)
+        throws IllegalArgumentException, IOException {
+      List<String> mapLines = readPathFile(line.getOptionValue("pathRuleFile"));
+      Map<String, ReplicationRule> pathRuleMap = new HashMap<>();
+      for (String mapLine: mapLines) {
+        // the format should be "path rule"
+        String[] fields = mapLine.split("\\s", 2);
+        if (fields.length != 2) {
+          throw new IllegalArgumentException("Invalid map: " + mapLine);
+        }
+        pathRuleMap.put(fields[0], ReplicationRule.parseFromString(fields[1]));
+      }
+      return pathRuleMap;
+    }
+
+    private static List<String> readPathFile(String file) throws IOException {
       List<String> list = new ArrayList<>();
       BufferedReader reader = new BufferedReader(
-          new InputStreamReader(new FileInputStream(file),
-              StandardCharsets.UTF_8));
+          new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8));
       try {
         String line;
         while ((line = reader.readLine()) != null) {
           if (!line.trim().isEmpty()) {
-            list.add(line);
+            list.add(line.trim());
           }
         }
       } finally {
@@ -893,75 +1162,106 @@ public class ZoneMover {
       final long monitorCheckInterval = conf.getLong(
           DFSConfigKeys.DFS_ZONEMOVER_MONITOR_CHECK_INTERVAL_KEY,
           DFSConfigKeys.DFS_ZONEMOVER_MONITOR_CHECK_INTERVAL_DEFAULT);
-
       try {
         checkReplicationPolicyCompatibility(conf);
         CommandLine commandLine = parser.parse(options, args, true);
-        URI nameNode = getNamespaceUri(commandLine, conf);
-        List<Path> paths = getPaths(commandLine);
-        ReplicationRule rule = getRule(commandLine);
+        additionalOptionsCheck(commandLine);
+        URI namenode = getNamespaceUri(commandLine, conf);
+        List<Path> paths;
+        ReplicationRule rule = null;
+        Map<String, ReplicationRule> pathRuleMap = null;
+        if (commandLine.hasOption("pathRuleFile")) {
+          pathRuleMap = getPathRuleMap(commandLine);
+          paths = getPaths(pathRuleMap);
+        } else {
+          paths = getPaths(commandLine);
+          rule = getRule(commandLine);
+        }
+
         if (commandLine.hasOption("monitorByTrigger")) {
           ZoneMoverTrigger zoneMoverTrigger =
               new ZoneMoverKafkaTrigger(conf, paths);
-          return run(zoneMoverTrigger, conf, nameNode, paths, rule);
+          if (rule != null) {
+            return run(zoneMoverTrigger, conf, namenode, paths, rule);
+          } else {
+            return run(zoneMoverTrigger, conf, namenode, paths, pathRuleMap);
+          }
         } else if (commandLine.hasOption("monitor")) {
-          // noinspection InfiniteLoopStatement
+          //noinspection InfiniteLoopStatement
           while (true) {
             startTime = Time.monotonicNow();
-            run(conf, nameNode, paths, rule);
-            LOG.info("ZoneMover took {}.",
-                StringUtils.formatTime(
-                    (Time.monotonicNow() - startTime)));
-            // noinspection BusyWait
+            run(conf, namenode, paths, rule);
+            LOG.info("ZoneMover took "
+                + StringUtils.formatTime(Time.monotonicNow() - startTime));
+            //noinspection BusyWait
             Thread.sleep(monitorCheckInterval);
           }
         } else {
-          return run(conf, nameNode, paths, rule);
+          if (rule != null) {
+            return run(conf, namenode, paths, rule);
+          } else {
+            return run(conf, namenode, paths, pathRuleMap);
+          }
+
         }
       } catch (IOException e) {
         System.out.println(e + ".  Exiting ...");
         return ExitStatus.IO_EXCEPTION.getExitCode();
       } catch (ParseException | IllegalArgumentException e) {
-        e.printStackTrace();
         System.out.println(e + ".  Exiting ...");
         return ExitStatus.ILLEGAL_ARGUMENTS.getExitCode();
       } catch (InterruptedException e) {
         System.out.println(e + ".  Exiting ...");
         return ExitStatus.INTERRUPTED.getExitCode();
       } finally {
-        LOG.info("ZoneMover took {}.",
-            StringUtils.formatTime((Time.monotonicNow() - startTime)));
+        LOG.info("ZoneMover took "
+            + StringUtils.formatTime(Time.monotonicNow() - startTime));
       }
     }
 
     /**
      * Run with prepared arguments.
      */
-    int run(Configuration conf, URI nameNode,
-        List<Path> paths, ReplicationRule rule)
+    int run(Configuration conf, URI namenode, List<Path> paths, ReplicationRule rule)
         throws IOException, InterruptedException {
-      return ZoneMover.run(conf, nameNode, paths, rule);
+      return ZoneMover.run(conf, namenode, paths, rule);
+    }
+
+    /**
+     * Run with prepared arguments.
+     */
+    int run(Configuration conf, URI namenode, List<Path> paths,
+            Map<String, ReplicationRule> pathRuleMap)
+        throws IOException, InterruptedException {
+      return ZoneMover.run(conf, namenode, paths, pathRuleMap);
     }
 
     /**
      * Run with ZoneMoverTrigger for monitorByTrigger mode
      */
     int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
-        URI namenode, List<Path> paths, ReplicationRule rule)
+            URI namenode, List<Path> paths, ReplicationRule rule)
         throws IOException, InterruptedException {
       return ZoneMover.run(zoneMoverTrigger, conf, namenode, paths, rule);
+    }
+
+    /**
+     * Run with ZoneMoverTrigger for monitorByTrigger mode
+     */
+    int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
+            URI namenode, List<Path> paths, Map<String, ReplicationRule> pathRuleMap)
+        throws IOException, InterruptedException {
+      return ZoneMover.run(zoneMoverTrigger, conf, namenode, paths, pathRuleMap);
     }
   }
 
   public static void main(String[] args) {
-    if (DFSUtil.parseHelpArgument(args, Cli.USAGE,
-        System.out, true)) {
+    if (DFSUtil.parseHelpArgument(args, Cli.USAGE, System.out, true)) {
       System.exit(0);
     }
 
     try {
-      System.exit(ToolRunner.run(
-          new HdfsConfiguration(), new Cli(), args));
+      System.exit(ToolRunner.run(new HdfsConfiguration(), new Cli(), args));
     } catch (Throwable e) {
       LOG.error("Exiting ZoneMover due to an exception", e);
       System.exit(-1);

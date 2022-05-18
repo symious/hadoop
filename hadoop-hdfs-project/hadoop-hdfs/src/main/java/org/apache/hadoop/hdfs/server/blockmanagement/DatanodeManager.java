@@ -22,6 +22,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPO
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_DEFAULT;
 import static org.apache.hadoop.util.Time.monotonicNow;
 
+import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -509,6 +510,40 @@ public class DatanodeManager {
   private boolean isInactive(DatanodeInfo datanode) {
     return datanode.isDecommissioned() || datanode.isEnteringMaintenance() ||
         (avoidStaleDataNodesForRead && datanode.isStale(staleInterval));
+  }
+
+  /** Check if the read traffic is inter-dc. */
+  public boolean isInterDCRead(final String clientMachine,
+      final List<LocatedBlock> locatedblocks) {
+    if (locatedblocks.size() == 0) {
+      return false;
+    }
+
+    String clientLocation;
+    Node client = getDatanodeByHost(clientMachine);
+    if (client != null) {
+      clientLocation = client.getNetworkLocation();
+    } else {
+      List<String> hosts = new ArrayList<>(1);
+      hosts.add(clientMachine);
+      List<String> resolvedHosts = dnsToSwitchMapping.resolve(hosts);
+      if (resolvedHosts != null && !resolvedHosts.isEmpty()) {
+        clientLocation = resolvedHosts.get(0);
+      } else {
+        LOG.error("Node Resolution failed. Please make sure that rack " +
+            "awareness scripts are functional.");
+        return false;
+      }
+    }
+    String clientDC = NetworkTopologyUtil.getDataCenter(clientLocation);
+
+    DatanodeInfo[] locations = locatedblocks.get(0).getLocations();
+    for (DatanodeInfo location: locations) {
+      if (NetworkTopologyUtil.getDataCenter(location).equals(clientDC)) {
+        return false;
+      }
+    }
+    return true;
   }
   
   /**

@@ -20,13 +20,22 @@ package org.apache.hadoop.hdfs.server.blockmanagement;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageType;
+import org.apache.hadoop.hdfs.AddBlockFlag;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
+import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRuleSection;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.net.NodeBase;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumMap;
+import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +60,11 @@ public class BlockPlacementPolicyWithDataCenter extends
     BlockPlacementPolicyDefault {
 
   protected DFSNetworkTopologyWithDataCenter dcClusterMap;
+  // use a virtual base to limit scope to the target datacenter
+  private static final Map<String, Node> dcBaseNodes = new HashMap<>();
+  private static final String VIRTUAL_HOST = "virtual_host";
+  private static final String VIRTUAL_RACK = "/virtual_rack";
+  private static final List<DatanodeStorageInfo> EMPTY_NODES = Collections.emptyList();
 
   @Override
   public void initialize(Configuration conf,
@@ -167,6 +181,10 @@ public class BlockPlacementPolicyWithDataCenter extends
           blockSize, maxNodesPerRack, results, avoidStaleNodes, storageTypes);
     }
     final String localRack = localMachine.getNetworkLocation();
+    if (localRack.endsWith(VIRTUAL_RACK)) {
+      return chooseRandom(localMachine, 1, NodeBase.ROOT, excludedNodes,
+          blockSize, maxNodesPerRack, results, avoidStaleNodes, storageTypes);
+    }
 
     try {
       // choose one from the local rack
@@ -174,12 +192,10 @@ public class BlockPlacementPolicyWithDataCenter extends
           blockSize, maxNodesPerRack, results, avoidStaleNodes, storageTypes);
     } catch (NotEnoughReplicasException e) {
       // find the next replica and retry with its rack
-      String localDataCenter = DFSNetworkTopologyWithDataCenter.getDataCenter(
-          localMachine.getNetworkLocation());
+      String localDataCenter = NetworkTopologyUtil.getDataCenter(localMachine);
       for(DatanodeStorageInfo resultStorage : results) {
         DatanodeDescriptor nextNode = resultStorage.getDatanodeDescriptor();
-        String nextDataCenter = DFSNetworkTopologyWithDataCenter.getDataCenter(
-            nextNode.getNetworkLocation());
+        String nextDataCenter = NetworkTopologyUtil.getDataCenter(nextNode);
         if ((nextNode != localMachine) && (localDataCenter.equals(nextDataCenter))) {
           if (LOG.isDebugEnabled()) {
             LOG.debug("Failed to choose from local rack (location = " + localRack
@@ -276,8 +292,7 @@ public class BlockPlacementPolicyWithDataCenter extends
       return chooseRandom(numOfReplicas, scope, excludedNodes, blockSize,
           maxNodesPerRack, results, avoidStaleNodes, storageTypes);
     }
-    String newScope = DFSNetworkTopologyWithDataCenter.getDataCenter(
-        base.getNetworkLocation());
+    String newScope = NetworkTopologyUtil.getDataCenter(base);
     LOG.debug("(base.loc={}, base.name={}," +
             " numOfReplicas={}, scope={}, results.size={}.",
         base.getNetworkLocation(), base.getName(),
@@ -304,9 +319,158 @@ public class BlockPlacementPolicyWithDataCenter extends
   @Override
   protected double getInServiceXceiverAverage(DatanodeDescriptor node) {
     double inServiceXceiverCount;
-    String dataCenter = DFSNetworkTopologyWithDataCenter
-        .getDataCenter(node.getNetworkLocation());
+    String dataCenter = NetworkTopologyUtil.getDataCenter(node);
     inServiceXceiverCount = stats.getDataCenterInServiceXceiverAverage(dataCenter);
     return inServiceXceiverCount;
+  }
+
+  @Override
+  public List<DatanodeStorageInfo> chooseReplicasToDelete(
+      Collection<DatanodeStorageInfo> availableReplicas,
+      Collection<DatanodeStorageInfo> delCandidates,
+      int expectedNumOfReplicas, ReplicationRule rule,
+      List<StorageType> excessTypes, DatanodeDescriptor addedNode,
+      DatanodeDescriptor delNodeHint) {
+    // Replicas are in one datacenter.
+    if (rule.getSections().size() == 1) {
+      return super.chooseReplicasToDelete(availableReplicas, delCandidates,
+          expectedNumOfReplicas, excessTypes, addedNode, delNodeHint);
+    }
+
+    List<DatanodeStorageInfo> excessReplicas = new ArrayList<>();
+    final Map<String, List<DatanodeStorageInfo>> dcMap = new HashMap<>();
+
+    splitNodesWithDataCenter(delCandidates, dcMap);
+
+    // Handle the replicas which are not included in the rule.
+    for (String dcName : dcMap.keySet()) {
+      if (!rule.getDatacenters().contains(dcName)) {
+        List<DatanodeStorageInfo> storageInfos = dcMap.get(dcName);
+        boolean full = addExcessReplicas(delCandidates, expectedNumOfReplicas,
+            storageInfos, excessReplicas, delNodeHint);
+        if (full) {
+          break;
+        }
+      }
+    }
+
+    // Handle the excess replicas in the rule.
+    if (excessReplicas.size() < delCandidates.size() - expectedNumOfReplicas) {
+      // Remove the excess replicas for every datacenter.
+      for (ReplicationRuleSection section: rule.getSections()) {
+        String dcName = section.getDataCenter();
+        if (dcMap.get(dcName) != null
+            && dcMap.get(dcName).size() > section.getReplica()) {
+          List<DatanodeStorageInfo> dcStorageInfos = dcMap.get(dcName);
+          List <DatanodeStorageInfo> dcExcessReplicas =
+              super.chooseReplicasToDelete(dcStorageInfos, dcStorageInfos,
+                  section.getReplica(), excessTypes, addedNode, delNodeHint);
+          boolean full = addExcessReplicas(delCandidates, expectedNumOfReplicas,
+              dcExcessReplicas, excessReplicas, delNodeHint);
+          if (full) {
+            break;
+          }
+        }
+      }
+    }
+    return excessReplicas;
+  }
+
+  /**
+   * Add replicas to excessReplicas list.
+   */
+  private boolean addExcessReplicas(
+      Collection<DatanodeStorageInfo> candidates,
+      int expectedNumOfReplicas,
+      List <DatanodeStorageInfo> toAddReplicas,
+      List<DatanodeStorageInfo> excessReplicas,
+      DatanodeDescriptor delNodeHint) {
+    int left = candidates.size() - expectedNumOfReplicas
+        - excessReplicas.size();
+    if (toAddReplicas.size() > left) {
+      // Add delHint to excessReplicas if it exists in toAddReplicas.
+      Iterator<DatanodeStorageInfo> it = toAddReplicas.iterator();
+      while (delNodeHint != null && it.hasNext()) {
+        DatanodeStorageInfo storageInfo = it.next();
+        if (storageInfo.getDatanodeDescriptor().equals(delNodeHint)) {
+          excessReplicas.add(storageInfo);
+          toAddReplicas.remove(storageInfo);
+          left = left - 1;
+          break;
+        }
+      }
+      for (int i = 0; i < left; ++i) {
+        excessReplicas.add(toAddReplicas.get(i));
+      }
+    } else {
+      excessReplicas.addAll(toAddReplicas);
+    }
+    return candidates.size() - expectedNumOfReplicas == excessReplicas.size();
+  }
+
+  /**
+   * Split data nodes into datacenter sets.
+   *
+   * @param storageInfos DatanodeStorageInfo to be split
+   * @param dcMap a map from datacenter to datanodes
+   */
+  public void splitNodesWithDataCenter(
+      final Collection<DatanodeStorageInfo> storageInfos,
+      final Map<String, List<DatanodeStorageInfo>> dcMap) {
+    for (DatanodeStorageInfo s : storageInfos) {
+      final String dcName = NetworkTopologyUtil.getDataCenter(
+          s.getDatanodeDescriptor());
+      List<DatanodeStorageInfo> storageList = dcMap.computeIfAbsent(
+          dcName, k -> new ArrayList<>());
+      storageList.add(s);
+    }
+  }
+
+  @Override
+  public DatanodeStorageInfo[] chooseTarget(
+      String srcPath, int numOfReplicas,
+      ReplicationRule rule, Node writer,
+      List<DatanodeStorageInfo> chosenNodes,
+      boolean returnChosenNodes, Set<Node> excludedNodes,
+      long blocksize, final BlockStoragePolicy storagePolicy,
+      EnumSet<AddBlockFlag> flags) {
+    final Map<String, List<DatanodeStorageInfo>> dcMap = new HashMap<>();
+    splitNodesWithDataCenter(chosenNodes, dcMap);
+
+    // Replicate to the datacenter without any replicas first
+    Set<String> exists = dcMap.keySet();
+    for (ReplicationRuleSection section: rule.getSections()) {
+      String dc = section.getDataCenter();
+      if (section.getReplica() > 0 && !exists.contains(dc)) {
+        Node base = dcBaseNodes.get(dc);
+        if (base == null) {
+          base = new NodeBase(VIRTUAL_HOST, dc + VIRTUAL_RACK);
+          dcBaseNodes.put(dc, base);
+        }
+        int n = Math.min(numOfReplicas, section.getReplica());
+        // do not put datanodes in multiple datacenters to one pipeline,
+        // so return immediately
+        return super.chooseTarget(srcPath, n, base, EMPTY_NODES,
+            returnChosenNodes, excludedNodes, blocksize,
+            storagePolicy, flags);
+      }
+    }
+
+    // Replicate to datacenters without enough replicas
+    for (ReplicationRuleSection section: rule.getSections()) {
+      List<DatanodeStorageInfo> storages = dcMap.get(section.getDataCenter());
+      if (section.getReplica() > storages.size()) {
+        int n = Math.min(numOfReplicas, section.getReplica() - storages.size());
+        Node base = (writer != null && NetworkTopologyUtil.getDataCenter(writer)
+            .equals(section.getDataCenter())) ?
+            writer: storages.get(0).getDatanodeDescriptor();
+        return super.chooseTarget(srcPath, n, base,
+            NetworkTopologyUtil.getStoragesInDataCenter(chosenNodes,
+                section.getDataCenter()), returnChosenNodes,
+            excludedNodes, blocksize, storagePolicy, flags);
+      }
+    }
+
+    return DatanodeStorageInfo.EMPTY_ARRAY;
   }
 }

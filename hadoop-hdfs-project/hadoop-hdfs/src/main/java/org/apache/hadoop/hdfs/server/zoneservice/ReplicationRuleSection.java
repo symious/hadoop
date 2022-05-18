@@ -31,8 +31,8 @@ public class ReplicationRuleSection {
   // Replica value in a specific data center
   private final short replica;
   // Characters to strip
-  private final static String[] STRIP_CHARACTERS = {"(", ")", " "};
-  private final static String FIELD_SEPARATOR = ",";
+  private final static String[] STRIP_CHARACTERS = {" "};
+  private final static String FIELD_SEPARATOR = ":";
   private static final String ROOT = "/";
   private final static Logger LOG =
       LoggerFactory.getLogger(ReplicationRuleSection.class);
@@ -44,8 +44,8 @@ public class ReplicationRuleSection {
 
   /**
    * Construct the ReplicationRuleSection instance from a string format rule.
-   * @param rule a string follows the pattern "(dc, replica)".
-   *             For example, "(sg_dc, 3)".
+   * @param rule a string follows the pattern "dc:replica".
+   *             For example, "/sg_dc:3".
    * @return the constructed ReplicationRuleSection
    */
   public static ReplicationRuleSection parseFromString(final String rule)
@@ -88,10 +88,7 @@ public class ReplicationRuleSection {
 
   @Override
   public String toString() {
-    return "ReplicationRuleSection{" +
-        "dataCenter='" + dataCenter + '\'' +
-        ", replica=" + replica +
-        '}';
+    return dataCenter + ":" + replica;
   }
 
   @Override

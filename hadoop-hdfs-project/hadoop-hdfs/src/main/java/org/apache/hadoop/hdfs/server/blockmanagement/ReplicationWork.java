@@ -17,7 +17,9 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
+import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
 import org.apache.hadoop.hdfs.server.protocol.BlockCommand;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.net.Node;
 
 import java.util.List;
@@ -36,27 +38,66 @@ class ReplicationWork extends BlockReconstructionWork {
     LOG.debug("Creating a ReplicationWork to reconstruct " + block);
   }
 
+  /**
+   * According to IDC, and select some datanodes one by one.
+   * So all datanode in current targets will in one datacenter.
+   */
   @Override
   void chooseTargets(BlockPlacementPolicy blockplacement,
       BlockStoragePolicySuite storagePolicySuite,
-      Set<Node> excludedNodes) {
+      Set<Node> excludedNodes, ReplicationRule rule) {
+    LOG.debug("Try to chooseTarget for blk_{}.", getBlock());
     assert getSrcNodes().length > 0
         : "At least 1 source node should have been selected";
+    DatanodeDescriptor originalSrcNode = getSrcNodes()[0];
     try {
       DatanodeStorageInfo[] chosenTargets = null;
       // HDFS-14720 If the block is deleted, the block size will become
       // BlockCommand.NO_ACK (LONG.MAX_VALUE) . This kind of block we don't need
       // to send for replication or reconstruction
       if (getBlock().getNumBytes() != BlockCommand.NO_ACK) {
-        chosenTargets = blockplacement.chooseTarget(getSrcPath(),
-            getAdditionalReplRequired(), getSrcNodes()[0],
-            getLiveReplicaStorages(), false, excludedNodes, getBlockSize(),
-            storagePolicySuite.getPolicy(getStoragePolicyID()), null);
+        if (rule != null) {
+          chosenTargets = chooseTargetWithDataCenter(blockplacement,
+              storagePolicySuite, excludedNodes, rule, originalSrcNode);
+        } else {
+          chosenTargets = blockplacement.chooseTarget(getSrcPath(),
+              getAdditionalReplRequired(), getSrcNodes()[0],
+              getLiveReplicaStorages(), false, excludedNodes, getBlockSize(),
+              storagePolicySuite.getPolicy(getStoragePolicyID()), null);
+        }
       }
       setTargets(chosenTargets);
     } finally {
-      getSrcNodes()[0].decrementPendingReplicationWithoutTargets();
+      originalSrcNode.decrementPendingReplicationWithoutTargets();
     }
+  }
+
+  private DatanodeStorageInfo[] chooseTargetWithDataCenter(
+      BlockPlacementPolicy blockplacement,
+      BlockStoragePolicySuite storagePolicySuite,
+      Set<Node> excludedNodes, ReplicationRule rule,
+      DatanodeDescriptor originalSrcNode) {
+    DatanodeStorageInfo[] chosenTargets = blockplacement.chooseTarget(
+        getSrcPath(), getAdditionalReplRequired(), rule, originalSrcNode,
+        getLiveReplicaStorages(), false,
+        excludedNodes, getBlockSize(),
+        storagePolicySuite.getPolicy(getStoragePolicyID()), null);
+    if (chosenTargets.length > 0) {
+      String targetDc = NetworkTopologyUtil.getDataCenter(
+          chosenTargets[0].getDatanodeDescriptor());
+      String srcDc = NetworkTopologyUtil.getDataCenter(originalSrcNode);
+      if (!srcDc.equals(targetDc)) {
+        List<DatanodeStorageInfo> storages = NetworkTopologyUtil.
+            getStoragesInDataCenter(getLiveReplicaStorages(), targetDc);
+        if (storages.size() > 0) {
+          // Reset the source node
+          getSrcNodes()[0] = storages.get(0).getDatanodeDescriptor();
+          LOG.debug("Changed srcNode from {} to {}",
+              originalSrcNode.getIpAddr(), getSrcNodes()[0].getIpAddr());
+        }
+      }
+    }
+    return chosenTargets;
   }
 
   @Override

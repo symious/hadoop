@@ -147,9 +147,12 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_FULL_BLOCK_R
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_LEASE_HARDLIMIT_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_ENABLED_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_ENABLED_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_AUTO_FAILOVER_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_AUTO_FAILOVER_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_FENCE_METHODS_KEY;
@@ -361,7 +364,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY,
           DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES,
           DFS_LEASE_HARDLIMIT_KEY,
-          DFS_NAMENODE_QUOTA_INIT_THREADS_KEY));
+          DFS_NAMENODE_QUOTA_INIT_THREADS_KEY,
+          DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2217,6 +2221,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfProtectedDirectories(newVal);
     } else if (property.equals(HADOOP_CALLER_CONTEXT_ENABLED_KEY)) {
       return reconfCallerContextEnabled(newVal);
+    } else if (property.equals(DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY)) {
+      return reconfReplicationRuleEnabled(newVal);
     } else if (property.equals(ipcClientRPCBackoffEnable)) {
       return reconfigureIPCBackoffEnabled(newVal);
     } else if (property.equals(DFS_STORAGE_POLICY_SATISFIER_MODE_KEY)) {
@@ -2407,6 +2413,18 @@ public class NameNode extends ReconfigurableBase implements
     }
     namesystem.setCallerContextEnabled(callerContextEnabled);
     return Boolean.toString(callerContextEnabled);
+  }
+
+  private String reconfReplicationRuleEnabled(String newVal) {
+    boolean enable;
+    if (newVal == null) {
+      enable = namesystem.getBlockManager().getReplicationRuleEnabled();
+    } else {
+      enable = Boolean.parseBoolean(newVal);
+      namesystem.getBlockManager().setReplicationRuleEnabled(enable);
+      LOG.info("RECONFIGURE* changed replicationRuleEnabled to " + enable);
+    }
+    return Boolean.toString(enable);
   }
 
   String reconfigureIPCBackoffEnabled(String newVal) {

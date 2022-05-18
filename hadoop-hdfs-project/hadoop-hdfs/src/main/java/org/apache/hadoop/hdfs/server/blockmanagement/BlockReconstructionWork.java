@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.net.Node;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +57,7 @@ abstract class BlockReconstructionWork {
   private DatanodeStorageInfo[] targets;
   private final int priority;
   private boolean notEnoughRack = false;
+  private final BlockCollection bc;
 
   public BlockReconstructionWork(BlockInfo block,
       BlockCollection bc,
@@ -65,6 +67,7 @@ abstract class BlockReconstructionWork {
       int additionalReplRequired,
       int priority) {
     this.block = block;
+    this.bc = bc;
     this.srcPath = bc.getName();
     this.blockSize = block.getNumBytes();
     this.storagePolicyID = bc.getStoragePolicyID();
@@ -116,6 +119,10 @@ abstract class BlockReconstructionWork {
     return storagePolicyID;
   }
 
+  public BlockCollection getBlockCollection() {
+    return bc;
+  }
+
   List<DatanodeStorageInfo> getLiveReplicaStorages() {
     return liveReplicaStorages;
   }
@@ -138,7 +145,7 @@ abstract class BlockReconstructionWork {
 
   abstract void chooseTargets(BlockPlacementPolicy blockplacement,
       BlockStoragePolicySuite storagePolicySuite,
-      Set<Node> excludedNodes);
+      Set<Node> excludedNodes, ReplicationRule rule);
 
   /**
    * Add reconstruction task into a source datanode.

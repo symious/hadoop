@@ -382,6 +382,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   private final MetricsRegistry registry = new MetricsRegistry("FSNamesystem");
   @Metric final MutableRatesWithAggregation detailedLockHoldTimeMetrics =
       registry.newRatesWithAggregation("detailedLockHoldTimeMetrics");
+  private static final String IS_INTER_DC_READ_STR = "isInterDCRead";
 
   boolean isAuditEnabled() {
     return (!isDefaultAuditLogger || auditLog.isInfoEnabled())
@@ -2122,6 +2123,13 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       throw e;
     }
 
+    LocatedBlocks blocks = res.blocks;
+    if (blocks != null && blockManager.getDataCenterAwareness()) {
+      if (blockManager.getDatanodeManager().isInterDCRead(
+          clientMachine, blocks.getLocatedBlocks())) {
+        appendInterDCReadToCallerContext();
+      }
+    }
     logAuditEvent(true, operationName, srcArg);
 
     if (!isInSafeMode() && res.updateAccessTime()) {
@@ -2152,7 +2160,6 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       }
     }
 
-    LocatedBlocks blocks = res.blocks;
     sortLocatedBlocks(clientMachine, blocks);
     return blocks;
   }
@@ -2175,6 +2182,21 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
             lastBlockList);
       }
     }
+  }
+
+  /**
+   * For marking inter-dc reads.
+   * It adds trace info "isInterDCRead:true" to caller context.
+   */
+  private void appendInterDCReadToCallerContext() {
+    final CallerContext ctx = CallerContext.getCurrent();
+    String origContext = ctx == null ? null : ctx.getContext();
+    byte[] origSignature = ctx == null ? null : ctx.getSignature();
+    CallerContext.setCurrent(
+        new CallerContext.Builder(origContext)
+            .append(IS_INTER_DC_READ_STR, Boolean.toString(true))
+            .setSignature(origSignature)
+            .build());
   }
 
   /**
@@ -8298,8 +8320,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot set XAttr on " + src);
-        auditStat = FSDirXAttrOp.setXAttr(dir, pc, src, xAttr, flag,
-            logRetryCache);
+        auditStat = FSDirXAttrOp.setXAttr(dir, blockManager, pc, src,
+            xAttr, flag, logRetryCache);
       } finally {
         writeUnlock(operationName);
       }

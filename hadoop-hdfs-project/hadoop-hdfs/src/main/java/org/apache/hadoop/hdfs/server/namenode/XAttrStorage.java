@@ -28,6 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.google.common.base.Preconditions;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.XAttr;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
 
 /**
@@ -36,8 +37,8 @@ import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
 @InterfaceAudience.Private
 public class XAttrStorage {
 
-  private final static Set<String> REUSE_NAMES =
-      Collections.singleton("replicationRule");
+  private final static Set<String> REUSE_NAMES = Collections.singleton(
+      DFSConfigKeys.DFS_ZONE_REPLICATION_RULE_XATTR_NAME);
   private final static ConcurrentHashMap<String, XAttrFeature> features
       = new ConcurrentHashMap<>();
 

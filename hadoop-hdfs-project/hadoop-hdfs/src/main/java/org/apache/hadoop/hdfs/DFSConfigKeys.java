@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.fs.XAttr;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
@@ -764,6 +765,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final long    DFS_ZONEMOVER_MONITOR_CHECK_INTERVAL_DEFAULT = 1000L * 60 * 2;
   public static final String  DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS =
       "dfs.zonemover.exitEvenHasProgress";
+  public static final String  DFS_ZONEMOVER_XATTR_SET_ENABLE_KEY =
+      "dfs.zonemover.xattr.set.enable";
+  public static final boolean DFS_ZONEMOVER_XATTR_SET_ENABLE_DEFAULT = false;
   public static final boolean DFS_ZONEMOVER_EXIT_EVEN_HAS_PROGRESS_DEFAULT = true;
   public static final String  DFS_ZONEMOVER_KAFKA_BOOTSTRAP_SERVERS = "dfs.zonemover.kafka.bootstrap.servers";
   public static final String  DFS_ZONEMOVER_KAFKA_TOPIC = "dfs.zonemover.kafka.topic";
@@ -772,6 +776,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONEMOVER_KAFKA_PASSWORD = "dfs.zonemover.kafka.password";
   public static final String  DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_KEY = "dfs.zonemover.trigger.queue.size";
   public static final int     DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_DEFAULT = 1000;
+  public static final XAttr.NameSpace  DFS_ZONE_REPLICATION_RULE_XATTR_NAMESPACE =
+      XAttr.NameSpace.USER;
+  public static final String  DFS_ZONE_REPLICATION_RULE_XATTR_NAME = "replicationRule";
 
   // StoragePolicySatisfier (SPS) related configurations
   public static final String  DFS_STORAGE_POLICY_SATISFIER_MODE_KEY =
@@ -815,6 +822,15 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.storage.policy.satisfier.keytab.file";
   public static final String  DFS_SPS_KERBEROS_PRINCIPAL_KEY =
       "dfs.storage.policy.satisfier.kerberos.principal";
+  public static final String  DFS_ZONE_COORDINATOR_MAX_CONCURRENT_REPLICATIONS_KEY =
+      "dfs.zone.coordinator.max.concurrent.replications";
+  public static final int     DFS_ZONE_COORDINATOR_MAX_CONCURRENT_REPLICATIONS_DEFAULT = 1000;
+  public static final String  DFS_ZONE_COORDINATOR_MIN_CHECK_INTERVAL_KEY =
+      "dfs.zone.coordinator.min.check.interval";
+  public static final long    DFS_ZONE_COORDINATOR_MIN_CHECK_INTERVAL_DEFAULT = 10000L;
+  public static final String  DFS_ZONE_COORDINATOR_MAX_CHECK_TIMES_KEY =
+      "dfs.zone.coordinator.max.check.times";
+  public static final int     DFS_ZONE_COORDINATOR_MAX_CHECK_TIMES_DEFAULT = 30;
 
   public static final String  DFS_DATANODE_ADDRESS_KEY = "dfs.datanode.address";
   public static final int     DFS_DATANODE_DEFAULT_PORT = 9866;
@@ -982,6 +998,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final Class<BlockPlacementPolicyDefault> DFS_BLOCK_REPLICATOR_CLASSNAME_DEFAULT = BlockPlacementPolicyDefault.class;
   public static final String  DFS_REPLICATION_MAX_KEY = "dfs.replication.max";
   public static final int     DFS_REPLICATION_MAX_DEFAULT = 512;
+  public static final String  DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY =
+      "dfs.namenode.replication-rule.enable";
+  public static final boolean DFS_NAMENODE_REPLICATION_RULE_ENABLE_DEFAULT = false;
   public static final String DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY = "dfs.block.placement.ec.classname";
   public static final Class<BlockPlacementPolicyRackFaultTolerant> DFS_BLOCK_PLACEMENT_EC_CLASSNAME_DEFAULT = BlockPlacementPolicyRackFaultTolerant.class;
 

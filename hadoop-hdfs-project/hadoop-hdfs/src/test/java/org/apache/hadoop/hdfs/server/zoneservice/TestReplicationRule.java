@@ -30,7 +30,7 @@ public class TestReplicationRule {
 
   @Test
   public void testParseFromString() {
-    String stringRule = "[(/dc1, 1), (/dc2, 2)]";
+    String stringRule = "/dc1:1,/dc2:2";
     ReplicationRule rule = ReplicationRule.parseFromString(stringRule);
     Set<ReplicationRuleSection> sections = rule.getSections();
     assertEquals(2, sections.size());

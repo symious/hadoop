@@ -109,6 +109,7 @@ import org.apache.hadoop.hdfs.server.protocol.ReceivedDeletedBlockInfo;
 import org.apache.hadoop.hdfs.server.protocol.StorageReceivedDeletedBlocks;
 import org.apache.hadoop.hdfs.server.protocol.StorageReport;
 import org.apache.hadoop.hdfs.server.protocol.VolumeFailureSummary;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.hdfs.util.FoldedTreeSet;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.server.namenode.CacheManager;
@@ -459,6 +460,10 @@ public class BlockManager implements BlockStatsMXBean {
    * from ENTERING_MAINTENANCE to IN_MAINTENANCE.
    */
   private final short minReplicationToBeInMaintenance;
+
+  private volatile boolean isDataCenterAwareness;
+  private volatile boolean isReplicationRuleEnabled;
+
   /**
    * Whether to delete corrupt replica immediately irrespective of other
    * replicas available on stale storages.
@@ -493,6 +498,11 @@ public class BlockManager implements BlockStatsMXBean {
       conf, datanodeManager.getFSClusterStats(),
       datanodeManager.getNetworkTopology(),
       datanodeManager.getHost2DatanodeMap());
+    isDataCenterAwareness = placementPolicies.getPolicy(CONTIGUOUS)
+        instanceof BlockPlacementPolicyWithDataCenter;
+    isReplicationRuleEnabled = conf.getBoolean(
+        DFSConfigKeys.DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY,
+        DFSConfigKeys.DFS_NAMENODE_REPLICATION_RULE_ENABLE_DEFAULT);
     storagePolicySuite = BlockStoragePolicySuite.createDefaultSuite();
     pendingReconstruction = new PendingReconstructionBlocks(conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY,
@@ -728,6 +738,22 @@ public class BlockManager implements BlockStatsMXBean {
     return blockTokenSecretManager;
   }
 
+  /** Check if replication rule enabled  */
+  public boolean getReplicationRuleEnabled() {
+    return isReplicationRuleEnabled;
+  }
+
+  /** Enable/Disable replication rule */
+  public void setReplicationRuleEnabled(boolean enable) {
+    this.isReplicationRuleEnabled = enable;
+  }
+
+  /** Check if BlockManager is data center awareness */
+  public boolean getDataCenterAwareness() {
+    return isDataCenterAwareness;
+  }
+
+
   /** Allow silent termination of redundancy monitor for testing. */
   @VisibleForTesting
   void enableRMTerminationForTesting() {
@@ -790,6 +816,8 @@ public class BlockManager implements BlockStatsMXBean {
             datanodeManager.getNetworkTopology(),
             datanodeManager.getHost2DatanodeMap());
     placementPolicies = bpp;
+    isDataCenterAwareness = placementPolicies.getPolicy(CONTIGUOUS)
+        instanceof BlockPlacementPolicyWithDataCenter;
   }
 
   /** Dump meta data to out. */
@@ -2046,10 +2074,19 @@ public class BlockManager implements BlockStatsMXBean {
         }
       }
 
+      ReplicationRule rule = null;
+      if (isDataCenterAwareness && isReplicationRuleEnabled) {
+       rule = rw.getBlockCollection()
+           .getReplicationRule(namesystem.getFSDirectory());
+       if (rule != null && rule.getReplica() != rw.getBlock().getReplication()) {
+         rule = null;
+       }
+      }
+
       // choose replication targets: NOT HOLDING THE GLOBAL LOCK
       final BlockPlacementPolicy placementPolicy =
           placementPolicies.getPolicy(rw.getBlock().getBlockType());
-      rw.chooseTargets(placementPolicy, storagePolicySuite, excludedNodes);
+      rw.chooseTargets(placementPolicy, storagePolicySuite, excludedNodes, rule);
     }
 
     // Step 3: add tasks to the DN
@@ -3926,6 +3963,10 @@ public class BlockManager implements BlockStatsMXBean {
     assert namesystem.hasWriteLock();
     // first form a rack to datanodes map and
     BlockCollection bc = getBlockCollection(storedBlock);
+    ReplicationRule rule = null;
+    if (isDataCenterAwareness && isReplicationRuleEnabled) {
+      rule = bc.getReplicationRule(namesystem.getFSDirectory());
+    }
     if (storedBlock.isStriped()) {
       chooseExcessRedundancyStriped(bc, nonExcess, storedBlock, delNodeHint);
     } else {
@@ -3934,7 +3975,7 @@ public class BlockManager implements BlockStatsMXBean {
       final List<StorageType> excessTypes = storagePolicy.chooseExcess(
           replication, DatanodeStorageInfo.toStorageTypes(nonExcess));
       chooseExcessRedundancyContiguous(nonExcess, storedBlock, replication,
-          addedNode, delNodeHint, excessTypes);
+          addedNode, delNodeHint, excessTypes, rule);
     }
   }
 
@@ -3955,11 +3996,20 @@ public class BlockManager implements BlockStatsMXBean {
   private void chooseExcessRedundancyContiguous(
       final Collection<DatanodeStorageInfo> nonExcess, BlockInfo storedBlock,
       short replication, DatanodeDescriptor addedNode,
-      DatanodeDescriptor delNodeHint, List<StorageType> excessTypes) {
+      DatanodeDescriptor delNodeHint, List<StorageType> excessTypes,
+      ReplicationRule rule) {
     BlockPlacementPolicy replicator = placementPolicies.getPolicy(CONTIGUOUS);
-    List<DatanodeStorageInfo> replicasToDelete = replicator
-        .chooseReplicasToDelete(nonExcess, nonExcess, replication, excessTypes,
-            addedNode, delNodeHint);
+    List<DatanodeStorageInfo> replicasToDelete = null;
+    if (rule != null && rule.getReplica() == replication) {
+      replicasToDelete = replicator.chooseReplicasToDelete(
+          nonExcess, nonExcess, replication, rule,
+          excessTypes, addedNode, delNodeHint);
+    }
+    if (replicasToDelete == null) {
+      replicasToDelete = replicator
+          .chooseReplicasToDelete(nonExcess, nonExcess,
+              replication, excessTypes, addedNode, delNodeHint);
+    }
     for (DatanodeStorageInfo chosenReplica : replicasToDelete) {
       processChosenExcessRedundancy(nonExcess, chosenReplica, storedBlock);
     }

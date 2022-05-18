@@ -99,7 +99,7 @@ public class TestZoneMover {
 
     // Wrong block placement policy
     String[] args = {"-namespace", "dev",
-        "-path", "/test", "-rule", "[(/sg_dc, 3)]"};
+        "-path", "/test", "-rule", "/sg_dc:3"};
     assertEquals(ExitStatus.IO_EXCEPTION.getExitCode(), tool.run(args));
 
     // Unable to match namespace
@@ -108,11 +108,11 @@ public class TestZoneMover {
     assertEquals(ExitStatus.ILLEGAL_ARGUMENTS.getExitCode(), tool.run(args));
 
     // Use the default namespace
-    String[] args2 = {"-path", "/test", "-rule", "[(/sg_dc, 3)]"};
+    String[] args2 = {"-path", "/test", "-rule", "/sg_dc:3"};
     assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args2));
 
     // Invalid path
-    String[] args3 = {"-path", "test", "-rule", "[(/sg_dc, 3)]"};
+    String[] args3 = {"-path", "test", "-rule", "/sg_dc:3"};
     assertEquals(ExitStatus.ILLEGAL_ARGUMENTS.getExitCode(), tool.run(args3));
   }
 
@@ -136,16 +136,16 @@ public class TestZoneMover {
     tool.setConf(conf);
 
     String[] args = {"-namespace", "dev",
-        "-path", "/test", "-rule", "[(/sg_dc, 3)]"};
+        "-path", "/test", "-rule", "/sg_dc:3"};
     assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args));
 
     // Unable to match namespace
     String[] args2 = {"-namespace", "dev2",
-        "-path", "/test", "-rule", "[(/sg_dc, 3)]"};
+        "-path", "/test", "-rule", "/sg_dc:3"};
     assertEquals(ExitStatus.ILLEGAL_ARGUMENTS.getExitCode(), tool.run(args2));
 
     // Use the default namespace
-    String[] args3 = {"-path", "/test", "-rule", "[(/sg_dc, 3)]"};
+    String[] args3 = {"-path", "/test", "-rule", "/sg_dc:3"};
     assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args3));
   }
 
@@ -171,7 +171,7 @@ public class TestZoneMover {
 
     // No block moved as the file is empty
     String[] args = {"-namespace", "dev",
-        "-path", "/test", "-rule", "[(/sg_dc, 3)]"};
+        "-path", "/test", "-rule", "/sg_dc:3"};
     assertEquals(ExitStatus.NO_MOVE_BLOCK.getExitCode(), tool.run(args));
   }
 
@@ -228,18 +228,18 @@ public class TestZoneMover {
     DFSTestUtil.createFile(fs, path1, FILE_LEN, REPLICATION, 0L);
     List<LocatedBlock> blocks1 = DFSTestUtil.getAllBlocks(fs, path1);
     assertEquals(1, blocks1.size());
-    assertTrue(zoneMover.isBlockSatisfyRule(blocks1.get(0)));
+    assertTrue(zoneMover.isBlockSatisfyRule(blocks1.get(0), rule));
 
     Path path2 = new Path("/test.txt");
     DFSTestUtil.createFile(fs, path2, FILE_LEN, (short) (REPLICATION - 1), 0L);
     List<LocatedBlock> blocks2 = DFSTestUtil.getAllBlocks(fs, path2);
     assertEquals(1, blocks2.size());
-    assertFalse(zoneMover.isBlockSatisfyRule(blocks2.get(0)));
-
+    assertFalse(zoneMover.isBlockSatisfyRule(blocks2.get(0), rule));
   }
 
   @Test
   public void testGetZoneMoveItems() throws IOException {
+    // block distribution is "/dc1:3"
     final String[] racks = {"/dc1/rack0", "/dc1/rack1", "/dc1/rack2"};
     Map<String, Short> ruleMap = new HashMap<>();
     ruleMap.put("/dc0", (short) 1);
@@ -262,18 +262,36 @@ public class TestZoneMover {
         namenode,
         new Path("/testIsBlockSatisfyRule"),
         new ArrayList<Path>(), conf, 1);
-    ZoneMover zoneMover = new ZoneMover(nnc, conf, rule, new AtomicInteger(1));
 
     DistributedFileSystem fs = cluster.getFileSystem();
     Path path1 = new Path("/test.txt");
     DFSTestUtil.createFile(fs, path1, FILE_LEN, REPLICATION, 0L);
-    List<LocatedBlock> blocks1 = DFSTestUtil.getAllBlocks(fs, path1);
-    assertEquals(1, blocks1.size());
-    assertFalse(zoneMover.isBlockSatisfyRule(blocks1.get(0)));
-
+    List<LocatedBlock> allBlocks = DFSTestUtil.getAllBlocks(fs, path1);
+    assertEquals(1, allBlocks.size());
+    LocatedBlock block = allBlocks.get(0);
     ZoneMover.ZoneMoveItem moveItem =
         new ZoneMover.ZoneMoveItem("/dc1", "/dc0", (short) 1);
-    List<ZoneMover.ZoneMoveItem> items = zoneMover.getZoneMoveItems(blocks1.get(0));
+    checkRuleAndItem(nnc, conf, rule, block, moveItem);
+
+    // works well even rule has more replicas than block
+    // rule becomes "/dc0:2,/dc1:2"
+    ruleMap.put("/dc0", (short) 2);
+    rule = ReplicationRule.parseFromMap(ruleMap);
+    checkRuleAndItem(nnc, conf, rule, block, moveItem);
+
+    // works well even block has more replicas than rule
+    // rule becomes "/dc0:1,/dc1:1"
+    ruleMap.put("/dc0", (short) 1);
+    ruleMap.put("/dc1", (short) 1);
+    rule = ReplicationRule.parseFromMap(ruleMap);
+    checkRuleAndItem(nnc, conf, rule, block, moveItem);
+  }
+
+  private void checkRuleAndItem(NameNodeConnector nnc, Configuration conf,
+      ReplicationRule rule, LocatedBlock block, ZoneMover.ZoneMoveItem moveItem) {
+    ZoneMover zoneMover = new ZoneMover(nnc, conf, rule, new AtomicInteger(1));
+    assertFalse(zoneMover.isBlockSatisfyRule(block, rule));
+    List<ZoneMover.ZoneMoveItem> items = zoneMover.getZoneMoveItems(block, rule);
     assertEquals(1, items.size());
     assertEquals(moveItem, items.get(0));
   }
@@ -342,7 +360,7 @@ public class TestZoneMover {
     // do block move
     Tool tool = new ZoneMover.Cli();
     tool.setConf(conf);
-    final String[] args = {"-path", "/test", "-rule", "[(/dc1, 3)]"};
+    final String[] args = {"-path", "/test", "-rule", "/dc1:3"};
     LOG.info("Try to do block move for path: /test ...");
     assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args));
     // sleep some time to wait datanode delete replicas

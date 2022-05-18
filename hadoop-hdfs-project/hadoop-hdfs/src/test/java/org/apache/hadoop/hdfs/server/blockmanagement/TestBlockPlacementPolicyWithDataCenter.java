@@ -15,24 +15,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.namenode;
+package org.apache.hadoop.hdfs.server.blockmanagement;
 
 import org.apache.hadoop.conf.Configuration;
 
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CreateFlag;
+import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.PermissionStatus;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
+import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter;
+import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.net.StaticMapping;
 import org.junit.After;
 import org.junit.Before;
@@ -41,7 +46,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -66,11 +77,15 @@ public class TestBlockPlacementPolicyWithDataCenter {
     Configuration conf = new HdfsConfiguration();
     final String[] racks = {
         "/datacenter0/rack0", "/datacenter0/rack0", "/datacenter0/rack1",
-        "/datacenter0/rack1", "/datacenter1/rack0", "/datacenter1/rack1"
+        "/datacenter0/rack1", "/datacenter1/rack0", "/datacenter1/rack1",
+        "/datacenter0/rack0", "/datacenter1/rack0", "/datacenter1/rack0",
+        "/datacenter2/rack0", "/datacenter2/rack0", "/datacenter2/rack0"
     };
     final String[] hosts = {
         "host0", "host1", "host2",
-        "host3", "host4", "host5"
+        "host3", "host4", "host5",
+        "host6", "host7", "host8",
+        "host9", "host10", "host11"
     };
 
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE);
@@ -82,7 +97,9 @@ public class TestBlockPlacementPolicyWithDataCenter {
     conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY,
         DFSNetworkTopologyWithDataCenter.class,
         DFSNetworkTopology.class);
-    cluster = new MiniDFSCluster.Builder(conf).numDataNodes(5).racks(racks)
+    conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY,
+        true);
+    cluster = new MiniDFSCluster.Builder(conf).numDataNodes(12).racks(racks)
         .hosts(hosts).build();
     cluster.waitActive();
     nameNodeRpc = cluster.getNameNodeRpc();
@@ -134,12 +151,12 @@ public class TestBlockPlacementPolicyWithDataCenter {
   }
 
   private boolean isDatacenterLocal(String clientHost,
-      String clientRack, DatanodeInfo datanodeInfo) {
+                                    String clientRack,
+                                    DatanodeInfo datanodeInfo) {
     return (!clientHost.equals(datanodeInfo.getHostName()) &&
         !clientRack.equals(datanodeInfo.getNetworkLocation()) &&
         DFSNetworkTopologyWithDataCenter.getDataCenter(clientRack).equals(
-            DFSNetworkTopologyWithDataCenter.getDataCenter(
-                datanodeInfo.getNetworkLocation())
+            NetworkTopologyUtil.getDataCenter(datanodeInfo)
         ));
   }
 
@@ -218,11 +235,10 @@ public class TestBlockPlacementPolicyWithDataCenter {
               locations[1].getNetworkLocation(), locations[2]));
     }
   }
-
   @Test
   public void testDatacenterOffPlacement() {
     String clientMachine = "client.foo.com";
-    String clientRack = "/datacenter2/rack0";
+    String clientRack = "/datacenter9/rack0";
     StaticMapping.addNodeToRack(clientMachine, clientRack);
     for (int i = 0; i < times; i++) {
       LOG.info("Start round " + i + " ...");
@@ -231,10 +247,152 @@ public class TestBlockPlacementPolicyWithDataCenter {
         getLocations(clientMachine);
         fail("Expected IOException");
       } catch (IOException e) {
-        e.printStackTrace();
         assertTrue(e.getMessage().contains(
             "could only be written to 0 of the 1 minReplication nodes"));
       }
     }
+  }
+
+  @Test
+  public void testChooseReplicasToDelete() {
+    Collection<DatanodeStorageInfo> nonExcess = new ArrayList<>();
+    ReplicationRule rule = ReplicationRule
+        .parseFromString("/datacenter0:2,/datacenter1:1");
+    BlockPlacementPolicyWithDataCenter policy =
+        (BlockPlacementPolicyWithDataCenter) namesystem.getBlockManager()
+            .getBlockPlacementPolicy();
+    Set<DatanodeDescriptor> datanodes=
+        namesystem.getBlockManager().getDatanodeManager().getDatanodes();
+
+    // Sort datanodes by rack, and add the DatanodeStorageInfo to map.
+    Map<String, List<DatanodeStorageInfo>> dcMap = getDcMapFromDatanodes(datanodes);
+
+    List<DatanodeStorageInfo> excessReplicas;
+    BlockStoragePolicySuite POLICY_SUITE = BlockStoragePolicySuite
+        .createDefaultSuite();
+    BlockStoragePolicy storagePolicy = POLICY_SUITE.getDefaultPolicy();
+
+    // Add the DatanodeStorageInfo of dc0 & dc1 to nonExcess
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(0));
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(1));
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(2));
+    nonExcess.add(dcMap.get("/datacenter1/rack0").get(0));
+    nonExcess.add(dcMap.get("/datacenter1/rack0").get(1));
+
+    // Use delete hint case.
+    DatanodeDescriptor delHintNode = dcMap.get("/datacenter0/rack0")
+        .get(0).getDatanodeDescriptor();
+    List<StorageType> excessTypes = storagePolicy.chooseExcess((short) 3,
+        DatanodeStorageInfo.toStorageTypes(nonExcess));
+    excessReplicas = policy.chooseReplicasToDelete(nonExcess,
+        nonExcess, 3, rule, excessTypes,
+        dcMap.get("/datacenter1/rack0").get(1).getDatanodeDescriptor(), delHintNode);
+    assertEquals(2, excessReplicas.size());
+    assertTrue(excessReplicas.contains(dcMap.get("/datacenter0/rack0").get(0)));
+
+    // Excess type deletion
+    DatanodeStorageInfo excessStorage = DFSTestUtil.createDatanodeStorageInfo(
+        "Storage-excess-ID", "localhost", delHintNode.getNetworkLocation(),
+        "foo.com", StorageType.ARCHIVE, null);
+    nonExcess.add(excessStorage);
+    excessTypes = storagePolicy.chooseExcess((short) 3,
+        DatanodeStorageInfo.toStorageTypes(nonExcess));
+    excessReplicas = policy.chooseReplicasToDelete(nonExcess,
+        nonExcess, 3, rule, excessTypes,
+        dcMap.get("/datacenter1/rack0").get(1).getDatanodeDescriptor(), null);
+    assertTrue(excessReplicas.contains(excessStorage));
+    assertEquals(3, excessReplicas.size());
+
+    // The Rule includes parts of all the given replicas.
+    rule = ReplicationRule
+        .parseFromString("/datacenter0:2,/datacenter2:1");
+    nonExcess.clear();
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(0));
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(1));
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(2));
+    nonExcess.add(dcMap.get("/datacenter0/rack1").get(0));
+    nonExcess.add(dcMap.get("/datacenter1/rack0").get(0));
+    excessTypes = storagePolicy.chooseExcess((short) 3,
+        DatanodeStorageInfo.toStorageTypes(nonExcess));
+    excessReplicas = policy.chooseReplicasToDelete(nonExcess,
+        nonExcess, 3, rule, excessTypes,
+        dcMap.get("/datacenter1/rack0").get(1).getDatanodeDescriptor(), null);
+    assertEquals(2, excessReplicas.size());
+
+    // delNodeHint is not in the rule.
+    rule = ReplicationRule
+        .parseFromString("/datacenter0:1,/datacenter1:2");
+    nonExcess.clear();
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(0));
+    nonExcess.add(dcMap.get("/datacenter1/rack0").get(0));
+    nonExcess.add(dcMap.get("/datacenter2/rack0").get(0));
+    nonExcess.add(dcMap.get("/datacenter2/rack0").get(1));
+    delHintNode = dcMap.get("/datacenter2/rack0").get(1).getDatanodeDescriptor();
+    excessReplicas = policy.chooseReplicasToDelete(
+        nonExcess, nonExcess, 3, rule, excessTypes,
+        dcMap.get("/datacenter1/rack0").get(0).getDatanodeDescriptor(), delHintNode);
+    assertEquals(1, excessReplicas.size());
+    // delHintNode is in excessReplicas.
+    assertEquals(delHintNode, excessReplicas.get(0).getDatanodeDescriptor());
+  }
+
+  @Test
+  public void testChooseTarget() {
+    BlockPlacementPolicyWithDataCenter policy =
+        (BlockPlacementPolicyWithDataCenter) namesystem.getBlockManager()
+            .getBlockPlacementPolicy();
+    BlockStoragePolicy storagePolicy = BlockStoragePolicySuite
+        .createDefaultSuite().getDefaultPolicy();
+
+    // Sort datanodes by rack, and add the DatanodeStorageInfo to map.
+    Set<DatanodeDescriptor> datanodes=
+        namesystem.getBlockManager().getDatanodeManager().getDatanodes();
+    Map<String, List<DatanodeStorageInfo>> dcMap = getDcMapFromDatanodes(datanodes);
+
+    // replicate to the datacenter without any replicas first
+    ReplicationRule rule = ReplicationRule
+        .parseFromString("/datacenter0:2,/datacenter1:2");
+    List<DatanodeStorageInfo> existNodes = new ArrayList<>();
+    existNodes.add(dcMap.get("/datacenter0/rack0").get(0));
+    DatanodeStorageInfo[] results = policy.chooseTarget(null, 3, rule, null,
+        existNodes, false, null, DEFAULT_BLOCK_SIZE, storagePolicy, null);
+    assertEquals(2, results.length);
+    for (DatanodeStorageInfo info: results) {
+      assertEquals("/datacenter1", NetworkTopologyUtil
+          .getDataCenter(info.getDatanodeDescriptor()));
+    }
+
+    // only replicate to one datacenter one time
+    existNodes.clear();
+    existNodes.add(dcMap.get("/datacenter0/rack0").get(0));
+    existNodes.add(dcMap.get("/datacenter1/rack0").get(0));
+    results = policy.chooseTarget(null, 2, rule, null,
+        existNodes, false, null, DEFAULT_BLOCK_SIZE, storagePolicy, null);
+    assertEquals(1, results.length);
+    String dc = NetworkTopologyUtil.getDataCenter(results[0].getDatanodeDescriptor());
+    assertTrue(dc.equals("/datacenter0") || dc.equals("/datacenter1"));
+
+    // allocated should not beyond numOfReplicas
+    rule = ReplicationRule.parseFromString("/datacenter0:3");
+    existNodes.clear();
+    existNodes.add(dcMap.get("/datacenter0/rack0").get(0));
+    results = policy.chooseTarget(null, 1, rule, null,
+        existNodes, false, null, DEFAULT_BLOCK_SIZE, storagePolicy, null);
+    assertEquals(1, results.length);
+    dc = NetworkTopologyUtil.getDataCenter(results[0].getDatanodeDescriptor());
+    assertEquals("/datacenter0", dc);
+  }
+
+  private Map<String, List<DatanodeStorageInfo>> getDcMapFromDatanodes(
+      Set<DatanodeDescriptor> datanodes) {
+    Map<String, List<DatanodeStorageInfo>> dcMap = new HashMap<>();
+    for (DatanodeDescriptor dn : datanodes) {
+      DatanodeStorageInfo storageInfo =  dn.getStorageInfos()[0];
+      String rackName = storageInfo.getDatanodeDescriptor().getNetworkLocation();
+      List<DatanodeStorageInfo> storageList =
+          dcMap.computeIfAbsent(rackName, k -> new ArrayList<>());
+      storageList.add(storageInfo);
+    }
+    return dcMap;
   }
 }

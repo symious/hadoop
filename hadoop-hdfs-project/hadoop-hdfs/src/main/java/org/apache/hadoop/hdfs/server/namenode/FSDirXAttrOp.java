@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hdfs.server.namenode;
 
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
@@ -70,9 +72,9 @@ class FSDirXAttrOp {
    * @throws IOException
    */
   static FileStatus setXAttr(
-      FSDirectory fsd, FSPermissionChecker pc, String src, XAttr xAttr,
-      EnumSet<XAttrSetFlag> flag, boolean logRetryCache)
-      throws IOException {
+      FSDirectory fsd, BlockManager bm, FSPermissionChecker pc,
+      String src, XAttr xAttr, EnumSet<XAttrSetFlag> flag,
+      boolean logRetryCache) throws IOException {
     checkXAttrsConfigFlag(fsd);
     checkXAttrSize(fsd, xAttr);
     XAttrPermissionFilter.checkPermissionForApi(
@@ -80,16 +82,30 @@ class FSDirXAttrOp {
     List<XAttr> xAttrs = Lists.newArrayListWithCapacity(1);
     xAttrs.add(xAttr);
     INodesInPath iip;
+    INode inode;
+    List<XAttr> newXAttrs;
     fsd.writeLock();
     try {
       iip = fsd.resolvePath(pc, src, DirOp.WRITE);
       src = iip.getPath();
       checkXAttrChangeAccess(fsd, iip, xAttr, pc);
-      unprotectedSetXAttrs(fsd, iip, xAttrs, flag);
+      inode = FSDirectory.resolveLastINode(iip);
+      List<XAttr> existingXAttrs = XAttrStorage.readINodeXAttrs(inode);
+      newXAttrs = setINodeXAttrs(fsd, existingXAttrs, xAttrs, flag);
+      unprotectedSetXAttrs(fsd, inode, iip, newXAttrs);
     } finally {
       fsd.writeUnlock();
     }
     fsd.getEditLog().logSetXAttrs(src, xAttrs, logRetryCache);
+    if (inode.isFile()) {
+      short replication = ((INodeFile) inode).getFileReplication(iip.getLatestSnapshotId());
+      ReplicationRule rule = FSDirXAttrReplicationRuleOp.getRuleFromXAttrs(newXAttrs);
+      if (rule != null && rule.getReplica() != replication) {
+        FSDirectory.LOG.info("Change the replication of {} from {} to {}",
+            src, replication, rule.getReplica());
+        FSDirAttrOp.setReplication(fsd, pc, bm, src, rule.getReplica());
+      }
+    }
     return fsd.getAuditFileInfo(iip);
   }
 
@@ -273,6 +289,13 @@ class FSDirXAttrOp {
     INode inode = FSDirectory.resolveLastINode(iip);
     List<XAttr> existingXAttrs = XAttrStorage.readINodeXAttrs(inode);
     List<XAttr> newXAttrs = setINodeXAttrs(fsd, existingXAttrs, xAttrs, flag);
+    return unprotectedSetXAttrs(fsd, inode, iip, newXAttrs);
+  }
+
+  static INode unprotectedSetXAttrs(
+      FSDirectory fsd, INode inode, final INodesInPath iip,
+      final List<XAttr> newXAttrs)
+      throws IOException {
     final boolean isFile = inode.isFile();
 
     for (XAttr xattr : newXAttrs) {
