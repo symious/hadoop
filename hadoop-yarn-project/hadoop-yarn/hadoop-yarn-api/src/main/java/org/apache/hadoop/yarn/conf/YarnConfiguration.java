@@ -2902,6 +2902,12 @@ public class YarnConfiguration extends Configuration {
   public static final String NM_LOG_AGG_POLICY_CLASS_PARAMETERS = NM_PREFIX
       + "log-aggregation.policy.parameters";
 
+  // The expiration time for app local dir to clean by NM, default is 5 minutes
+  public static final String APP_LOCAL_DIR_MIN_EXPIRATION_MS =
+      NM_PREFIX + ".app-home.min.expiration-ms";
+  public static final long DEFAULT_APP_LOCAL_DIR_MIN_EXPIRATION_MS = 300000;
+
+
   ////////////////////////////////
   // Web Proxy Configs
   ////////////////////////////////

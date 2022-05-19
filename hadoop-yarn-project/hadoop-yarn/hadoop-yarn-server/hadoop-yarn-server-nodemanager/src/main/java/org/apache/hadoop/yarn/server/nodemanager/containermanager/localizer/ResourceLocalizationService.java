@@ -20,7 +20,17 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer;
 import static org.apache.hadoop.fs.CreateFlag.CREATE;
 import static org.apache.hadoop.fs.CreateFlag.OVERWRITE;
 
+import com.sun.jersey.api.client.Client;
+import com.sun.jersey.api.client.ClientResponse;
+import com.sun.jersey.api.client.config.ClientConfig;
+import com.sun.jersey.api.client.config.DefaultClientConfig;
+import com.sun.jersey.client.urlconnection.HttpURLConnectionFactory;
+import com.sun.jersey.client.urlconnection.URLConnectionClientHandler;
+import org.apache.hadoop.yarn.api.records.YarnApplicationState;
+import org.apache.hadoop.yarn.api.records.timelineservice.TimelineEntity;
+import org.apache.hadoop.yarn.api.records.timelineservice.TimelineEvent;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.RecoveryIterator;
+import org.apache.hadoop.yarn.webapp.YarnJacksonJaxbJsonProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,7 +38,10 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.lang.reflect.UndeclaredThrowableException;
+import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -39,6 +52,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableSet;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletionService;
@@ -148,6 +162,8 @@ import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTest
 import org.apache.hadoop.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.hadoop.thirdparty.com.google.common.cache.LoadingCache;
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
+
+import javax.ws.rs.core.MediaType;
 
 public class ResourceLocalizationService extends CompositeService
     implements EventHandler<LocalizationEvent>, LocalizationProtocol {
@@ -262,6 +278,8 @@ public class ResourceLocalizationService extends CompositeService
         initializeLocalDirs(lfs);
         initializeLogDirs(lfs);
       }
+      cleanDumpedLocalDirs(conf);
+
     } catch (Exception e) {
       throw new YarnRuntimeException(
         "Failed to initialize LocalizationService", e);
@@ -1494,6 +1512,141 @@ public class ResourceLocalizationService extends CompositeService
       LOG.warn(msg, e);
       throw new YarnRuntimeException(msg, e);
     }
+  }
+
+  public static Client createClient() {
+    ClientConfig cfg = new DefaultClientConfig();
+    cfg.getClasses().add(YarnJacksonJaxbJsonProvider.class);
+    return new Client(new URLConnectionClientHandler(
+        new DummyURLConnectionFactory()), cfg);
+  }
+
+  private static class DummyURLConnectionFactory
+      implements HttpURLConnectionFactory {
+
+    @Override
+    public HttpURLConnection getHttpURLConnection(final java.net.URL url)
+        throws IOException {
+      try {
+        return (HttpURLConnection)url.openConnection();
+      } catch (UndeclaredThrowableException e) {
+        throw new IOException(e.getCause());
+      }
+    }
+  }
+
+  public static ClientResponse getResponse(Client client, URI uri)
+      throws Exception {
+    ClientResponse resp =
+        client.resource(uri).accept(MediaType.APPLICATION_JSON)
+            .type(MediaType.APPLICATION_JSON).get(ClientResponse.class);
+    if (resp == null ||
+        resp.getStatusInfo().getStatusCode() !=
+            ClientResponse.Status.OK.getStatusCode()) {
+      String msg = new String();
+      if (resp != null) {
+        msg = String.valueOf(resp.getStatusInfo().getStatusCode());
+      }
+      throw new IOException("Incorrect response from timeline reader. " +
+          "Status=" + msg);
+    }
+    return resp;
+  }
+
+  public long getAppLocalDirExpireMinTime(Configuration conf){
+    return conf.getLong(YarnConfiguration.APP_LOCAL_DIR_MIN_EXPIRATION_MS,
+        YarnConfiguration.DEFAULT_APP_LOCAL_DIR_MIN_EXPIRATION_MS);
+  }
+
+  private void cleanDumpedLocalDirs(Configuration conf){
+    Runnable r = () -> {
+
+      Client httpClient = createClient();
+
+      String[] localDirs =
+          conf.get(YarnConfiguration.NM_LOCAL_DIRS).split(",");
+
+      int successDeletedAppDirs = 0;
+      long startTime = System.currentTimeMillis();
+
+      for (String localDir : localDirs) {
+        String userCachePath = localDir + "/" + "usercache";
+        File[] userCacheFiles = new File(userCachePath).listFiles();
+
+        for (File ucf : userCacheFiles) {
+          if (ucf.isDirectory()) {
+            String appCachePath =
+                userCachePath + "/" + ucf.getName() + "/appcache";
+            File[] appCacheFiles = new File(appCachePath).listFiles();
+
+            for (File acf : appCacheFiles) {
+
+              if (acf.isDirectory() &&
+                  acf.getName().startsWith("application_")) {
+                String appId = acf.getName();
+                String appLocalDirPath = appCachePath + "/" + appId;
+                LOG.info("appId: " + appId + " ,appLocalDirPath: " +
+                    appLocalDirPath);
+
+                String queryTimelineAddress = conf.get(
+                    YarnConfiguration.GPG_QUERY_TIMELINE_WEBAPP_ADDRESS,
+                    YarnConfiguration.DEFAULT_GPG_QUERY_TIMELINE_WEBAPP_ADDRESS);
+                String clusterId = conf.get(YarnConfiguration.RM_CLUSTER_ID);
+                String queryUrl = queryTimelineAddress + "/ws/v2/timeline/" +
+                    "clusters/" + clusterId + "/apps/" + appId + "?fields=ALL";
+                URI uri = URI.create(queryUrl);
+                LOG.info("queryTimeLineAddress Url: " + queryUrl);
+
+                ClientResponse resp;
+                try {
+                  resp = getResponse(httpClient, uri);
+                  TimelineEntity entity = resp.getEntity(TimelineEntity.class);
+
+                  //get app state
+                  String applicationState =
+                      (String) entity.getInfo().get("YARN_APPLICATION_STATE");
+
+                  //get app finish timestamp
+                  long appFinishedStamp = Long.MAX_VALUE;
+                  NavigableSet<TimelineEvent> timelineEvents =
+                      entity.getEvents();
+                  for (TimelineEvent event : timelineEvents) {
+                    if (event.getId().equals("YARN_APPLICATION_FINISHED")) {
+                      appFinishedStamp = event.getTimestamp();
+                      break;
+                    }
+                  }
+
+                  if ((applicationState
+                      .equals(YarnApplicationState.FINISHED.toString()) ||
+                      applicationState
+                          .equals(YarnApplicationState.FAILED.toString()) ||
+                      applicationState
+                          .equals(YarnApplicationState.KILLED.toString())) &&
+                      (System.currentTimeMillis() - appFinishedStamp) >
+                          getAppLocalDirExpireMinTime(conf)) {
+                    FileUtil.fullyDeleteContents(new File(appLocalDirPath));
+                    successDeletedAppDirs++;
+                    LOG.info("Success to clean dumped appLocalDirPath: " +
+                        appLocalDirPath);
+                  }
+                } catch (Exception e) {
+                  LOG.error("Delete appLocalDirPath: " + appLocalDirPath +
+                      " failed!", e);
+                }
+              }
+            }
+          }
+        }
+      }
+      long endTime = System.currentTimeMillis();
+      LOG.info("cleanDumpedLocalDirsThread successDeletedAppDirs: " +
+          successDeletedAppDirs + " ,costTime: " +
+          (endTime - startTime) + "ms!");
+    };
+
+    new Thread(r).start();
+    LOG.info("cleanDumpedLocalDirsThread start!");
   }
 
   private void cleanupLogDirs(FileContext fs, DeletionService del) {
