@@ -49,6 +49,7 @@ import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.util.ReflectionUtils;
+import org.json.JSONObject;
 
 import java.io.IOException;
 import java.net.URI;
@@ -110,7 +111,7 @@ public class ZoneServiceRestAPI {
         Thread.currentThread().getStackTrace()[1].getMethodName(), defaultNull,
         defaultNull, defaultNull, startTime, new Date(),
         ResultCode.SUCCESS.getMsg(), defaultNull);
-    return result.toString();
+    return new ZoneServiceHttpResponse(result.toString()).toString();
   }
 
   /**
@@ -135,7 +136,7 @@ public class ZoneServiceRestAPI {
           Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
           path, defaultNull, startTime, new Date(),
           ResultCode.THREAD_FULL.getMsg(), defaultNull);
-      return ResultCode.THREAD_FULL.toString();
+      return new ZoneServiceHttpResponse(ResultCode.THREAD_FULL).toString();
     }
     try {
       semaphore.acquire();
@@ -146,14 +147,23 @@ public class ZoneServiceRestAPI {
           Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
           path, defaultNull, startTime, new Date(),
           ResultCode.SUCCESS.getMsg(), defaultNull);
-      return hashMap.toString();
+      if (hashMap.isEmpty()) {
+        AuditLogger.logRuleProcess(
+            Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+            path, defaultNull, startTime, new Date(),
+            ResultCode.NO_DISTRIBUTION.getMsg(), defaultNull);
+        return
+            new ZoneServiceHttpResponse(ResultCode.NO_DISTRIBUTION).toString();
+      }
+      JSONObject json = new JSONObject(hashMap);
+      return new ZoneServiceHttpResponse(json.toString()).toString();
     } catch (InterruptedException e) {
       e.printStackTrace();
       AuditLogger.logRuleProcess(
           Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
           path, defaultNull, startTime, new Date(),
           ResultCode.INTERRUPTED.getMsg(), defaultNull);
-      return ResultCode.INTERRUPTED.toString();
+      return new ZoneServiceHttpResponse(ResultCode.INTERRUPTED).toString();
     }
   }
 
@@ -180,7 +190,7 @@ public class ZoneServiceRestAPI {
       AuditLogger.logRuleProcess(currentMethod, nameSpace,
           path, replicaRule, startTime, new Date(),
           ResultCode.THREAD_FULL.getMsg(), defaultMode);
-      return ResultCode.THREAD_FULL.toString();
+      return new ZoneServiceHttpResponse(ResultCode.THREAD_FULL).toString();
     }
     try {
       semaphore.acquire();
@@ -192,19 +202,19 @@ public class ZoneServiceRestAPI {
       driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
       AuditLogger.logRuleProcess(currentMethod, nameSpace, path, replicaRule,
           startTime, new Date(), result.getMsg(), defaultMode);
-      return result.toString();
+      return new ZoneServiceHttpResponse(result).toString();
     } catch (InterruptedException e) {
       e.printStackTrace();
       AuditLogger.logRuleProcess(currentMethod, nameSpace,
           path, replicaRule, startTime, new Date(),
           ResultCode.INTERRUPTED.getMsg(), defaultMode);
-      return ResultCode.INTERRUPTED.toString();
+      return new ZoneServiceHttpResponse(ResultCode.INTERRUPTED).toString();
     } catch (IOException e) {
       e.printStackTrace();
       AuditLogger.logRuleProcess(currentMethod, nameSpace,
           path, replicaRule, startTime, new Date(),
           ResultCode.IO_EXCEPTION.getMsg(), defaultMode);
-      return ResultCode.IO_EXCEPTION.toString();
+      return new ZoneServiceHttpResponse(ResultCode.IO_EXCEPTION).toString();
     }
   }
 
@@ -231,7 +241,7 @@ public class ZoneServiceRestAPI {
       AuditLogger.logRuleProcess(currentMethod, nameSpace,
           path, replicaRule, startTime, new Date(),
           ResultCode.THREAD_FULL.getMsg(), defaultMode);
-      return ResultCode.THREAD_FULL.toString();
+      return new ZoneServiceHttpResponse(ResultCode.THREAD_FULL).toString();
     }
     try {
       semaphore.acquire();
@@ -243,19 +253,19 @@ public class ZoneServiceRestAPI {
       driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
       AuditLogger.logRuleProcess(currentMethod, nameSpace, path, replicaRule,
           startTime, new Date(), result.getMsg(), defaultMode);
-      return result.toString();
+      return new ZoneServiceHttpResponse(result).toString();
     } catch (InterruptedException e) {
       e.printStackTrace();
       AuditLogger.logRuleProcess(currentMethod, nameSpace,
           path, replicaRule, startTime, new Date(),
           ResultCode.INTERRUPTED.getMsg(), defaultMode);
-      return ResultCode.INTERRUPTED.toString();
+      return new ZoneServiceHttpResponse(ResultCode.INTERRUPTED).toString();
     } catch (IOException e) {
       e.printStackTrace();
       AuditLogger.logRuleProcess(currentMethod, nameSpace,
           path, replicaRule, startTime, new Date(),
           ResultCode.IO_EXCEPTION.getMsg(), defaultMode);
-      return ResultCode.IO_EXCEPTION.toString();
+      return new ZoneServiceHttpResponse(ResultCode.IO_EXCEPTION).toString();
     }
   }
 
@@ -271,10 +281,11 @@ public class ZoneServiceRestAPI {
   @Path("rulemap/{path:.*}")
   @Consumes()
   public String setPathRuleMap(@Context HttpServletRequest hsr,
-                               @QueryParam("namespace") String nameSpace,
-                               @QueryParam("rule") String replicaRule,
-                               @PathParam("path") String path) {
-    return createUpdateMap(nameSpace, path, replicaRule, true);
+      @QueryParam("namespace") String nameSpace,
+      @QueryParam("rule") String replicaRule,
+      @PathParam("path") String path) {
+    return new ZoneServiceHttpResponse(createUpdateMap(
+        nameSpace, path, replicaRule, true)).toString();
   }
 
   /**
@@ -289,10 +300,11 @@ public class ZoneServiceRestAPI {
   @Path("rulemap/{path:.*}")
   @Consumes()
   public String refreshPathRuleMap(@Context HttpServletRequest hsr,
-                                   @QueryParam("namespace") String nameSpace,
-                                   @QueryParam("rule") String replicaRule,
-                                   @PathParam("path") String path) {
-    return createUpdateMap(nameSpace, path, replicaRule, false);
+      @QueryParam("namespace") String nameSpace,
+      @QueryParam("rule") String replicaRule,
+      @PathParam("path") String path) {
+    return new ZoneServiceHttpResponse(createUpdateMap(
+        nameSpace, path, replicaRule, false)).toString();
   }
 
   /**
@@ -319,7 +331,8 @@ public class ZoneServiceRestAPI {
             "DeletePathRuleMap", nameSpace,
             path, defaultNull, startTime, new Date(),
             ResultCode.NO_MIGRATION_RECORD.getMsg(), "monitor");
-        return ResultCode.NO_MIGRATION_RECORD.toString();
+        return new ZoneServiceHttpResponse(ResultCode.NO_MIGRATION_RECORD)
+            .toString();
       }
       Thread[] ts = new Thread[Thread.activeCount()];
       Thread.enumerate(ts);
@@ -331,21 +344,22 @@ public class ZoneServiceRestAPI {
               "DeletePathRuleMap", nameSpace,
               path, defaultNull, startTime, new Date(),
               ResultCode.SUCCESS.getMsg(), "monitor");
-          return ResultCode.SUCCESS.toString();
+          return new ZoneServiceHttpResponse(ResultCode.SUCCESS).toString();
         }
       }
       AuditLogger.logRuleProcess(
           "DeletePathRuleMap", nameSpace,
           path, defaultNull, startTime, new Date(),
           ResultCode.NO_MIGRATION_RECORD.getMsg(), "monitor");
-      return ResultCode.NO_MIGRATION_RECORD.toString();
+      return new ZoneServiceHttpResponse(ResultCode.NO_MIGRATION_RECORD)
+          .toString();
     } catch (IOException e) {
       e.printStackTrace();
       AuditLogger.logRuleProcess(
           "DeletePathRuleMap", nameSpace,
           path, defaultNull, startTime, new Date(),
           ResultCode.IO_EXCEPTION.getMsg(), "monitor");
-      return ResultCode.IO_EXCEPTION.toString();
+      return new ZoneServiceHttpResponse(ResultCode.IO_EXCEPTION).toString();
     }
   }
 
@@ -354,7 +368,6 @@ public class ZoneServiceRestAPI {
    * @param nameSpace   URI of the NameNode
    * @param path        the path to apply the rule
    * @param replicaRule the replica rule to apply
-   * @param mode        if use monitor mode or not
    * @return ResultCode
    */
   protected ResultCode movePath(String nameSpace,
@@ -421,7 +434,7 @@ public class ZoneServiceRestAPI {
    * @param allowCreate  allow create new map by this method or not
    * @return the status of the result
    */
-  protected String createUpdateMap(String nameSpace, String path,
+  protected ResultCode createUpdateMap(String nameSpace, String path,
       String replicaRule, boolean allowCreate) {
     Date startTime = new Date();
     try {
@@ -442,7 +455,7 @@ public class ZoneServiceRestAPI {
                 "setPathRuleMap", nameSpace,
                 path, replicaRule, startTime, new Date(),
                 ResultCode.CREATE_SUCCESS.getMsg(), "monitor");
-            return ResultCode.CREATE_SUCCESS.toString();
+            return ResultCode.CREATE_SUCCESS;
           }
           driver.put(migrationRecord, true, false);
           driver.put(signalRecord, true, false);
@@ -450,7 +463,7 @@ public class ZoneServiceRestAPI {
               "updatePathRuleMap", nameSpace,
               path, replicaRule, startTime, new Date(),
               ResultCode.UPDATE_SUCCESS.getMsg(), "monitor");
-          return ResultCode.UPDATE_SUCCESS.toString();
+          return ResultCode.UPDATE_SUCCESS;
         }
       }
       if (!allowCreate) {
@@ -459,7 +472,7 @@ public class ZoneServiceRestAPI {
             "refreshPathRuleMap", nameSpace,
             path, replicaRule, startTime, new Date(),
             ResultCode.METHOD_ERROR.getMsg(), "monitor");
-        return ResultCode.METHOD_ERROR.toString();
+        return ResultCode.METHOD_ERROR;
       }
       //If there is no monitor thread for this namespace, it will create a new one
       Thread monitorThread = new MonitorThread(threadName, new Configuration(),
@@ -471,14 +484,14 @@ public class ZoneServiceRestAPI {
           "CreatePathRuleMap", nameSpace,
           path, replicaRule, startTime, new Date(),
           ResultCode.CREATE_SUCCESS.getMsg(), "monitor");
-      return ResultCode.CREATE_SUCCESS.toString();
+      return ResultCode.CREATE_SUCCESS;
     } catch (IOException e) {
       e.printStackTrace();
       AuditLogger.logRuleProcess(
           "CreatePathRuleMap", nameSpace,
           path, replicaRule, startTime, new Date(),
           ResultCode.IO_EXCEPTION.getMsg(), "monitor");
-      return ResultCode.IO_EXCEPTION.toString();
+      return ResultCode.IO_EXCEPTION;
     }
   }
 
