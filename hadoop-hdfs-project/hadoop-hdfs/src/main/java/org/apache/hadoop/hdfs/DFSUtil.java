@@ -71,6 +71,7 @@ import org.apache.hadoop.fs.ParentNotDirectoryException;
 import org.apache.hadoop.fs.UnresolvedLinkException;
 import org.apache.hadoop.hdfs.server.namenode.FSDirectory;
 import org.apache.hadoop.hdfs.server.namenode.INodesInPath;
+import org.apache.hadoop.hdfs.server.namenode.ProtectedDirectoriesManager;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.security.AccessControlException;
 import org.slf4j.Logger;
@@ -1774,14 +1775,19 @@ public class DFSUtil {
    * @param iip directory whose descendants are to be checked.
    * @throws AccessControlException if a non-empty protected descendant
    *                                was found.
-   * @throws ParentNotDirectoryException
-   * @throws UnresolvedLinkException
    */
   public static void checkProtectedDescendants(
       FSDirectory fsd, INodesInPath iip)
           throws AccessControlException, UnresolvedLinkException,
           ParentNotDirectoryException {
-    final SortedSet<String> protectedDirs = fsd.getProtectedDirectories();
+    final SortedSet<String> protectedDirs;
+    if (ProtectedDirectoriesManager.getInstance()
+        .getProtectedDirectoriesUseFileEnabled()) {
+      protectedDirs = ProtectedDirectoriesManager.getInstance()
+          .getProtectedDirectoriesSet();
+    } else {
+      protectedDirs = fsd.getProtectedDirectories();
+    }
     if (protectedDirs.isEmpty()) {
       return;
     }

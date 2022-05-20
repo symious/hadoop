@@ -152,6 +152,12 @@ public class CommonConfigurationKeysPublic {
       "fs.protected.directories";
 
   public static final String FS_FORWARD_RULES = "fs.forward.rules";
+  public static final String FS_PROTECTED_DIRECTORIES_USE_FILE_ENABLED_KEY =
+      "fs.protected.directories.use.file.enabled";
+  public static final boolean FS_PROTECTED_DIRECTORIES_USE_FILE_ENABLED_DEFAULT
+      = false;
+  public static final String FS_PROTECTED_DIRECTORIES_FILE_KEY =
+      "fs.protected.directories.file";
 
   // TBD: Code is still using hardcoded values (e.g. "fs.automatic.close")
   // instead of constant (e.g. FS_AUTOMATIC_CLOSE_KEY)
