@@ -600,47 +600,6 @@ public class RMContainerImpl implements RMContainer {
               RMAppAttemptEventType.CONTAINER_ALLOCATED));
 
       publishNonAMContainerEventstoATS(container);
-
-      //Add App total assigned resource check
-      ResourceScheduler scheduler = container.rmContext.getScheduler();
-      if(scheduler instanceof CapacityScheduler) {
-        CapacityScheduler cs = (CapacityScheduler)scheduler;
-        String queueName = container.getQueueName();
-        LeafQueue queue = (LeafQueue) cs.getQueue(queueName);
-        int queuePerAppMaxVcores = queue.getQueuePerAppMaxVcores();
-        long queuePerAppMaxMemoryMB = queue.getQueuePerAppMaxMemoryMB();
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("Queue: " + queueName + " ,queuePerAppMaxVcores: " +
-              queuePerAppMaxVcores + " ,queuePerAppMaxMemoryMB: " +
-              queuePerAppMaxMemoryMB);
-        }
-
-        ApplicationResourceUsageReport appResUsageReport =
-            container.rmContext.getScheduler()
-                .getAppResourceUsageReport(container.appAttemptId);
-        int allocatedCpuVcores = appResUsageReport
-            .getUsedResources().getVirtualCores();
-        long allocatedMemoryMB = appResUsageReport
-            .getUsedResources().getMemorySize();
-
-        if (allocatedCpuVcores > queuePerAppMaxVcores ||
-            allocatedMemoryMB > queuePerAppMaxMemoryMB) {
-          ApplicationId appId =
-              container.getApplicationAttemptId().getApplicationId();
-          String message =
-              "application: " + appId + " total assigned resources: [" +
-                  allocatedCpuVcores + " vcores, " + allocatedMemoryMB +
-                  " MB], beyond queue max resources limit: " + "[" +
-                  queuePerAppMaxVcores + " vcores, " +
-                  queuePerAppMaxMemoryMB +
-                  " MB]";
-          LOG.warn(message);
-          container.rmContext.getDispatcher().getEventHandler().handle(
-              new RMAppEvent(appId, RMAppEventType.KILL,
-                  message));
-        }
-      }
-
     }
   }
 

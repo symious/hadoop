@@ -26,6 +26,17 @@ import java.util.concurrent.ConcurrentMap;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.time.DateUtils;
+import org.apache.hadoop.yarn.api.records.ApplicationResourceUsageReport;
+import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore;
+import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStoreEventType;
+import org.apache.hadoop.yarn.server.resourcemanager.recovery.ZKRMStateStore;
+import org.apache.hadoop.yarn.server.resourcemanager.recovery.records.ApplicationAttemptStateData;
+import org.apache.hadoop.yarn.server.resourcemanager.recovery.records.ApplicationStateData;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptEventType;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.event.RMAppAttemptStatusupdateEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -1262,6 +1273,59 @@ public class LeafQueue extends AbstractCSQueue {
 
       // Did we schedule or reserve a container?
       Resource assigned = assignment.getResource();
+
+      // Check whether the resource used by the app exceeds the maximum
+      // resource limit for a single app in the queue
+      boolean enableCheckAppMaxResources = this.getEnableCheckAppMaxResources();
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Queue: " + queueName + " ,enableCheckAppMaxResources: " +
+            enableCheckAppMaxResources);
+      }
+      if (enableCheckAppMaxResources) {
+        long start = System.nanoTime();
+        ApplicationResourceUsageReport appResUsageReport =
+            application.getResourceUsageReport();
+        int runningCpuVcores =
+            appResUsageReport.getUsedResources().getVirtualCores();
+        long runningMemoryMB =
+            appResUsageReport.getUsedResources().getMemorySize();
+        int newAssignedCpuVcores = assigned.getVirtualCores();
+        long newAssignedMemoryMB = assigned.getMemorySize();
+        int appPlanCpuVcores = runningCpuVcores + newAssignedCpuVcores;
+        long appPlanMemoryMB = runningMemoryMB + newAssignedMemoryMB;
+        int queuePerAppMaxVcores = this.getQueuePerAppMaxVcores();
+        boolean canKillApp = this.getKillAppWhenOverResources();
+        long queuePerAppMaxMemoryMB = this.getQueuePerAppMaxMemoryMB();
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Queue: " + queueName + " ,queuePerAppMaxVcores: " +
+              queuePerAppMaxVcores + " ,queuePerAppMaxMemoryMB: " +
+              queuePerAppMaxMemoryMB + " ,canKillApp: " + canKillApp);
+        }
+        if (appPlanCpuVcores > queuePerAppMaxVcores ||
+            appPlanMemoryMB > queuePerAppMaxMemoryMB) {
+          ApplicationId appId = application.getApplicationId();
+          String message =
+              "application: " + appId + " current used resources: [" +
+                  runningCpuVcores + " VCores, " + runningMemoryMB +
+                  " MB], nearly reach queue max resources limit: " + "[" +
+                  queuePerAppMaxVcores + " VCores, " + queuePerAppMaxMemoryMB +
+                  " MB], can't assign new containers!";
+          LOG.warn(message);
+          if (!canKillApp) {
+            application
+                .updateAMContainerDiagnostics(AMState.ACTIVATED, message);
+          } else {
+            csContext.getRMContext().getDispatcher().getEventHandler().handle(
+                new RMAppEvent(appId, RMAppEventType.KILL, message));
+          }
+          continue;
+        }
+        long end = System.nanoTime();
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Check single app resources limit cost time: " +
+              (end - start) / 1000 + " us!");
+        }
+      }
 
       if (Resources.greaterThan(resourceCalculator, clusterResource, assigned,
           Resources.none())) {

@@ -170,6 +170,14 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   public static final String MAX_MEMORY_MB_PER_APPLICATION_SUFFIX =
       "max-memory-mb-application";
 
+  @Private
+  public static final String OVER_RESOURCES_KILL_APP_SUFFIX =
+      "over-resources-kill-app";
+
+  @Private
+  public static final String CHECK_APP_MAX_RESOURCES_SUFFIX =
+      "check-app-max-resources-enable";
+
   /**
    * Ordering policy of queues
    */
@@ -488,6 +496,30 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
       getInt(getQueuePrefix(queue) + MAXIMUM_APPLICATIONS_SUFFIX,
           (int)UNDEFINED);
     return maxApplicationsPerQueue;
+  }
+
+  /**
+   * Get flag to check if app is over max resources limit per queue setting.
+   * @param queue name of the queue
+   * @return setting specified or true if not set
+   */
+  public boolean getEnableCheckAppMaxResources(String queue) {
+    boolean enableCheck =
+        getBoolean(getQueuePrefix(queue) + CHECK_APP_MAX_RESOURCES_SUFFIX,
+            false);
+    return enableCheck;
+  }
+
+  /**
+   * Get flag for kill app when app over max resources limit per queue setting.
+   * @param queue name of the queue
+   * @return setting specified or true if not set
+   */
+  public boolean getKillAppWhenOverResources(String queue) {
+    boolean killAble =
+        getBoolean(getQueuePrefix(queue) + OVER_RESOURCES_KILL_APP_SUFFIX,
+            true);
+    return killAble;
   }
 
   /**

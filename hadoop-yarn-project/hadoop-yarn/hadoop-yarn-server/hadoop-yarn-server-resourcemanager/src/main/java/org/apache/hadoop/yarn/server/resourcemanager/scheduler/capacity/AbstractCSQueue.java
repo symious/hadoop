@@ -98,6 +98,8 @@ public abstract class AbstractCSQueue implements CSQueue {
   Set<String> accessMultiLabelTimes;
   int queuePerAppMaxVcores;
   long queuePerAppMaxMemoryMB;
+  boolean canKillApp;
+  boolean enableCheckAppMaxResources;
   String intraQueuePreemptionOrderPolicy;
   Set<String> resourceTypes;
   final RMNodeLabelsManager labelManager;
@@ -304,6 +306,14 @@ public abstract class AbstractCSQueue implements CSQueue {
     return queuePerAppMaxMemoryMB;
   }
 
+  public boolean getKillAppWhenOverResources() {
+    return canKillApp;
+  }
+
+  public boolean getEnableCheckAppMaxResources(){
+    return enableCheckAppMaxResources;
+  }
+
   public String getIntraQueuePreemptionOrderPolicy() {
     return intraQueuePreemptionOrderPolicy;
   }
@@ -385,6 +395,10 @@ public abstract class AbstractCSQueue implements CSQueue {
           configuration.getAppMaxVcoresPerQueue(getQueuePath());
       this.queuePerAppMaxMemoryMB =
           configuration.getAppMaxMemoryMBPerQueue(getQueuePath());
+      this.canKillApp =
+          configuration.getKillAppWhenOverResources(getQueuePath());
+      this.enableCheckAppMaxResources =
+          configuration.getEnableCheckAppMaxResources(getQueuePath());
       this.intraQueuePreemptionOrderPolicy = configuration
           .getIntraQueuePreemptionOrderPolicyPerQueue(getQueuePath());
       this.defaultLabelExpression =
