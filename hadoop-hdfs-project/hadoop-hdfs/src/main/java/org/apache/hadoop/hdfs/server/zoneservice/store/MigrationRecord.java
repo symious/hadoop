@@ -23,11 +23,12 @@ public class MigrationRecord extends BaseRecord{
   private String rule;
   private long dateCreated;
   private long dateModified;
+  private static final String PATHSUFFIX = "/";
 
   public MigrationRecord(String ns, String path, String rule) {
     init();
     this.ns = ns;
-    this.path = path;
+    this.path = unifyPath(path);
     this.rule = rule;
   }
 
@@ -88,5 +89,24 @@ public class MigrationRecord extends BaseRecord{
     MigrationRecord record = (MigrationRecord) obj;
     return this.ns.equals(record.ns) && this.path.equals(record.path)
         && this.rule.equals(record.rule);
+  }
+
+  @Override
+  public String toString() {
+    return "MigrationRecord{" +
+        "ns='" + ns + '\'' +
+        ", path='" + path + '\'' +
+        ", rule='" + rule + '\'' +
+        ", dateCreated=" + dateCreated +
+        ", dateModified=" + dateModified +
+        '}';
+  }
+
+  //Remove the path suffix -- "/"
+  private String unifyPath(String path) {
+    if (path.endsWith(PATHSUFFIX)) {
+      return path.substring(0, path.length() - 1);
+    }
+    return path;
   }
 }

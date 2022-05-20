@@ -30,6 +30,12 @@ public interface RecordOperations {
   <T extends BaseRecord> T get(Query<T> query, Class<T> clazz) throws IOException;
 
   /**
+   * Get a list of records from the store that likes the query.
+   */
+  <T extends BaseRecord> List<T> getLike(Query<T> query, Class<T> clazz) throws IOException;
+
+
+  /**
    * Get all records from the store.
    */
   <T extends BaseRecord> QueryResult<T> getAll(Class<T> clazz) throws IOException;

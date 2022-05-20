@@ -26,12 +26,13 @@ enum ResultCode {
   ALREADY_RUNNING(1001, "Already running"),
   NO_MOVE_BLOCK(1002, "No move block"),
   NO_MOVE_PROGRESS(1003, "No move progress"),
-  IO_EXCEPTION(1004, "Fail caused by IOException!"),
-  ILLEGAL_ARGUMENTS(1005, "Illegal arguments"),
-  INTERRUPTED(1006, "Fail caused by interrupt"),
-  UNFINALIZED_UPGRADE(1007, "Unfinalized Upgrade"),
-  THREAD_FULL(1008, "No more available thread"),
-  UNKNOWNERROR(1009, "Unknown ERROR!");
+  NO_MIGRATION_RECORD(1004, "No migration record found"),
+  IO_EXCEPTION(1005, "Fail caused by IOException!"),
+  ILLEGAL_ARGUMENTS(1006, "Illegal arguments"),
+  INTERRUPTED(1007, "Fail caused by interrupt"),
+  UNFINALIZED_UPGRADE(1008, "Unfinalized Upgrade"),
+  THREAD_FULL(1009, "No more available thread"),
+  UNKNOWNERROR(1010, "Unknown ERROR!");
 
   private final Integer code;
   private final String msg;

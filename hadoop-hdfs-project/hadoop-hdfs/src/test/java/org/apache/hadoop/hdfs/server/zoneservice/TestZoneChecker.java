@@ -34,8 +34,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 
@@ -77,15 +79,15 @@ public class TestZoneChecker {
     replicaInfoMap.put("/dc0", (short) 3);
     ReplicationRule replicationRule =
         ReplicationRule.parseFromMap(replicaInfoMap);
-    Map<ReplicationRule, List<String>> replicationRuleListMap =
+    Map<ReplicationRule, Set<String>> replicationRuleListMap =
         new HashMap<>();
-    replicationRuleListMap.put(replicationRule, new ArrayList<>(
+    replicationRuleListMap.put(replicationRule, new HashSet<>(
         Collections.singletonList(pathName)));
     assertEquals(replicationRuleListMap, zch.getReplicaInfo(pathName));
 
     //Check the zone check for dir
     replicationRuleListMap.clear();
-    replicationRuleListMap.put(replicationRule, new ArrayList<>(
+    replicationRuleListMap.put(replicationRule, new HashSet<>(
         Collections.singletonList(dirName)));
     assertEquals(replicationRuleListMap, zch.getReplicaInfo(dirName));
   }

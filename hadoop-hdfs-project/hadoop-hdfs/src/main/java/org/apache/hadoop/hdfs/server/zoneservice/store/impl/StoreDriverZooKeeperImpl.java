@@ -17,7 +17,6 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice.store.impl;
 
-import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.server.zoneservice.store.BaseRecord;
@@ -106,8 +105,8 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
     }
   }
 
-  private boolean writeNode(
-      String znode, byte[] bytes, boolean update, boolean error) {
+  private boolean writeNode(String znode,
+      byte[] bytes, boolean update, boolean error) {
     try {
       boolean created = zkManager.create(znode);
       if (!update && !created && error) {
@@ -136,12 +135,12 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
    */
   private <T extends BaseRecord> T createRecord(
       String data, Stat stat, Class<T> clazz) throws IOException {
-    T record = deserializeString(data, clazz);
-    return record;
+    return deserializeString(data, clazz);
   }
 
   @Override
-  public <T extends BaseRecord> T deserializeString(String data, Class<T> clazz) {
+  public <T extends BaseRecord> T deserializeString(
+      String data, Class<T> clazz) {
     return new GsonBuilder().create().fromJson(data, clazz);
   }
 
@@ -151,8 +150,9 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
   }
 
   @Override
-  public <T extends BaseRecord> T get(Query<T> query, Class<T> clazz) throws IOException {
-    List<T> records = getMultiple(clazz, query);
+  public <T extends BaseRecord> T get(Query<T> query,
+      Class<T> clazz) throws IOException {
+    List<T> records = getMultiple(clazz, query, false);
     if (records.size() > 1) {
       throw new IOException("Found more than one object in collection");
     } else if (records.size() == 1) {
@@ -163,7 +163,19 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
   }
 
   @Override
-  public <T extends BaseRecord> QueryResult<T> getAll(Class<T> clazz) throws IOException {
+  public <T extends BaseRecord> List<T> getLike(Query<T> query,
+      Class<T> clazz) throws IOException {
+    List<T> records = getMultiple(clazz, query, true);
+    if (records.size() >= 1) {
+      return records;
+    } else {
+      return new ArrayList<>();
+    }
+  }
+
+  @Override
+  public <T extends BaseRecord> QueryResult<T> getAll(
+      Class<T> clazz) throws IOException {
     List<T> ret = new ArrayList<>();
     String znode = getZNodeForClass(clazz);
     try {
@@ -207,7 +219,8 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
   }
 
   @Override
-  public <T extends BaseRecord> boolean put(T record, boolean allowUpdate, boolean errorIfExists)
+  public <T extends BaseRecord> boolean put(T record,
+      boolean allowUpdate, boolean errorIfExists)
       throws IOException {
     List<T> singletonList = new ArrayList<>();
     singletonList.add(record);
@@ -215,13 +228,14 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
   }
 
   @Override
-  public <T extends BaseRecord> boolean putAll(List<T> records, boolean allowUpdate,
-                                               boolean errorIfExists) throws IOException {
+  public <T extends BaseRecord> boolean putAll(List<T> records,
+      boolean allowUpdate, boolean errorIfExists)
+      throws IOException {
     if (records.isEmpty()) {
       return true;
     }
 
-    // All records should be the same
+    // All records should be the same class
     T record0 = records.get(0);
     Class<? extends BaseRecord> recordClass = record0.getClass();
     String znode = getZNodeForClass(recordClass);
@@ -238,13 +252,14 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
     return status;
   }
   @Override
-  public <T extends BaseRecord> int remove(Query<T> query, Class<T> clazz) throws IOException {
+  public <T extends BaseRecord> int remove(Query<T> query, Class<T> clazz)
+      throws IOException {
     if (query == null) {
       return 0;
     }
 
     // Read the current data
-    List<T> records = null;
+    List<T> records;
     try {
       QueryResult<T> result = getAll(clazz);
       records = result.getRecords();
@@ -255,22 +270,22 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
 
     // Check the records to remove
     String znode = getZNodeForClass(clazz);
-    List<T> recordsToRemove = filterMultiple(query, records);
+    List<T> recordsToRemove = filterMultiple(query, records, false);
 
     // Remove the records
     int removed = 0;
     for (T existingRecord : recordsToRemove) {
-      LOG.info("Removing \"{}\"", existingRecord);
+      LOG.info("Removing \"{}\"", existingRecord.getPrimaryKey());
       try {
         String primaryKey = getPrimaryKey(existingRecord);
         String path = getNodePath(znode, primaryKey);
         if (zkManager.delete(path)) {
           removed++;
         } else {
-          LOG.error("Did not remove \"{}\"", existingRecord);
+          LOG.error("Did not remove \"{}\"", existingRecord.getPrimaryKey());
         }
       } catch (Exception e) {
-        LOG.error("Cannot remove \"{}\"", existingRecord, e);
+        LOG.error("Cannot remove \"{}\"", existingRecord.getPrimaryKey(), e);
       }
     }
     return removed;
@@ -296,22 +311,23 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
   }
 
   public <T extends BaseRecord> List<T> getMultiple(
-      Class<T> clazz, Query<T> query) throws IOException  {
+      Class<T> clazz, Query<T> query, boolean fuzzy) throws IOException  {
     QueryResult<T> result = getAll(clazz);
     List<T> records = result.getRecords();
-    List<T> ret = filterMultiple(query, records);
-    return ret;
+    return filterMultiple(query, records, fuzzy);
   }
 
   /**
    * Filters a list of records to find all records matching the query.
    */
   public static <T extends BaseRecord> List<T> filterMultiple(
-      final Query<T> query, final Iterable<T> records) {
+      final Query<T> query, final Iterable<T> records, boolean fuzzy) {
 
     List<T> matchingList = new ArrayList<>();
     for (T record : records) {
-      if (query.matches(record)) {
+      if (!fuzzy && query.matches(record)) {
+        matchingList.add(record);
+      } else if (fuzzy && query.likes(record)) {
         matchingList.add(record);
       }
     }
