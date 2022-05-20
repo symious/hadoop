@@ -40,6 +40,7 @@ import java.util.List;
 public class TestFSDirXAttrReplicationRuleOp {
   private static final ReplicationRule rule =
       ReplicationRule.parseFromString("/dc1:1,/dc2:2");
+  private static final String invalidRule = "/dc1:a,/dc2:2";
   private static final PermissionStatus perm = new PermissionStatus(
       "hdfs", "supergroup",
       FsPermission.createImmutable((short) 0x1ff));
@@ -51,7 +52,7 @@ public class TestFSDirXAttrReplicationRuleOp {
     return conf;
   }
 
-  private XAttrFeature getFeature() throws IOException {
+  private XAttrFeature getFeature(String ruleString) throws IOException {
     XAttr.NameSpace namespace =
         DFSConfigKeys.DFS_ZONE_REPLICATION_RULE_XATTR_NAMESPACE;
     String name =
@@ -60,7 +61,7 @@ public class TestFSDirXAttrReplicationRuleOp {
         StringUtils.toLowerCase(namespace.name()) + "." + name;
 
     XAttr xattr = XAttrHelper.buildXAttr(
-        attrKey, XAttrCodec.decodeValue(rule.toString()));
+        attrKey, XAttrCodec.decodeValue(ruleString));
     List<XAttr> xAttrs = Lists.newArrayListWithCapacity(1);
     xAttrs.add(xattr);
     return XAttrStorage.createXAttrFeature(xAttrs);
@@ -75,8 +76,12 @@ public class TestFSDirXAttrReplicationRuleOp {
     cluster.getNamesystem().readLock();
     Assert.assertNull(FSDirXAttrReplicationRuleOp.getRuleFromInodeFile(fsd, iNodeFile));
 
-    iNodeFile.addXAttrFeature(getFeature());
+    iNodeFile.addXAttrFeature(getFeature(rule.toString()));
     Assert.assertEquals(rule, FSDirXAttrReplicationRuleOp.getRuleFromInodeFile(fsd, iNodeFile));
+    iNodeFile = new INodeFile(0L, null, perm, 0L, 0L, null,
+        (short) 1, 128L);
+    iNodeFile.addXAttrFeature(getFeature(invalidRule));
+    Assert.assertNull(FSDirXAttrReplicationRuleOp.getRuleFromInodeFile(fsd, iNodeFile));
     cluster.getNamesystem().readUnlock();
   }
 
@@ -89,7 +94,7 @@ public class TestFSDirXAttrReplicationRuleOp {
     cluster.getNamesystem().readLock();
     Assert.assertFalse(FSDirXAttrReplicationRuleOp.hasRuleInXAttr(fsd, iNodeFile));
 
-    iNodeFile.addXAttrFeature(getFeature());
+    iNodeFile.addXAttrFeature(getFeature(rule.toString()));
     Assert.assertTrue(FSDirXAttrReplicationRuleOp.hasRuleInXAttr(fsd, iNodeFile));
     cluster.getNamesystem().readUnlock();
   }

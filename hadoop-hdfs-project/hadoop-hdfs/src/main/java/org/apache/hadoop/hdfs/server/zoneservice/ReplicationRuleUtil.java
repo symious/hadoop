@@ -75,6 +75,29 @@ public class ReplicationRuleUtil {
   }
 
   /**
+   * Get the content of the rule key without parsing it.
+   * @param src file or directory path
+   * @return the content of the key
+   * @throws IOException if the file/directory does not have content of the key or
+   *                     encounters other exceptions
+   */
+  public String getStringFromRuleKey(String src) throws IOException {
+    return this.getStringFromRuleKey(new Path(src));
+  }
+
+  /**
+   * Get the content of the rule key without parsing it.
+   * @param path file or directory path
+   * @return the content of the key
+   * @throws IOException if the file/directory does not have content of the key or
+   *                     encounters other exceptions
+   */
+  public String getStringFromRuleKey(Path path) throws IOException {
+    byte[] bs = fs.getXAttr(path, ATTR_KEY);
+    return XAttrCodec.encodeValue(bs, XAttrCodec.TEXT);
+  }
+
+  /**
    * Check if the file/directory has ReplicationRule in its XAttr.
    * @param src file or directory path
    * @return yes or no
