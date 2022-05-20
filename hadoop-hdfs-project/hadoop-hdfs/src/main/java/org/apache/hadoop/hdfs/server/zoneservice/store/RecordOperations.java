@@ -27,12 +27,12 @@ public interface RecordOperations {
   /**
    * Get a single record from the store that matches the query.
    */
-  <T extends BaseRecord> T get(Query<T> query) throws IOException;
+  <T extends BaseRecord> T get(Query<T> query, Class<T> clazz) throws IOException;
 
   /**
    * Get all records from the store.
    */
-  <T extends BaseRecord> List<T> getAll() throws IOException;
+  <T extends BaseRecord> QueryResult<T> getAll(Class<T> clazz) throws IOException;
 
   /**
    * Put a single record to the store.
@@ -50,10 +50,10 @@ public interface RecordOperations {
   /**
    * Remove one record from the store that matches the query.
    */
-  <T extends BaseRecord> int remove(Query<T> query) throws IOException;
+  <T extends BaseRecord> int remove(Query<T> query, Class<T>clazz) throws IOException;
 
   /**
    * Remove all records from the store.
    */
-  <T extends BaseRecord> boolean removeAll() throws IOException;
+  <T extends BaseRecord> boolean removeAll(Class<T> clazz) throws IOException;
 }

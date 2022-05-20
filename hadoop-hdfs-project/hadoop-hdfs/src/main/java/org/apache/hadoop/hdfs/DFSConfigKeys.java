@@ -29,6 +29,8 @@ import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyDefault
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyRackFaultTolerant;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.RamDiskReplicaLruTracker;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator;
+import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
+import org.apache.hadoop.hdfs.server.zoneservice.store.impl.StoreDriverZooKeeperImpl;
 import org.apache.hadoop.hdfs.web.URLConnectionFactory;
 import org.apache.hadoop.http.HttpConfig;
 
@@ -794,6 +796,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONEMOVER_KAFKA_PASSWORD = "dfs.zonemover.kafka.password";
   public static final String  DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_KEY = "dfs.zonemover.trigger.queue.size";
   public static final int     DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_DEFAULT = 1000;
+  //ZoneService related keys
+  public static final String  DFS_ZONESERVICE_STORE_DRIVER_CLASS = "dfs.zoneservice.store.driver.class";
+  public static final Class<? extends StoreDriver> DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT = StoreDriverZooKeeperImpl.class;
   public static final XAttr.NameSpace  DFS_ZONE_REPLICATION_RULE_XATTR_NAMESPACE =
       XAttr.NameSpace.USER;
   public static final String  DFS_ZONE_REPLICATION_RULE_XATTR_NAME = "replicationRule";

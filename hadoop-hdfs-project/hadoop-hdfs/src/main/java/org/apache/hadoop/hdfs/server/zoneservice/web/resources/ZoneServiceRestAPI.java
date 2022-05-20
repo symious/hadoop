@@ -35,7 +35,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
-import org.apache.hadoop.hdfs.server.namenode.AuditLogger;
+import org.apache.hadoop.hdfs.server.zoneservice.AuditLogger;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneChecker;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneMover;

@@ -39,11 +39,16 @@ public abstract class StoreDriver implements RecordOperations{
     this.identifier = id;
     boolean success = initDriver();
     if (!success) {
-      LOG.error("Cannot intialize driver for {}", getDriverName());
+      LOG.error("Cannot initialize driver for {}", getDriverName());
       return false;
     }
     return true;
   }
+
+  /**
+   * Initialize storage for a single record class.
+   */
+  public abstract <T extends BaseRecord> boolean initRecordStorage(Class<T> clazz);
 
   /**
    * Get the State Store configuration.
@@ -65,9 +70,24 @@ public abstract class StoreDriver implements RecordOperations{
   public abstract boolean initDriver();
 
   /**
+   * Close the State Store driver connection.
+   */
+  public abstract void close() throws Exception;
+
+  /**
    * Get the name of the driver implementation for debugging.
    */
   private String getDriverName() {
     return this.getClass().getSimpleName();
   }
+
+  /**
+   * Deserialize record.
+   */
+  public abstract <T extends BaseRecord> T deserializeString(String data, Class<T> clazz);
+
+  /**
+   * Serialize record.
+   */
+  public abstract <T extends BaseRecord> byte[] serialize(T record);
 }
