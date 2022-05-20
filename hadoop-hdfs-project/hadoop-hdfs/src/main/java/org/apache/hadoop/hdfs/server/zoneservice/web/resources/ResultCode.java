@@ -35,9 +35,10 @@ public enum ResultCode {
   ILLEGAL_ARGUMENTS(1007, "Illegal arguments"),
   INTERRUPTED(1008, "Fail caused by interrupt"),
   UNFINALIZED_UPGRADE(1009, "Unfinalized Upgrade"),
-  THREAD_FULL(10010, "No more available thread"),
+  THREAD_FULL(1010, "No more available thread"),
   METHOD_ERROR(1011, "Cannot create new record"),
-  UNKNOWNERROR(1012, "Unknown ERROR!");
+  REJECT(1012, "Reject! There has already been rule on the path!"),
+  UNKNOWNERROR(1013, "Unknown ERROR!");
 
   private final Integer code;
   private final String msg;

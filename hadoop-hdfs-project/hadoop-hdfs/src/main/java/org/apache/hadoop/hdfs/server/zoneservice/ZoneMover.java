@@ -315,6 +315,9 @@ public class ZoneMover {
     checkDataCenterValues(conf, rule, pathRuleMap);
     LOG.info("Start to apply rule: " + rule + " to namenode:"
         + namenode + ", path: " + paths);
+    if (paths.isEmpty()) {
+      return ExitStatus.SUCCESS.getExitCode();
+    }
 
     NameNodeConnector nnc = null;
     ZoneMover zs = null;
@@ -438,6 +441,9 @@ public class ZoneMover {
       ReplicationRule rule, Map<String, ReplicationRule> pathRuleMap)
       throws IOException {
     checkDataCenterValues(conf, rule, pathRuleMap);
+    if (paths.isEmpty()) {
+      return ExitStatus.SUCCESS.getExitCode();
+    }
     Class<? extends StoreDriver> driverClass = conf.getClass(
         DFS_ZONESERVICE_STORE_DRIVER_CLASS,
         DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT,
@@ -863,6 +869,9 @@ public class ZoneMover {
           LOG.warn(e.toString());
           return;
         }
+      } else if (status.getReplication() != rule.getReplica()) {
+        LOG.warn("Ignore replica not consistent file: {}", fullPath);
+        return;
       }
 
       if (status.getReplication() < rule.getReplica()) {
