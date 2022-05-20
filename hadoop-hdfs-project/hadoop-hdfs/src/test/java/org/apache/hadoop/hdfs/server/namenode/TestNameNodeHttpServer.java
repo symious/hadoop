@@ -47,7 +47,7 @@ public class TestNameNodeHttpServer {
       .getTempPath(TestNameNodeHttpServer.class.getSimpleName());
   private static String keystoresDir;
   private static String sslConfDir;
-  private static Configuration conf;
+  protected static Configuration conf;
   private static URLConnectionFactory connectionFactory;
 
   @Parameters
@@ -115,7 +115,7 @@ public class TestNameNodeHttpServer {
     }
   }
 
-  private static boolean canAccess(String scheme, InetSocketAddress addr) {
+  protected static boolean canAccess(String scheme, InetSocketAddress addr) {
     if (addr == null)
       return false;
     try {
@@ -129,7 +129,7 @@ public class TestNameNodeHttpServer {
     return true;
   }
 
-  private static boolean implies(boolean a, boolean b) {
+  protected static boolean implies(boolean a, boolean b) {
     return !a || b;
   }
 }

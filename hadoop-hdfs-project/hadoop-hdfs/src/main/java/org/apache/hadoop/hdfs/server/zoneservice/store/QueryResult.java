@@ -15,38 +15,41 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.balancer;
+package org.apache.hadoop.hdfs.server.zoneservice.store;
+
+import java.util.List;
 
 /**
- * Exit status - The values associated with each exit status is directly mapped
- * to the process's exit code in command line.
+ * Encapsulates a state store query result that includes a set of records and a
+ * time stamp for the result.
  */
-public enum ExitStatus {
-  SUCCESS(0),
-  IN_PROGRESS(1),
-  ALREADY_RUNNING(-1),
-  NO_MOVE_BLOCK(-2),
-  NO_MOVE_PROGRESS(-3),
-  IO_EXCEPTION(-4),
-  ILLEGAL_ARGUMENTS(-5),
-  INTERRUPTED(-6),
-  UNFINALIZED_UPGRADE(-7);
+public class QueryResult<T extends BaseRecord> {
 
-  private final int code;
+  /**
+   * Data result.
+   */
+  private final List<T> records;
+  /**
+   * Time stamp of the data results.
+   */
+  private final long timestamp;
 
-  private ExitStatus(int code) {
-    this.code = code;
-  }
-  
-  /** @return the command line exit code. */
-  public int getExitCode() {
-    return code;
+  public QueryResult(final List<T> recs, final long time) {
+    this.records = recs;
+    this.timestamp = time;
   }
 
-  public static ExitStatus getExitStatusByCode(int code) {
-    for (ExitStatus exitStatus : values()) {
-      if (exitStatus.getExitCode() == code) { return exitStatus; }
-    }
-    throw new IllegalArgumentException("ExitStatus code is illegal");
+  /**
+   * Get the result of the query.
+   */
+  public List<T> getRecords() {
+    return this.records;
+  }
+
+  /**
+   * The timetamp in driver time of this query.
+   */
+  public long getTimestamp() {
+    return this.timestamp;
   }
 }

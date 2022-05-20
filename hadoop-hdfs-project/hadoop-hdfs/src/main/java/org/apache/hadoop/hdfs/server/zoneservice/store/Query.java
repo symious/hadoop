@@ -15,38 +15,43 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.server.balancer;
+package org.apache.hadoop.hdfs.server.zoneservice.store;
 
 /**
- * Exit status - The values associated with each exit status is directly mapped
- * to the process's exit code in command line.
+ * Check if a record matches a query. The query is usually a partial record.
  */
-public enum ExitStatus {
-  SUCCESS(0),
-  IN_PROGRESS(1),
-  ALREADY_RUNNING(-1),
-  NO_MOVE_BLOCK(-2),
-  NO_MOVE_PROGRESS(-3),
-  IO_EXCEPTION(-4),
-  ILLEGAL_ARGUMENTS(-5),
-  INTERRUPTED(-6),
-  UNFINALIZED_UPGRADE(-7);
+public class Query<T extends BaseRecord> {
 
-  private final int code;
+  /** Partial object to compare against. */
+  private final T partial;
 
-  private ExitStatus(int code) {
-    this.code = code;
-  }
-  
-  /** @return the command line exit code. */
-  public int getExitCode() {
-    return code;
+
+  /**
+   * Create a query to search for a partial record.
+   */
+  public Query(final T part) {
+    this.partial = part;
   }
 
-  public static ExitStatus getExitStatusByCode(int code) {
-    for (ExitStatus exitStatus : values()) {
-      if (exitStatus.getExitCode() == code) { return exitStatus; }
+  /**
+   * Get the partial record used to query.
+   */
+  public T getPartial() {
+    return this.partial;
+  }
+
+  /**
+   * Check if a record matches the primary keys or the partial record.
+   */
+  public boolean matches(T other) {
+    if (this.partial == null) {
+      return false;
     }
-    throw new IllegalArgumentException("ExitStatus code is illegal");
+    return this.partial.like(other);
+  }
+
+  @Override
+  public String toString() {
+    return "Checking: " + this.partial;
   }
 }

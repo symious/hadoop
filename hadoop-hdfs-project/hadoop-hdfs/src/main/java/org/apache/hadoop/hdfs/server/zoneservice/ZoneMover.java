@@ -107,8 +107,8 @@ public class ZoneMover {
   private Result result;
   private final Thread fetcher = new Thread(new Fetcher());
 
-  public ZoneMover(NameNodeConnector nnc, Configuration conf,
-                   AtomicInteger retryCount) {
+  public ZoneMover(NameNodeConnector nnc,
+      Configuration conf, AtomicInteger retryCount) {
     final long movedWinWidth = conf.getLong(
         DFSConfigKeys.DFS_ZONEMOVER_MOVEDWINWIDTH_KEY,
         DFSConfigKeys.DFS_ZONEMOVER_MOVEDWINWIDTH_DEFAULT);
@@ -267,7 +267,7 @@ public class ZoneMover {
    * @return a ExitStatus code
    */
   public static int run(Configuration conf, URI namenode, List<Path> paths,
-                        ReplicationRule rule) throws IOException, InterruptedException {
+      ReplicationRule rule) throws IOException, InterruptedException {
     return ZoneMover.run(conf, namenode, paths, rule, null);
   }
 
