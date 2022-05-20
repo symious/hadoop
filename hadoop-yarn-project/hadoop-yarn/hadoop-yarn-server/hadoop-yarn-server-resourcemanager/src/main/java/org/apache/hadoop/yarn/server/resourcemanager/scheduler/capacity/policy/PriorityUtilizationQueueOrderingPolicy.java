@@ -27,6 +27,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CSQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity
     .CapacitySchedulerConfiguration;
 import org.apache.hadoop.yarn.util.resource.Resources;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -53,6 +55,10 @@ import java.util.function.Supplier;
  */
 public class PriorityUtilizationQueueOrderingPolicy
     implements QueueOrderingPolicy {
+
+  private static final Logger LOG =
+      LoggerFactory.getLogger(PriorityUtilizationQueueOrderingPolicy.class);
+
   private List<CSQueue> queues;
   private boolean respectPriority;
 
@@ -216,9 +222,15 @@ public class PriorityUtilizationQueueOrderingPolicy
   public Iterator<CSQueue> getAssignmentIterator(String partition) {
     // Since partitionToLookAt is a thread local variable, and every time we
     // copy and sort queues, so it's safe for multi-threading environment.
+    long start = System.nanoTime();
     PriorityUtilizationQueueOrderingPolicy.partitionToLookAt.set(partition);
     List<CSQueue> sortedQueue = new ArrayList<>(queues);
     Collections.sort(sortedQueue, new PriorityQueueComparator());
+    long end = System.nanoTime();
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("PriorityUtilizationQueueOrderingPolicy getAssignmentIterator "
+          + "cost time: " + (end - start) / 1000 + " us!");
+    }
     return sortedQueue.iterator();
   }
 
