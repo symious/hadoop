@@ -51,7 +51,8 @@ public class ReplicationRuleUtil {
    * @throws IOException if the file/directory does not have ReplicationRule or encounters
    *                     other exceptions
    */
-  public ReplicationRule getRuleFromXAttr(String src) throws IOException {
+  public ReplicationRule getRuleFromXAttr(String src)
+      throws IOException {
     return this.getRuleFromXAttr(new Path(src));
   }
 
@@ -62,11 +63,13 @@ public class ReplicationRuleUtil {
    * @throws IOException if the file/directory does not have ReplicationRule or encounters
    *                     other exceptions
    */
-  public ReplicationRule getRuleFromXAttr(Path path) throws IOException {
+  public ReplicationRule getRuleFromXAttr(Path path)
+      throws IOException {
     byte[] bs = fs.getXAttr(path, ATTR_KEY);
     String value = XAttrCodec.encodeValue(bs, XAttrCodec.TEXT);
     if (!rules.containsKey(value)) {
-      rules.put(value, ReplicationRule.parseFromString(value.replace("\"", "")));
+      rules.put(value, ReplicationRule.parseFromString(
+          value.replace("\"", "")));
     }
     return rules.get(value);
   }
@@ -94,7 +97,8 @@ public class ReplicationRuleUtil {
    * @param src file or directory path
    * @param rule replicationRule instance
    */
-  public void setRuleToXAttr(String src, ReplicationRule rule) throws IOException {
+  public void setRuleToXAttr(String src, ReplicationRule rule)
+      throws IOException {
     setRuleToXAttr(new Path(src), rule);
   }
 
@@ -103,7 +107,9 @@ public class ReplicationRuleUtil {
    * @param path file or directory
    * @param rule replicationRule instance
    */
-  public void setRuleToXAttr(Path path, ReplicationRule rule) throws IOException {
-    fs.setXAttr(path, ATTR_KEY, XAttrCodec.decodeValue(rule.toString()));
+  public void setRuleToXAttr(Path path, ReplicationRule rule)
+      throws IOException {
+    fs.setXAttr(path, ATTR_KEY,
+        XAttrCodec.decodeValue(rule.toString()));
   }
 }

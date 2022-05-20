@@ -21,12 +21,17 @@ import com.google.common.collect.Sets;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.ReconfigurableBase;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.StartupProgress;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.StartupProgressMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
+import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
+import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
+import org.apache.hadoop.hdfs.server.zoneservice.web.resources.ResultCode;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -40,9 +45,20 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.TreeSet;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_USER_GROUP_METRICS_PERCENTILES_INTERVALS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_METRICS_PERCENTILES_INTERVALS_KEY;
@@ -75,6 +91,7 @@ public class ZoneService extends ReconfigurableBase  {
 
   protected final Tracer tracer;
   protected final TracerConfigurationManager tracerConfigurationManager;
+  private final ExecutorService batchThreadPool;
 
   public ZoneService(Configuration conf) throws IOException {
     this.tracer = new Tracer.Builder("ZoneService").
@@ -82,6 +99,19 @@ public class ZoneService extends ReconfigurableBase  {
         build();
     this.tracerConfigurationManager =
         new TracerConfigurationManager(ZONESERVICE_HTRACE_PREFIX, conf);
+    int threadPoolSize = conf.getInt(
+        DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_POOL_SIZE,
+        DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_POOL_SIZE_DEFAULT);
+    int threadPoolMaxSize = conf.getInt(
+        DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_POOL_MAX_SIZE,
+        DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_POOL_MAX_SIZE_DEFAULT);
+    int threadPoolTimeOut = conf.getInt(
+        DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_POOL_ALIVE_TIME,
+        DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_POOL_ALIVE_TIME_DEFAULT);
+    this.batchThreadPool = new ThreadPoolExecutor(threadPoolSize,
+        threadPoolMaxSize, threadPoolTimeOut, TimeUnit.SECONDS,
+        new LinkedBlockingQueue<>(), Executors.defaultThreadFactory(),
+        new ThreadPoolExecutor.AbortPolicy());
     try {
       initialize(getConf());
     } catch (IOException | HadoopIllegalArgumentException e) {
@@ -113,13 +143,9 @@ public class ZoneService extends ReconfigurableBase  {
             intervals);
       }
     }
-
     UserGroupInformation.setConfiguration(conf);
-
     StartupProgressMetrics.register(startupProgress);
-
     startHttpServer(conf);
-
     Class<? extends StoreDriver> driverClass = conf.getClass(
         DFS_ZONESERVICE_STORE_DRIVER_CLASS,
         DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT,
@@ -127,6 +153,7 @@ public class ZoneService extends ReconfigurableBase  {
     driver = ReflectionUtils.newInstance(driverClass, conf);
     driver.init(conf, httpServer.getHttpAddress().getHostName() + ":"
         + httpServer.getHttpAddress().getPort());
+    recoverZMProcess(conf);
   }
 
   /**
@@ -155,7 +182,8 @@ public class ZoneService extends ReconfigurableBase  {
   /** @return the ZoneService HTTP address. */
   public static InetSocketAddress getHttpAddress(Configuration conf) {
     return  NetUtils.createSocketAddr(
-        conf.getTrimmed(DFS_ZONESERVICE_HTTP_ADDRESS_KEY, DFS_ZONESERVICE_HTTP_ADDRESS_DEFAULT));
+        conf.getTrimmed(DFS_ZONESERVICE_HTTP_ADDRESS_KEY,
+            DFS_ZONESERVICE_HTTP_ADDRESS_DEFAULT));
   }
 
   private void startHttpServer(final Configuration conf) throws IOException {
@@ -187,6 +215,108 @@ public class ZoneService extends ReconfigurableBase  {
       LOG.warn("Encountered exception when handling exception ("
           + e.getMessage() + "):", ex);
     }
+  }
+
+  //Start unfinished batch ZoneMover for every mapping file under specific file
+  private void recoverZMProcess(Configuration conf) throws IOException {
+    Map<String, Map<String, ReplicationRule>> nsRuleMap = new HashMap<>();
+    List<MigrationRecord> records =
+        driver.getAll(MigrationRecord.class).getRecords();
+    for (MigrationRecord record : records) {
+      try {
+        if (record.getNs().equals("null")) {
+          driver.remove(new Query<>(record), MigrationRecord.class);
+        }
+        //Record monitor mode path-rule pairs
+        if (record.getMode().equals("monitor")) {
+          if (!nsRuleMap.containsKey(record.getNs())) {
+            nsRuleMap.put(record.getNs(), new HashMap<>());
+          }
+          nsRuleMap.get(record.getNs()).put(record.getPath(),
+              ReplicationRule.parseFromString(record.getRule()));
+        }
+        //Recover batch mode ZoneMover process
+        else {
+          List<Path> paths =
+              Collections.singletonList(new Path(record.getPath()));
+          ReplicationRule replicationRule =
+              ReplicationRule.parseFromString(record.getRule());
+          batchThreadPool.submit(
+              new BatchZMRunnable(paths, replicationRule,
+                  getNamespaceUri(record.getNs(), conf), conf));
+        }
+      } catch (IllegalArgumentException e) {
+        LOG.error("Record is illegal: " + record);
+      }
+    }
+    for (String ns: nsRuleMap.keySet()) {
+      SignalRecord signalRecord = new SignalRecord(ns, true);
+      driver.put(signalRecord, true, false);
+      Thread monitorThread = new MonitorThread("monitor_" + ns,
+          conf, getNamespaceUri(ns, conf));
+      monitorThread.start();
+    }
+  }
+
+  class BatchZMRunnable implements Runnable {
+    private final List<Path> paths;
+    private final ReplicationRule replicationRule;
+    private final URI namenode;
+    private final Configuration conf;
+
+    public BatchZMRunnable(List<Path> paths,
+        ReplicationRule replicationRule, URI namenode,
+        Configuration conf) {
+      this.paths = paths;
+      this.replicationRule = replicationRule;
+      this.namenode = namenode;
+      this.conf = conf;
+    }
+
+    @Override
+    public void run() {
+      Date startTime = new Date();
+      try {
+        ZoneMover.run(conf, namenode, paths, replicationRule);
+        for (Path path : paths) {
+          MigrationRecord migrationRecord = new MigrationRecord(
+              namenode.getAuthority(), path.toUri().getPath(),
+              replicationRule.toString());
+          driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
+          AuditLogger.logRuleProcess(
+              "RecoverBatch", namenode.getAuthority(),
+              path.toUri().getPath(), replicationRule.toString(), startTime,
+              new Date(), ResultCode.SUCCESS.getMsg(), "batch");
+          LOG.info("Remove namespace " + namenode.getAuthority() +
+              "\nPath " + path.toUri().getPath() + "\nRule " +
+              replicationRule.toString());
+        }
+      } catch (IOException e) {
+        AuditLogger.logRuleProcess(
+            "RecoverBatch", namenode.getAuthority(),
+            paths.get(0).toUri().getPath(), replicationRule.toString(),
+            startTime, new Date(), ResultCode.IO_EXCEPTION.getMsg(), "batch");
+        e.printStackTrace();
+      } catch (InterruptedException e) {
+        AuditLogger.logRuleProcess(
+            "RecoverBatch", namenode.getAuthority(),
+            paths.get(0).toUri().getPath(), replicationRule.toString(),
+            startTime, new Date(), ResultCode.INTERRUPTED.getMsg(), "batch");
+        e.printStackTrace();
+      }
+    }
+  }
+
+  private URI getNamespaceUri(String namespace, Configuration conf)
+      throws IllegalArgumentException {
+    Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
+    for (URI namenode: namenodes) {
+      if (namenode.getAuthority().equals(namespace)) {
+        return namenode;
+      }
+    }
+    throw new IllegalArgumentException(
+        "Cannot find the NameNode for namespace: " + namespace);
   }
 
   @Override // ReconfigurableBase

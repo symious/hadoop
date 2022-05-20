@@ -17,10 +17,10 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice.web.resources;
 
-enum ResultCode {
+public enum ResultCode {
   SUCCESS(0, "Success!"),
-  MONITOR_MODE_ON(1, "Monitor Mode ON"),
-  MONITOR_MODE_OFF(2, "Monitor Mode OFF"),
+  CREATE_SUCCESS(1, "Create Success!"),
+  UPDATE_SUCCESS(2, "Update Success!"),
 
   IN_PROGRESS(1000, "In Process"),
   ALREADY_RUNNING(1001, "Already running"),
@@ -32,7 +32,8 @@ enum ResultCode {
   INTERRUPTED(1007, "Fail caused by interrupt"),
   UNFINALIZED_UPGRADE(1008, "Unfinalized Upgrade"),
   THREAD_FULL(1009, "No more available thread"),
-  UNKNOWNERROR(1010, "Unknown ERROR!");
+  METHOD_ERROR(1010, "Cannot create new record"),
+  UNKNOWNERROR(1011, "Unknown ERROR!");
 
   private final Integer code;
   private final String msg;

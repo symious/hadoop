@@ -22,11 +22,16 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 import org.junit.Test;
 
+import java.io.IOException;
+import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
 
@@ -62,11 +67,18 @@ public class TestZoneMoverKafkaTrigger {
   }
 
   @Test
-  public void testCheckPaths() {
+  public void testCheckPaths() throws IOException {
+    final String[] racks = {"/dc0/rack0", "/dc1/rack1", "/dc1/rack2"};
+    Configuration conf = new HdfsConfiguration();
+    MiniDFSCluster cluster = new MiniDFSCluster
+        .Builder(conf)
+        .numDataNodes(racks.length).racks(racks).build();
+    URI namenode = DFSUtil.createUri(HdfsConstants.HDFS_URI_SCHEME,
+        cluster.getNameNode().getNameNodeAddress());
     List<Path> pathList = Arrays.asList(new Path("/test1"),
         new Path("/test2"), new Path("/test3"));
     ZoneMoverKafkaTrigger zoneMoverTrigger =
-        new ZoneMoverKafkaTrigger(getConf(), pathList);
+        new ZoneMoverKafkaTrigger(getConf(), pathList, namenode);
     String pathLoc1 = "/test2/test.file";
     String pathLoc2 = "/test4/test.file";
     assertTrue(zoneMoverTrigger.checkPaths(pathLoc1));

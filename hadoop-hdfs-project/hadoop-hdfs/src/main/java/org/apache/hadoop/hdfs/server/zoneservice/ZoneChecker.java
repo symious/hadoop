@@ -110,7 +110,8 @@ public class ZoneChecker {
     NameNodeConnector nnc;
     try {
       nnc = new NameNodeConnector(namenode,
-          Collections.singletonList(new Path(path)), conf, 1);
+          Collections.singletonList(new Path(path)),
+          conf, 1);
       final ZoneChecker zch = new ZoneChecker(nnc, conf);
       //if ratio is inputted by user, set it
       if (ratio > 0.0f) {
