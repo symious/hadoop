@@ -68,8 +68,16 @@ class DataXceiverServer implements Runnable {
    * Enforcing the limit is required in order to avoid data-node
    * running out of memory.
    */
-  int maxXceiverCount =
+  volatile int maxXceiverCount =
     DFSConfigKeys.DFS_DATANODE_MAX_RECEIVER_THREADS_DEFAULT;
+
+  public synchronized void updateDatanodeSlowLogThresholdMs(
+      long datanodeSlowLogThresholdMs) {
+    for (Peer p : peers.keySet()) {
+      peersXceiver.get(p).updateDatanodeSlowLogThresholdMs(
+          datanodeSlowLogThresholdMs);
+    }
+  }
 
   /**
    * A manager to make sure that cluster balancing does not take too much
@@ -502,6 +510,10 @@ class DataXceiverServer implements Runnable {
   public boolean updateBalancerMaxConcurrentMovers(final int movers) {
     return balanceThrottler.setMaxConcurrentMovers(movers,
         this.maxReconfigureWaitTime);
+  }
+
+  public void setMaxXceiverCount(int maxXceiverCount) {
+    this.maxXceiverCount = maxXceiverCount;
   }
 
   /**

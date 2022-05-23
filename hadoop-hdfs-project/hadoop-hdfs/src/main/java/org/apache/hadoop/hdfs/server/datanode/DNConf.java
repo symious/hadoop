@@ -110,7 +110,7 @@ public class DNConf {
   final long ibrInterval;
   final long initialBlockReportDelayMs;
   final long cacheReportInterval;
-  final long datanodeSlowIoWarningThresholdMs;
+  volatile long datanodeSlowIoWarningThresholdMs;
 
   final String minimumNameNodeVersion;
   final String encryptionAlgorithm;
@@ -131,7 +131,7 @@ public class DNConf {
   // Allow LAZY_PERSIST writes from non-local clients?
   private final boolean allowNonLocalLazyPersist;
 
-  private final int volFailuresTolerated;
+  private volatile int volFailuresTolerated;
   private final int volsConfigured;
   private final int maxDataLength;
   private Configurable dn;
@@ -444,6 +444,11 @@ public class DNConf {
     return datanodeSlowIoWarningThresholdMs;
   }
 
+  public void setSlowIoWarningThresholdMs(
+      long datanodeSlowIoWarningThresholdMs) {
+    this.datanodeSlowIoWarningThresholdMs = datanodeSlowIoWarningThresholdMs;
+  }
+
   int getMaxDataLength() {
     return maxDataLength;
   }
@@ -458,5 +463,9 @@ public class DNConf {
 
   public long getProcessCommandsThresholdMs() {
     return processCommandsThresholdMs;
+  }
+
+  public void setVolFailuresTolerated(int volFailuresTolerated) {
+    this.volFailuresTolerated = volFailuresTolerated;
   }
 }

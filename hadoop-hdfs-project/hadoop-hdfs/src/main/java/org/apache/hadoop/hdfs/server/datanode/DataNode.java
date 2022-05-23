@@ -25,6 +25,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_IN
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DNS_INTERFACE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DNS_NAMESERVER_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_FAILED_VOLUMES_TOLERATED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_FAILED_VOLUMES_TOLERATED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HOST_NAME_KEY;
@@ -34,11 +36,17 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_IPC_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_KERBEROS_PRINCIPAL_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_KEYTAB_FILE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_MAX_LOCKED_MEMORY_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_MAX_RECEIVER_THREADS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_MAX_RECEIVER_THREADS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_NETWORK_COUNTS_CACHE_MAX_SIZE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_NETWORK_COUNTS_CACHE_MAX_SIZE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_OOB_TIMEOUT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_OOB_TIMEOUT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_PLUGINS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SCAN_PERIOD_HOURS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SCAN_PERIOD_HOURS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SLOW_IO_WARNING_THRESHOLD_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SLOW_IO_WARNING_THRESHOLD_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_STARTUP_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_BALANCE_MAX_NUM_CONCURRENT_MOVES_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_BALANCE_MAX_NUM_CONCURRENT_MOVES_DEFAULT;
@@ -308,7 +316,12 @@ public class DataNode extends ReconfigurableBase
       Collections.unmodifiableList(
           Arrays.asList(
               DFS_DATANODE_DATA_DIR_KEY,
-              DFS_DATANODE_BALANCE_MAX_NUM_CONCURRENT_MOVES_KEY));
+              DFS_DATANODE_BALANCE_MAX_NUM_CONCURRENT_MOVES_KEY,
+              DFS_DATANODE_FAILED_VOLUMES_TOLERATED_KEY,
+              DFS_DATANODE_MAX_RECEIVER_THREADS_KEY,
+              DFS_DATANODE_SLOW_IO_WARNING_THRESHOLD_KEY,
+              DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY,
+              DFS_DATANODE_SCAN_PERIOD_HOURS_KEY));
 
   public static final Log METRICS_LOG = LogFactory.getLog("DataNodeMetricsLog");
 
@@ -615,6 +628,144 @@ public class DataNode extends ReconfigurableBase
           if (rootException != null) {
             LOG.warn(String.format(
                 "Exception in updating balancer max concurrent movers %s to %s",
+                property, newVal), rootException);
+            throw rootException;
+          }
+        }
+        break;
+      }
+      case DFS_DATANODE_FAILED_VOLUMES_TOLERATED_KEY: {
+        ReconfigurationException rootException = null;
+        try {
+          LOG.info("Reconfiguring " + property + " to " + newVal);
+          int failedVolumesTolerated;
+          if (newVal == null) {
+            // set to default
+            failedVolumesTolerated = DFS_DATANODE_FAILED_VOLUMES_TOLERATED_DEFAULT;
+          } else {
+            failedVolumesTolerated = Integer.parseInt(newVal);
+          }
+          volumeChecker.setMaxVolumeFailuresTolerated(failedVolumesTolerated);
+          if (storageLocationChecker != null) {
+            storageLocationChecker.setMaxVolumeFailuresTolerated(failedVolumesTolerated);
+          }
+          this.getDnConf().setVolFailuresTolerated(failedVolumesTolerated);
+          return Integer.toString(failedVolumesTolerated);
+        } catch (NumberFormatException | DiskErrorException e) {
+          rootException = new ReconfigurationException(
+              property, newVal, getConf().get(property), e);
+        } finally {
+          if (rootException != null) {
+            LOG.warn(String.format(
+                "Exception in updating failed volumes tolerated %s to %s",
+                property, newVal), rootException);
+            throw rootException;
+          }
+        }
+        break;
+      }
+      case DFS_DATANODE_MAX_RECEIVER_THREADS_KEY: {
+        ReconfigurationException rootException = null;
+        try {
+          LOG.info("Reconfiguring " + property + " to " + newVal);
+          int maxReceiverThreads;
+          if (newVal == null) {
+            // set to default
+            maxReceiverThreads = DFS_DATANODE_MAX_RECEIVER_THREADS_DEFAULT;
+        } else {
+          maxReceiverThreads = Integer.parseInt(newVal);
+        }
+          xserver.setMaxXceiverCount(maxReceiverThreads);
+          return Integer.toString(maxReceiverThreads);
+        } catch (NumberFormatException  nfe) {
+          rootException = new ReconfigurationException(
+              property, newVal, getConf().get(property), nfe);
+        } finally {
+          if (rootException != null) {
+            LOG.warn(String.format(
+                "Exception in updating max receiver threads %s to %s",
+                property, newVal), rootException);
+            throw rootException;
+          }
+        }
+        break;
+      }
+      case DFS_DATANODE_SLOW_IO_WARNING_THRESHOLD_KEY: {
+        ReconfigurationException rootException = null;
+        try {
+          LOG.info("Reconfiguring " + property + " to " + newVal);
+          long datanodeSlowLogThresholdMs;
+          if (newVal == null) {
+            // set to default
+            datanodeSlowLogThresholdMs =
+                DFS_DATANODE_SLOW_IO_WARNING_THRESHOLD_DEFAULT;
+          } else {
+            datanodeSlowLogThresholdMs = Long.parseLong(newVal);
+          }
+          xserver.updateDatanodeSlowLogThresholdMs(datanodeSlowLogThresholdMs);
+          this.getDnConf()
+              .setSlowIoWarningThresholdMs(datanodeSlowLogThresholdMs);
+          return Long.toString(datanodeSlowLogThresholdMs);
+        } catch (NumberFormatException  nfe) {
+          rootException = new ReconfigurationException(
+              property, newVal, getConf().get(property), nfe);
+        } finally {
+          if (rootException != null) {
+            LOG.warn(String.format(
+                "Exception in updating slow log threshold ms %s to %s",
+                property, newVal), rootException);
+            throw rootException;
+          }
+        }
+        break;
+      }
+      case DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY: {
+        ReconfigurationException rootException = null;
+        try {
+          LOG.info("Reconfiguring " + property + " to " + newVal);
+          int directoryScanInterval;
+          if (newVal == null) {
+            // set to default
+            directoryScanInterval = DFS_DATANODE_DIRECTORYSCAN_INTERVAL_DEFAULT;
+          } else {
+            directoryScanInterval = Integer.parseInt(newVal);
+          }
+          getDirectoryScanner().updateDatanodeDirectoryScanInterval(
+              directoryScanInterval);
+          return Integer.toString(directoryScanInterval);
+        } catch (NumberFormatException  nfe) {
+          rootException = new ReconfigurationException(
+              property, newVal, getConf().get(property), nfe);
+        } finally {
+          if (rootException != null) {
+            LOG.warn(String.format(
+                "Exception in updating directoryscan interval ms %s to %s",
+                property, newVal), rootException);
+            throw rootException;
+          }
+        }
+        break;
+      }
+      case DFS_DATANODE_SCAN_PERIOD_HOURS_KEY: {
+        ReconfigurationException rootException = null;
+        try {
+          LOG.info("Reconfiguring " + property + " to " + newVal);
+          long scanPeriodHours;
+          if (newVal == null) {
+            // set to default
+            scanPeriodHours = DFS_DATANODE_SCAN_PERIOD_HOURS_DEFAULT;
+          } else {
+            scanPeriodHours = Long.parseLong(newVal);
+          }
+          getBlockScanner().updateScanPeriodHs(scanPeriodHours);
+          return Long.toString(scanPeriodHours);
+        } catch (NumberFormatException  nfe) {
+          rootException = new ReconfigurationException(
+              property, newVal, getConf().get(property), nfe);
+        } finally {
+          if (rootException != null) {
+            LOG.warn(String.format(
+                "Exception in updating datanode scan period hours ms %s to %s",
                 property, newVal), rootException);
             throw rootException;
           }

@@ -55,6 +55,8 @@ import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTest
 import org.apache.hadoop.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ListMultimap;
 
+import static org.apache.commons.lang.time.DateUtils.MILLIS_PER_SECOND;
+
 /**
  * Periodically scans the data directories for block and block metadata files.
  * Reconciles the differences with block information maintained in the dataset.
@@ -69,7 +71,7 @@ public class DirectoryScanner implements Runnable {
   private final FsDatasetSpi<?> dataset;
   private final ExecutorService reportCompileThreadPool;
   private final ScheduledExecutorService masterThread;
-  private final long scanPeriodMsecs;
+  private volatile long scanPeriodMsecs;
   private final long throttleLimitMsPerSec;
   private final AtomicBoolean shouldRun = new AtomicBoolean();
 
@@ -316,6 +318,11 @@ public class DirectoryScanner implements Runnable {
 
     masterThread =
         new ScheduledThreadPoolExecutor(1, new Daemon.DaemonFactory());
+  }
+
+  public void updateDatanodeDirectoryScanInterval(int interval) {
+    // implicit casting to long
+    this.scanPeriodMsecs = interval * MILLIS_PER_SECOND;
   }
 
   /**
