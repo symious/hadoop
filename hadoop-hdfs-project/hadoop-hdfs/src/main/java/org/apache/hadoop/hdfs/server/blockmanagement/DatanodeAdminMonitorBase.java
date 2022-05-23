@@ -46,7 +46,7 @@ public abstract class DatanodeAdminMonitorBase
    * The maximum number of nodes to track in outOfServiceNodeBlocks.
    * A value of 0 means no limit.
    */
-  protected int maxConcurrentTrackedNodes;
+  protected volatile int maxConcurrentTrackedNodes;
 
   private static final Logger LOG =
       LoggerFactory.getLogger(DatanodeAdminMonitorBase.class);
@@ -150,5 +150,13 @@ public abstract class DatanodeAdminMonitorBase
   @Override
   public Queue<DatanodeDescriptor> getPendingNodes() {
     return pendingNodes;
+  }
+
+  public int getMaxConcurrentTrackedNodes() {
+    return maxConcurrentTrackedNodes;
+  }
+
+  public void setMaxConcurrentTrackedNodes(int maxConcurrentTrackedNodes) {
+    this.maxConcurrentTrackedNodes = maxConcurrentTrackedNodes;
   }
 }

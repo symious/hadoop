@@ -815,4 +815,12 @@ public class DatanodeAdminBackoffMonitor extends DatanodeAdminMonitorBase
       return outOfServiceBlockCount;
     }
   }
+
+  public int getNumBlocksPerCheck() {
+    return -1;
+  }
+
+  public void setNumBlocksPerCheck(int numBlocksPerCheck) {
+
+  }
 }

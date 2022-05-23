@@ -400,8 +400,8 @@ public class BlockManager implements BlockStatsMXBean {
   /** value returned by MAX_CORRUPT_FILES_RETURNED */
   final int maxCorruptFilesReturned;
 
-  final float blocksInvalidateWorkPct;
-  private int blocksReplWorkMultiplier;
+  volatile float blocksInvalidateWorkPct;
+  volatile int blocksReplWorkMultiplier;
 
   // whether or not to issue block encryption keys.
   final boolean encryptDataTransfer;
@@ -5426,6 +5426,37 @@ public class BlockManager implements BlockStatsMXBean {
           .getConsiderLoadFactor();
     }
     return 0.0;
+  }
+
+  public void setMaxFullBlockReportLease(int maxFullBlockReportLease) {
+    this.blockReportLeaseManager.setMaxPending(maxFullBlockReportLease);
+  }
+
+  public int getMaxFullBlockReportLease() {
+    return this.blockReportLeaseManager.getMaxPending();
+  }
+
+  public void setFullBlockReportLeaseLength(long fullBlockReportLeaseLength) {
+    this.blockReportLeaseManager.setLeaseExpiryMs(fullBlockReportLeaseLength);
+  }
+
+  public long getFullBlockReportLeaseLength() {
+    return this.blockReportLeaseManager.getLeaseExpiryMs();
+  }
+
+  public void setWorkPctPerIteration(float blocksWorkPctIteration) {
+    this.blocksInvalidateWorkPct =
+        DFSUtil.getInvalidateWorkPctPerIteration(blocksWorkPctIteration);
+  }
+
+  public float getBlocksInvalidateWorkPct() {
+    return this.blocksInvalidateWorkPct;
+  }
+
+  public void setReplicationWorkMultiplierPerIteration(
+      int replicationWorkMultiplierPerIteration) {
+    this.blocksReplWorkMultiplier =
+        DFSUtil.getReplWorkMultiplier(replicationWorkMultiplierPerIteration);
   }
 
   @VisibleForTesting

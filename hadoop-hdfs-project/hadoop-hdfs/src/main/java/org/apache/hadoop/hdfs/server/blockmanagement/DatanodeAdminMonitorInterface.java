@@ -36,4 +36,12 @@ public interface DatanodeAdminMonitorInterface extends Runnable {
   void setBlockManager(BlockManager bm);
   void setDatanodeAdminManager(DatanodeAdminManager dnm);
   void setNameSystem(Namesystem ns);
+
+  int getNumBlocksPerCheck();
+
+  void setNumBlocksPerCheck(int numBlocksPerCheck);
+
+  int getMaxConcurrentTrackedNodes();
+
+  void setMaxConcurrentTrackedNodes(int maxConcurrentTrackedNodes);
 }

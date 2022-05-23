@@ -109,6 +109,14 @@ public class LeaseManager {
     updateInternalLeaseHolder();
   }
 
+  public long getHardLimit() {
+    return this.hardLimit;
+  }
+
+  public void setHardLimit(long hardLimit) {
+    this.hardLimit = hardLimit;
+  }
+
   // Update the internal lease holder with the current time stamp.
   private void updateInternalLeaseHolder() {
     this.lastHolderUpdateTime = Time.monotonicNow();

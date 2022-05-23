@@ -460,7 +460,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   private final String supergroup;
   private final boolean standbyShouldCheckpoint;
   private final int snapshotDiffReportLimit;
-  private final int blockDeletionIncrement;
+  private volatile int blockDeletionIncrement;
 
   /** Interval between each check of lease to release. */
   private final long leaseRecheckIntervalMs;
@@ -1013,6 +1013,14 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       close();
       throw re;
     }
+  }
+
+  public int getBlockDeletionIncrement() {
+    return blockDeletionIncrement;
+  }
+
+  public void setBlockDeletionIncrement(int blockDeletionIncrement) {
+    this.blockDeletionIncrement = blockDeletionIncrement;
   }
 
   @VisibleForTesting

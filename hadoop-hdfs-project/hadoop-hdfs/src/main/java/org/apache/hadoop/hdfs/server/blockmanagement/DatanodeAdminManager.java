@@ -157,6 +157,22 @@ public class DatanodeAdminManager {
         blocksPerInterval, maxConcurrentTrackedNodes);
   }
 
+  public void refreshBlocksPerInterval(int blocksPerInterval) {
+    this.monitor.setNumBlocksPerCheck(blocksPerInterval);
+  }
+
+  public void refreshMaxConcurrentTrackedNodes(int maxConcurrentTrackedNodes) {
+    this.monitor.setMaxConcurrentTrackedNodes(maxConcurrentTrackedNodes);
+  }
+
+  public int getBlocksPerInterval() {
+    return this.monitor.getNumBlocksPerCheck();
+  }
+
+  public int getMaxConcurrentTrackedNodes() {
+    return this.monitor.getMaxConcurrentTrackedNodes();
+  }
+
   /**
    * Stop the admin monitor thread, waiting briefly for it to terminate.
    */

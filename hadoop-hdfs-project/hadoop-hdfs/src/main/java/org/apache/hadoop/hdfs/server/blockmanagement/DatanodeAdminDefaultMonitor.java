@@ -73,7 +73,7 @@ public class DatanodeAdminDefaultMonitor extends DatanodeAdminMonitorBase
   /**
    * The maximum number of blocks to check per tick.
    */
-  private int numBlocksPerCheck;
+  private volatile int numBlocksPerCheck;
 
   /**
    * The number of blocks that have been checked on this tick.
@@ -442,5 +442,13 @@ public class DatanodeAdminDefaultMonitor extends DatanodeAdminMonitorBase
     datanode.getLeavingServiceStatus().set(lowRedundancyBlocksInOpenFiles,
         lowRedundancyOpenFiles, lowRedundancyBlocks,
         outOfServiceOnlyReplicas);
+  }
+
+  public int getNumBlocksPerCheck() {
+    return numBlocksPerCheck;
+  }
+
+  public void setNumBlocksPerCheck(int numBlocksPerCheck) {
+    this.numBlocksPerCheck = numBlocksPerCheck;
   }
 }

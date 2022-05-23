@@ -130,6 +130,20 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_LEASE_HARDLIMIT_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_LEASE_HARDLIMIT_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_DELETION_INCREMENT_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_DELETION_INCREMENT_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FULL_BLOCK_REPORT_LEASE_LENGTH_MS;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FULL_BLOCK_REPORT_LEASE_LENGTH_MS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_INVALIDATE_WORK_PCT_PER_ITERATION;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_INVALIDATE_WORK_PCT_PER_ITERATION_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_FULL_BLOCK_REPORT_LEASES;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_FULL_BLOCK_REPORT_LEASES_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR_DEFAULT;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT;
@@ -337,7 +351,15 @@ public class NameNode extends ReconfigurableBase implements
           DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
           DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY,
           DFS_IMAGE_PARALLEL_LOAD_KEY,
-          DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR));
+          DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR,
+          DFS_NAMENODE_MAX_FULL_BLOCK_REPORT_LEASES,
+          DFS_NAMENODE_FULL_BLOCK_REPORT_LEASE_LENGTH_MS,
+          DFS_NAMENODE_BLOCK_DELETION_INCREMENT_KEY,
+          DFS_NAMENODE_INVALIDATE_WORK_PCT_PER_ITERATION,
+          DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION,
+          DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY,
+          DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES,
+          DFS_LEASE_HARDLIMIT_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2212,6 +2234,22 @@ public class NameNode extends ReconfigurableBase implements
       return reconfMaintenanceEnabled(datanodeManager, property, newVal);
     } else if (property.equals(DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR)) {
       return reconfConsiderLoadFactor(property, newVal);
+    }  else if (property.equals(DFS_NAMENODE_MAX_FULL_BLOCK_REPORT_LEASES)) {
+      return reconfMaxFullBlockReportLease(property, newVal);
+    } else if (property.equals(DFS_NAMENODE_FULL_BLOCK_REPORT_LEASE_LENGTH_MS)) {
+      return reconfFullBlockReportLeaseLength(property, newVal);
+    } else if (property.equals(DFS_NAMENODE_BLOCK_DELETION_INCREMENT_KEY)) {
+      return reconfBlockDeletionIncrement(property, newVal);
+    } else if (property.equals(DFS_NAMENODE_INVALIDATE_WORK_PCT_PER_ITERATION)) {
+      return reconfReplicationWorkPctPerIteration(property, newVal);
+    } else if (property.equals(DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION)) {
+      return reconfReplicationWorkMultiplierPerIteration(property, newVal);
+    }  else if (property.equals(DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY)) {
+      return reconfDecommissionBlocksPerInterval(property, newVal);
+    } else if (property.equals(DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES)) {
+      return reconfDecommissionMaxConcurrentTrackedNodes(property, newVal);
+    } else if (property.equals(DFS_LEASE_HARDLIMIT_KEY)) {
+      return reconfLeaseHardLimit(property, newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -2445,6 +2483,149 @@ public class NameNode extends ReconfigurableBase implements
     } finally {
       LOG.info("RECONFIGURE* changed considerLoadFactor to "
           + namesystem.getBlockManager().getConsiderLoadFactor());
+    }
+  }
+
+  private String reconfLeaseHardLimit(String property, String newVal)
+      throws ReconfigurationException {
+    try {
+      long hardLimit = (newVal == null ? DFS_LEASE_HARDLIMIT_DEFAULT :
+          Integer.parseInt(newVal));
+      namesystem.getLeaseManager().setHardLimit(hardLimit);
+      return String.valueOf(hardLimit);
+    } catch (UnsupportedOperationException | IllegalArgumentException e) {
+      throw new ReconfigurationException(property, newVal, getConf().get(
+          property), e);
+    } finally {
+      LOG.info("RECONFIGURE* changed leaseHardLimit to " +
+          namesystem.getLeaseManager().getHardLimit());
+    }
+  }
+
+  private String reconfDecommissionBlocksPerInterval(String property,
+      String newVal) throws ReconfigurationException {
+    try {
+      int blocksPerInterval = (newVal == null ?
+          DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_DEFAULT :
+          Integer.parseInt(newVal));
+      namesystem.getBlockManager().getDatanodeManager()
+          .getDatanodeAdminManager()
+          .refreshBlocksPerInterval(blocksPerInterval);
+      return String.valueOf(blocksPerInterval);
+    } catch (UnsupportedOperationException | IllegalArgumentException e) {
+      throw new ReconfigurationException(property, newVal, getConf().get(
+          property), e);
+    } finally {
+      LOG.info("RECONFIGURE* changed decommissionBlocksPerInterval to "
+          + namesystem.getBlockManager().getDatanodeManager()
+          .getDatanodeAdminManager().getBlocksPerInterval());
+    }
+  }
+
+  private String reconfDecommissionMaxConcurrentTrackedNodes(String property,
+      String newVal) throws ReconfigurationException {
+    try {
+      int maxConcurrentTrackedNodes = (newVal == null ?
+          DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES_DEFAULT:
+          Integer.parseInt(newVal));
+      namesystem.getBlockManager().getDatanodeManager()
+          .getDatanodeAdminManager()
+          .refreshMaxConcurrentTrackedNodes(maxConcurrentTrackedNodes);
+      return String.valueOf(maxConcurrentTrackedNodes);
+    } catch (UnsupportedOperationException | IllegalArgumentException e) {
+      throw new ReconfigurationException(property, newVal, getConf().get(
+          property), e);
+    } finally {
+      LOG.info("RECONFIGURE* changed decommissionMaxConcurrentTrackedNodes to "
+          + namesystem.getBlockManager().getDatanodeManager()
+          .getDatanodeAdminManager().getMaxConcurrentTrackedNodes());
+    }
+  }
+
+  private String reconfReplicationWorkMultiplierPerIteration(String property,
+      String newVal) throws ReconfigurationException {
+    try {
+      int replicationWorkMultiplierIteration = (newVal == null ?
+          DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION_DEFAULT :
+          Integer.parseInt(newVal));
+      namesystem.getBlockManager().setReplicationWorkMultiplierPerIteration(
+          replicationWorkMultiplierIteration);
+      return String.valueOf(replicationWorkMultiplierIteration);
+    } catch (UnsupportedOperationException | IllegalArgumentException e) {
+      throw new ReconfigurationException(property, newVal, getConf().get(
+          property), e);
+    } finally {
+      LOG.info("RECONFIGURE* changed replicationWorkMultiplierPerIteration to "
+          + namesystem.getBlockManager().getBlocksReplWorkMultiplier());
+    }
+  }
+
+  private String reconfReplicationWorkPctPerIteration(String property,
+      String newVal) throws ReconfigurationException {
+    try {
+      float replicationWorkPctPerIteration = (newVal == null ?
+          DFS_NAMENODE_INVALIDATE_WORK_PCT_PER_ITERATION_DEFAULT :
+          Float.parseFloat(newVal));
+      namesystem.getBlockManager()
+          .setWorkPctPerIteration(replicationWorkPctPerIteration);
+      return String.valueOf(replicationWorkPctPerIteration);
+    } catch (UnsupportedOperationException | IllegalArgumentException e) {
+      throw new ReconfigurationException(property, newVal, getConf().get(
+          property), e);
+    } finally {
+      LOG.info("RECONFIGURE* changed replicationWorkPctPerIteration to "
+          + namesystem.getBlockManager().getBlocksInvalidateWorkPct());
+    }
+  }
+
+  private String reconfBlockDeletionIncrement(String property, String newVal)
+      throws ReconfigurationException {
+    try {
+      int blockDeletionIncrement = (newVal == null ?
+          DFS_NAMENODE_BLOCK_DELETION_INCREMENT_DEFAULT :
+          Integer.parseInt(newVal));
+      namesystem.setBlockDeletionIncrement(blockDeletionIncrement);
+      return String.valueOf(blockDeletionIncrement);
+    } catch (NumberFormatException | UnsupportedOperationException e) {
+      throw new ReconfigurationException(property, newVal, getConf().get(
+          property), e);
+    } finally {
+      LOG.info("RECONFIGURE* changed blockDeletionIncrement to "
+          + namesystem.getBlockDeletionIncrement());
+    }
+  }
+
+  private String reconfFullBlockReportLeaseLength(String property,
+      String newVal) throws ReconfigurationException {
+    try {
+      long fullBlockReportLeaseLength = (newVal == null ?
+          DFS_NAMENODE_FULL_BLOCK_REPORT_LEASE_LENGTH_MS_DEFAULT :
+          Long.parseLong(newVal));
+      namesystem.getBlockManager().setFullBlockReportLeaseLength(fullBlockReportLeaseLength);
+      return String.valueOf(fullBlockReportLeaseLength);
+    } catch (NumberFormatException | UnsupportedOperationException e) {
+      throw new ReconfigurationException(property, newVal, getConf().get(
+          property), e);
+    } finally {
+      LOG.info("RECONFIGURE* changed FullBlockReportLeaseLength to "
+          + namesystem.getBlockManager().getFullBlockReportLeaseLength());
+    }
+  }
+
+  private String reconfMaxFullBlockReportLease(String property, String newVal)
+      throws ReconfigurationException {
+    try {
+      int maxFullBlockReportLease = (newVal == null ?
+          DFS_NAMENODE_MAX_FULL_BLOCK_REPORT_LEASES_DEFAULT :
+          Integer.parseInt(newVal));
+      namesystem.getBlockManager().setMaxFullBlockReportLease(maxFullBlockReportLease);
+      return String.valueOf(maxFullBlockReportLease);
+    } catch (NumberFormatException | UnsupportedOperationException e) {
+      throw new ReconfigurationException(property, newVal, getConf().get(
+          property), e);
+    } finally {
+      LOG.info("RECONFIGURE* changed MaxFullBlockReportLease to "
+          + namesystem.getBlockManager().getMaxFullBlockReportLease());
     }
   }
 
