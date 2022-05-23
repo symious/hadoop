@@ -130,6 +130,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR_DEFAULT;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_ENABLED_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_ENABLED_DEFAULT;
@@ -334,7 +336,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION,
           DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
           DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY,
-          DFS_IMAGE_PARALLEL_LOAD_KEY));
+          DFS_IMAGE_PARALLEL_LOAD_KEY,
+          DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2207,6 +2210,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigureParallelLoad(newVal);
     } else if (property.equals(DFS_HOSTS_MAINTENANCE_ENABLED_KEY)) {
       return reconfMaintenanceEnabled(datanodeManager, property, newVal);
+    } else if (property.equals(DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR)) {
+      return reconfConsiderLoadFactor(property, newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -2424,6 +2429,23 @@ public class NameNode extends ReconfigurableBase implements
     }
     FSImageFormatProtobuf.refreshParallelSaveAndLoad(enableParallelLoad);
     return Boolean.toString(enableParallelLoad);
+  }
+
+  private String reconfConsiderLoadFactor(String property, String newVal)
+      throws ReconfigurationException {
+    try {
+      double considerLoadFactor = (newVal == null ?
+          DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR_DEFAULT :
+          Double.parseDouble(newVal));
+      namesystem.getBlockManager().setConsiderLoadFactor(considerLoadFactor);
+      return String.valueOf(considerLoadFactor);
+    } catch (NumberFormatException | UnsupportedOperationException e) {
+      throw new ReconfigurationException(property, newVal, getConf().get(
+          property), e);
+    } finally {
+      LOG.info("RECONFIGURE* changed considerLoadFactor to "
+          + namesystem.getBlockManager().getConsiderLoadFactor());
+    }
   }
 
   @Override  // ReconfigurableBase
