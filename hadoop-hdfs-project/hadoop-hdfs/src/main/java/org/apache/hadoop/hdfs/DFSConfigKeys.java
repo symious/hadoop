@@ -375,6 +375,7 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final int     DFS_NAMENODE_EDITS_DIR_MINIMUM_DEFAULT = 1;
   public static final String  DFS_NAMENODE_QUOTA_INIT_THREADS_KEY = "dfs.namenode.quota.init-threads";
   public static final int     DFS_NAMENODE_QUOTA_INIT_THREADS_DEFAULT = 12;
+  public static final int     DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM = 128;
 
   public static final String  DFS_NAMENODE_EDIT_LOG_AUTOROLL_MULTIPLIER_THRESHOLD = "dfs.namenode.edit.log.autoroll.multiplier.threshold";
   public static final float

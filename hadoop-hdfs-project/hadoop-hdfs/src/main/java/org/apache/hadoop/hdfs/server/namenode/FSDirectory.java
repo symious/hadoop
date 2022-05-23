@@ -410,11 +410,28 @@ public class FSDirectory implements Closeable {
     this.editLog = ns.getEditLog();
     ezManager = new EncryptionZoneManager(this, conf);
 
-    this.quotaInitThreads = conf.getInt(
+    int confQuotaInitThreads = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY,
         DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_DEFAULT);
+    reConfQuotaInitThreads(confQuotaInitThreads);
 
     initUsersToBypassExtProvider(conf);
+  }
+
+  public int reConfQuotaInitThreads(int newThreadNumber) {
+    newThreadNumber = Math.min(newThreadNumber,
+        DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM);
+    if (this.quotaInitThreads != newThreadNumber && newThreadNumber > 0) {
+      LOG.info("Will reConf the QuotaInitThreads from {} to {}.",
+          this.quotaInitThreads, newThreadNumber);
+      this.quotaInitThreads = newThreadNumber;
+    }
+    return this.quotaInitThreads;
+  }
+
+  @VisibleForTesting
+  public int getQuotaInitThreads() {
+    return this.quotaInitThreads;
   }
 
   private void initUsersToBypassExtProvider(Configuration conf) {

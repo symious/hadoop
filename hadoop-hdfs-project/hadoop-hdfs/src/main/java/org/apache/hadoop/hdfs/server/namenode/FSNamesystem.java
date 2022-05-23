@@ -1319,10 +1319,12 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    */
   void startActiveServices() throws IOException {
     startingActiveService = true;
+    long beginTime = Time.monotonicNow();
     LOG.info("Starting services required for active state");
     writeLock();
     try {
       FSEditLog editLog = getFSImage().getEditLog();
+      long beginEditTime = Time.monotonicNow();
       
       if (!editLog.isOpenForWrite()) {
         // During startup, we're already open for write during initialization.
@@ -1359,6 +1361,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
         getFSImage().editLog.openForWrite(getEffectiveLayoutVersion());
       }
+      LOG.info("CatchupEditLogs costs " + (Time.monotonicNow() - beginEditTime) + "ms.");
 
       // Initialize the quota.
       dir.updateCountForQuota();
@@ -1410,6 +1413,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       startingActiveService = false;
       blockManager.checkSafeMode();
       writeUnlock("startActiveServices");
+      LOG.info("StartActiveServices costs "
+          + (Time.monotonicNow() - beginTime) + "ms.");
     }
   }
 
