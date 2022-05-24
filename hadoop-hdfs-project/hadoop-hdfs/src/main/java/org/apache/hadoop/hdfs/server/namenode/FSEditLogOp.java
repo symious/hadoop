@@ -412,6 +412,17 @@ public abstract class FSEditLogOp {
     return PBHelperClient.convertXAttrs(proto.getXAttrsList());
   }
 
+  private static Block[] deepCopy(Block[] blocks) {
+    if (blocks == null || blocks.length == 0) {
+      return blocks;
+    }
+    Block[] copy = new Block[blocks.length];
+    for (int i = 0; i < blocks.length; ++i) {
+      copy[i] = blocks[i] == null ? null : new Block(blocks[i]);
+    }
+    return copy;
+  }
+
   @SuppressWarnings("unchecked")
   static abstract class AddCloseOp
          extends FSEditLogOp
@@ -500,7 +511,11 @@ public abstract class FSEditLogOp {
         throw new RuntimeException("Can't have more than " + MAX_BLOCKS +
             " in an AddCloseOp.");
       }
-      this.blocks = blocks;
+      if (this instanceof CloseOp) {
+        this.blocks = FSEditLogOp.deepCopy(blocks);
+      } else {
+        this.blocks = blocks;
+      }
       return (T)this;
     }
     
