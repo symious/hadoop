@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hdfs.server.namenode;
 
+import org.apache.hadoop.hdfs.server.blockmanagement.HostConfigManager;
+import org.apache.hadoop.hdfs.server.blockmanagement.HostFileWithMaintenanceManager;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
@@ -124,6 +126,8 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERV
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_NN_NOT_BECOME_ACTIVE_IN_SAFEMODE;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_NN_NOT_BECOME_ACTIVE_IN_SAFEMODE_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT;
@@ -323,6 +327,7 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY,
           FS_PROTECTED_DIRECTORIES,
           HADOOP_CALLER_CONTEXT_ENABLED_KEY,
+          DFS_HOSTS_MAINTENANCE_ENABLED_KEY,
           DFS_STORAGE_POLICY_SATISFIER_MODE_KEY,
           DFS_NAMENODE_REPLICATION_MAX_STREAMS_KEY,
           DFS_NAMENODE_REPLICATION_STREAMS_HARD_LIMIT_KEY,
@@ -2200,9 +2205,44 @@ public class NameNode extends ReconfigurableBase implements
       return newVal;
     } else if (property.equals(DFS_IMAGE_PARALLEL_LOAD_KEY)) {
       return reconfigureParallelLoad(newVal);
+    } else if (property.equals(DFS_HOSTS_MAINTENANCE_ENABLED_KEY)) {
+      return reconfMaintenanceEnabled(datanodeManager, property, newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
+    }
+  }
+
+  private String reconfMaintenanceEnabled(DatanodeManager datanodeManager, String property,
+      String newVal)
+      throws ReconfigurationException {
+    namesystem.writeLock();
+    try {
+      HostConfigManager configManager = datanodeManager.getHostConfigManager();
+      if (!(configManager instanceof HostFileWithMaintenanceManager)) {
+        throw new RuntimeException(
+            "please check dfs.namenode.hosts.provider.classname whether configured as HostFileWithMaintenanceManager");
+      }
+
+      HostFileWithMaintenanceManager hostFileWithMaintenanceManager =
+          (HostFileWithMaintenanceManager) configManager;
+      if (newVal == null) {
+        hostFileWithMaintenanceManager.setEnabled(
+            DFS_HOSTS_MAINTENANCE_ENABLED_DEFAULT);
+        LOG.info("RECONFIGURE* changed maintenance enabled to "
+            + hostFileWithMaintenanceManager.isEnabled());
+        return String.valueOf(DFS_HOSTS_MAINTENANCE_ENABLED_DEFAULT);
+      } else {
+        hostFileWithMaintenanceManager.setEnabled(Boolean.parseBoolean(newVal));
+        LOG.info("RECONFIGURE* changed maintenance enabled to "
+            + hostFileWithMaintenanceManager.isEnabled());
+        return String.valueOf(hostFileWithMaintenanceManager.isEnabled());
+      }
+    } catch (Exception ex) {
+      throw new ReconfigurationException(property, newVal, getConf().get(
+          property), ex);
+    } finally {
+      namesystem.writeUnlock();
     }
   }
 

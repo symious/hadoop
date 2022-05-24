@@ -70,7 +70,7 @@ public class HostFileManager extends HostConfigManager {
     refresh(conf.get(DFSConfigKeys.DFS_HOSTS, ""),
         conf.get(DFSConfigKeys.DFS_HOSTS_EXCLUDE, ""));
   }
-  private static HostSet readFile(String type, String filename)
+  static HostSet readFile(String type, String filename)
           throws IOException {
     HostSet res = new HostSet();
     if (!filename.isEmpty()) {

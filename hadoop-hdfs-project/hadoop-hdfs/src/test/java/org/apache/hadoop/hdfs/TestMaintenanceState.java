@@ -74,7 +74,7 @@ public class TestMaintenanceState extends AdminStatesBaseTest {
       DFSConfigKeys.DFS_NAMENODE_MAINTENANCE_REPLICATION_MIN_DEFAULT;
 
   public TestMaintenanceState() {
-    setUseCombinedHostFileManager();
+    setUseCombinedHostFileManager(true);
   }
 
   void setMinMaintenanceR(int minMaintenanceR) {

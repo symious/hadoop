@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 
+import org.apache.hadoop.hdfs.server.blockmanagement.HostFileWithMaintenanceManager;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -68,9 +69,17 @@ public class AdminStatesBaseTest {
   private Configuration conf;
   private MiniDFSCluster cluster = null;
   private boolean useCombinedHostFileManager = false;
+  private boolean useHostFileWithMaintenanceManager = false;
 
-  protected void setUseCombinedHostFileManager() {
-    useCombinedHostFileManager = true;
+  protected void setUseCombinedHostFileManager(boolean flag) {
+    useCombinedHostFileManager = flag;
+  }
+
+  protected void setHostFileWithMaintenanceManager(boolean flag) {
+    useHostFileWithMaintenanceManager = flag;
+  }
+
+  protected void setDfsNamenodeHostsProviderClassName() {
   }
 
   protected Configuration getConf() {
@@ -92,7 +101,11 @@ public class AdminStatesBaseTest {
           CombinedHostFileManager.class, HostConfigManager.class);
     }
 
+    setDfsNamenodeHostsProviderClassName();
+
     // Setup conf
+    conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY,
+        true);
     conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_KEY,
         false);
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY,
@@ -283,11 +296,24 @@ public class AdminStatesBaseTest {
       }
     }
 
+    if (useHostFileWithMaintenanceManager) {
+      updateMaintenanceExpirationTimeInMS(maintenanceExpirationInMS, nnIndex);
+    }
+
     // write node names into the json host file.
     hostsFileWriter.initOutOfServiceHosts(decommissionNodes, maintenanceNodes);
     refreshNodes(nnIndex);
     waitNodeState(datanodeInfos, waitForState);
     return datanodeInfos;
+  }
+
+  private void updateMaintenanceExpirationTimeInMS(long maintenanceExpirationTimeInMS,
+      int nnIndex) {
+    HostFileWithMaintenanceManager configManager =
+        (HostFileWithMaintenanceManager) cluster.getNamesystem(nnIndex).getBlockManager()
+            .getDatanodeManager()
+            .getHostConfigManager();
+    configManager.setExpirationTime(maintenanceExpirationTimeInMS);
   }
 
   /* Ask a specific NN to put the datanode in service and wait for it
@@ -313,6 +339,14 @@ public class AdminStatesBaseTest {
     }
     decommissionNodes.remove(outOfServiceNode.getName());
     maintenanceNodes.remove(outOfServiceNode.getName());
+
+    if (useHostFileWithMaintenanceManager && maintenanceNodes.size() > 0) {
+      long maintenanceExpirationInMS = Long.MIN_VALUE;
+      for (long time : maintenanceNodes.values()) {
+        maintenanceExpirationInMS = Math.min(maintenanceExpirationInMS, time);
+      }
+      updateMaintenanceExpirationTimeInMS(maintenanceExpirationInMS, nnIndex);
+    }
 
     hostsFileWriter.initOutOfServiceHosts(decommissionNodes, maintenanceNodes);
     refreshNodes(nnIndex);

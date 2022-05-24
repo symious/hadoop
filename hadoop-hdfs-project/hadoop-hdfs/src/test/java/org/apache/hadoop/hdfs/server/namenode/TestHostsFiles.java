@@ -22,6 +22,8 @@ import static org.junit.Assert.assertTrue;
 import java.lang.management.ManagementFactory;
 import java.util.Arrays;
 
+import org.apache.hadoop.hdfs.server.blockmanagement.HostFileWithMaintenanceManager;
+import org.apache.hadoop.hdfs.util.HostFileWithMaintenanceEnableManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -61,7 +63,9 @@ public class TestHostsFiles {
   @Parameterized.Parameters
   public static Iterable<Object[]> data() {
     return Arrays.asList(new Object[][]{
-        {HostFileManager.class}, {CombinedHostFileManager.class}});
+        {HostFileManager.class}, {HostFileWithMaintenanceManager.class}, {
+        HostFileWithMaintenanceEnableManager.class},
+        {CombinedHostFileManager.class}});
   }
 
   /*
