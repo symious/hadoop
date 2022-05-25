@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -33,8 +34,11 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableMap;
+import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.event.EventDispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
+import org.apache.hadoop.yarn.server.ApplicationLevelType;
+import org.apache.hadoop.yarn.server.api.records.ApplicationLevel;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -128,6 +132,13 @@ public class ResourceTrackerService extends AbstractService implements
 
   private boolean isCoLocateEnabled;
 
+  private boolean isAppLevelDefineEnabled;
+
+  private int criticalAppThreshold;
+  private int highAppThreshold;
+  private int mediumAppThreshold;
+  private int lowAppThreshold;
+
   private Server server;
   private InetSocketAddress resourceTrackerAddress;
   private String minimumNodeManagerVersion;
@@ -199,6 +210,7 @@ public class ResourceTrackerService extends AbstractService implements
         conf.getLong(YarnConfiguration.RM_NM_RECOVERY_HEARTBEAT_INTERVAL_MS,
             YarnConfiguration.DEFAULT_RM_NM_RECOVERY_HEARTBEAT_INTERVAL_MS);
     updateCoLocateConfiguration(conf);
+    updateAppLevelDefineConfiguration(conf);
     loadDynamicResourceConfiguration(conf);
     decommissioningWatcher.init(conf);
     super.serviceInit(conf);
@@ -333,6 +345,29 @@ public class ResourceTrackerService extends AbstractService implements
     } finally {
       this.writeLock.unlock();
     }
+  }
+
+  public void updateAppLevelDefineConfiguration(Configuration conf) {
+    this.writeLock.lock();
+    try {
+      this.isAppLevelDefineEnabled =
+          conf.getBoolean(YarnConfiguration.RM_APPLICATION_LEVEL_DEFINE_ENABLED,
+              YarnConfiguration.RM_APPLICATION_LEVEL_DEFINE_ENABLED_DEFAULT);
+      this.criticalAppThreshold = conf.getInt(YarnConfiguration.RM_APPLICATION_LEVEL_CRITICAL,
+          YarnConfiguration.RM_APPLICATION_LEVEL_CRITICAL_DEFAULT);
+      this.highAppThreshold = conf.getInt(YarnConfiguration.RM_APPLICATION_LEVEL_HIGH,
+          YarnConfiguration.RM_APPLICATION_LEVEL_HIGH_DEFAULT);
+      this.mediumAppThreshold = conf.getInt(YarnConfiguration.RM_APPLICATION_LEVEL_MEDIUM,
+          YarnConfiguration.RM_APPLICATION_LEVEL_MEDIUM_DEFAULT);
+      this.lowAppThreshold = conf.getInt(YarnConfiguration.RM_APPLICATION_LEVEL_LOW,
+          YarnConfiguration.RM_APPLICATION_LEVEL_LOW_DEFAULT);
+    } finally {
+      this.writeLock.unlock();
+    }
+  }
+
+  private void updateAppLevel() {
+
   }
 
   @Override
@@ -793,6 +828,10 @@ public class ResourceTrackerService extends AbstractService implements
           nodeHeartBeatResponse);
     }
 
+    if (isAppLevelDefineEnabled) {
+      setAppLevelToResponse(rmNode.getRunningApps(), nodeHeartBeatResponse);
+    }
+
     // 4. Send status to RMNode, saving the latest response.
     RMNodeStatusEvent nodeStatusEvent =
         new RMNodeStatusEvent(nodeId, remoteNodeStatus);
@@ -859,6 +898,41 @@ public class ResourceTrackerService extends AbstractService implements
     }
 
     return nodeHeartBeatResponse;
+  }
+
+  private void setAppLevelToResponse(List<ApplicationId> runningApps,
+      NodeHeartbeatResponse nodeHeartBeatResponse) {
+    List<ApplicationLevel> appLevels = new ArrayList<>();
+    Map<ApplicationId, RMApp> rmApps = rmContext.getRMApps();
+    // Set AppLevel for all running apps on this node.
+    for (ApplicationId appId : runningApps) {
+      RMApp app = rmApps.get(appId);
+      if (app != null) {
+        String appLevel = getAppLevel(app.getApplicationPriority());
+        appLevels.add(ApplicationLevel.newInstance(appId.toString(), appLevel));
+      }
+    }
+    nodeHeartBeatResponse.setApplicationLevel(appLevels);
+  }
+
+  private String getAppLevel(Priority applicationPriority) {
+    if (null == applicationPriority) {
+      return ApplicationLevelType.NONE.name();
+    }
+    int priority = applicationPriority.getPriority();
+    if (priority >= this.criticalAppThreshold) {
+      return ApplicationLevelType.CRITICAL.name();
+    }
+    if (priority >= this.highAppThreshold) {
+      return ApplicationLevelType.HIGH.name();
+    }
+    if (priority >= this.mediumAppThreshold) {
+      return ApplicationLevelType.MEDIUM.name();
+    }
+    if (priority >= this.lowAppThreshold) {
+      return ApplicationLevelType.LOW.name();
+    }
+    return ApplicationLevelType.NONE.name();
   }
 
   private void updateCoLocateStatus(RMNode rmNode) {

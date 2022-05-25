@@ -633,7 +633,26 @@ public class YarnConfiguration extends Configuration {
   public static final String RM_NODES_COLOCATE_FILE_PATH =
       RM_PREFIX + "nodes.colocate-path";
   public static final String DEFAULT_RM_NODES_COLOCATE_FILE_PATH = "";
-  
+
+  // AppLevelDefine
+  public static final String APPLICATION_LEVEL_DEFINE = "application.level.";
+  public static final String RM_APPLICATION_LEVEL_DEFINE_ENABLED =
+      RM_PREFIX + APPLICATION_LEVEL_DEFINE + "define.enabled";
+  public static final boolean RM_APPLICATION_LEVEL_DEFINE_ENABLED_DEFAULT = false;
+
+  public static final String RM_APPLICATION_LEVEL_CRITICAL =
+      RM_PREFIX + APPLICATION_LEVEL_DEFINE + "critical";
+  public static final int RM_APPLICATION_LEVEL_CRITICAL_DEFAULT = 60;
+  public static final String RM_APPLICATION_LEVEL_HIGH =
+      RM_PREFIX + APPLICATION_LEVEL_DEFINE + "high";
+  public static final int RM_APPLICATION_LEVEL_HIGH_DEFAULT = 40;
+  public static final String RM_APPLICATION_LEVEL_MEDIUM =
+      RM_PREFIX + APPLICATION_LEVEL_DEFINE + "medium";
+  public static final int RM_APPLICATION_LEVEL_MEDIUM_DEFAULT = 10;
+  public static final String RM_APPLICATION_LEVEL_LOW =
+      RM_PREFIX + APPLICATION_LEVEL_DEFINE + "low";
+  public static final int RM_APPLICATION_LEVEL_LOW_DEFAULT = 1;
+
   /** Number of threads to handle resource tracker calls.*/
   public static final String RM_RESOURCE_TRACKER_CLIENT_THREAD_COUNT =
     RM_PREFIX + "resource-tracker.client.thread-count";

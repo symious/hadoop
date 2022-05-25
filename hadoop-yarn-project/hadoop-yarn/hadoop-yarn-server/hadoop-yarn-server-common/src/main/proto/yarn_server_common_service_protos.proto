@@ -135,6 +135,12 @@ message NodeHeartbeatResponseProto {
   repeated ContainerProto containers_to_update = 17;
   optional bool areNodeAttributesAcceptedByRM = 18 [default = false];
   optional int64 tokenSequenceNo = 19;
+  repeated ApplicationLevelProto application_level = 20;
+}
+
+message ApplicationLevelProto {
+  optional string applicationId = 1;
+  optional string applicationLevel = 2;
 }
 
 message ContainerQueuingLimitProto {
@@ -156,6 +162,7 @@ message AppCollectorDataProto {
   optional int64 rm_identifier = 3 [default = -1];
   optional int64 version = 4 [default = -1];
   optional hadoop.common.TokenProto app_collector_token = 5;
+  optional string priorityLevel = 6;
 }
 
 //////////////////////////////////////////////////////

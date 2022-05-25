@@ -38,8 +38,10 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.fs.FileUtil;
+import org.apache.hadoop.yarn.server.api.records.ApplicationLevel;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ContainerLocalizer;
 
 import org.apache.hadoop.util.SysInfo;
@@ -1571,6 +1573,12 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
             // ContainerLauncher.
             List<SignalContainerRequest> containersToSignal = response
                 .getContainersToSignalList();
+            List <ApplicationLevel> levels = response.getApplicationLevel();
+            if (!CollectionUtils.isEmpty(levels)) {
+              for (ApplicationLevel le : levels) {
+                LOG.debug("ID:" + le.getApplicationId() + ", level:" + le.getApplicationLevel());
+              }
+            }
             if (!containersToSignal.isEmpty()) {
               dispatcher.getEventHandler().handle(
                   new CMgrSignalContainersEvent(containersToSignal));

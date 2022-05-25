@@ -29,6 +29,7 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.SystemCredentialsForAppsProto;
 import org.apache.hadoop.yarn.server.api.records.AppCollectorData;
+import org.apache.hadoop.yarn.server.api.records.ApplicationLevel;
 import org.apache.hadoop.yarn.server.api.records.ContainerQueuingLimit;
 import org.apache.hadoop.yarn.server.api.records.MasterKey;
 import org.apache.hadoop.yarn.server.api.records.NodeAction;
@@ -128,4 +129,8 @@ public abstract class NodeHeartbeatResponse {
 
   public abstract Collection<SystemCredentialsForAppsProto>
       getSystemCredentialsForApps();
+
+  public abstract List<ApplicationLevel> getApplicationLevel();
+
+  public abstract void setApplicationLevel(List<ApplicationLevel> applicationLevels);
 }

@@ -28,6 +28,7 @@ import java.util.Map;
 import org.apache.hadoop.security.proto.SecurityProtos.TokenProto;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SignalContainerRequestPBImpl;
+import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos;
 import org.apache.hadoop.yarn.server.api.records.AppCollectorData;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.Container;
@@ -52,9 +53,11 @@ import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.NodeHeartbeatR
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.NodeHeartbeatResponseProtoOrBuilder;
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos.SystemCredentialsForAppsProto;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
+import org.apache.hadoop.yarn.server.api.records.ApplicationLevel;
 import org.apache.hadoop.yarn.server.api.records.ContainerQueuingLimit;
 import org.apache.hadoop.yarn.server.api.records.MasterKey;
 import org.apache.hadoop.yarn.server.api.records.NodeAction;
+import org.apache.hadoop.yarn.server.api.records.impl.pb.ApplicationLevelPBImpl;
 import org.apache.hadoop.yarn.server.api.records.impl.pb.ContainerQueuingLimitPBImpl;
 import org.apache.hadoop.yarn.server.api.records.impl.pb.MasterKeyPBImpl;
 
@@ -72,6 +75,8 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
   private List<ApplicationId> applicationsToCleanup = null;
   private Resource resource = null;
   private Map<ApplicationId, AppCollectorData> appCollectorsMap = null;
+
+  private List<ApplicationLevel> applicationLevel = null;
 
   private MasterKey containerTokenMasterKey = null;
   private MasterKey nmTokenMasterKey = null;
@@ -133,6 +138,9 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
     }
     if (this.appCollectorsMap != null) {
       addAppCollectorsMapToProto();
+    }
+    if (this.applicationLevel != null) {
+      addApplicationLevelToProto();
     }
   }
 
@@ -438,6 +446,43 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
     builder.addAllContainersToBeRemovedFromNm(iterable);
   }
 
+  private void addApplicationLevelToProto() {
+    maybeInitBuilder();
+    builder.clearApplicationLevel();
+    if (applicationLevel == null) {
+      return;
+    }
+    Iterable<YarnServerCommonServiceProtos.ApplicationLevelProto> iterable =
+        new Iterable<YarnServerCommonServiceProtos.ApplicationLevelProto>() {
+
+          @Override
+          public Iterator<YarnServerCommonServiceProtos.ApplicationLevelProto> iterator() {
+            return new Iterator<YarnServerCommonServiceProtos.ApplicationLevelProto>() {
+
+              Iterator<ApplicationLevel> iter = applicationLevel.iterator();
+
+              @Override
+              public boolean hasNext() {
+                return iter.hasNext();
+              }
+
+              @Override
+              public YarnServerCommonServiceProtos.ApplicationLevelProto next() {
+                return convertToProtoFormat(iter.next());
+              }
+
+              @Override
+              public void remove() {
+                throw new UnsupportedOperationException();
+
+              }
+            };
+
+          }
+        };
+    builder.addAllApplicationLevel(iterable);
+  }
+
   @Override
   public List<ApplicationId> getApplicationsToCleanup() {
     initApplicationsToCleanup();
@@ -665,6 +710,38 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
     return p.getSystemCredentialsForAppsList();
   }
 
+  private void initApplicationLevel() {
+    if (this.applicationLevel != null) {
+      return;
+    }
+    NodeHeartbeatResponseProtoOrBuilder p = viaProto ? proto : builder;
+    List<YarnServerCommonServiceProtos.ApplicationLevelProto> list = p.getApplicationLevelList();
+    this.applicationLevel = new ArrayList<ApplicationLevel>();
+
+    for (YarnServerCommonServiceProtos.ApplicationLevelProto c : list) {
+      this.applicationLevel.add(convertFromProtoFormat(c));
+    }
+  }
+
+  @Override
+  public List<ApplicationLevel> getApplicationLevel() {
+    initApplicationLevel();
+    return this.applicationLevel;
+  }
+
+  @Override
+  public void setApplicationLevel(List<ApplicationLevel> applicationLevel) {
+    addApplicationLevel(applicationLevel);
+  }
+
+  public void addApplicationLevel(final List<ApplicationLevel> applicationLevels) {
+    if (applicationLevels == null) {
+      return;
+    }
+    initApplicationLevel();
+    this.applicationLevel.addAll(applicationLevels);
+  }
+
   @Override
   public void setAppCollectors(
       Map<ApplicationId, AppCollectorData> appCollectors) {
@@ -726,6 +803,16 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
 
   private ContainerProto convertToProtoFormat(Container t) {
     return ((ContainerPBImpl) t).getProto();
+  }
+
+  private ApplicationLevelPBImpl convertFromProtoFormat(
+      YarnServerCommonServiceProtos.ApplicationLevelProto p) {
+    return new ApplicationLevelPBImpl(p);
+  }
+
+  private YarnServerCommonServiceProtos.ApplicationLevelProto convertToProtoFormat(
+      ApplicationLevel t) {
+    return ((ApplicationLevelPBImpl) t).getProto();
   }
 
   @Override

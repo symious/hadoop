@@ -658,6 +658,9 @@ public class AdminService extends CompositeService implements
     // Update CoLocate Hosts
     rm.getRMContext().getNodesListManager().loadCoLocate();
 
+    // Update Application Level Define Config
+    rm.getRMContext().getResourceTrackerService().updateAppLevelDefineConfiguration(newConf);
+
     RMAuditLogger.logSuccess(user.getShortUserName(), operation, "AdminService");
 
     UpdateRMConfigResponse response =
