@@ -65,7 +65,7 @@ public final class RouterYarnClientUtils {
     return GetClusterMetricsResponse.newInstance(tmp);
   }
 
-  public static GetApplicationsResponse mergeApps(
+  public static List<ApplicationReport> mergeApps(
       Collection<GetApplicationsResponse> responses) {
     List<ApplicationReport> sumApplicationReportList = new ArrayList<>();
     for (GetApplicationsResponse response : responses) {
@@ -74,7 +74,7 @@ public final class RouterYarnClientUtils {
       sumApplicationReportList.addAll(applicationReportList);
     }
     LOG.info("GetApplicationsResponse size: " + sumApplicationReportList.size());
-    return GetApplicationsResponse.newInstance(sumApplicationReportList);
+    return sumApplicationReportList;
   }
 
   public static GetClusterNodesResponse mergeNodes(

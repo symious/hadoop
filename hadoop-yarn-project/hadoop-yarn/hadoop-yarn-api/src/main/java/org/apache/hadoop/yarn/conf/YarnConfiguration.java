@@ -4228,6 +4228,10 @@ public class YarnConfiguration extends Configuration {
   public static final boolean DEFAULT_ROUTER_WEBAPP_PARTIAL_RESULTS_ENABLED =
       false;
 
+  public static final String ROUTER_QUERY_TIMELINE_ENABLED =
+      ROUTER_PREFIX + "query.timeline.enabled";
+  public static final boolean DEFAULT_ROUTER_QUERY_TIMELINE_ENABLED = false;
+
   /**
    * Specifications on how (many times) to contact Router for apps. We need to
    * do this because Router might return partial application list because some

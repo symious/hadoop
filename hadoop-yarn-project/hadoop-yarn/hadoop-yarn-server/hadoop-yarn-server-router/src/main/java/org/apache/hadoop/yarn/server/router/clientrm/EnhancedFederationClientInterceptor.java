@@ -18,6 +18,12 @@
 
 package org.apache.hadoop.yarn.server.router.clientrm;
 
+import com.sun.jersey.api.client.Client;
+import com.sun.jersey.api.client.ClientResponse;
+import com.sun.jersey.api.client.config.ClientConfig;
+import com.sun.jersey.api.client.config.DefaultClientConfig;
+import com.sun.jersey.client.urlconnection.HttpURLConnectionFactory;
+import com.sun.jersey.client.urlconnection.URLConnectionClientHandler;
 import org.apache.hadoop.ipc.Server;
 
 import org.apache.commons.lang3.RandomStringUtils;
@@ -37,27 +43,40 @@ import org.apache.hadoop.yarn.api.protocolrecords.GetQueueInfoRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetQueueInfoResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerReport;
 import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.QueueInfo;
+import org.apache.hadoop.yarn.api.records.timelineservice.TimelineEntity;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterInfo;
 import org.apache.hadoop.yarn.server.federation.utils.CacheUtil;
 import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade;
+import org.apache.hadoop.yarn.server.metrics.ApplicationMetricsConstants;
 import org.apache.hadoop.yarn.server.router.RouterMetrics;
 import org.apache.hadoop.yarn.server.router.RouterServerUtil;
 import org.apache.hadoop.yarn.util.Clock;
 import org.apache.hadoop.yarn.util.MonotonicClock;
 import org.apache.hadoop.yarn.util.Records;
+import org.apache.hadoop.yarn.webapp.YarnJacksonJaxbJsonProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.ws.rs.core.MediaType;
 import java.io.IOException;
+import java.lang.reflect.UndeclaredThrowableException;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A custom class to Add the missing FederationClientInterceptor method
@@ -74,18 +93,129 @@ public class EnhancedFederationClientInterceptor
   private final Clock clock = new MonotonicClock();
 
   private static final String GET_CLUSTER_NODES_CACHEID = "getClusterNodes";
+  private static final String TIC_TAG_PREFIX = "tic:";
+  private static final String LIVY_TAG_PREFIX = "livy:";
 
   public EnhancedFederationClientInterceptor() {
     federationFacade = FederationStateStoreFacade.getInstance();
     routerMetrics = RouterMetrics.getMetrics();
   }
 
+  public boolean enableQueryTimeLine(){
+    return getConf().getBoolean(YarnConfiguration.ROUTER_QUERY_TIMELINE_ENABLED,
+        YarnConfiguration.DEFAULT_ROUTER_QUERY_TIMELINE_ENABLED);
+  }
+
+  public String getQueryTimeLineAddress(){
+    return getConf().get(YarnConfiguration.GPG_QUERY_TIMELINE_WEBAPP_ADDRESS,
+        YarnConfiguration.DEFAULT_GPG_QUERY_TIMELINE_WEBAPP_ADDRESS);
+  }
+
+  public static ClientResponse getResponse(Client client, URI uri)
+      throws Exception {
+    ClientResponse resp =
+        client.resource(uri).accept(MediaType.APPLICATION_JSON)
+            .type(MediaType.APPLICATION_JSON).get(ClientResponse.class);
+    if (resp == null ||
+        resp.getStatusInfo().getStatusCode() !=
+            ClientResponse.Status.OK.getStatusCode()) {
+      String msg = new String();
+      if (resp != null) {
+        msg = String.valueOf(resp.getStatusInfo().getStatusCode());
+      }
+      throw new IOException("Incorrect response from timeline reader. " +
+          "Status=" + msg);
+    }
+    return resp;
+  }
+
+  public static Client createClient() {
+    ClientConfig cfg = new DefaultClientConfig();
+    cfg.getClasses().add(YarnJacksonJaxbJsonProvider.class);
+    return new Client(new URLConnectionClientHandler(
+        new DummyURLConnectionFactory()), cfg);
+  }
+
+  private static class DummyURLConnectionFactory
+      implements HttpURLConnectionFactory {
+
+    @Override
+    public HttpURLConnection getHttpURLConnection(final URL url)
+        throws IOException {
+      try {
+        return (HttpURLConnection)url.openConnection();
+      } catch (UndeclaredThrowableException e) {
+        throw new IOException(e.getCause());
+      }
+    }
+  }
+
+  public ApplicationReport queryAppsByTagFromTimeLine(String tagName) {
+
+    int index = tagName.indexOf(":");
+    String queryTimelineAddress = getQueryTimeLineAddress();
+    String queryAppIdByTagUrl =
+        queryTimelineAddress + "/ws/v2/timeline/tics/" +
+            tagName.substring(index + 1);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("timeline queryAppIdByTagUrl: " + queryAppIdByTagUrl);
+    }
+
+    ClientResponse queryAppIdByTagResp;
+    ClientResponse queryAppStateResp;
+    String appId = "";
+    Set<String> appTags = new HashSet<>();
+    Client httpClient = createClient();
+    URI queryAppIdByTagUri = URI.create(queryAppIdByTagUrl);
+
+    try {
+      queryAppIdByTagResp = getResponse(httpClient, queryAppIdByTagUri);
+      appId = queryAppIdByTagResp.getEntity(String.class).replaceAll("\"", "");
+    } catch (Exception e) {
+      LOG.error("timeline queryAppIdByTag failed", e);
+    }
+
+    if (!appId.isEmpty()) {
+      String queryAppStatesUrl =
+          queryTimelineAddress + "/ws/v2/timeline/apps/" + appId + "?fields=ALL";
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("timeline queryAppStatesUrl: " + queryAppStatesUrl);
+      }
+      URI queryAppStatesUri = URI.create(queryAppStatesUrl);
+      try {
+        queryAppStateResp = getResponse(httpClient, queryAppStatesUri);
+        TimelineEntity entity = queryAppStateResp.getEntity(TimelineEntity.class);
+        Map<String, Object> entityInfo = entity.getInfo();
+        if (entityInfo.containsKey(ApplicationMetricsConstants.APP_TAGS_INFO)) {
+          Object obj = entityInfo.get(ApplicationMetricsConstants.APP_TAGS_INFO);
+          if (obj != null && obj instanceof Collection<?>) {
+            for(Object o : (Collection<?>)obj) {
+              if (o != null) {
+                appTags.add(o.toString());
+              }
+            }
+          }
+        }
+      } catch (Exception e) {
+        LOG.error("timeline query appId: " + appId + " states failed", e);
+      }
+    }
+
+    ApplicationReport appReport = Records.newRecord(ApplicationReport.class);
+    if (!appId.isEmpty()) {
+      appReport.setApplicationId(ApplicationId.fromString(appId));
+      appReport.setApplicationTags(appTags);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Timeline getApplications: appId: " + appId + " ,appTags: " +
+            appTags);
+      }
+    }
+    return appReport;
+  }
+
   @Override
   public GetApplicationsResponse getApplications(GetApplicationsRequest request)
       throws YarnException, IOException {
-
-    long startTime = clock.getTime();
-    String requestId = RandomStringUtils.randomAlphabetic(8);
 
     if (request == null) {
       routerMetrics.incrMultipleAppsFailedRetrieved();
@@ -93,35 +223,85 @@ public class EnhancedFederationClientInterceptor
           null);
     }
 
-    LOG.info("GetApplications request info -> tags: " +
-        request.getApplicationTags() + ", states: " +
-        request.getApplicationStates() + ", types: " +
-        request.getApplicationTypes() + ", limit: " + request.getLimit() +
-        ", clientIP: " + Server.getRemoteAddress());
+    long startTime = clock.getTime();
+    String requestId = RandomStringUtils.randomAlphabetic(8);
 
-    if (request.getApplicationTags() == null ||
-        request.getApplicationTags().size() <= 0) {
+    Set<String> queryTags = request.getApplicationTags();
+    LOG.info("requestId: " + requestId + " ,getApplications request info -> " +
+        "tags: " + queryTags + ", states: " + request.getApplicationStates() +
+        ", types: " + request.getApplicationTypes() + ", limit: "
+        + request.getLimit() + ", clientIP: " + Server.getRemoteAddress());
+
+    if (queryTags == null || queryTags.size() <= 0) {
       RouterServerUtil.logAndThrowException(
           "Router does not support getApplications requests without specifying a tag!",
           null);
     }
 
-    Map<SubClusterId, SubClusterInfo> subclusters =
-        federationFacade.getSubClusters(true);
-    ClientMethod remoteMethod = new ClientMethod("getApplications",
-        new Class[] {GetApplicationsRequest.class}, new Object[] {request});
-    ArrayList<SubClusterId> clusterList = new ArrayList<>(subclusters.keySet());
-    Map<SubClusterId, GetApplicationsResponse> clusterApps =
-        invokeConcurrent(clusterList, remoteMethod,
-            GetApplicationsResponse.class, requestId);
+    GetApplicationsResponse getApplicationsResponse;
+    List<ApplicationReport> applications = new ArrayList<>();
+    Set<String> queryFromTimeLineTags = new HashSet<>();
+    Set<String> queryFromYarnTags = new HashSet<>();
 
+    //query apps from timeline
+    long startTime1 = clock.getTime();
+    for (String tag : queryTags) {
+      if (enableQueryTimeLine() && (tag.startsWith(TIC_TAG_PREFIX) ||
+          tag.startsWith(LIVY_TAG_PREFIX))) {
+        ApplicationReport appReport = queryAppsByTagFromTimeLine(tag);
+        if (appReport != null && appReport.getApplicationId() != null &&
+            !appReport.getApplicationId().toString().isEmpty() &&
+            appReport.getApplicationTags() != null &&
+            appReport.getApplicationTags().size() > 0) {
+          applications.add(appReport);
+          queryFromTimeLineTags.add(tag);
+        } else {
+          queryFromYarnTags.add(tag);
+        }
+      } else {
+        queryFromYarnTags.add(tag);
+      }
+    }
+    long stopTime1 = clock.getTime();
+    if (queryFromTimeLineTags.size() > 0) {
+      LOG.info("requestId: " + requestId + " ,getApplications, tags: " +
+          queryFromTimeLineTags + " ,from TimeLineService cost time: " +
+          (stopTime1 - startTime1) + "ms, clientIP: " +
+          Server.getRemoteAddress());
+    }
+
+    //query apps from yarn
+    if (queryFromYarnTags.size() > 0) {
+      long startTime2 = clock.getTime();
+      request.setApplicationTags(queryFromYarnTags);
+      Map<SubClusterId, SubClusterInfo> subclusters =
+          federationFacade.getSubClusters(true);
+      ClientMethod remoteMethod = new ClientMethod("getApplications",
+          new Class[] {GetApplicationsRequest.class}, new Object[] {request});
+      ArrayList<SubClusterId> clusterList =
+          new ArrayList<>(subclusters.keySet());
+      Map<SubClusterId, GetApplicationsResponse> clusterApps =
+          invokeConcurrent(clusterList, remoteMethod,
+              GetApplicationsResponse.class, requestId);
+      long stopTime2 = clock.getTime();
+      applications
+          .addAll(RouterYarnClientUtils.mergeApps(clusterApps.values()));
+      LOG.info("requestId: " + requestId + " ,getApplications, tags: " +
+          queryFromYarnTags + " ,from YARN cost time: " +
+          (stopTime2 - startTime2) + "ms, clientIP: " +
+          Server.getRemoteAddress());
+    }
+
+    getApplicationsResponse = GetApplicationsResponse.newInstance(applications);
     long stopTime = clock.getTime();
-    if (clusterApps.size() > 0) {
+    LOG.info("requestId: " + requestId + " ,getApplications, tags: " +
+        queryTags + " ,sum cost time: " + (stopTime - startTime) +
+        "ms, clientIP: " + Server.getRemoteAddress() + " ,result size: " +
+        applications.size());
+    if (applications.size() > 0) {
       routerMetrics.succeededMultipleAppsRetrieved(stopTime - startTime);
     }
-    LOG.info("GetApplications cost time: " + (stopTime - startTime) +
-        "ms, clientIP: " + Server.getRemoteAddress());
-    return RouterYarnClientUtils.mergeApps(clusterApps.values());
+    return getApplicationsResponse;
   }
 
   @Override
