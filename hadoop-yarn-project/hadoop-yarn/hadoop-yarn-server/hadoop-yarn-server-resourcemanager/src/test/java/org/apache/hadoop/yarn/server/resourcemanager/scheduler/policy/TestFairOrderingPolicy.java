@@ -19,6 +19,7 @@
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.util.*;
 
@@ -387,5 +388,71 @@ public class TestFairOrderingPolicy {
     }
 
     Assert.assertEquals(5, policy.getNumSchedulableEntities());
+  }
+
+  @Test
+  public void testIteratorsWithCache() throws InterruptedException {
+
+    long cacheTime = 3000;
+
+    FairOrderingPolicy<MockSchedulableEntity> schedOrder =
+        new FairOrderingPolicy<MockSchedulableEntity>();
+    schedOrder.setAppsCacheTime(cacheTime);
+
+    MockSchedulableEntity msp1 = new MockSchedulableEntity();
+    MockSchedulableEntity msp2 = new MockSchedulableEntity();
+    MockSchedulableEntity msp3 = new MockSchedulableEntity();
+
+    msp1.setId("1");
+    msp2.setId("2");
+    msp3.setId("3");
+
+    msp1.setUsed(Resources.createResource(3));
+    msp2.setUsed(Resources.createResource(2));
+    msp3.setUsed(Resources.createResource(1));
+
+    AbstractComparatorOrderingPolicy.updateSchedulingResourceUsage(
+        msp1.getSchedulingResourceUsage());
+    AbstractComparatorOrderingPolicy.updateSchedulingResourceUsage(
+        msp2.getSchedulingResourceUsage());
+    AbstractComparatorOrderingPolicy.updateSchedulingResourceUsage(
+        msp2.getSchedulingResourceUsage());
+
+    schedOrder.addSchedulableEntity(msp1);
+    schedOrder.addSchedulableEntity(msp2);
+    schedOrder.addSchedulableEntity(msp3);
+
+
+    //Assignment, least to greatest consumption
+    long startTime1 = System.nanoTime();
+    Iterator iterator1 = schedOrder.getAssignmentIterator(
+        IteratorSelector.EMPTY_ITERATOR_SELECTOR);
+    long endTime1 = System.nanoTime();
+    long costTime1 = endTime1 - startTime1;
+    checkIds(iterator1, new String[]{"3", "2", "1"});
+
+    //Change value with cache, should see no change for assignmentIterator
+    msp2.setUsed(Resources.createResource(6));
+    schedOrder.containerAllocated(msp2, null);
+    long startTime2 = System.nanoTime();
+    Iterator iterator2 = schedOrder.getAssignmentIterator(
+        IteratorSelector.EMPTY_ITERATOR_SELECTOR);
+    long endTime2 = System.nanoTime();
+    long costTime2 = endTime2 - startTime2;
+    checkIds(iterator2, new String[]{"3", "2", "1"});
+
+    //Cache time out, will reorder
+    Thread.sleep(cacheTime);
+    msp2.setUsed(Resources.createResource(8));
+    schedOrder.containerAllocated(msp2, null);
+    long startTime3 = System.nanoTime();
+    Iterator iterator3 = schedOrder.getAssignmentIterator(
+        IteratorSelector.EMPTY_ITERATOR_SELECTOR);
+    long endTime3 = System.nanoTime();
+    long costTime3 = endTime3 - startTime3;
+    checkIds(iterator3, new String[]{"3", "1", "2"});
+
+    assertTrue(costTime2 < costTime1);
+    assertTrue(costTime2 < costTime3);
   }
 }

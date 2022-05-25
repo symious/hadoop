@@ -28,7 +28,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
  * An OrderingPolicy which orders SchedulableEntities by input order
  */
 public class FifoOrderingPolicy<S extends SchedulableEntity> extends AbstractComparatorOrderingPolicy<S> {
-  
+
   public FifoOrderingPolicy() {
     List<Comparator<SchedulableEntity>> comparators =
         new ArrayList<Comparator<SchedulableEntity>>();
@@ -38,10 +38,10 @@ public class FifoOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
     this.schedulableEntities = new ConcurrentSkipListSet<S>(comparator);
 
   }
-  
+
   @Override
   public void configure(Map<String, String> conf) {
-    
+
   }
   
   @Override

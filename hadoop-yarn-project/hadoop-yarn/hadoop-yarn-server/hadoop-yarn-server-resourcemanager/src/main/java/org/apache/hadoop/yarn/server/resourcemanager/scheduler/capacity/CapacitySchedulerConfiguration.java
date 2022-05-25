@@ -21,7 +21,6 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableSet;
-import org.apache.hadoop.yarn.server.resourcemanager.placement.QueuePlacementRuleUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.Utilization2RandomQueueOrderingPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -693,6 +692,19 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     return userLimit;
   }
 
+
+  /**
+   * Apps order cache time, default 0, without cache
+   */
+  private static final String APPS_ORDER_CACHE_TIME =
+      PREFIX + "apps.order.cache.time";
+
+  public static final long DEFAULT_APP_ORDER_CACHE_TIME = 0;
+
+  public long getAppOrderCacheTime() {
+    return getLong(APPS_ORDER_CACHE_TIME, DEFAULT_APP_ORDER_CACHE_TIME);
+  }
+
   // TODO (wangda): We need to better distinguish app ordering policy and queue
   // ordering policy's classname / configuration options, etc. And dedup code
   // if possible.
@@ -702,6 +714,7 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   
     String policyType = get(getQueuePrefix(queue) + ORDERING_POLICY,
         DEFAULT_APP_ORDERING_POLICY);
+    LOG.info("queue: " + queue + " ,AppOrderingPolicy: " + policyType);
     
     OrderingPolicy<S> orderingPolicy;
     
@@ -719,8 +732,10 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     }
 
     try {
-      orderingPolicy = (OrderingPolicy<S>)
-        Class.forName(policyType).newInstance();
+      long cacheTime = getAppOrderCacheTime();
+      LOG.info("getAppOrderCacheTime: " + cacheTime);
+      orderingPolicy =
+          (OrderingPolicy<S>) Class.forName(policyType).newInstance();
     } catch (Exception e) {
       String message = "Unable to construct ordering policy for: " + policyType + ", " + e.getMessage();
       throw new RuntimeException(message, e);
@@ -732,6 +747,12 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
       if (kv.getKey().startsWith(confPrefix)) {
          config.put(kv.getKey().substring(confPrefix.length()), kv.getValue());
       }
+
+      //add queue name
+      config.put("queueName", queue);
+
+      //add cache time
+      config.put("appsOrderCacheTime", String.valueOf(getAppOrderCacheTime()));
     }
     orderingPolicy.configure(config);
     return orderingPolicy;

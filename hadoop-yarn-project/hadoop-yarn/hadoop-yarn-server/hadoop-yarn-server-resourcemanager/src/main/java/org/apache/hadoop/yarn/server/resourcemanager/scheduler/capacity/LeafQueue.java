@@ -1190,9 +1190,20 @@ public class LeafQueue extends AbstractCSQueue {
     boolean needAssignToQueueCheck = true;
     IteratorSelector sel = new IteratorSelector();
     sel.setPartition(candidates.getPartition());
-    for (Iterator<FiCaSchedulerApp> assignmentIterator =
-         orderingPolicy.getAssignmentIterator(sel);
-         assignmentIterator.hasNext(); ) {
+
+    long startTime = System.nanoTime();
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("leaf queue: " + getQueuePath() + " start to sort apps...");
+    }
+    Iterator<FiCaSchedulerApp> assignmentIterator =
+        orderingPolicy.getAssignmentIterator(sel);
+    long endTime = System.nanoTime();
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("leaf queue: " + getQueuePath() + " ,orderPolicy: "
+          + orderingPolicy + " ,sort apps cost time: " +
+          (endTime - startTime) / 1000 + " us!");
+    }
+    while (assignmentIterator.hasNext()) {
       FiCaSchedulerApp application = assignmentIterator.next();
 
       ActivitiesLogger.APP.startAppAllocationRecording(activitiesManager,

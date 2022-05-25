@@ -26,6 +26,8 @@ import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTest
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
@@ -46,8 +48,17 @@ import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
  */
 public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractComparatorOrderingPolicy<S> {
 
+  private static final Logger LOG =
+      LoggerFactory.getLogger(FairOrderingPolicy.class);
+
   public static final String ENABLE_SIZE_BASED_WEIGHT =
         "fair.enable-size-based-weight";
+
+  private String queueName;
+  private long cacheTime;
+
+  //global scheduler will have multiple threads, update visibility
+  private volatile long lastUpdateTime;
 
   protected class FairComparator implements Comparator<SchedulableEntity> {
     @Override
@@ -97,6 +108,21 @@ public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
     this.schedulableEntities = new ConcurrentSkipListSet<S>(comparator);
   }
 
+  @Override
+  public Iterator<S> getAssignmentIterator(IteratorSelector sel) {
+    long now = System.currentTimeMillis();
+    if(now - lastUpdateTime > cacheTime){
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("queueName: " + this.queueName + " ,now: " + now +
+            " ,lastUpdateTime: " + lastUpdateTime +
+            " ,over cacheTime: " + cacheTime + " ,start to reorder apps!");
+      }
+      reorderScheduleEntities();
+      lastUpdateTime = now;
+    }
+    return schedulableEntities.iterator();
+  }
+
   private double getMagnitude(SchedulableEntity r) {
     double mag = r.getSchedulingResourceUsage().getCachedUsed(
       CommonNodeLabelsManager.ANY).getMemorySize();
@@ -120,12 +146,24 @@ public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
    this.sizeBasedWeight = sizeBasedWeight;
   }
 
+  @VisibleForTesting
+  public long getAppsCacheTime() {
+    return cacheTime;
+  }
+
+  @VisibleForTesting
+  public void setAppsCacheTime(long cacheTime) {
+    this.cacheTime = cacheTime;
+  }
+
   @Override
   public void configure(Map<String, String> conf) {
     if (conf.containsKey(ENABLE_SIZE_BASED_WEIGHT)) {
       sizeBasedWeight =
         Boolean.parseBoolean(conf.get(ENABLE_SIZE_BASED_WEIGHT));
     }
+    this.queueName = conf.get("queueName");
+    this.cacheTime = Long.valueOf(conf.get("appsOrderCacheTime"));
   }
 
   @Override
