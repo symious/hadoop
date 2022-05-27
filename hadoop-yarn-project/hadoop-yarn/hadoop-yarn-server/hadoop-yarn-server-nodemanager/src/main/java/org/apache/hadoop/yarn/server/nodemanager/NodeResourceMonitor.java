@@ -30,4 +30,6 @@ public interface NodeResourceMonitor extends Service {
    * @return <em>resource utilization</em> of the node.
    */
   public ResourceUtilization getUtilization();
+
+  void updateNodeResource(int coreNumber, long memory) throws Exception;
 }

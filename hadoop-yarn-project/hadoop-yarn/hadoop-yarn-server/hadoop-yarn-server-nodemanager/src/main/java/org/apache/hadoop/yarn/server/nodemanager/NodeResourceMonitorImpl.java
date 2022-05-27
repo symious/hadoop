@@ -20,9 +20,17 @@ package org.apache.hadoop.yarn.server.nodemanager;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.AbstractService;
+import org.apache.hadoop.yarn.api.records.NodeId;
+import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceInformation;
+import org.apache.hadoop.yarn.api.records.ResourceOption;
+import org.apache.hadoop.yarn.client.ClientRMProxy;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.api.records.ResourceUtilization;
+import org.apache.hadoop.yarn.factories.RecordFactory;
+import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
+import org.apache.hadoop.yarn.server.api.ResourceManagerAdministrationProtocol;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceRequest;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.gpu.GpuNodeResourceUpdateHandler;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.gpu.GpuResourcePlugin;
 import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
@@ -219,5 +227,23 @@ public class NodeResourceMonitorImpl extends AbstractService implements
   @Override
   public ResourceUtilization getUtilization() {
     return this.nodeUtilization;
+  }
+
+  @Override
+  public void updateNodeResource(int coreNumber, long memory) throws Exception {
+    ResourceManagerAdministrationProtocol adminProtocol =  ClientRMProxy.createRMProxy(this.nmContext.getConf(),
+        ResourceManagerAdministrationProtocol.class);
+    RecordFactory recordFactory =
+        RecordFactoryProvider.getRecordFactory(null);
+    UpdateNodeResourceRequest request =
+        recordFactory.newRecordInstance(UpdateNodeResourceRequest.class);
+    NodeId nodeId = this.nmContext.getNodeId();
+
+    Map<NodeId, ResourceOption> resourceMap =
+        new HashMap<NodeId, ResourceOption>();
+    resourceMap.put(
+        nodeId, ResourceOption.newInstance(Resource.newInstance(memory, coreNumber), 0));
+    request.setNodeResourceMap(resourceMap);
+    adminProtocol.updateNodeResource(request);
   }
 }

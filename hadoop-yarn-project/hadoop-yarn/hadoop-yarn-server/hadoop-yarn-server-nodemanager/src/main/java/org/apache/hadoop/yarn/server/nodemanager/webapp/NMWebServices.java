@@ -25,8 +25,10 @@ import java.nio.charset.Charset;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
@@ -110,10 +112,14 @@ public class NMWebServices {
   private final LogAggregationFileControllerFactory factory;
   private boolean filterAppsByUser = false;
 
-  private @javax.ws.rs.core.Context 
+  private long requestTimeStamp = 0;
+
+  private long interval;
+
+  private @javax.ws.rs.core.Context
     HttpServletRequest request;
-  
-  private @javax.ws.rs.core.Context 
+
+  private @javax.ws.rs.core.Context
     HttpServletResponse response;
 
   @javax.ws.rs.core.Context
@@ -132,6 +138,8 @@ public class NMWebServices {
     this.filterAppsByUser = this.nmContext.getConf().getBoolean(
         YarnConfiguration.FILTER_ENTITY_LIST_BY_USER,
         YarnConfiguration.DEFAULT_DISPLAY_APPS_FOR_LOGGED_IN_USER);
+    this.interval = this.nmContext.getConf().getInt(YarnConfiguration.NM_REQUEST_INTERVAL_MS,
+        YarnConfiguration.DEFAULT_NM_REQUEST_INTERVAL_MS);
   }
 
   public NMWebServices(final Context nm, final ResourceView view,
@@ -387,12 +395,12 @@ public class NMWebServices {
   }
 
   /**
-   * Returns the contents of a container's log file in plain text. 
+   * Returns the contents of a container's log file in plain text.
    *
    * Only works for containers that are still in the NodeManager's memory, so
    * logs are no longer available after the corresponding application is no
    * longer running.
-   * 
+   *
    * @param containerIdStr
    *    The container ID
    * @param filename
@@ -706,5 +714,29 @@ public class NMWebServices {
     }
 
     return callerUGI;
+  }
+
+  @GET
+  @Path("/resource/{core}/{memory}")
+  @Produces({MediaType.APPLICATION_JSON + "; " + JettyUtils.UTF_8,
+      MediaType.APPLICATION_XML + "; " + JettyUtils.UTF_8})
+  public Map<String, String> getReportResourceStatus(@PathParam("core") int coreNumber,
+      @PathParam("memory") long memory) {
+    init();
+    Map<String, String> result = new HashMap<>();
+    result.put("status", "200");
+    try {
+      if (System.currentTimeMillis() - requestTimeStamp > interval) {
+        this.requestTimeStamp = System.currentTimeMillis();
+        this.nmContext.getNodeResourceMonitor().updateNodeResource(coreNumber, memory);
+        result.put("msg", "SUCCESS");
+      } else {
+        result.put("msg", "Please request again after " + interval + " ms");
+      }
+    } catch (Exception e) {
+      LOG.error("Request Failed.", e);
+      result.put("msg", "FAILURE");
+    }
+    return result;
   }
 }

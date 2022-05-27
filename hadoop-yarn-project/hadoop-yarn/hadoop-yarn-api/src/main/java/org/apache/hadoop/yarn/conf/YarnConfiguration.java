@@ -2002,6 +2002,9 @@ public class YarnConfiguration extends Configuration {
   public static final int DEFAULT_NM_WEBAPP_PORT = 8042;
   public static final String DEFAULT_NM_WEBAPP_ADDRESS = "0.0.0.0:" +
     DEFAULT_NM_WEBAPP_PORT;
+  public static final String NM_REQUEST_INTERVAL_MS = NM_PREFIX + "interval.ms";
+
+  public static final int DEFAULT_NM_REQUEST_INTERVAL_MS = 30000;
 
   /** NM Webapp https address.**/
   public static final String NM_WEBAPP_HTTPS_ADDRESS = NM_PREFIX
