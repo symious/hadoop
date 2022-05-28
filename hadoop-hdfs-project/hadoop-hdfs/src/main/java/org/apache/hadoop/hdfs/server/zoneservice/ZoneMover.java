@@ -349,11 +349,11 @@ public class ZoneMover {
    * @param namenode URI of the NameNode
    * @return a ExitStatus code
    */
-  public static int run(Configuration conf, URI namenode)
+  public static int run(Configuration conf, URI namenode, boolean loadMapFromStore)
       throws IOException {
     List<Path> paths = new ArrayList<>();
     return run(new ZoneMoverKafkaTrigger(conf, paths, namenode), conf, namenode,
-        paths, null, new HashMap<String, ReplicationRule>());
+        paths, null, new HashMap<String, ReplicationRule>(), loadMapFromStore);
   }
 
   /**
@@ -366,9 +366,9 @@ public class ZoneMover {
    * @return a ExitStatus code
    */
   public static int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
-      URI namenode, List<Path> paths, ReplicationRule rule)
+      URI namenode, List<Path> paths, ReplicationRule rule, boolean loadMapFromStore)
       throws IOException {
-    return run(zoneMoverTrigger, conf, namenode, paths, rule, null);
+    return run(zoneMoverTrigger, conf, namenode, paths, rule, null, loadMapFromStore);
   }
 
   /**
@@ -381,9 +381,9 @@ public class ZoneMover {
    * @return a ExitStatus code
    */
   public static int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
-      URI namenode, List<Path> paths, Map<String, ReplicationRule> pathRuleMap)
+      URI namenode, List<Path> paths, Map<String, ReplicationRule> pathRuleMap, boolean loadMapFromStore)
       throws IOException {
-    return run(zoneMoverTrigger, conf, namenode, paths, null, pathRuleMap);
+    return run(zoneMoverTrigger, conf, namenode, paths, null, pathRuleMap, loadMapFromStore);
   }
 
   /**
@@ -397,18 +397,15 @@ public class ZoneMover {
    */
   private static int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
       URI namenode, List<Path> paths, ReplicationRule rule,
-      Map<String, ReplicationRule> pathRuleMap) throws IOException {
+      Map<String, ReplicationRule> pathRuleMap, boolean loadMapFromStore) throws IOException {
     checkDataCenterValues(conf, rule, pathRuleMap);
-    if (paths.isEmpty()) {
+    if (paths.isEmpty() && !loadMapFromStore) {
       return ExitStatus.SUCCESS.getExitCode();
     }
     Class<? extends StoreDriver> driverClass = conf.getClass(
         DFS_ZONESERVICE_STORE_DRIVER_CLASS,
         DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT,
         StoreDriver.class);
-    final StoreDriver driver =
-        ReflectionUtils.newInstance(driverClass, conf);
-    driver.init(conf, "ZoneMover_" + namenode.getAuthority());
     NameNodeConnector nnc = null;
     ZoneMover zs = null;
     try {
@@ -420,10 +417,15 @@ public class ZoneMover {
         zs = new ZoneMover(nnc, conf, pathRuleMap, new AtomicInteger(0));
       }
       zs.init();
-      //monitor if the path rule map is update or not
-      MapUpdater mapUpdater =
-          zs.new MapUpdater(namenode, driver, zoneMoverTrigger);
-      new Thread(mapUpdater,"Updater" + namenode.getAuthority()).start();
+      //monitor if the path rule map is update or not when zk enable
+      if (loadMapFromStore) {
+        final StoreDriver driver =
+            ReflectionUtils.newInstance(driverClass, conf);
+        driver.init(conf, "ZoneMover_" + namenode.getAuthority());
+        MapUpdater mapUpdater =
+            zs.new MapUpdater(namenode, driver, zoneMoverTrigger);
+        new Thread(mapUpdater, "Updater" + namenode.getAuthority()).start();
+      }
       while (zoneMoverTrigger.hasNext()) {
         try {
           String curPath = zoneMoverTrigger.getNext();
@@ -1356,7 +1358,7 @@ public class ZoneMover {
     int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
         URI namenode, List<Path> paths, ReplicationRule rule)
         throws IOException {
-      return ZoneMover.run(zoneMoverTrigger, conf, namenode, paths, rule);
+      return ZoneMover.run(zoneMoverTrigger, conf, namenode, paths, rule, false);
     }
 
     /**
@@ -1365,7 +1367,7 @@ public class ZoneMover {
     int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
         URI namenode, List<Path> paths, Map<String, ReplicationRule> pathRuleMap)
         throws IOException {
-      return ZoneMover.run(zoneMoverTrigger, conf, namenode, paths, pathRuleMap);
+      return ZoneMover.run(zoneMoverTrigger, conf, namenode, paths, pathRuleMap, false);
     }
   }
 

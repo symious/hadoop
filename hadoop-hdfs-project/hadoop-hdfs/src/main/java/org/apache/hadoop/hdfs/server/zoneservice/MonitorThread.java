@@ -45,7 +45,7 @@ public class MonitorThread extends Thread {
   public void run() {
     Date startTime = new Date();
     try {
-      ZoneMover.run(conf, nameSpace);
+      ZoneMover.run(conf, nameSpace, true);
     } catch (IOException e) {
       e.printStackTrace();
       AuditLogger.logRuleProcess("monitorThread", nameSpace.getAuthority(),
