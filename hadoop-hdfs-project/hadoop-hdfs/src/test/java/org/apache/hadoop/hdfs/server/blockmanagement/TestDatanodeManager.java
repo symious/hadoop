@@ -50,6 +50,7 @@ import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
@@ -1106,5 +1107,23 @@ public class TestDatanodeManager {
     public MockDfsNetworkTopology(){
       super();
     }
+  }
+
+  @Test
+  public void testIsMultiDC() throws Exception {
+    // case 1, dfs.net.topology.impl property is DFSNetworkTopology.
+    Configuration conf1 = new HdfsConfiguration();
+    FSNamesystem fsn = Mockito.mock(FSNamesystem.class);
+    conf1.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY,
+        DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_DEFAULT, NetworkTopology.class);
+    DatanodeManager dm1 = mockDatanodeManager(fsn, conf1);
+    assertFalse(dm1.getNetworkTopology() instanceof DFSNetworkTopologyWithDataCenter);
+
+    // case 2, dfs.net.topology.impl property is DFSNetworkTopologyWithDataCenter.
+    Configuration conf2 = new HdfsConfiguration();
+    conf2.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY,
+        DFSNetworkTopologyWithDataCenter.class, NetworkTopology.class);
+    DatanodeManager dm2 = mockDatanodeManager(fsn, conf2);
+    assertTrue(dm2.getNetworkTopology() instanceof DFSNetworkTopologyWithDataCenter);
   }
 }

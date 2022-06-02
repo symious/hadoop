@@ -83,6 +83,7 @@ import org.apache.hadoop.crypto.key.KeyProvider;
 import org.apache.hadoop.crypto.key.KeyProviderCryptoExtension;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
@@ -1904,5 +1905,34 @@ public class DFSUtil {
 
     return path.charAt(parent.length()) == Path.SEPARATOR_CHAR
         || parent.equals(Path.SEPARATOR);
+  }
+
+  /**
+   * Compute datacenter of a given DatanodeInfo instance,
+   * It will return default datacenter in case of no multiDC.
+   *
+   * @param node DatanodeInfo.
+   * @param multiDC Whether multi-datacenter is supported.
+   * @return string representation of a datacenter.
+   */
+  public static String getDataCenter(DatanodeInfo node, boolean multiDC) {
+    if(!multiDC) {
+      return DFSNetworkTopologyWithDataCenter.DEFAULT_DATACENTER;
+    }
+    return DFSNetworkTopologyWithDataCenter.getDataCenter(
+        node.getNetworkLocation());
+  }
+
+  /**
+   * Comparator for sorting DataNodeInfo[] based on
+   * XceiverCount, less XceiverCount comes first.
+   */
+  @InterfaceAudience.Private
+  public static class LoadComparator
+      implements Comparator<DatanodeInfo> {
+    @Override
+    public int compare(DatanodeInfo dn1, DatanodeInfo dn2) {
+      return Integer.compare(dn1.getXceiverCount(), dn2.getXceiverCount());
+    }
   }
 }

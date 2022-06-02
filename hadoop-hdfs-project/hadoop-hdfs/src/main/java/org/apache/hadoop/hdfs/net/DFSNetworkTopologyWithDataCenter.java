@@ -47,7 +47,7 @@ public class DFSNetworkTopologyWithDataCenter extends DFSNetworkTopology{
   private static final Logger LOG =
       LoggerFactory.getLogger(DFSNetworkTopologyWithDataCenter.class);
 
-  private final static String DEFAULT_DATACENTER = "/default-datacenter";
+  public final static String DEFAULT_DATACENTER = "/default-datacenter";
   private final static String PATH_SEPARATOR = "/";
   private final static String ROOT_PATH = "/";
 

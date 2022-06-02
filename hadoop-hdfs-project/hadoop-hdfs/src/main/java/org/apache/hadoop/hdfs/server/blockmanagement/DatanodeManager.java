@@ -40,6 +40,7 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
 import org.apache.hadoop.hdfs.protocol.*;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo.DatanodeInfoBuilder;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
@@ -141,6 +142,9 @@ public class DatanodeManager {
   
   /** Whether or not to avoid using stale DataNodes for reading */
   private final boolean avoidStaleDataNodesForRead;
+
+  /** Whether or not to avoid using DataNodes having high XceiverCount for reading*/
+  private final boolean avoidHighLoadDataNodesForRead;
 
   /** Whether or not to consider lad for reading. */
   private final boolean readConsiderLoad;
@@ -347,6 +351,9 @@ public class DatanodeManager {
     this.avoidStaleDataNodesForRead = conf.getBoolean(
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_READ_KEY,
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_READ_DEFAULT);
+    this.avoidHighLoadDataNodesForRead = conf.getBoolean(
+        DFSConfigKeys.DFS_NAMENODE_AVOID_HIGH_LOAD_FOR_READ_KEY,
+        DFSConfigKeys.DFS_NAMENODE_AVOID_HIGH_LOAD_FOR_READ_DEFAULT);
     this.readConsiderLoad = conf.getBoolean(
         DFSConfigKeys.DFS_NAMENODE_READ_CONSIDERLOAD_KEY,
         DFSConfigKeys.DFS_NAMENODE_READ_CONSIDERLOAD_DEFAULT);
@@ -654,10 +661,32 @@ public class DatanodeManager {
       networktopology.sortByDistance(client, lb.getLocations(), activeLen,
           createSecondaryNodeSorter());
     }
+    if (avoidHighLoadDataNodesForRead) {
+      sortByLoad(lb.getLocations(), activeLen);
+    }
     // move PROVIDED storage to the end to prefer local replicas.
     lb.moveProvidedToEnd(activeLen);
     // must update cache since we modified locations array
     lb.updateCachedStorageInfo();
+  }
+
+  private void sortByLoad(DatanodeInfo[] locations, int activeLen) {
+    final boolean multiDC = networktopology instanceof DFSNetworkTopologyWithDataCenter;
+    final Comparator<DatanodeInfo> loadComparator =
+        new DFSUtil.LoadComparator();
+    int i = 0;
+    while(i < activeLen) {
+      String currentDC = DFSUtil.getDataCenter(locations[i], multiDC);
+      int j = i + 1;
+      while (j < activeLen && currentDC.equals(
+          DFSUtil.getDataCenter(locations[j], multiDC))) {
+        j++;
+      }
+      if (j - i > 1) {
+        Arrays.sort(locations, i, j, loadComparator);
+      }
+      i = j;
+    }
   }
 
   private Consumer<List<DatanodeInfoWithStorage>> createSecondaryNodeSorter() {
