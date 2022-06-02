@@ -32,6 +32,7 @@ import java.util.Arrays;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(Parameterized.class)
@@ -99,12 +100,12 @@ public class TestReplicationPolicyExcludeSlowNodes
       Thread.sleep(3000);
 
       // fetch slow nodes
-      Set<Node> slowPeers = dnManager.getSlowPeers();
+      Set<String> slowPeers = dnManager.getSlowPeersUuidSet();
 
       // assert slow nodes
       assertEquals(3, slowPeers.size());
       for (int i = 0; i < slowPeers.size(); i++) {
-        assertTrue(slowPeers.contains(dataNodes[i]));
+        assertTrue(slowPeers.contains(dataNodes[i].getDatanodeUuid()));
       }
 
       // mock writer
@@ -118,8 +119,9 @@ public class TestReplicationPolicyExcludeSlowNodes
 
       // assert targets
       assertEquals(3, targets.length);
-      for (int i = 0; i < targets.length; i++) {
-        assertTrue(!slowPeers.contains(targets[i].getDatanodeDescriptor()));
+      for (DatanodeStorageInfo target : targets) {
+        assertFalse(slowPeers.contains(target.getDatanodeDescriptor()
+            .getDatanodeUuid()));
       }
     } finally {
       namenode.getNamesystem().writeUnlock();
