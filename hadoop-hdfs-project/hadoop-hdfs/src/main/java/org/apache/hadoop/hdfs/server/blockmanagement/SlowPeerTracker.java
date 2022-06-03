@@ -200,6 +200,12 @@ public class SlowPeerTracker {
     }
   }
 
+  public ReportForJson[] getJsonObject() {
+    Collection<ReportForJson> validReports = getJsonReports(
+        MAX_NODES_TO_REPORT);
+    return validReports.toArray(new ReportForJson[0]);
+  }
+
   /**
    * This structure is a thin wrapper over reports to make Json
    * [de]serialization easy.

@@ -2159,5 +2159,13 @@ public class DatanodeManager {
     return slowDiskTracker != null ?
         slowDiskTracker.getSlowDiskReportAsJsonString() : null;
   }
+
+  public SlowPeerTracker.ReportForJson[] getSlowPeersReportJSON() {
+    return slowPeerTracker != null ? slowPeerTracker.getJsonObject() : null;
+  }
+
+  public SlowDiskTracker.DiskLatency[] getSlowDisksReportJSON() {
+    return slowDiskTracker != null ? slowDiskTracker.getJsonObject() : null;
+  }
 }
 

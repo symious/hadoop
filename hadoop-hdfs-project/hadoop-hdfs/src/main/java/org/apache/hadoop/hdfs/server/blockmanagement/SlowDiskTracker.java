@@ -52,7 +52,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @InterfaceStability.Unstable
 public class SlowDiskTracker {
   public static final Logger LOG =
-      LoggerFactory.getLogger(SlowPeerTracker.class);
+      LoggerFactory.getLogger(SlowDiskTracker.class);
 
   /**
    * Time duration after which a report is considered stale. This is
@@ -186,8 +186,12 @@ public class SlowDiskTracker {
       this.timestamp = timestamp;
     }
 
-    String getSlowDiskID() {
+    public String getSlowDiskID() {
       return this.slowDiskID;
+    }
+
+    public SlowDiskReports.DiskOpForJMX getLatency() {
+      return new SlowDiskReports.DiskOpForJMX(this.latencyMap);
     }
 
     double getMaxLatency() {
@@ -204,6 +208,7 @@ public class SlowDiskTracker {
       return this.latencyMap.get(op);
     }
   }
+
 
   /**
    * Retrieve a list of stop low disks i.e disks with the highest max latencies.
@@ -265,6 +270,10 @@ public class SlowDiskTracker {
       LOG.debug("Failed to serialize statistics" + e);
       return null;
     }
+  }
+
+  public DiskLatency[] getJsonObject() {
+    return slowDisksReport.toArray(new DiskLatency[0]);
   }
 
   private void cleanUpOldReports(long now) {

@@ -19,6 +19,8 @@ package org.apache.hadoop.hdfs.server.namenode;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.hdfs.server.blockmanagement.SlowDiskTracker;
+import org.apache.hadoop.hdfs.server.blockmanagement.SlowPeerTracker;
 
 /**
  * This is the JMX management interface for NameNode status information.
@@ -83,4 +85,16 @@ public interface NameNodeStatusMXBean {
    *  @return JSON string of list of diskIDs and latencies
    */
   String getSlowDisksReport();
+
+  /**
+   * Retrieves information about slow DataNodes, if the feature is
+   * enabled. The report is in a real JSON format, not a JSON string.
+   */
+  SlowPeerTracker.ReportForJson[] getSlowPeersReportJSON();
+
+  /**
+   * Gets the topN slow disks in the cluster, if the feature is enabled.
+   * The report is in a real JSON format, not a JSON string.
+   */
+  SlowDiskTracker.DiskLatency[] getSlowDisksReportJSON();
 }

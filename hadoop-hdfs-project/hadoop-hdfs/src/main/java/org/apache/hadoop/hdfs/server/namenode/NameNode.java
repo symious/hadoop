@@ -47,6 +47,8 @@ import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.HostConfigManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.HostFileWithMaintenanceManager;
+import org.apache.hadoop.hdfs.server.blockmanagement.SlowDiskTracker;
+import org.apache.hadoop.hdfs.server.blockmanagement.SlowPeerTracker;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.NamenodeRole;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.RollingUpgradeStartupOption;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.StartupOption;
@@ -96,6 +98,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.management.ObjectName;
+
 import java.io.IOException;
 import java.io.PrintStream;
 import java.net.InetSocketAddress;
@@ -1986,6 +1989,18 @@ public class NameNode extends ReconfigurableBase implements
   public String getSlowDisksReport() {
     return namesystem.getBlockManager().getDatanodeManager()
         .getSlowDisksReport();
+  }
+
+  @Override //NameNodeStatusMXBean
+  public SlowPeerTracker.ReportForJson[] getSlowPeersReportJSON() {
+    return namesystem.getBlockManager().getDatanodeManager()
+        .getSlowPeersReportJSON();
+  }
+
+  @Override //NameNodeStatusMXBean
+  public SlowDiskTracker.DiskLatency[] getSlowDisksReportJSON() {
+    return namesystem.getBlockManager().getDatanodeManager()
+        .getSlowDisksReportJSON();
   }
 
   /**

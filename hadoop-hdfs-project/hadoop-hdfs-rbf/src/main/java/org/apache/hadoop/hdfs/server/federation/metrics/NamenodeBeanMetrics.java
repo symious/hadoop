@@ -42,6 +42,8 @@ import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.RollingUpgradeInfo;
+import org.apache.hadoop.hdfs.server.blockmanagement.SlowDiskTracker;
+import org.apache.hadoop.hdfs.server.blockmanagement.SlowPeerTracker;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.NamenodeRole;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamespaceInfo;
 import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
@@ -725,6 +727,16 @@ public class NamenodeBeanMetrics
   @Override
   public String getSlowDisksReport() {
     return "N/A";
+  }
+
+  @Override
+  public SlowPeerTracker.ReportForJson[] getSlowPeersReportJSON() {
+    return new SlowPeerTracker.ReportForJson[] {};
+  }
+
+  @Override
+  public SlowDiskTracker.DiskLatency[] getSlowDisksReportJSON() {
+    return new SlowDiskTracker.DiskLatency[] {};
   }
 
   @Override
