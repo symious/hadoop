@@ -727,6 +727,18 @@ public class NMWebServices {
     try {
       if (System.currentTimeMillis() - requestTimeStamp > interval) {
         this.requestTimeStamp = System.currentTimeMillis();
+        int minMB = nmContext.getConf().getInt(
+            YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB,
+            YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_MB);
+        int minVcores = nmContext.getConf().getInt(
+            YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES,
+            YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES);
+        if (memory < minMB) {
+          memory = minMB;
+        }
+        if (coreNumber < minVcores) {
+          coreNumber = minVcores;
+        }
         this.nmContext.getNodeResourceMonitor().updateNodeResource(coreNumber, memory);
         result.put("status", "200");
         result.put("msg", "SUCCESS");
