@@ -724,17 +724,19 @@ public class NMWebServices {
       @PathParam("memory") long memory) {
     init();
     Map<String, String> result = new HashMap<>();
-    result.put("status", "200");
     try {
       if (System.currentTimeMillis() - requestTimeStamp > interval) {
         this.requestTimeStamp = System.currentTimeMillis();
         this.nmContext.getNodeResourceMonitor().updateNodeResource(coreNumber, memory);
+        result.put("status", "200");
         result.put("msg", "SUCCESS");
       } else {
+        result.put("status", "300");
         result.put("msg", "Please request again after " + interval + " ms");
       }
     } catch (Exception e) {
       LOG.error("Request Failed.", e);
+      result.put("status", "400");
       result.put("msg", "FAILURE");
     }
     return result;
