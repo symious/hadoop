@@ -147,9 +147,6 @@ public class Client implements AutoCloseable {
   
   final static int CONNECTION_CONTEXT_CALL_ID = -3;
 
-  private static final SDICredentialsProvider sdiCredentialsProvider =
-      DefaultSDICredentialsProviderChain.getInstance();
-
   /**
    * Executor on which IPC calls' parameters are sent.
    * Deferring the sending of parameters to a separate
