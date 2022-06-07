@@ -429,6 +429,17 @@ public class TestUserGroupInformation {
     }
   }
 
+  @Test
+  public void testGetRpcPassword() {
+     String rpcPassword = "mock_test_password";
+     System.setProperty("HADOOP_USER_RPCPASSWORD", rpcPassword);
+     String principal = "user1";
+    UserGroupInformation ugi =
+        UserGroupInformation.createUserForTesting(principal, GROUP_NAMES);
+    assertEquals(principal, ugi.getUserName());
+    assertEquals(rpcPassword, ugi.getSdiUserRpcPassword());
+  }
+
   @Test (timeout = 30000)
   public void testSetConfigWithRules() {
     String[] rules = { "RULE:[1:TEST1]", "RULE:[1:TEST2]", "RULE:[1:TEST3]" };

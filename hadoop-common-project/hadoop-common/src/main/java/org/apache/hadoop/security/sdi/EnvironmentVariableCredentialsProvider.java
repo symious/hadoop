@@ -9,15 +9,16 @@ public class EnvironmentVariableCredentialsProvider implements SDICredentialsPro
   @Override
   public SDICredentials getCredentials() throws AccessControlException {
 
-    String rpcPassword = System.getenv(SDI_CREDENTIAL_ENV_VAR);
-
-    rpcPassword = StringUtils.trim(rpcPassword);
-
+    String rpcPassword = StringUtils.trim(
+        System.getenv(SDI_CREDENTIAL_ENV_VAR));
     if (StringUtils.isNullOrEmpty(rpcPassword)) {
-
-      throw new AccessControlException(
-          "Unable to load SDI credentials from environment variables " +
-              "(" + SDI_CREDENTIAL_ENV_VAR + ")");
+      rpcPassword = StringUtils.trim(
+          System.getProperty(SDI_CREDENTIAL_ENV_VAR));
+      if (StringUtils.isNullOrEmpty(rpcPassword)) {
+        throw new AccessControlException(
+            "Unable to load SDI credentials from environment variables " +
+                "(" + SDI_CREDENTIAL_ENV_VAR + ")");
+      }
     }
 
     return new BasicSDICredentials(rpcPassword);

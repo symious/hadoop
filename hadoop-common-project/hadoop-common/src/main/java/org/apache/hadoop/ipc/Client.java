@@ -150,9 +150,6 @@ public class Client implements AutoCloseable {
   private final int maxAsyncCalls;
   private final AtomicInteger asyncCallCounter = new AtomicInteger(0);
 
-  private static final SDICredentialsProvider sdiCredentialsProvider =
-      DefaultSDICredentialsProviderChain.getInstance();
-
   /**
    * Executor on which IPC calls' parameters are sent.
    * Deferring the sending of parameters to a separate
