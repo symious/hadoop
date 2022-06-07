@@ -129,6 +129,26 @@ public class MockContainer implements Container {
   }
 
   @Override
+  public void setContainerLevel(String level) {
+    return;
+  }
+
+  @Override
+  public String getContainerLevel() {
+    return null;
+  }
+
+  @Override
+  public void setHighLoad(boolean isHighLoad) {
+    return;
+  }
+
+  @Override
+  public boolean isHighLoad() {
+    return false;
+  }
+
+  @Override
   public ResourceSet getResourceSet() {
     return null;
   }

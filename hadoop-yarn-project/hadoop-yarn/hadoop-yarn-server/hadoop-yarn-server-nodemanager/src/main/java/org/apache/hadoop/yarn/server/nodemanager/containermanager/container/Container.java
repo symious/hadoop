@@ -148,4 +148,12 @@ public interface Container extends EventHandler<ContainerEvent> {
    */
   String localizationCountersAsString();
 
+  void setContainerLevel(String level);
+
+  String getContainerLevel();
+
+  void setHighLoad(boolean isHighLoad);
+
+  boolean isHighLoad();
+
 }

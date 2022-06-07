@@ -35,6 +35,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerImpl;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.ResourceHandlerChain;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.ResourceHandlerException;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.ResourceHandlerModule;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.monitor
     .ChangeMonitoringContainerResourceEvent;
@@ -246,6 +247,25 @@ public class ContainerScheduler extends AbstractService implements
       startPendingContainers(maxOppQueueLength <= 0);
       metrics.setQueuedContainers(queuedOpportunisticContainers.size(),
           queuedGuaranteedContainers.size());
+    }
+  }
+
+  public void updateContainersByLoad(boolean isHighLoad) {
+    // If enabled loadBalance strategy
+    if (null != runningContainers && runningContainers.size() > 0) {
+      for (Container container : runningContainers.values()) {
+        try {
+          container.setHighLoad(isHighLoad);
+          resourceHandlerChain.updateContainer(container);
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Container Info: " + container.getContainerId().toString() + ", level:" +
+                container.getContainerLevel() + ", HighLoad:" + isHighLoad);
+          }
+        } catch (
+            ResourceHandlerException e) {
+          LOG.error("Update Container Resource: ", e);
+        }
+      }
     }
   }
 
@@ -673,5 +693,19 @@ public class ContainerScheduler extends AbstractService implements
   @VisibleForTesting
   public ResourceUtilization getCurrentUtilization() {
     return this.utilizationTracker.getCurrentUtilization();
+  }
+
+  public void updateContainersLevels(Map<String, String> levelMap) {
+    if (null != runningContainers && runningContainers.size() > 0) {
+      for (ContainerId containerId : runningContainers.keySet()) {
+        Container container = runningContainers.get(containerId);
+        String level =
+            levelMap.get(containerId.getApplicationAttemptId().getApplicationId().toString());
+        container.setContainerLevel(level);
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Update Container Level: " + containerId.toString() + ", level:" + level);
+        }
+      }
+    }
   }
 }

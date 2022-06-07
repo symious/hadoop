@@ -1323,6 +1323,47 @@ public class YarnConfiguration extends Configuration {
   /** Prefix for all node manager configs.*/
   public static final String NM_PREFIX = "yarn.nodemanager.";
 
+  public static final String NM_CONTAINER_LEVEL_CRITICAL_LIMIT =
+      NM_PREFIX + "container.critical.cpu.hard.limit.factor";
+  public static final String NM_CONTAINER_LEVEL_HIGH_LIMIT =
+      NM_PREFIX + "container.high.cpu.hard.limit.factor";
+  public static final String NM_CONTAINER_LEVEL_MEDIUM_LIMIT =
+      NM_PREFIX + "container.medium.cpu.hard.limit.factor";
+  public static final String NM_CONTAINER_LEVEL_LOW_LIMIT =
+      NM_PREFIX + "container.low.cpu.hard.limit.factor";
+
+  public static final float DEFAULT_NM_CONTAINER_LEVEL_CRITICAL_LIMIT = 3;
+  public static final float DEFAULT_NM_CONTAINER_LEVEL_HIGH_LIMIT = 2;
+  public static final float DEFAULT_NM_CONTAINER_LEVEL_MEDIUM_LIMIT = 1.5f;
+  public static final float DEFAULT_NM_CONTAINER_LEVEL_LOW_LIMIT = 1;
+
+  public static final String NM_HIGH_LOAD_CPU_USAGE_LIMIT_ENABLED =
+      NM_PREFIX + "high.load.cpu.usage.limit.enabled";
+  public static final String NM_HIGH_LOAD1_THRESHOLD = NM_PREFIX + "high.load1.threshold";
+  public static final String NM_HIGH_LOAD5_THRESHOLD = NM_PREFIX + "high.load5.threshold";
+
+  public static final String NM_HIGH_LOAD_CHECK_INTERVAL_MS =
+      NM_PREFIX + "high.load.check.interval.ms";
+  public static final int DEFAULT_NM_HIGH_LOAD_CHECK_INTERVAL_MS = 60000;
+
+  public static final String NM_CONTAINER_LEVEL_CRITICAL_SHARE_LIMIT =
+      NM_PREFIX + "container.critical.cpu.share.limit.factor";
+  public static final String NM_CONTAINER_LEVEL_HIGH_SHARE_LIMIT =
+      NM_PREFIX + "container.high.cpu.share.limit.factor";
+  public static final String NM_CONTAINER_LEVEL_MEDIUM_SHARE_LIMIT =
+      NM_PREFIX + "container.medium.cpu.share.limit.factor";
+  public static final String NM_CONTAINER_LEVEL_LOW_SHARE_LIMIT =
+      NM_PREFIX + "container.low.cpu.share.limit.factor";
+
+  public static final float DEFAULT_NM_CONTAINER_LEVEL_CRITICAL_SHARE_LIMIT = 1.5f;
+  public static final float DEFAULT_NM_CONTAINER_LEVEL_HIGH_SHARE_LIMIT = 1.2f;
+  public static final float DEFAULT_NM_CONTAINER_LEVEL_MEDIUM_SHARE_LIMIT = 1.0f;
+  public static final float DEFAULT_NM_CONTAINER_LEVEL_LOW_SHARE_LIMIT = 0.8f;
+
+  public static final boolean DEFAULT_NM_HIGH_LOAD_CPU_USAGE_LIMIT_ENABLED = false;
+  public static final float DEFAULT_NM_HIGH_LOAD1_THRESHOLD = 1.2f;
+  public static final float DEFAULT_NM_HIGH_LOAD5_THRESHOLD = 1.0f;
+
   /** Max Queue length of <code>OPPORTUNISTIC</code> containers on the NM. */
   public static final String NM_OPPORTUNISTIC_CONTAINERS_MAX_QUEUE_LENGTH =
       NM_PREFIX + "opportunistic-containers-max-queue-length";
@@ -2757,6 +2798,15 @@ public class YarnConfiguration extends Configuration {
   public static final int
       DEFAULT_NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_STRICT_CORE_NUMBER =
       10;
+
+  public static final String
+      NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_SOFT_DEFAULT_STRICT_CORE_NUMBER =
+      NM_PREFIX +
+          "linux-container-executor.cgroups.strict-resource-usage-with-soft.default-strict-core-number";
+  public static final int
+      DEFAULT_NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_SOFT_DEFAULT_STRICT_CORE_NUMBER =
+      4;
+
 
   // Configurations for applicaiton life time monitor feature
   public static final String RM_APPLICATION_MONITOR_INTERVAL_MS =

@@ -200,6 +200,10 @@ public class ContainerImpl implements Container {
   private final Configuration daemonConf;
   private final long startTime;
 
+  private String level;
+
+  private boolean isHighLoad;
+
   private static final Logger LOG =
        LoggerFactory.getLogger(ContainerImpl.class);
 
@@ -2370,5 +2374,25 @@ public class ContainerImpl implements Container {
       result.append(',').append(localizationCounts[i]);
     }
     return result.toString();
+  }
+
+  @Override
+  public void setContainerLevel(String level) {
+    this.level = level;
+  }
+
+  @Override
+  public String getContainerLevel() {
+    return this.level;
+  }
+
+  @Override
+  public void setHighLoad(boolean isHighLoad) {
+    this.isHighLoad = isHighLoad;
+  }
+
+  @Override
+  public boolean isHighLoad() {
+    return this.isHighLoad;
   }
 }

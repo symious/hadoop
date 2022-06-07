@@ -67,7 +67,20 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
   private boolean strictResourceUsageMode = false;
   private boolean strictResourceUsageModeWithSoftLimit = false;
   private int maxStrictCoreNumber = 10;
+
+  private int defaultStrictCoreNumber = 10;
+
   private String STRICT_CORE_NUMBER = "STRICT_CORE_NUMBER";
+
+  private float criticalLimitFactor = 1f;
+  private float highLimitFactor = 1f;
+  private float mediumLimitFactor = 1f;
+  private float lowLimitFactor = 1f;
+
+  private float criticalShareLimitFactor = 1f;
+  private float highShareLimitFactor = 1f;
+  private float mediumShareLimitFactor = 1f;
+  private float lowShareLimitFactor = 1f;
 
   private float yarnProcessors;
   private int nodeVCores;
@@ -107,6 +120,30 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
     this.maxStrictCoreNumber = conf.getInt(
         YarnConfiguration.NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_SOFT_MAX_STRICT_CORE_NUMBER,
         YarnConfiguration.DEFAULT_NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_STRICT_CORE_NUMBER);
+
+    this.defaultStrictCoreNumber = conf.getInt(
+        YarnConfiguration.NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_SOFT_DEFAULT_STRICT_CORE_NUMBER,
+        YarnConfiguration.DEFAULT_NM_LINUX_CONTAINER_CGROUPS_STRICT_RESOURCE_USAGE_WITH_SOFT_DEFAULT_STRICT_CORE_NUMBER);
+
+    this.criticalLimitFactor = conf.getFloat(YarnConfiguration.NM_CONTAINER_LEVEL_CRITICAL_LIMIT,
+        YarnConfiguration.DEFAULT_NM_CONTAINER_LEVEL_CRITICAL_LIMIT);
+    this.highLimitFactor = conf.getFloat(YarnConfiguration.NM_CONTAINER_LEVEL_HIGH_LIMIT,
+        YarnConfiguration.DEFAULT_NM_CONTAINER_LEVEL_HIGH_LIMIT);
+    this.mediumLimitFactor = conf.getFloat(YarnConfiguration.NM_CONTAINER_LEVEL_MEDIUM_LIMIT,
+        YarnConfiguration.DEFAULT_NM_CONTAINER_LEVEL_MEDIUM_LIMIT);
+    this.lowLimitFactor = conf.getFloat(YarnConfiguration.NM_CONTAINER_LEVEL_LOW_LIMIT,
+        YarnConfiguration.DEFAULT_NM_CONTAINER_LEVEL_LOW_LIMIT);
+
+    this.criticalShareLimitFactor =
+        conf.getFloat(YarnConfiguration.NM_CONTAINER_LEVEL_CRITICAL_SHARE_LIMIT,
+            YarnConfiguration.DEFAULT_NM_CONTAINER_LEVEL_CRITICAL_SHARE_LIMIT);
+    this.highShareLimitFactor = conf.getFloat(YarnConfiguration.NM_CONTAINER_LEVEL_HIGH_SHARE_LIMIT,
+        YarnConfiguration.DEFAULT_NM_CONTAINER_LEVEL_HIGH_SHARE_LIMIT);
+    this.mediumShareLimitFactor =
+        conf.getFloat(YarnConfiguration.NM_CONTAINER_LEVEL_MEDIUM_SHARE_LIMIT,
+            YarnConfiguration.DEFAULT_NM_CONTAINER_LEVEL_MEDIUM_SHARE_LIMIT);
+    this.lowShareLimitFactor = conf.getFloat(YarnConfiguration.NM_CONTAINER_LEVEL_LOW_SHARE_LIMIT,
+        YarnConfiguration.DEFAULT_NM_CONTAINER_LEVEL_LOW_SHARE_LIMIT);
 
     this.cGroupsHandler.initializeCGroupController(CPU);
     nodeVCores = NodeManagerHardwareUtils.getVCores(plugin, conf);
@@ -233,6 +270,12 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
                   String.valueOf(CPU_DEFAULT_WEIGHT_OPPORTUNISTIC));
         } else {
           int cpuShares = CPU_DEFAULT_WEIGHT * containerVCores;
+          // If encounter high load then adjust the ShareValue
+          // To ensure the high level container CPU usage
+          if (container.isHighLoad()) {
+            float shareFactor = getShareFactorByContainerLevel(container.getContainerLevel());
+            cpuShares = Double.valueOf(cpuShares * shareFactor).intValue();
+          }
           cGroupsHandler
               .updateCGroupParam(CPU, cgroupId,
                   CGroupsHandler.CGROUP_CPU_SHARES,
@@ -250,16 +293,23 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
           String strictCoreString =
               container.getLaunchContext().getEnvironment()
                   .get(STRICT_CORE_NUMBER);
+
+          // Set the strictCoreNumber according to the app level
+          strictCoreNumber = getStrictCoreNumberByContainerLevel(container.getContainerLevel(),
+              container.getResource().getVirtualCores());
+          // If user set this param and less than the allowed value then use it
           if (!StringUtils.isNullOrEmpty(strictCoreString)) {
-            strictCoreNumber = Integer.valueOf(strictCoreString);
+            int strictCoreNumberFromUser = Integer.valueOf(strictCoreString);
+            if (strictCoreNumberFromUser < strictCoreNumber) {
+              strictCoreNumber = strictCoreNumberFromUser;
+            }
           }
-          // Request strict core number greater than container cores
-          // and less than default strict core number
-          if (strictCoreNumber < 1 ||
-              strictCoreNumber > this.maxStrictCoreNumber ||
-              strictCoreNumber < containerVCores) {
-            strictCoreNumber = this.maxStrictCoreNumber;
+
+          // If overload will change to let it less than max
+          if (strictCoreNumber > yarnProcessors) {
+            strictCoreNumber = Double.valueOf(yarnProcessors).intValue();
           }
+
           containerVCores = strictCoreNumber;
           setupLimitsInternal(containerVCores, cgroupId);
         }
@@ -270,6 +320,53 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
       }
     }
     return null;
+  }
+
+  private int getStrictCoreNumberByContainerLevel(String containerLevel, int virtualCores) {
+    if (!StringUtils.isNullOrEmpty(containerLevel)) {
+      float factor = 1;
+      switch (containerLevel) {
+        case "CRITICAL":
+          factor = this.criticalLimitFactor;
+          break;
+        case "HIGH":
+          factor = this.highLimitFactor;
+          break;
+        case "MEDIUM":
+          factor = this.mediumLimitFactor;
+          break;
+        case "LOW":
+          factor = this.lowLimitFactor;
+          break;
+        default:
+          break;
+      }
+      return Math.round(virtualCores * factor);
+    }
+    return this.defaultStrictCoreNumber;
+  }
+
+  private float getShareFactorByContainerLevel(String containerLevel) {
+    float factor = 1;
+    if (!StringUtils.isNullOrEmpty(containerLevel)) {
+      switch (containerLevel) {
+        case "CRITICAL":
+          factor = this.criticalShareLimitFactor;
+          break;
+        case "HIGH":
+          factor = this.highShareLimitFactor;
+          break;
+        case "MEDIUM":
+          factor = this.mediumShareLimitFactor;
+          break;
+        case "LOW":
+          factor = this.lowShareLimitFactor;
+          break;
+        default:
+          break;
+      }
+    }
+    return factor;
   }
 
   private void setupLimitsInternal(int containerVCores, String cgroupId)

@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.nodemanager;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.AbstractService;
+import org.apache.hadoop.util.SysInfo;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceInformation;
@@ -33,6 +34,7 @@ import org.apache.hadoop.yarn.server.api.ResourceManagerAdministrationProtocol;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceRequest;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.gpu.GpuNodeResourceUpdateHandler;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.gpu.GpuResourcePlugin;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.scheduler.ContainerScheduler;
 import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
 import org.apache.hadoop.yarn.util.ResourceCalculatorPlugin;
 import org.slf4j.Logger;
@@ -72,6 +74,17 @@ public class NodeResourceMonitorImpl extends AbstractService implements
       ResourceUtilization.newInstance(0, 0, 0f, customResources);
   private Context nmContext;
 
+  private boolean cGroupsEnabled;
+  private String cGroupsMountPath;
+  private boolean highLoadStrategyEnabled;
+
+  private long lastCheck = 0;
+
+  private int highLoadCheckInterval;
+
+  private float load1Threshold;
+  private float load5Threshold;
+
   /**
    * Initialize the node resource monitor.
    */
@@ -89,6 +102,24 @@ public class NodeResourceMonitorImpl extends AbstractService implements
     this.monitoringInterval =
         conf.getLong(YarnConfiguration.NM_RESOURCE_MON_INTERVAL_MS,
             YarnConfiguration.DEFAULT_NM_RESOURCE_MON_INTERVAL_MS);
+
+    Class executorClass = conf.getClass(YarnConfiguration.NM_CONTAINER_EXECUTOR,
+        DefaultContainerExecutor.class, ContainerExecutor.class);
+    if (executorClass.getName().equals(LinuxContainerExecutor.class.getName())) {
+      this.cGroupsEnabled = true;
+      this.cGroupsMountPath =
+          conf.get(YarnConfiguration.NM_LINUX_CONTAINER_CGROUPS_MOUNT_PATH, null);
+      this.highLoadStrategyEnabled =
+          conf.getBoolean(YarnConfiguration.NM_HIGH_LOAD_CPU_USAGE_LIMIT_ENABLED,
+              YarnConfiguration.DEFAULT_NM_HIGH_LOAD_CPU_USAGE_LIMIT_ENABLED);
+      this.load1Threshold = conf.getFloat(YarnConfiguration.NM_HIGH_LOAD1_THRESHOLD,
+          YarnConfiguration.DEFAULT_NM_HIGH_LOAD1_THRESHOLD);
+      this.load5Threshold = conf.getFloat(YarnConfiguration.NM_HIGH_LOAD5_THRESHOLD,
+          YarnConfiguration.DEFAULT_NM_HIGH_LOAD5_THRESHOLD);
+      this.lastCheck = System.currentTimeMillis();
+      this.highLoadCheckInterval = conf.getInt(YarnConfiguration.NM_HIGH_LOAD_CHECK_INTERVAL_MS,
+          YarnConfiguration.DEFAULT_NM_HIGH_LOAD_CHECK_INTERVAL_MS);
+    }
 
     this.resourceCalculatorPlugin =
         ResourceCalculatorPlugin.getNodeResourceMonitorPlugin(conf);
@@ -209,6 +240,16 @@ public class NodeResourceMonitorImpl extends AbstractService implements
           nmMetrics.setNodeGpuUtilization(totalNodeGpuUtilization);
         }
 
+        boolean canUpdateContainersResource = false;
+        if ((lastCheck + highLoadCheckInterval) < System.currentTimeMillis()) {
+          canUpdateContainersResource = true;
+        }
+        // Clean leak CGroups containers config
+        if (cGroupsEnabled && highLoadStrategyEnabled && canUpdateContainersResource) {
+          lastCheck = System.currentTimeMillis();
+          // Node Load Balance strategy
+          updateContainersResource();
+        }
         try {
           Thread.sleep(monitoringInterval);
         } catch (InterruptedException e) {
@@ -217,6 +258,25 @@ public class NodeResourceMonitorImpl extends AbstractService implements
           break;
         }
       }
+    }
+  }
+
+  private void updateContainersResource() {
+    try {
+      boolean isHighLoad = false;
+      SysInfo info = SysInfo.newInstance();
+      if ((info.getLoad1() / info.getNumProcessors()) > load1Threshold) {
+        isHighLoad = true;
+      }
+
+      if ((info.getLoad5() / info.getNumProcessors()) > load5Threshold) {
+        isHighLoad = true;
+      }
+
+      ContainerScheduler scheduler = nmContext.getContainerManager().getContainerScheduler();
+      scheduler.updateContainersByLoad(isHighLoad);
+    } catch (Exception e) {
+      LOG.error("ERROR from UpdateContainerResource: ", e);
     }
   }
 

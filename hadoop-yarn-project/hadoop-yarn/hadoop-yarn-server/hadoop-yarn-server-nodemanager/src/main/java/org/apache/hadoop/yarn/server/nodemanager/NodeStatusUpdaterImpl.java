@@ -203,7 +203,6 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     this.nodeLabelsProvider = provider;
   }
 
-
   // Read 'yarn.allocation' file to overwrite resource config from yarn-site
   private Resource getNodeResourceFromAllocationFile() {
     if (StringUtils.isNullOrEmpty(this.yarnAllocation)) {
@@ -1612,6 +1611,9 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
           } else {
             cleaned = false;
           }
+          // Refresh the containers level
+          List<ApplicationLevel> levels = response.getApplicationLevel();
+          updateContainerLevel(levels);
         } catch (ConnectException e) {
           //catch and throw the exception if tried MAX wait time to connect RM
           dispatcher.getEventHandler().handle(
@@ -1692,6 +1694,16 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
       if (updatedMasterKey != null) {
         context.getNMTokenSecretManager().setMasterKey(updatedMasterKey);
       }
+    }
+  }
+
+  private void updateContainerLevel(List<ApplicationLevel> levels) {
+    if (!CollectionUtils.isEmpty(levels)) {
+      Map<String, String> levelMap = new HashMap<>();
+      for (ApplicationLevel level : levels) {
+        levelMap.put(level.getApplicationId(), level.getApplicationLevel());
+      }
+      context.getContainerManager().getContainerScheduler().updateContainersLevels(levelMap);
     }
   }
 }
