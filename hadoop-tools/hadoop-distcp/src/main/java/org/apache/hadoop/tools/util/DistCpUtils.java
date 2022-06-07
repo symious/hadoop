@@ -549,6 +549,7 @@ public class DistCpUtils {
       targetChecksum = targetFS.getFileChecksum(target);
     } catch (IOException e) {
       LOG.error("Unable to retrieve checksum for " + source + " or " + target, e);
+      throw e;
     }
     return (sourceChecksum == null || targetChecksum == null ||
             sourceChecksum.equals(targetChecksum));

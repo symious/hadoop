@@ -56,9 +56,12 @@ import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.ExtendedBlockId;
 import org.apache.hadoop.hdfs.net.Peer;
+import org.apache.hadoop.hdfs.protocol.BlockChecksumOptions;
+import org.apache.hadoop.hdfs.protocol.BlockChecksumType;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.hdfs.protocol.StripedBlockInfo;
 import org.apache.hadoop.hdfs.protocol.datatransfer.BlockConstructionStage;
 import org.apache.hadoop.hdfs.protocol.datatransfer.DataTransferProtoUtil;
 import org.apache.hadoop.hdfs.protocol.datatransfer.IOStreamPair;
@@ -81,6 +84,7 @@ import org.apache.hadoop.hdfs.server.datanode.DataNode.ShortCircuitFdsUnsupporte
 import org.apache.hadoop.hdfs.server.datanode.DataNode.ShortCircuitFdsVersionException;
 import org.apache.hadoop.hdfs.server.datanode.ShortCircuitRegistry.NewShmInfo;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.LengthInputStream;
+import org.apache.hadoop.hdfs.server.namenode.UnsupportedActionException;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
 import org.apache.hadoop.hdfs.shortcircuit.ShortCircuitShm.SlotId;
 import org.apache.hadoop.io.IOUtils;
@@ -1004,7 +1008,14 @@ class DataXceiver extends Receiver implements Runnable {
 
   @Override
   public void blockChecksum(final ExtendedBlock block,
-      final Token<BlockTokenIdentifier> blockToken) throws IOException {
+      final Token<BlockTokenIdentifier> blockToken,
+      final BlockChecksumOptions blockChecksumOptions)
+      throws IOException {
+    if (BlockChecksumType.COMPOSITE_CRC
+        .equals(blockChecksumOptions.getBlockChecksumType())) {
+      throw new UnsupportedActionException(
+          "COMPOSITE_CRC is not yet supported.");
+    }
     updateCurrentThreadName("Getting checksum for block " + block);
     final DataOutputStream out = new DataOutputStream(
         getOutputStream());
@@ -1062,6 +1073,17 @@ class DataXceiver extends Receiver implements Runnable {
 
     //update metrics
     datanode.metrics.addBlockChecksumOp(elapsed());
+  }
+
+  @Override
+  public void blockGroupChecksum(
+      final StripedBlockInfo stripedBlockInfo,
+      final Token<BlockTokenIdentifier> blockToken,
+      long requestedNumBytes,
+      BlockChecksumOptions blockChecksumOptions)
+      throws IOException {
+    throw new UnsupportedActionException(
+        "BlockGroupChecksum not yet supported.");
   }
 
   @Override

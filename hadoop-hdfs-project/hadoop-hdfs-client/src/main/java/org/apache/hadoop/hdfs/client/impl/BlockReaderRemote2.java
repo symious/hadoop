@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.client.impl;
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -27,10 +28,13 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.util.EnumSet;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.ReadOption;
 import org.apache.hadoop.hdfs.BlockReader;
+import org.apache.hadoop.hdfs.ClientContext.BlockCompositeCrcCache;
+import org.apache.hadoop.hdfs.HdfsCrcComposer;
 import org.apache.hadoop.hdfs.PeerCache;
 import org.apache.hadoop.hdfs.net.Peer;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
@@ -99,6 +103,7 @@ public class BlockReaderRemote2 implements BlockReader {
   private final PacketReceiver packetReceiver = new PacketReceiver(true);
 
   private ByteBuffer curDataSlice = null;
+  private ByteBuffer curChecksumSlice = null;
 
   /** offset in block of the last chunk received */
   private long lastSeqNo = -1;
@@ -124,6 +129,8 @@ public class BlockReaderRemote2 implements BlockReader {
   private final Tracer tracer;
 
   private final int networkDistance;
+
+  private final HdfsCrcComposer crcComposer;
 
   @VisibleForTesting
   public Peer getPeer() {
@@ -188,6 +195,7 @@ public class BlockReaderRemote2 implements BlockReader {
 
     PacketHeader curHeader = packetReceiver.getHeader();
     curDataSlice = packetReceiver.getDataSlice();
+    curChecksumSlice = packetReceiver.getChecksumSlice();
     assert curDataSlice.capacity() == curHeader.getDataLen();
 
     LOG.trace("DFSClient readNextPacket got header {}", curHeader);
@@ -202,9 +210,9 @@ public class BlockReaderRemote2 implements BlockReader {
       int chunks = 1 + (curHeader.getDataLen() - 1) / bytesPerChecksum;
       int checksumsLen = chunks * checksumSize;
 
-      assert packetReceiver.getChecksumSlice().capacity() == checksumsLen :
+      assert curChecksumSlice.capacity() == checksumsLen :
           "checksum slice capacity=" +
-              packetReceiver.getChecksumSlice().capacity() +
+              curChecksumSlice.capacity() +
               " checksumsLen=" + checksumsLen;
 
       lastSeqNo = curHeader.getSeqno();
@@ -214,11 +222,13 @@ public class BlockReaderRemote2 implements BlockReader {
         // This is slightly misleading, but preserves the behavior from
         // the older BlockReader.
         checksum.verifyChunkedSums(curDataSlice,
-            packetReceiver.getChecksumSlice(),
+            curChecksumSlice,
             filename, curHeader.getOffsetInBlock());
       }
       bytesNeededToFinish -= curHeader.getDataLen();
     }
+    tryToComputeCompositeCRC(curChecksumSlice,
+        curHeader.getOffsetInBlock(), curHeader.getDataLen());
 
     // First packet will include some data prior to the first byte
     // the user requested. Skip it.
@@ -237,6 +247,50 @@ public class BlockReaderRemote2 implements BlockReader {
         sendReadResult(Status.SUCCESS);
       }
     }
+  }
+
+  /**
+   * Update the checksum data into CrcComposer to compute
+   * composite checksum for the block.
+   */
+  private void tryToComputeCompositeCRC(ByteBuffer crcData,
+      long offsetInBlock, int length) {
+    if (this.crcComposer != null && !this.crcComposer.isClosed()) {
+      try {
+        this.crcComposer.update(offsetInBlock, length,
+            crcData, this.bytesPerChecksum);
+      } catch (Exception e) {
+        LOG.debug("Compute composite checksum for "
+            + this.blockId + " failed, ", e);
+        this.crcComposer.closeUpdate();
+      }
+    }
+  }
+
+  public synchronized DataChecksum getChecksum() {
+    return this.checksum;
+  }
+
+  /**
+   * @return return one checksum of the chunk.
+   */
+  public synchronized int getOneCRC() throws IOException {
+    if (curDataSlice == null ||
+        curDataSlice.remaining() == 0 && bytesNeededToFinish > 0) {
+      try (TraceScope ignored = tracer.newScope(
+          "BlockReaderRemote2#readNextPacket(" + blockId + ")")) {
+        readNextPacket();
+      }
+    }
+    if (curDataSlice.remaining() == 0) {
+      // we're at EOF now
+      throw new EOFException("there is no data in curDataSlice");
+    }
+    int nRead = Math.min(curDataSlice.remaining(),
+        this.checksum.getBytesPerChecksum());
+    int currentPosition = curDataSlice.position();
+    curDataSlice.position(currentPosition + nRead);
+    return curChecksumSlice.getInt();
   }
 
   @Override
@@ -279,7 +333,7 @@ public class BlockReaderRemote2 implements BlockReader {
       DataChecksum checksum, boolean verifyChecksum,
       long startOffset, long firstChunkOffset, long bytesToRead, Peer peer,
       DatanodeID datanodeID, PeerCache peerCache, Tracer tracer,
-      int networkDistance) {
+      int networkDistance, HdfsCrcComposer crcComposer) {
     // Path is used only for printing block and file information in debug
     this.peer = peer;
     this.datanodeID = datanodeID;
@@ -300,6 +354,7 @@ public class BlockReaderRemote2 implements BlockReader {
     checksumSize = this.checksum.getChecksumSize();
     this.tracer = tracer;
     this.networkDistance = networkDistance;
+    this.crcComposer = crcComposer;
   }
 
 
@@ -386,8 +441,8 @@ public class BlockReaderRemote2 implements BlockReader {
    * @param datanodeID  The DatanodeID this peer is connected to
    * @return New BlockReader instance, or null on error.
    */
-  public static BlockReader newBlockReader(String file,
-      ExtendedBlock block,
+  public static BlockReaderRemote2 newBlockReader(String file,
+      final ExtendedBlock block,
       Token<BlockTokenIdentifier> blockToken,
       long startOffset, long len,
       boolean verifyChecksum,
@@ -396,7 +451,8 @@ public class BlockReaderRemote2 implements BlockReader {
       PeerCache peerCache,
       CachingStrategy cachingStrategy,
       Tracer tracer,
-      int networkDistance) throws IOException {
+      int networkDistance,
+      BlockCompositeCrcCache compositeCrcCache) throws IOException {
     // in and out will be closed when sock is closed (by the caller)
     final DataOutputStream out = new DataOutputStream(new BufferedOutputStream(
         peer.getOutputStream()));
@@ -413,7 +469,7 @@ public class BlockReaderRemote2 implements BlockReader {
     checkSuccess(status, peer, block, file);
     ReadOpChecksumInfoProto checksumInfo =
         status.getReadOpChecksumInfo();
-    DataChecksum checksum = DataTransferProtoUtil.fromProto(
+    final DataChecksum checksum = DataTransferProtoUtil.fromProto(
         checksumInfo.getChecksum());
     //Warning when we get CHECKSUM_NULL?
 
@@ -427,9 +483,26 @@ public class BlockReaderRemote2 implements BlockReader {
           startOffset + " for file " + file);
     }
 
+    HdfsCrcComposer hdfsCrcComposer = null;
+    if (compositeCrcCache != null) {
+      try {
+        hdfsCrcComposer = compositeCrcCache.getCrcComposerWithCallable(
+            block, new Callable<HdfsCrcComposer>() {
+              @Override
+              public HdfsCrcComposer call() throws Exception {
+                return HdfsCrcComposer.newStripedCrcComposer(
+                    checksum, checksum.getBytesPerChecksum(),
+                    block.getNumBytes());
+              }
+            });
+      } catch (Exception e) {
+        LOG.debug("Get CompositeCrcComposer failed for " + block, e);
+      }
+    }
+
     return new BlockReaderRemote2(file, block.getBlockId(), checksum,
         verifyChecksum, startOffset, firstChunkOffset, len, peer, datanodeID,
-        peerCache, tracer, networkDistance);
+        peerCache, tracer, networkDistance, hdfsCrcComposer);
   }
 
   static void checkSuccess(

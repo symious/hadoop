@@ -114,6 +114,7 @@ public class DFSInputStream extends FSInputStream
   protected AtomicBoolean closed = new AtomicBoolean(false);
   protected final String src;
   protected final boolean verifyChecksum;
+  protected final boolean needComputeCompositeCrc;
 
   // state by stateful read only:
   // (protected by lock on this)
@@ -197,9 +198,11 @@ public class DFSInputStream extends FSInputStream
   }
 
   DFSInputStream(DFSClient dfsClient, String src, boolean verifyChecksum,
-      LocatedBlocks locatedBlocks) throws IOException {
+      boolean needComputeCompositeCrc, LocatedBlocks locatedBlocks)
+      throws IOException {
     this.dfsClient = dfsClient;
     this.verifyChecksum = verifyChecksum;
+    this.needComputeCompositeCrc = needComputeCompositeCrc;
     this.src = src;
     synchronized (infoLock) {
       this.cachingStrategy = dfsClient.getDefaultReadCachingStrategy();
@@ -604,7 +607,7 @@ public class DFSInputStream extends FSInputStream
       try {
         blockReader = getBlockReader(targetBlock, offsetIntoBlock,
             targetBlock.getBlockSize() - offsetIntoBlock, targetAddr,
-            storageType, chosenNode);
+            storageType, chosenNode, this.needComputeCompositeCrc);
         if(connectFailedOnce) {
           DFSClient.LOG.info("Successfully connected to " + targetAddr +
                              " for " + targetBlock.getBlock());
@@ -646,7 +649,8 @@ public class DFSInputStream extends FSInputStream
 
   protected BlockReader getBlockReader(LocatedBlock targetBlock,
       long offsetInBlock, long length, InetSocketAddress targetAddr,
-      StorageType storageType, DatanodeInfo datanode) throws IOException {
+      StorageType storageType, DatanodeInfo datanode,
+      boolean computeCompositeCrc) throws IOException {
     ExtendedBlock blk = targetBlock.getBlock();
     Token<BlockTokenIdentifier> accessToken = targetBlock.getBlockToken();
     CachingStrategy curCachingStrategy;
@@ -665,6 +669,7 @@ public class DFSInputStream extends FSInputStream
         setBlockToken(accessToken).
         setStartOffset(offsetInBlock).
         setVerifyChecksum(verifyChecksum).
+        setNeedComputeCompositeCRC(computeCompositeCrc).
         setClientName(dfsClient.clientName).
         setLength(length).
         setCachingStrategy(curCachingStrategy).
@@ -1140,7 +1145,7 @@ public class DFSInputStream extends FSInputStream
       try {
         DFSClientFaultInjector.get().fetchFromDatanodeException();
         reader = getBlockReader(block, startInBlk, len, datanode.addr,
-            datanode.storageType, datanode.info);
+            datanode.storageType, datanode.info, false);
 
         // Behave exactly as the readAll() call
         ByteBuffer tmp = buf.duplicate();

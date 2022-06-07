@@ -41,6 +41,7 @@ import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.log4j.Level;
+import org.junit.Assert;
 import org.junit.Test;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
@@ -1021,6 +1022,55 @@ public class TestDFSShell {
       if (null != bak) {
         System.setOut(bak);
       }
+    }
+  }
+
+  @Test (timeout = 30000)
+  public void testChecksum() throws Exception {
+    PrintStream printStream = System.out;
+    try {
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      System.setOut(new PrintStream(out));
+      FsShell shell = new FsShell(dfs.getConf());
+      final Path filePath = new Path("/testChecksum/file1");
+      writeFile(dfs, filePath);
+      FileStatus fileStatus = dfs.getFileStatus(filePath);
+      FileChecksum checksum = dfs.getFileChecksum(filePath);
+      String[] args = {"-checksum", "-v", filePath.toString()};
+      assertEquals(0, shell.run(args));
+      // verify block size is printed in the output
+      assertTrue(out.toString()
+          .contains(String.format("BlockSize=%s", fileStatus.getBlockSize())));
+      // verify checksum is printed in the output
+      assertTrue(out.toString().contains(StringUtils
+          .byteToHexString(checksum.getBytes(), 0, checksum.getLength())));
+    } finally {
+      Assert.assertNotNull(printStream);
+      System.setOut(printStream);
+    }
+  }
+
+  @Test (timeout = 30000)
+  public void testChecksum2() throws Exception {
+    PrintStream printStream = System.out;
+    try {
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      System.setOut(new PrintStream(out));
+      FsShell shell = new FsShell(dfs.getConf());
+      final Path filePath = new Path("/testChecksum/file1");
+      writeFile(dfs, filePath);
+      FileStatus fileStatus = dfs.getFileStatus(filePath);
+      long verifyLength = (long) (fileStatus.getLen() / 2.0);
+      FileChecksum checksum = dfs.getFileChecksum(filePath, verifyLength);
+      String[] args = {"-checksum", "-l", String.valueOf(verifyLength),
+          filePath.toString()};
+      assertEquals(0, shell.run(args));
+      // verify checksum is printed in the output
+      assertTrue(out.toString().contains(StringUtils
+          .byteToHexString(checksum.getBytes(), 0, checksum.getLength())));
+    } finally {
+      Assert.assertNotNull(printStream);
+      System.setOut(printStream);
     }
   }
 

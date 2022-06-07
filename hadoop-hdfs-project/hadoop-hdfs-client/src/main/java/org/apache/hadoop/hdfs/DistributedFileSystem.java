@@ -127,6 +127,7 @@ public class DistributedFileSystem extends FileSystem
 
   DFSClient dfs;
   private boolean verifyChecksum = true;
+  private boolean needComputeCompositeCrc = false;
 
   private DFSOpsCountStatistics storageStatistics;
 
@@ -305,6 +306,11 @@ public class DistributedFileSystem extends FileSystem
     this.verifyChecksum = verifyChecksum;
   }
 
+  @Override
+  public void setNeedComputeCompositeCrc(boolean needComputeCompositeCrc) {
+    this.needComputeCompositeCrc = needComputeCompositeCrc;
+  }
+
   /**
    * Start the lease recovery of a file
    *
@@ -342,7 +348,8 @@ public class DistributedFileSystem extends FileSystem
       @Override
       public FSDataInputStream doCall(final Path p) throws IOException {
         final DFSInputStream dfsis =
-            dfs.open(getPathName(p), bufferSize, verifyChecksum);
+            dfs.open(getPathName(p), bufferSize, verifyChecksum,
+                needComputeCompositeCrc);
         return dfs.createWrappedInputStream(dfsis);
       }
       @Override
@@ -1679,7 +1686,7 @@ public class DistributedFileSystem extends FileSystem
     return new FileSystemLinkResolver<FileChecksum>() {
       @Override
       public FileChecksum doCall(final Path p) throws IOException {
-        return dfs.getFileChecksum(getPathName(p), Long.MAX_VALUE);
+        return dfs.getFileChecksumWithCombineMode(getPathName(p), Long.MAX_VALUE);
       }
 
       @Override
@@ -1699,7 +1706,7 @@ public class DistributedFileSystem extends FileSystem
     return new FileSystemLinkResolver<FileChecksum>() {
       @Override
       public FileChecksum doCall(final Path p) throws IOException {
-        return dfs.getFileChecksum(getPathName(p), length);
+        return dfs.getFileChecksumWithCombineMode(getPathName(p), length);
       }
 
       @Override

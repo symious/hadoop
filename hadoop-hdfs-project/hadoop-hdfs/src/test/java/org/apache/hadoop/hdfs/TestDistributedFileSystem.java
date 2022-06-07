@@ -72,6 +72,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.GlobalStorageStatistics;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.MD5MD5CRC32FileChecksum;
+import org.apache.hadoop.fs.MD5MD5CRC32GzipFileChecksum;
 import org.apache.hadoop.fs.Options.ChecksumOpt;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.PathIsNotEmptyDirectoryException;
@@ -96,6 +97,7 @@ import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
 import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
 import org.apache.hadoop.hdfs.web.HftpFileSystem;
 import org.apache.hadoop.hdfs.web.WebHdfsConstants;
+import org.apache.hadoop.io.MD5Hash;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.net.DNSToSwitchMapping;
 import org.apache.hadoop.net.NetUtils;
@@ -970,13 +972,14 @@ public class TestDistributedFileSystem {
         }
 
         // verify none existent file and 0 request length
-        try {
-          final FileChecksum noneExistentChecksumWith0 =
-              hdfs.getFileChecksum(new Path(dir, "none-existent"), 0);
-          fail();
-        } catch (Exception ioe) {
-          FileSystem.LOG.info("GOOD: getting an exception", ioe);
-        }
+        final int lenOfZeroBytes = 32;
+        byte[] emptyBlockMd5 = new byte[lenOfZeroBytes];
+        MD5Hash fileMD5 = MD5Hash.digest(emptyBlockMd5);
+        FileChecksum expectedFileChecksum =  new MD5MD5CRC32GzipFileChecksum(
+            0, 0, fileMD5);
+        final FileChecksum noneExistentChecksumWith0 =
+            hdfs.getFileChecksum(new Path(dir, "none-existent"), 0);
+        Assert.assertEquals(expectedFileChecksum, noneExistentChecksumWith0);
 
         // verify checksums
         final FileChecksum barcs = hdfs.getFileChecksum(bar);

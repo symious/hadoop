@@ -17,6 +17,11 @@
  */
 package org.apache.hadoop.hdfs;
 
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
@@ -24,7 +29,11 @@ import java.io.IOException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileChecksum;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -91,5 +100,55 @@ public class TestGetFileChecksum {
   public void testGetFileChecksum() throws Exception {
     testGetFileChecksum(new Path("/foo"), BLOCKSIZE / 4);
     testGetFileChecksum(new Path("/bar"), BLOCKSIZE / 4 - 1);
+  }
+
+  private void testGetFileCompositeChecksum(Path filePath, long fileLength)
+      throws IOException {
+    dfs.getClient().getClientContext().getBlockCompositeCrcCache().invalidateAll();
+    DFSTestUtil.createFile(dfs, filePath, fileLength, REPLICATION, 0L);
+    FileStatus fileStatus = dfs.getFileStatus(filePath);
+    long blockNumber = (fileStatus.getLen() - 1)/fileStatus.getBlockSize() + 1;
+    FileChecksum compositeChecksum = dfs.getClient().getFileChecksumInternal(
+        filePath.toUri().getPath(), Long.MAX_VALUE,
+        Options.ChecksumCombineMode.COMPOSITE_CRC);
+    FileChecksum md5Checksum = dfs.getClient().getFileChecksumInternal(
+        filePath.toUri().getPath(), Long.MAX_VALUE,
+        Options.ChecksumCombineMode.MD5MD5CRC);
+    assertNotEquals(compositeChecksum, md5Checksum);
+
+    dfs.setNeedComputeCompositeCrc(true);
+    long readLength = DFSTestUtil.readFile2(dfs, filePath);
+    assertEquals(fileStatus.getLen(), readLength);
+
+    assertEquals(blockNumber, dfs.getClient().getClientContext()
+        .getBlockCompositeCrcCache().size());
+    LocatedBlocks locatedBlocks = dfs.getClient()
+        .getBlockLocations(filePath.toUri().getPath(), Long.MAX_VALUE);
+    assertEquals(blockNumber, locatedBlocks.getLocatedBlocks().size());
+    for (LocatedBlock locatedBlock : locatedBlocks.getLocatedBlocks()) {
+      HdfsCrcComposer hdfsCrcComposer = dfs.getClient().getClientContext()
+          .getBlockCompositeCrcCache().getCrcComposer(locatedBlock.getBlock());
+      assertNotNull(hdfsCrcComposer);
+      assertTrue(hdfsCrcComposer.isClosed());
+      assertEquals(locatedBlock.getBlock().getNumBytes(), hdfsCrcComposer.getLength());
+      if (blockNumber == 1) {
+        assertEquals(fileStatus.getLen(), hdfsCrcComposer.getLength());
+        assertArrayEquals(compositeChecksum.getBytes(), hdfsCrcComposer.digest());
+      }
+    }
+
+    FileChecksum compositeChecksum2 = dfs.getClient()
+        .getFileChecksumInternal(
+            filePath.toUri().getPath(), Long.MAX_VALUE,
+            Options.ChecksumCombineMode.COMPOSITE_CRC);
+    assertEquals(compositeChecksum, compositeChecksum2);
+  }
+
+  @Test
+  public void testGetFileCompositeChecksum() throws IOException {
+    testGetFileCompositeChecksum(new Path("/Test1"), (long)(0.3 * BLOCKSIZE));
+    testGetFileCompositeChecksum(new Path("/Test2"), (long)(1.3 * BLOCKSIZE));
+    testGetFileCompositeChecksum(new Path("/Test3"), (long)(5.3 * BLOCKSIZE));
+    testGetFileCompositeChecksum(new Path("/Test4"), 10 * BLOCKSIZE);
   }
 }

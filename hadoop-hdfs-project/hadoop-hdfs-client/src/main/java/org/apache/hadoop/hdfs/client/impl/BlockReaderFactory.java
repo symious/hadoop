@@ -37,6 +37,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.BlockReader;
 import org.apache.hadoop.hdfs.ClientContext;
+import org.apache.hadoop.hdfs.ClientContext.BlockCompositeCrcCache;
 import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.DFSInputStream;
 import org.apache.hadoop.hdfs.DFSUtilClient;
@@ -133,6 +134,12 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
    * If false, we won't try to verify the block checksum.
    */
   private boolean verifyChecksum;
+
+  /**
+   * If true, we need to compute the composite checksum
+   *    for the block, and cache it in ClientContext.
+   */
+  private boolean needComputeCompositeCRC;
 
   /**
    * The name of this client.
@@ -234,6 +241,12 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
 
   public BlockReaderFactory setVerifyChecksum(boolean verifyChecksum) {
     this.verifyChecksum = verifyChecksum;
+    return this;
+  }
+
+  public BlockReaderFactory setNeedComputeCompositeCRC(
+      boolean needComputeCompositeCRC) {
+    this.needComputeCompositeCRC = needComputeCompositeCRC;
     return this;
   }
 
@@ -776,6 +789,64 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
     }
   }
 
+  /**
+   * Get a BlockReaderRemote that communicates over a TCP socket.
+   *
+   * @return The new BlockReader.  We will not return null, but instead throw
+   *         an exception if this fails.
+   *
+   * @throws InvalidToken
+   *             If the block token was invalid.
+   *         InvalidEncryptionKeyException
+   *             If the encryption key was invalid.
+   *         Other IOException
+   *             If there was another problem.
+   */
+  public BlockReaderRemote2 getRemote2BlockReaderFromTcp() throws IOException {
+    LOG.trace("{}: trying to create a remote block reader from a TCP socket",
+        this);
+    BlockReaderRemote2 blockReaderRemote2 = null;
+    while (true) {
+      BlockReaderPeer curPeer = null;
+      Peer peer = null;
+      try {
+        curPeer = nextTcpPeer();
+        if (curPeer.fromCache) remainingCacheTries--;
+        peer = curPeer.peer;
+        int networkDistance = clientContext.getNetworkDistance(datanode);
+        BlockCompositeCrcCache compositeCrcCache =
+            needComputeCompositeCRC ?
+                this.clientContext.getBlockCompositeCrcCache() : null;
+        blockReaderRemote2 = BlockReaderRemote2.newBlockReader(
+            fileName, block, token, startOffset, length,
+            verifyChecksum, clientName, peer, datanode,
+            clientContext.getPeerCache(), cachingStrategy, tracer,
+            networkDistance, compositeCrcCache);
+        return blockReaderRemote2;
+      } catch (IOException ioe) {
+        if (isSecurityException(ioe)) {
+          LOG.trace("{}: got security exception while constructing a remote "
+              + "block reader from {}", this, peer, ioe);
+          throw ioe;
+        }
+        if ((curPeer != null) && curPeer.fromCache) {
+          // Handle an I/O error we got when using a cached peer.  These are
+          // considered less serious, because the underlying socket may be
+          // stale.
+          LOG.debug("Closed potentially stale remote peer {}", peer, ioe);
+        } else {
+          // Handle an I/O error we got when using a newly created peer.
+          LOG.warn("I/O error constructing remote block reader.", ioe);
+          throw ioe;
+        }
+      } finally {
+        if (blockReaderRemote2 == null) {
+          IOUtilsClient.cleanup(LOG, peer);
+        }
+      }
+    }
+  }
+
   public static class BlockReaderPeer {
     final Peer peer;
     final boolean fromCache;
@@ -861,11 +932,14 @@ public class BlockReaderFactory implements ShortCircuitReplicaCreator {
           clientContext.getPeerCache(), cachingStrategy, tracer,
           networkDistance);
     } else {
+      BlockCompositeCrcCache compositeCrcCache =
+          needComputeCompositeCRC ?
+              this.clientContext.getBlockCompositeCrcCache() : null;
       return BlockReaderRemote2.newBlockReader(
           fileName, block, token, startOffset, length,
           verifyChecksum, clientName, peer, datanode,
           clientContext.getPeerCache(), cachingStrategy, tracer,
-          networkDistance);
+          networkDistance, compositeCrcCache);
     }
   }
 

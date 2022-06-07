@@ -100,7 +100,7 @@ public class DFSStripedInputStream extends DFSInputStream {
   DFSStripedInputStream(DFSClient dfsClient, String src,
       boolean verifyChecksum, ErasureCodingPolicy ecPolicy,
       LocatedBlocks locatedBlocks) throws IOException {
-    super(dfsClient, src, verifyChecksum, locatedBlocks);
+    super(dfsClient, src, verifyChecksum, false, locatedBlocks);
 
     this.readStatistics.setBlockType(BlockType.STRIPED);
     assert ecPolicy != null;
@@ -260,7 +260,7 @@ public class DFSStripedInputStream extends DFSInputStream {
         }
         reader = getBlockReader(block, offsetInBlock,
             block.getBlockSize() - offsetInBlock,
-            dnInfo.addr, dnInfo.storageType, dnInfo.info);
+            dnInfo.addr, dnInfo.storageType, dnInfo.info, false);
       } catch (IOException e) {
         if (e instanceof InvalidEncryptionKeyException &&
             retry.shouldRefetchEncryptionKey()) {

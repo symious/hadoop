@@ -181,7 +181,7 @@ class Display extends FsCommand {
   
   public static class Checksum extends Display {
     public static final String NAME = "checksum";
-    public static final String USAGE = "<src> ...";
+    public static final String USAGE = "[-v] [-l <input length>] <src> ...";
     public static final String DESCRIPTION =
       "Dump checksum information for files that match the file " +
       "pattern <src> to stdout. Note that this requires a round-trip " +
@@ -190,21 +190,41 @@ class Display extends FsCommand {
       "file depends on its content, block size and the checksum " +
       "algorithm and parameters used for creating the file.";
 
+    private boolean displayBlockSize;
+    private long fileLength = Long.MAX_VALUE;
+
+    @Override
+    protected void processOptions(LinkedList<String> args)
+        throws IOException {
+      CommandFormat cf = new CommandFormat(1, Integer.MAX_VALUE, "v");
+      cf.addOptionWithValue("l");
+      cf.parse(args);
+      displayBlockSize = cf.getOpt("v");
+      String fileLengthOp = cf.getOptValue("l");
+      if (fileLengthOp != null && !fileLengthOp.isEmpty()) {
+        long fileLength = Long.parseLong(fileLengthOp);
+        if (fileLength > 0) {
+          this.fileLength = fileLength;
+        }
+      }
+    }
+
     @Override
     protected void processPath(PathData item) throws IOException {
       if (item.stat.isDirectory()) {
         throw new PathIsDirectoryException(item.toString());
       }
 
-      FileChecksum checksum = item.fs.getFileChecksum(item.path);
-      if (checksum == null) {
-        out.printf("%s\tNONE\t%n", item.toString());
+      FileChecksum checksum = item.fs.getFileChecksum(item.path, this.fileLength);
+      String outputChecksum = checksum == null ? "NONE" :
+          String.format("%s\t%s", checksum.getAlgorithmName(), StringUtils
+              .byteToHexString(checksum.getBytes(), 0, checksum.getLength()));
+      if (displayBlockSize) {
+        FileStatus fileStatus = item.fs.getFileStatus(item.path);
+        out.printf("%s\t%s\tBlockSize=%s%n", item.toString(), outputChecksum,
+            fileStatus != null ? fileStatus.getBlockSize() : "NONE");
       } else {
-        String checksumString = StringUtils.byteToHexString(
-            checksum.getBytes(), 0, checksum.getLength());
-        out.printf("%s\t%s\t%s%n",
-            item.toString(), checksum.getAlgorithmName(),
-            checksumString);
+        out.printf("%s\t%s%n", item.toString(), outputChecksum);
       }
     }
   }

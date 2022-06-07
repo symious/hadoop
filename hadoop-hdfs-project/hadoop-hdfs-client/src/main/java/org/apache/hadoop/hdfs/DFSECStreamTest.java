@@ -22,7 +22,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileChecksum;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
@@ -35,6 +37,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.concurrent.ThreadLocalRandom;
 
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CHECKSUM_COMBINE_MODE_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.StripedRead.MOCK_FAILURE;
 
 /**
@@ -596,6 +599,85 @@ public class DFSECStreamTest {
     testWriteCornerCase6(testPath);
   }
 
+  private long readFile(FileSystem fs, Path fileName)
+      throws IOException {
+    long totalNumber = 0;
+    try (FSDataInputStream in = fs.open(fileName)) {
+      byte[] buf = new byte[64 * 1024];
+      int bytesRead = in.read(buf);
+      while (bytesRead >= 0) {
+        totalNumber += bytesRead;
+        bytesRead = in.read(buf);
+      }
+    }
+    return totalNumber;
+  }
+
+  private void testCompositeCrc(Path replicateFilePath,
+      Path ecFilePath, boolean useCache, int loopNumber) throws IOException {
+    LOG.info("Will verify replicateFilePath {} and ecFilePath {}, " +
+        "and useCache is {}.", replicateFilePath, ecFilePath, useCache);
+    Configuration compositeConf = new Configuration(this.normalConf);
+    compositeConf.set(DFS_CHECKSUM_COMBINE_MODE_KEY,
+        Options.ChecksumCombineMode.COMPOSITE_CRC.name());
+
+    FileSystem replicaFS = replicateFilePath.getFileSystem(compositeConf);
+    FileSystem ecFS = ecFilePath.getFileSystem(compositeConf);
+    long fileLength = replicaFS.getFileStatus(replicateFilePath).getLen();
+
+    FileChecksum replicaFullCK = replicaFS.getFileChecksum(replicateFilePath);
+    FileChecksum ecFullCK = ecFS.getFileChecksum(ecFilePath);
+    if (!replicaFullCK.equals(ecFullCK)) {
+      throw new IOException("EcFullCK not equal with ReplicaFullCK");
+    } else {
+      LOG.info("ReplicaFullCK {} is same with ECFullCK {}.", replicaFullCK, ecFullCK);
+    }
+
+    replicaFS.setNeedComputeCompositeCrc(useCache);
+    ecFS.setNeedComputeCompositeCrc(useCache);
+
+    long replicaFileLength = readFile(replicaFS, replicateFilePath);
+    long ecFileLength = readFile(ecFS, ecFilePath);
+    if (fileLength != replicaFileLength || fileLength != ecFileLength) {
+      throw new IOException("ReplicaFileLength:" + replicaFileLength
+          + " or ecFileLength:" + ecFileLength
+          + " is not same with " + fileLength);
+    }
+    LOG.info("ReplicaFileLength is {} and ecFileLength is {} and fileLength is {}.",
+        replicaFileLength, ecFileLength, fileLength);
+    FileChecksum replicaFullCK2 = replicaFS.getFileChecksum(replicateFilePath);
+    FileChecksum ecFullCK2 = ecFS.getFileChecksum(ecFilePath);
+    if (!replicaFullCK2.equals(ecFullCK2) || !replicaFullCK.equals(replicaFullCK2)) {
+      throw new IOException("EcFullCK not equal with ReplicaFullCK");
+    } else {
+      LOG.info("ReplicaFullCK2 {} is same with ECFullCK2 {}.",
+          replicaFullCK2, ecFullCK2);
+    }
+
+    for (int index = 0; index < loopNumber; index++) {
+      long verifyLength = ThreadLocalRandom.current()
+          .nextLong(1024, fileLength);
+      verifyFileCheckSum(replicaFS, replicateFilePath,
+          ecFS, ecFilePath, verifyLength);
+    }
+  }
+
+  private void verifyFileCheckSum(FileSystem replicaFS, Path replicaPath,
+      FileSystem ecFS, Path ecPath, long verifyLength) throws IOException {
+    LOG.info("Will verify composite checksum between {} and {} with length {}.",
+        replicaPath, ecPath, verifyLength);
+    FileChecksum replicaCK = replicaFS.getFileChecksum(replicaPath, verifyLength);
+    LOG.info("ReplicaCheckSum is {} and will get checksum from ecFile {}.",
+        replicaCK, ecPath);
+    FileChecksum ecCK = ecFS.getFileChecksum(ecPath, verifyLength);
+    LOG.info("EC Checksum is {}.", ecCK);
+    if (!replicaCK.equals(ecCK)) {
+      throw new IOException("ReplicaCK:" + replicaCK
+          + " is not same with ECCK:" + ecCK
+          + " when the verifyLength is " + verifyLength);
+    }
+  }
+
   public void run(String[] args) throws IOException, NoSuchAlgorithmException {
     String cmd = args[0];
     switch (cmd) {
@@ -636,6 +718,15 @@ public class DFSECStreamTest {
       int expectedLoopNum = Integer.parseInt(args[4]);
       testReadWithRandomOffsetAndLength(existedPath,
           testPath, ecPolicyName, expectedLoopNum);
+      break;
+    }
+    case "testCompositeCRC": {
+      Path replicateFilePath = new Path(args[1]);
+      Path ecFilePath = new Path(args[2]);
+      boolean useCache = Boolean.parseBoolean(args[3]);
+      int loopNumber = Integer.parseInt(args[4]);
+      testCompositeCrc(replicateFilePath, ecFilePath,
+          useCache, loopNumber);
       break;
     }
     default:

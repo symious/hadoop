@@ -771,6 +771,16 @@ public class ViewFileSystem extends FileSystem {
       mount.target.targetFileSystem.setVerifyChecksum(verifyChecksum);
     }
   }
+
+  @Override
+  public void setNeedComputeCompositeCrc(boolean needComputeCompositeCrc) {
+    List<InodeTree.MountPoint<FileSystem>> mountPoints =
+        fsState.getMountPoints();
+    for (InodeTree.MountPoint<FileSystem> mount : mountPoints) {
+      mount.target.targetFileSystem.setNeedComputeCompositeCrc(
+          needComputeCompositeCrc);
+    }
+  }
   
   @Override
   public long getDefaultBlockSize() {

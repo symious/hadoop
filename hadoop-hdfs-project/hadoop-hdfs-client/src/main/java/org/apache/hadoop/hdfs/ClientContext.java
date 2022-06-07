@@ -23,6 +23,8 @@ import static org.apache.hadoop.fs.CommonConfigurationKeys.FS_CLIENT_TOPOLOGY_RE
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.cache.Cache;
@@ -34,6 +36,7 @@ import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.client.impl.DfsClientConf;
 import org.apache.hadoop.hdfs.client.impl.DfsClientConf.ShortCircuitConf;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.shortcircuit.DomainSocketFactory;
 import org.apache.hadoop.hdfs.shortcircuit.ShortCircuitCache;
 import org.apache.hadoop.hdfs.util.ByteArrayManager;
@@ -144,6 +147,11 @@ public class ClientContext {
    */
   private SlowNodeCache slowNodeCache = null;
 
+  /**
+   * Cache some composite checksums for a specific amount of time.
+   */
+  private BlockCompositeCrcCache blockCompositeCrcCache = null;
+
   private static final DFSSlowDatanodeCacheMetrics
       SLOW_DATANODE_CACHE_METRICS_METRIC = new DFSSlowDatanodeCacheMetrics();
 
@@ -181,6 +189,39 @@ public class ClientContext {
     }
   }
 
+  public class BlockCompositeCrcCache {
+    private Cache<ExtendedBlock, HdfsCrcComposer> cache;
+
+    public BlockCompositeCrcCache(int expireAfterWrite, int maxSize) {
+      this.cache = CacheBuilder
+          .newBuilder()
+          .maximumSize(maxSize)
+          .expireAfterWrite(expireAfterWrite, TimeUnit.MILLISECONDS)
+          .build();
+    }
+
+    public HdfsCrcComposer getCrcComposerWithCallable(
+        ExtendedBlock extendedBlock,
+        Callable<HdfsCrcComposer> crcComposerCallable)
+        throws ExecutionException {
+      return this.cache.get(extendedBlock, crcComposerCallable);
+    }
+
+    public HdfsCrcComposer getCrcComposer(ExtendedBlock extendedBlock) {
+      return this.cache.getIfPresent(extendedBlock);
+    }
+
+    @VisibleForTesting
+    public long size() {
+      return this.cache.size();
+    }
+
+    @VisibleForTesting
+    public void invalidateAll() {
+      this.cache.invalidateAll();
+    }
+  }
+
   private ClientContext(String name, DfsClientConf conf,
       Configuration config) {
     final ShortCircuitConf scConf = conf.getShortCircuitConf();
@@ -208,6 +249,8 @@ public class ClientContext {
       slowNodeCache = new SlowNodeCacheImpl(conf.getSlowNodeCacheExpiryMillis(),
           conf.getSlowNodeCacheSize());
     }
+    this.blockCompositeCrcCache = new BlockCompositeCrcCache(
+        3600, 1000);
 
     initTopologyResolution(config);
   }
@@ -372,5 +415,12 @@ public class ClientContext {
    */
   public SlowNodeCache getSlowNodeCache() {
     return slowNodeCache;
+  }
+
+  /**
+   * Obtain BlockCompositeCrcCache of the current client.
+   */
+  public BlockCompositeCrcCache getBlockCompositeCrcCache() {
+    return blockCompositeCrcCache;
   }
 }

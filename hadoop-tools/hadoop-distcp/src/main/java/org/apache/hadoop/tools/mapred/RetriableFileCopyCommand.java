@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileChecksum;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Options.ChecksumOpt;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -119,14 +120,14 @@ public class RetriableFileCopyCommand extends RetriableCommand {
       }
       final Path sourcePath = source.getPath();
       final FileSystem sourceFS = sourcePath.getFileSystem(configuration);
-      final FileChecksum sourceChecksum = fileAttributes
+      final FileChecksum partialSourceChecksum = fileAttributes
           .contains(FileAttribute.CHECKSUMTYPE) ? sourceFS
-          .getFileChecksum(sourcePath) : null;
+          .getFileChecksum(sourcePath, 1) : null;
 
       long offset = (action == FileAction.APPEND) ?
           targetFS.getFileStatus(target).getLen() : source.getChunkOffset();
       long bytesRead = copyToFile(targetPath, targetFS, source,
-          offset, context, fileAttributes, sourceChecksum, ecPolicyInfo);
+          offset, context, fileAttributes, partialSourceChecksum, ecPolicyInfo);
 
       if (!source.isSplit()) {
         compareFileLengths(source, targetPath, configuration, bytesRead
@@ -135,8 +136,7 @@ public class RetriableFileCopyCommand extends RetriableCommand {
       //At this point, src&dest lengths are same. if length==0, we skip checksum
       if ((bytesRead != 0) && (!skipCrc)) {
         if (!source.isSplit()) {
-          compareCheckSums(sourceFS, source.getPath(), sourceChecksum,
-              targetFS, targetPath);
+          compareCheckSums(sourceFS, source.getPath(), targetFS, targetPath);
         }
       }
       // it's not append case, thus we first write to a temporary file, rename
@@ -234,8 +234,39 @@ public class RetriableFileCopyCommand extends RetriableCommand {
       outStream = new BufferedOutputStream(targetFS.append(targetPath,
           copyBufferSize));
     }
+    tryToSetComputeCompositeCrc(targetPath, targetFS,
+        source.getPath(), conf);
     return copyBytes(source, sourceOffset, outStream, copyBufferSize,
         context);
+  }
+
+  /**
+   * Try to set the needComputeCompositeCrc flag in FileSystem, and if true,
+   * will compute the Composite CRC during reading process and cache it in ClientContext.
+   */
+  private void tryToSetComputeCompositeCrc(Path targetPath,
+      FileSystem targetFS, Path sourcePath, Configuration conf) {
+    try {
+      FileSystem sourceFS = sourcePath.getFileSystem(conf);
+      if (!skipCrc && sourceFS instanceof DistributedFileSystem
+          && targetFS instanceof DistributedFileSystem) {
+        Options.ChecksumCombineMode checksumCombineMode =
+            ((DistributedFileSystem) sourceFS).getClient()
+                .getConf().getChecksumCombineMode();
+
+        if (checksumCombineMode.equals(Options.ChecksumCombineMode.COMPOSITE_CRC)) {
+          ErasureCodingPolicy targetECPolicy =
+              ((DistributedFileSystem) targetFS).getErasureCodingPolicy(targetPath);
+          ErasureCodingPolicy sourceECPolicy =
+              ((DistributedFileSystem) sourceFS).getErasureCodingPolicy(sourcePath);
+          if (sourceECPolicy == null && targetECPolicy != null) {
+            sourceFS.setNeedComputeCompositeCrc(true);
+          }
+        }
+      }
+    } catch (IOException e) {
+      LOG.info("tryToSetComputeCompositeCrc failed for " + sourcePath, e);
+    }
   }
 
   private boolean fastCopyEnable(Configuration conf) {
@@ -253,9 +284,8 @@ public class RetriableFileCopyCommand extends RetriableCommand {
   }
 
   private void compareCheckSums(FileSystem sourceFS, Path source,
-      FileChecksum sourceChecksum, FileSystem targetFS, Path target)
-      throws IOException {
-    if (!DistCpUtils.checksumsAreEqual(sourceFS, source, sourceChecksum,
+      FileSystem targetFS, Path target) throws IOException {
+    if (!DistCpUtils.checksumsAreEqual(sourceFS, source, null,
         targetFS, target)) {
       StringBuilder errorMessage = new StringBuilder("Check-sum mismatch between ")
           .append(source).append(" and ").append(target).append(".");

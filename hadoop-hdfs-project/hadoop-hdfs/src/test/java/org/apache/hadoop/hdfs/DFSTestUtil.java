@@ -351,6 +351,20 @@ public class DFSTestUtil {
       return os.toByteArray();
     }
   }
+
+  public static long readFile2(FileSystem fs, Path fileName)
+      throws IOException {
+    long totalNumber = 0;
+    try (FSDataInputStream in = fs.open(fileName)) {
+      byte buf[] = new byte[64 * 1024];
+      int bytesRead = in.read(buf);
+      while (bytesRead >= 0) {
+        totalNumber += bytesRead;
+        bytesRead = in.read(buf);
+      }
+    }
+    return totalNumber;
+  }
   
   public static void createFile(FileSystem fs, Path fileName, long fileLen, 
       short replFactor, long seed) throws IOException {

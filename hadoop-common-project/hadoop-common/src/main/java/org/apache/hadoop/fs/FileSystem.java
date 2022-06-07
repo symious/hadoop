@@ -2688,6 +2688,15 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /**
+   * If true, will compute the Composite Checksum during reading process
+   * and cache it in ClientContext.
+   * @param needComputeCompositeCrc Need Compute Composite Checksum flag
+   */
+  public void setNeedComputeCompositeCrc(boolean needComputeCompositeCrc) {
+    //doesn't do anything
+  }
+
+  /**
    * Set the write checksum flag. This is only applicable if the
    * corresponding filesystem supports checksums. By default doesn't do anything.
    * @param writeChecksum Write checksum flag

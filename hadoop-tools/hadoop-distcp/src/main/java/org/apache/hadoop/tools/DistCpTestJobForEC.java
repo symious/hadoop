@@ -52,7 +52,7 @@ public class DistCpTestJobForEC {
   private final String EC_DIR_3 = "stripedDir3";
   private final int FILE_MIN_LENGTH = 100 * 1024 * 1024;
   private final int FILE_MAX_LENGTH = 150 * 1024 * 1024;
-  private final int DEFAULT_BATCH_SIZE = 10 * 1024 * 1024;
+  private final long DEFAULT_BATCH_SIZE = 10 * 1024 * 1024;
 
   private final Configuration conf;
   private final Path baseDir;
@@ -202,6 +202,7 @@ public class DistCpTestJobForEC {
    */
   private void createOneDistcpJob(Path sourceDir, Path destDir, boolean keepEC)
       throws Exception {
+    sourceDir = new Path(sourceDir, "*");
     DistCpOptions inputOptions = new DistCpOptions(
         Collections.singletonList(sourceDir), destDir);
 
@@ -212,7 +213,6 @@ public class DistCpTestJobForEC {
     inputOptions.preserve(DistCpOptions.FileAttribute.PERMISSION);
     inputOptions.preserve(DistCpOptions.FileAttribute.CHECKSUMTYPE);
     inputOptions.preserve(DistCpOptions.FileAttribute.ACL);
-    //inputOptions.preserve(DistCpOptions.FileAttribute.XATTR);
     inputOptions.preserve(DistCpOptions.FileAttribute.TIMES);
     if (keepEC) {
       inputOptions.preserve(DistCpOptions.FileAttribute.ERASURECODINGPOLICY);
@@ -222,13 +222,37 @@ public class DistCpTestJobForEC {
       inputOptions.setSyncFolder(true);
       inputOptions.setSkipCRC(true);
     }
+
+    Configuration copyConf = new Configuration(this.conf);
+    setTargetPathExists(destDir, copyConf, inputOptions);
     inputOptions.setMaxMaps(this.maxMap);
     inputOptions.setMapBandwidth(this.bandwidthMB);
 
-    DistCp distCp = new DistCp(this.conf, inputOptions);
-    Job job = distCp.execute();
-    LOG.info("Distcp job complete from {} to {}, and job status is {}.",
-        sourceDir, destDir, job);
+    int retryNumber = 0;
+    while (true) {
+      try {
+        DistCp distCp = new DistCp(copyConf, inputOptions);
+        Job job = distCp.execute();
+        LOG.info("Distcp job complete from {} to {}, and job status is {}.",
+            sourceDir, destDir, job);
+        break;
+      } catch (Exception e) {
+        LOG.warn("Distcp failed from " + sourceDir + " to " + destDir
+            + ", message is " + e.getMessage(), e);
+        if (retryNumber++ >= 2) {
+          throw e;
+        }
+      }
+    }
+  }
+
+  private void setTargetPathExists(Path target, Configuration conf,
+      DistCpOptions inputOptions) throws IOException {
+    FileSystem targetFS = target.getFileSystem(conf);
+    boolean targetExists = targetFS.exists(target);
+    inputOptions.setTargetPathExists(targetExists);
+    conf.setBoolean(DistCpConstants.CONF_LABEL_TARGET_PATH_EXISTS,
+        targetExists);
   }
 
   /**
@@ -265,7 +289,7 @@ public class DistCpTestJobForEC {
 
     // corner case 1: file size less than cellSize * dataUnits
     for (int index = 0; index < 10; index++) {
-      Path filePath = new Path(normalPath, "corner_case_1_" + index);
+      Path filePath = new Path(normalPath, ecPolicyName + "_corner_case_1_" + index);
       long fileLength = ThreadLocalRandom.current().nextLong(0,
           (long) dataUnits * cellSize);
       crateFileAndStoreCheckSum(filePath, fileLength);
@@ -276,7 +300,7 @@ public class DistCpTestJobForEC {
 
     // corner case 2: file size more than cellSize * dataUnits but less than block size.
     for (int index = 0; index < 10; index++) {
-      Path filePath = new Path(normalPath, "corner_case_2_" + index);
+      Path filePath = new Path(normalPath, ecPolicyName + "_corner_case_2_" + index);
       long fileLength = ThreadLocalRandom.current().nextLong(
           (long) dataUnits * cellSize, defaultBlockSize);
       crateFileAndStoreCheckSum(filePath, fileLength);
@@ -284,10 +308,10 @@ public class DistCpTestJobForEC {
 
     // corner case 3: file size more than cellSize * (dataUnits + parityUnits) * blockSize
     for (int index = 0; index < 10; index++) {
-      Path filePath = new Path(normalPath, "corner_case_3_" + index);
+      Path filePath = new Path(normalPath, ecPolicyName + "_corner_case_3_" + index);
       long fileLength = ThreadLocalRandom.current().nextLong(
-          (long) (dataUnits + parityUnits) * defaultBlockSize,
-          (long) 2 * (dataUnits + parityUnits) * defaultBlockSize);
+          (dataUnits + parityUnits) * defaultBlockSize,
+          2 * (dataUnits + parityUnits) * defaultBlockSize);
       crateFileAndStoreCheckSum(filePath, fileLength);
     }
   }
@@ -309,10 +333,11 @@ public class DistCpTestJobForEC {
    */
   private FileChecksum generateFile(Path filePath, long fileLength)
       throws IOException {
+    LOG.info("Will create {} and length is {}.", filePath, fileLength);
     FileSystem fs = filePath.getFileSystem(this.conf);
     FSDataOutputStream fsDataOutputStream = fs.create(filePath);
 
-    int writeLength = 0;
+    long writeLength = 0;
     while (writeLength < fileLength) {
       long currentBatchSize = Math.min(fileLength - writeLength, DEFAULT_BATCH_SIZE);
       byte[] bytes = generateRandomData((int) currentBatchSize);
