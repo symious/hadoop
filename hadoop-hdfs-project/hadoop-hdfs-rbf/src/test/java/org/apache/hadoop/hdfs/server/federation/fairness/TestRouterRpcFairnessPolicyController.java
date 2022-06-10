@@ -26,6 +26,8 @@ import org.apache.hadoop.test.GenericTestUtils;
 import org.junit.Test;
 import org.slf4j.LoggerFactory;
 
+import javax.management.openmbean.CompositeData;
+
 import static org.apache.hadoop.hdfs.server.federation.fairness.RouterRpcFairnessConstants.CONCURRENT_NS;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_KEY;
@@ -132,6 +134,26 @@ public class TestRouterRpcFairnessPolicyController {
     routerRpcFairnessPolicyController.acquirePermit("ns2");
     assertEquals("{\"concurrent\":10,\"ns2\":10,\"ns1\":10}",
         routerRpcFairnessPolicyController.getPermitCapacityPerNs());
+  }
+
+  @Test
+  public void testGetPermitCapacityPerNsAsJson() {
+    RouterRpcFairnessPolicyController routerRpcFairnessPolicyController
+        = getFairnessPolicyController(30);
+    CompositeData report =
+        routerRpcFairnessPolicyController.getPermitCapacityPerNsAsJson();
+    assertEquals(10, report.get("concurrent"));
+    assertEquals(10, report.get("ns1"));
+    assertEquals(10, report.get("ns2"));
+    assertEquals(3, report.values().size());
+    routerRpcFairnessPolicyController.acquirePermit("ns1");
+    routerRpcFairnessPolicyController.acquirePermit("ns2");
+    report =
+        routerRpcFairnessPolicyController.getPermitCapacityPerNsAsJson();
+    assertEquals(10, report.get("concurrent"));
+    assertEquals(10, report.get("ns1"));
+    assertEquals(10, report.get("ns2"));
+    assertEquals(3, report.values().size());
   }
 
   @Test

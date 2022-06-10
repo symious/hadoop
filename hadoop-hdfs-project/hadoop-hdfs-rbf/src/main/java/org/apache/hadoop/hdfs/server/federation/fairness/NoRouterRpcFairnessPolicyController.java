@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.LongAdder;
 
 import org.apache.hadoop.conf.Configuration;
+import javax.management.openmbean.CompositeData;
 
 /**
  * A pass through fairness policy that implements
@@ -59,5 +60,10 @@ public class NoRouterRpcFairnessPolicyController implements
   @Override
   public String getPermitCapacityPerNs() {
     return "N/A";
+  }
+
+  @Override
+  public CompositeData getPermitCapacityPerNsAsJson() {
+    return null;
   }
 }

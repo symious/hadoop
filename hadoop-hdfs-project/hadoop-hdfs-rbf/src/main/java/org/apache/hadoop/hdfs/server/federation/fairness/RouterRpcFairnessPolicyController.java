@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.federation.fairness;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import javax.management.openmbean.CompositeData;
 
 /**
  * Interface to define handlers assignment for specific name services.
@@ -72,4 +73,10 @@ public interface RouterRpcFairnessPolicyController {
    * Returns the JSON string of the max handler count for each ns.
    */
   String getPermitCapacityPerNs();
+
+  /**
+   * FederationRPCMBean
+   * Return the max number of permits allowed per namespace as a CompositeData object used by MBean.
+   */
+  CompositeData getPermitCapacityPerNsAsJson();
 }

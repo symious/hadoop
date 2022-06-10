@@ -330,4 +330,9 @@ public class FederationRPCMetrics implements FederationRPCMBean {
   public CompositeData getProxyOpPermitAcceptedPerNsJSON() {
     return rpcServer.getRPCClient().getAcceptedPermitsPerNs();
   }
+
+  @Override
+  public CompositeData getPermitCapacityPerNsJSON() {
+    return rpcServer.getRPCClient().getRouterRpcFairnessPolicyController().getPermitCapacityPerNsAsJson();
+  }
 }

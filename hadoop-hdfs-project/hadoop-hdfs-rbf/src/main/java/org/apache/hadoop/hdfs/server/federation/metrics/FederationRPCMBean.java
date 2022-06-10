@@ -139,4 +139,10 @@ public interface FederationRPCMBean {
    * @return Number of operations accepted of each namespace as a CompositeData object.
    */
   CompositeData getProxyOpPermitAcceptedPerNsJSON();
+
+  /**
+   * Get the max number of permits per namespace as a CompositeData object.
+   * @return Max number of permits per namespace as a CompositeData object.
+   */
+  CompositeData getPermitCapacityPerNsJSON();
 }

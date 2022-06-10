@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hdfs.server.federation.fairness;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.Semaphore;
@@ -30,6 +31,12 @@ import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import javax.management.openmbean.CompositeData;
+import javax.management.openmbean.CompositeDataSupport;
+import javax.management.openmbean.CompositeType;
+import javax.management.openmbean.OpenDataException;
+import javax.management.openmbean.OpenType;
+import javax.management.openmbean.SimpleType;
 
 /**
  * Base fairness policy that implements @RouterRpcFairnessPolicyController.
@@ -108,6 +115,33 @@ public class AbstractRouterRpcFairnessPolicyController
       }
     }
     return json.toString();
+  }
+
+  @Override
+  public CompositeData getPermitCapacityPerNsAsJson() {
+    if (permitSizes.isEmpty()) {
+      return null;
+    }
+
+    try {
+      String[] fields =
+          permitSizes.keySet().toArray(new String[permitSizes.size()]);
+      OpenType[] types =
+          Collections.nCopies(permitSizes.size(), SimpleType.INTEGER)
+              .toArray(new OpenType[0]);
+      Integer[] values = new Integer[permitSizes.size()];
+      for (int i = 0; i < permitSizes.size(); i++) {
+        values[i] = permitSizes.get(fields[i]);
+      }
+
+      CompositeType type = new CompositeType(this.getClass().getName(),
+          this.getClass().getName(), fields, fields, types);
+      CompositeData data = new CompositeDataSupport(type, fields, values);
+      return data;
+    } catch (OpenDataException e) {
+      LOG.warn("Failed to get permit capacity metrics as CompositeData", e);
+      return null;
+    }
   }
 
   protected Map<String, AdjustableSemaphore> getPermits() {
