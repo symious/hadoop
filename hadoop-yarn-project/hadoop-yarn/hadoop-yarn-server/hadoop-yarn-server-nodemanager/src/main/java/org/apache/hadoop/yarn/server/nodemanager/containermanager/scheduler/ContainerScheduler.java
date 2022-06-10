@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.nodemanager.containermanager.scheduler;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.AbstractService;
@@ -34,6 +35,8 @@ import org.apache.hadoop.yarn.server.nodemanager.Context;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
 
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerImpl;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.CpuResourceHandler;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.ResourceHandler;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.ResourceHandlerChain;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.ResourceHandlerException;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.ResourceHandlerModule;
@@ -54,11 +57,13 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The ContainerScheduler manages a collection of runnable containers. It
@@ -706,6 +711,46 @@ public class ContainerScheduler extends AbstractService implements
           LOG.debug("Update Container Level: " + containerId.toString() + ", level:" + level);
         }
       }
+    }
+  }
+
+  public void cleanLeakContainers() {
+    Set<String> containerIDs = new HashSet<>();
+    if (null != runningContainers && runningContainers.size() > 0) {
+      for (Container container : runningContainers.values()) {
+        containerIDs.add(container.getContainerId().toString());
+      }
+    }
+    try {
+      List<ResourceHandler> handlers = resourceHandlerChain.getResourceHandlerList();
+      if (!CollectionUtils.isEmpty(handlers)) {
+        for (ResourceHandler handler : handlers) {
+          if (handler instanceof CpuResourceHandler) {
+            CpuResourceHandler cpuResourceHandler = (CpuResourceHandler) handler;
+            cpuResourceHandler.cleanLeakContainers(containerIDs);
+            break;
+          }
+        }
+      }
+    } catch (Exception e) {
+      LOG.error("Clean Leak Containers: ", e);
+    }
+  }
+
+  public void updateTotalCGroupsResource() {
+    try {
+      List<ResourceHandler> handlers = resourceHandlerChain.getResourceHandlerList();
+      if (!CollectionUtils.isEmpty(handlers)) {
+        for (ResourceHandler handler : handlers) {
+          if (handler instanceof CpuResourceHandler) {
+            CpuResourceHandler cpuResourceHandler = (CpuResourceHandler) handler;
+            cpuResourceHandler.updateTotalCGroupsResource(this.context.getConf());
+            break;
+          }
+        }
+      }
+    } catch (Exception e) {
+      LOG.error("Update CGroups Resource: ", e);
     }
   }
 }

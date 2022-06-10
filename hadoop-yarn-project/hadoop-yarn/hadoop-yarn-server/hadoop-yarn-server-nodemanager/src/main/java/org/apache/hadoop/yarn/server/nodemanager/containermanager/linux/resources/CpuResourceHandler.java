@@ -21,6 +21,10 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resourc
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+import org.apache.hadoop.conf.Configuration;
+
+import java.io.IOException;
+import java.util.Set;
 
 /**
  * Resource handler for cpu resources.
@@ -29,4 +33,7 @@ import org.apache.hadoop.classification.InterfaceStability;
 @InterfaceStability.Unstable
 public interface CpuResourceHandler extends ResourceHandler {
 
+  void cleanLeakContainers(Set<String> containerIDs) throws IOException;
+
+  void updateTotalCGroupsResource(Configuration conf) throws ResourceHandlerException;
 }

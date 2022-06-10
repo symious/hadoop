@@ -608,6 +608,26 @@ class CGroupsHandlerImpl implements CGroupsHandler {
   }
 
   @Override
+  public void cleanLeakContainers(Set<String> containerIDs) throws IOException {
+    String cgPath = this.cGroupsMountConfig.getMountPath() + "/cpu/" + this.cGroupPrefix;
+    // find /sys/fs/cgroup/cpu/yarn/ -type d |grep container|xargs -r rmdir
+    String command = "find " + cgPath + " -type d | grep container | xargs -r rmdir ";
+    try {
+      String[] commands = {"/bin/sh", "-c", command};
+      if (Shell.LINUX) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("command is: " + commands);
+        }
+        Runtime.getRuntime().exec(commands);
+      }
+    } catch (Exception e) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("clean leak containers, ", e);
+      }
+    }
+  }
+
+  @Override
   public String toString() {
     return CGroupsHandlerImpl.class.getName() + "{" +
         "mtabFile='" + mtabFile + '\'' +

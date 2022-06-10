@@ -247,8 +247,12 @@ public class NodeResourceMonitorImpl extends AbstractService implements
         // Clean leak CGroups containers config
         if (cGroupsEnabled && highLoadStrategyEnabled && canUpdateContainersResource) {
           lastCheck = System.currentTimeMillis();
+          // Clean the leak container file under CGroups
+          cleanLeakContainers();
           // Node Load Balance strategy
           updateContainersResource();
+          // Update the total resource of CGroups
+          updateTotalCGroupsResource();
         }
         try {
           Thread.sleep(monitoringInterval);
@@ -258,6 +262,24 @@ public class NodeResourceMonitorImpl extends AbstractService implements
           break;
         }
       }
+    }
+  }
+
+  private void updateTotalCGroupsResource() {
+    try {
+      ContainerScheduler scheduler = nmContext.getContainerManager().getContainerScheduler();
+      scheduler.updateTotalCGroupsResource();
+    } catch (Exception e) {
+      LOG.error("ERROR from updateTotalCGroupsResource: ", e);
+    }
+  }
+
+  private void cleanLeakContainers() {
+    try {
+      ContainerScheduler scheduler = nmContext.getContainerManager().getContainerScheduler();
+      scheduler.cleanLeakContainers();
+    } catch (Exception e) {
+      LOG.error("ERROR from cleanLeakContainers: ", e);
     }
   }
 
@@ -305,5 +327,21 @@ public class NodeResourceMonitorImpl extends AbstractService implements
         nodeId, ResourceOption.newInstance(Resource.newInstance(memory, coreNumber), 0));
     request.setNodeResourceMap(resourceMap);
     adminProtocol.updateNodeResource(request);
+    // Update Config as well
+    Configuration conf = this.getConfig();
+    SysInfo info = SysInfo.newInstance();
+    int coreRatio = (coreNumber * 100) / info.getNumProcessors();
+    if (coreRatio < 1) {
+      coreRatio = 1;
+    }
+    if (coreRatio > 100) {
+      coreRatio = 100;
+    }
+    conf.setInt(YarnConfiguration.NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT, coreRatio);
+    conf.setInt(YarnConfiguration.NM_PMEM_MB, Long.valueOf(memory).intValue());
+    conf.setInt(YarnConfiguration.NM_VCORES, coreNumber);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("New Resources: Mem-" + memory + ", Vcore-" + coreNumber + ", Ratio-" + coreRatio);
+    }
   }
 }

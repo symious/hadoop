@@ -203,30 +203,6 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     this.nodeLabelsProvider = provider;
   }
 
-  // Read 'yarn.allocation' file to overwrite resource config from yarn-site
-  private Resource getNodeResourceFromAllocationFile() {
-    if (StringUtils.isNullOrEmpty(this.yarnAllocation)) {
-      return null;
-    }
-    File yarnAllocation = FileUtils.getFile(this.yarnAllocation);
-    if (!yarnAllocation.exists()) {
-      return null;
-    }
-    Resource recordResource = null;
-    try {
-      String[] resourceRecord =
-          FileUtils.readFileToString(yarnAllocation, Charset.defaultCharset()).split(",");
-      long mem = Long.parseLong(resourceRecord[0]);
-      int vcore = Integer.parseInt(resourceRecord[1]);
-      recordResource = Resource.newInstance(mem, vcore);
-    } catch (IOException e) {
-      String errorMessage = "Unexpected error starting getNodeResourceFromAllocationFile";
-      LOG.error(errorMessage, e);
-    } finally {
-      return recordResource;
-    }
-  }
-
   /**
    * Update Resource params to 'yarn.allocation' file
    */
@@ -239,9 +215,17 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
       if (!yarnAllocationFile.exists()) {
         yarnAllocationFile.createNewFile();
       }
-      FileUtils.writeStringToFile(yarnAllocationFile,
-          this.totalResource.getMemorySize() + "," + this.totalResource.getVirtualCores(),
-          Charset.defaultCharset(), false);
+      int cpuPercentage = context.getConf()
+          .getInt(YarnConfiguration.NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT,
+              YarnConfiguration.DEFAULT_NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT);
+      String nmResourceData =
+          this.totalResource.getMemorySize() + "," + this.totalResource.getVirtualCores() + "," +
+              cpuPercentage;
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Writing the nm resource data:" + nmResourceData);
+      }
+      FileUtils.writeStringToFile(yarnAllocationFile, nmResourceData, Charset.defaultCharset(),
+          false);
     } catch (IOException e) {
       metrics.incrResourceDataPersistenceFailed();
       String errorMessage = "Unexpected error during updateNodeResourceAllocationFile";
@@ -255,11 +239,7 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
   protected void serviceInit(Configuration conf) throws Exception {
     this.yarnAllocation = conf.get(YarnConfiguration.NM_RESOURCE_ALLOCATION_FILE_PATH,
         YarnConfiguration.DEFAULT_NM_RESOURCE_ALLOCATION_FILE_PATH);
-    Resource yarnAllocationResource = getNodeResourceFromAllocationFile();
-    if (yarnAllocationResource == null) {
-      yarnAllocationResource = NodeManagerHardwareUtils.getNodeResources(conf);
-    }
-    this.totalResource = yarnAllocationResource;
+    this.totalResource = NodeManagerHardwareUtils.getNodeResources(conf);
     long memoryMb = totalResource.getMemorySize();
     float vMemToPMem =
         conf.getFloat(

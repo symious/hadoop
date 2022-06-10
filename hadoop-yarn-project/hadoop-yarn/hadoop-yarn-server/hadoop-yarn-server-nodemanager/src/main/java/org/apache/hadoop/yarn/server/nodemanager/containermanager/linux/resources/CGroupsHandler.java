@@ -23,6 +23,7 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resourc
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 
+import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -34,7 +35,6 @@ import java.util.Set;
 @InterfaceAudience.Private
 @InterfaceStability.Unstable
 public interface CGroupsHandler {
-
   /**
    * List of supported cgroup subsystem types.
    */
@@ -192,4 +192,6 @@ public interface CGroupsHandler {
    * @return parameter value as read from the parameter file
    */
   String getCGroupMountPath();
+
+  void cleanLeakContainers(Set<String> containerIDs) throws IOException;
 }

@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.nodemanager;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
@@ -92,6 +93,7 @@ import java.lang.reflect.UndeclaredThrowableException;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
+import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -1068,8 +1070,42 @@ public class NodeManager extends CompositeService
     @SuppressWarnings("resource")
     NodeManager nodeManager = new NodeManager();
     Configuration conf = new YarnConfiguration();
+    // Load NM resource when start NodeManager
+    loadAllocationResource(conf);
     new GenericOptionsParser(conf, args);
     nodeManager.initAndStartNodeManager(conf, false);
+  }
+
+  public static void loadAllocationResource(Configuration conf) {
+    String allocationPath = conf.get(YarnConfiguration.NM_RESOURCE_ALLOCATION_FILE_PATH,
+        YarnConfiguration.DEFAULT_NM_RESOURCE_ALLOCATION_FILE_PATH);
+    if (StringUtils.isNullOrEmpty(allocationPath)) {
+      return;
+    }
+    File yarnAllocation = FileUtils.getFile(allocationPath);
+    if (!yarnAllocation.exists()) {
+      return;
+    }
+    try {
+      String[] resourceRecord =
+          FileUtils.readFileToString(yarnAllocation, Charset.defaultCharset()).split(",");
+      long mem = Long.parseLong(resourceRecord[0]);
+      int vcore = Integer.parseInt(resourceRecord[1]);
+      int nodeCpuPercentage =
+          Math.min(conf.getInt(
+                  YarnConfiguration.NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT,
+                  YarnConfiguration.DEFAULT_NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT),
+              100);
+      if (resourceRecord.length == 3) {
+        nodeCpuPercentage = Integer.parseInt(resourceRecord[2]);
+      }
+      conf.setInt(YarnConfiguration.NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT, nodeCpuPercentage);
+      conf.setInt(YarnConfiguration.NM_PMEM_MB, Long.valueOf(mem).intValue());
+      conf.setInt(YarnConfiguration.NM_VCORES, vcore);
+    } catch (IOException e) {
+      String errorMessage = "Unexpected error starting getNodeResourceFromAllocationFile";
+      LOG.error(errorMessage, e);
+    }
   }
 
   @VisibleForTesting

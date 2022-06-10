@@ -40,6 +40,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * An implementation for using CGroups to restrict CPU usage on Linux. The
@@ -397,5 +398,26 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
   @Override
   public String toString() {
     return CGroupsCpuResourceHandlerImpl.class.getName();
+  }
+
+  @Override
+  public void cleanLeakContainers(Set<String> containerIDs) throws IOException {
+    this.cGroupsHandler.cleanLeakContainers(containerIDs);
+  }
+
+  @Override
+  public void updateTotalCGroupsResource(Configuration conf) throws ResourceHandlerException {
+    ResourceCalculatorPlugin plugin =
+        ResourceCalculatorPlugin.getResourceCalculatorPlugin(null, conf);
+    nodeVCores = NodeManagerHardwareUtils.getVCores(plugin, conf);
+    yarnProcessors = NodeManagerHardwareUtils.getContainersCPUs(plugin, conf);
+    LOG.info("YARN containers restricted to " + yarnProcessors + " cores");
+    int[] limits = getOverallLimits(yarnProcessors);
+    cGroupsHandler
+        .updateCGroupParam(CPU, "", CGroupsHandler.CGROUP_CPU_PERIOD_US,
+            String.valueOf(limits[0]));
+    cGroupsHandler
+        .updateCGroupParam(CPU, "", CGroupsHandler.CGROUP_CPU_QUOTA_US,
+            String.valueOf(limits[1]));
   }
 }
