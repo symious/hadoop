@@ -92,7 +92,11 @@ public class RMTimelineCollectorManager extends TimelineCollectorManager {
         break;
       case TimelineUtils.TIC_TAG_PREFIX:
         LOG.debug("Setting the tic: {}", parts[1]);
-        context.setTic(parts[1]);
+        context.addTag(TimelineUtils.TIC_TAG_PREFIX, parts[1]);
+        break;
+      case TimelineUtils.LIVY_TAG_PREFIX:
+        LOG.debug("Setting the livy: {}", parts[1]);
+        context.addTag(TimelineUtils.LIVY_TAG_PREFIX, parts[1]);
         break;
       default:
         break;

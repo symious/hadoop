@@ -21,15 +21,18 @@ package org.apache.hadoop.yarn.server.timelineservice.collector;
 import org.apache.hadoop.yarn.server.timelineservice.TimelineContext;
 import org.apache.hadoop.yarn.util.timeline.TimelineUtils;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Encapsulates context information required by collector during a put.
  */
 public class TimelineCollectorContext extends TimelineContext {
   private String flowVersion;
-  private String tic;
+  private Map<String, String> tags;
 
   public TimelineCollectorContext() {
-    this(null, null, null, null, 0L, null, null);
+    this(null, null, null, null, 0L, null);
   }
 
   public TimelineCollectorContext(String clusterId, String userId,
@@ -37,14 +40,7 @@ public class TimelineCollectorContext extends TimelineContext {
     super(clusterId, userId, flowName, flowRunId, appId);
     this.flowVersion = flowVersion == null ?
         TimelineUtils.DEFAULT_FLOW_VERSION : flowVersion;
-  }
-
-  public TimelineCollectorContext(String clusterId, String userId,
-      String flowName, String flowVersion, Long flowRunId, String appId, String tic) {
-    super(clusterId, userId, flowName, flowRunId, appId);
-    this.flowVersion = flowVersion == null ?
-        TimelineUtils.DEFAULT_FLOW_VERSION : flowVersion;
-    this.tic = tic;
+    this.tags = new HashMap<>();
   }
 
   @Override
@@ -83,11 +79,11 @@ public class TimelineCollectorContext extends TimelineContext {
     this.flowVersion = version;
   }
 
-  public String getTic() {
-    return tic;
+  public void addTag(String key, String value) {
+    this.tags.put(key, value);
   }
 
-  public void setTic(String tic) {
-    this.tic = tic;
+  public Map<String, String> getTags() {
+    return tags;
   }
 }

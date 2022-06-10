@@ -181,7 +181,7 @@ public class HBaseTimelineWriterImpl extends AbstractService implements
     String userId = context.getUserId();
     String flowName = context.getFlowName();
     String flowVersion = context.getFlowVersion();
-    String tic = context.getTic();
+    Map<String, String> tags = context.getTags();
     long flowRunId = context.getFlowRunId();
     String appId = context.getAppId();
     String subApplicationUser = callerUgi.getShortUserName();
@@ -236,7 +236,7 @@ public class HBaseTimelineWriterImpl extends AbstractService implements
             new FlowRunRowKey(clusterId, userId, flowName, flowRunId);
         if (event != null) {
           onApplicationCreated(flowRunRowKey, clusterId, appId, userId,
-              flowVersion, tic, te, event.getTimestamp());
+              flowVersion, tags, te, event.getTimestamp());
         }
         // if it's an application entity, store metrics
         storeFlowMetricsAppRunning(flowRunRowKey, appId, te);
@@ -291,7 +291,7 @@ public class HBaseTimelineWriterImpl extends AbstractService implements
 
   private void onApplicationCreated(FlowRunRowKey flowRunRowKey,
       String clusterId, String appId, String userId, String flowVersion,
-      String tic, TimelineEntity te, long appCreatedTimeStamp)
+      Map<String, String> tags, TimelineEntity te, long appCreatedTimeStamp)
       throws IOException {
 
     String flowName = flowRunRowKey.getFlowName();
@@ -310,13 +310,14 @@ public class HBaseTimelineWriterImpl extends AbstractService implements
     // store in flow run table
     storeAppCreatedInFlowRunTable(flowRunRowKey, appId, te);
 
-    if (tic != null && !tic.isEmpty()) {
-      // store in tic to app table
-      TicToAppRowKey ticToAppRowKey = new TicToAppRowKey(tic);
-      ColumnRWHelper.store(ticToAppRowKey.getRowKey(), ticToAppTable,
-          TicToAppColumn.ID, null, appId);
+    for (String tag : tags.values()) {
+      if (tag != null && !tag.isEmpty()) {
+        TicToAppRowKey ticToAppRowKey = new TicToAppRowKey(tag);
+        ColumnRWHelper
+            .store(ticToAppRowKey.getRowKey(), ticToAppTable, TicToAppColumn.ID,
+                null, appId);
+      }
     }
-
 
     // store in flow activity table
     byte[] flowActivityRowKeyBytes =
