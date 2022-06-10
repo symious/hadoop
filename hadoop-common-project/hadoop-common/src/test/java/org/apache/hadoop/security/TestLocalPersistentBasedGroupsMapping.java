@@ -54,6 +54,7 @@ public class TestLocalPersistentBasedGroupsMapping {
   private final static String TEST_FILE2 = "usergroups2";
   private final static String TEST_FILE_TEMP = "usergroups.temp";
   private final static String TEST_FILE_INVALID = "usergroups.invalid";
+  private final static String TEST_FILE_EMPTY = "usergroups.empty";
 
   /**
    * Initializes Mapping object, deletes checksum file if existed, executes
@@ -155,6 +156,24 @@ public class TestLocalPersistentBasedGroupsMapping {
     assertTrue("Expected the exception message to be about invalid"
             + " mapping format but was: " + mappingLog.getOutput(),
         mappingLog.getOutput().contains("Unable to process mapping:"));
+    mappingLog.clearOutput();
+  }
+
+  @Test
+  public void testEmptyMappingFormat() throws IOException {
+    ClassLoader classLoader = getClass().getClassLoader();
+    final File testFileEmpty =
+        new File(classLoader.getResource(TEST_FILE_EMPTY).getFile());
+    LocalPersistentBasedGroupsMapping mapping =
+        getMapping(testFileEmpty, false, true);
+
+    mapping.initializeMappingRefreshService();
+    assertTrue("Expected the exception message to be about empty"
+            + " mappings but was: " + mappingLog.getOutput(),
+        mappingLog.getOutput().contains("Empty group:"));
+    assertTrue("Expected the exception message to be about empty"
+            + " mappings but was: " + mappingLog.getOutput(),
+        mappingLog.getOutput().contains("Usergroup mappings are empty."));
     mappingLog.clearOutput();
   }
 
