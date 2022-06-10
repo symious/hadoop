@@ -695,4 +695,8 @@ public class Router extends CompositeService {
   RouterSafemodeService getSafemodeService() {
     return this.safemodeService;
   }
+
+  public void updateConf(String key, String value) {
+    conf.set(key, value);
+  }
 }
