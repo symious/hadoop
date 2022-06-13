@@ -778,6 +778,30 @@ public class YarnConfiguration extends Configuration {
   public static final float
       DEFAULT_RM_NM_HEARTBEAT_INTERVAL_SLOWDOWN_FACTOR = 1.0f;
 
+  /**
+   * Number of consecutive missed heartbeats after which node will be
+   * skipped from scheduling.
+   */
+  public static final String SCHEDULER_SKIP_NODE_MULTIPLIER =
+      YARN_PREFIX + "scheduler.skip.node.multiplier";
+  public static final int DEFAULT_SCHEDULER_SKIP_NODE_MULTIPLIER = 2;
+
+  /**
+   * Returns Timeout to skip node from scheduling if not heartbeated.
+   *
+   * @param conf the configuration
+   * @return timeout in milliseconds.
+   */
+  public static long getSkipNodeInterval(Configuration conf) {
+    long heartbeatIntvl = conf.getLong(
+        YarnConfiguration.RM_NM_HEARTBEAT_INTERVAL_MS,
+        YarnConfiguration.DEFAULT_RM_NM_HEARTBEAT_INTERVAL_MS);
+    int multiplier = conf.getInt(SCHEDULER_SKIP_NODE_MULTIPLIER,
+        DEFAULT_SCHEDULER_SKIP_NODE_MULTIPLIER);
+    return multiplier * heartbeatIntvl;
+  }
+
+
   public static final String RM_NM_RECOVERY_HEARTBEAT_INTERVAL_MS =
       RM_PREFIX + "nodemanagers.recovery.heartbeat-interval";
   public static final long DEFAULT_RM_NM_RECOVERY_HEARTBEAT_INTERVAL_MS = 10000;
