@@ -239,9 +239,7 @@ public class LocalPersistentBasedGroupsMapping extends Configured
         ConcurrentHashMap<String, List<String>> localMappings) {
       for (Map.Entry<String, List<String>> entry : groupUsers.entrySet()) {
         for (String user : entry.getValue()) {
-          if (!localMappings.containsKey(user)) {
-            localMappings.put(user, new ArrayList<String>());
-          }
+          localMappings.putIfAbsent(user, new ArrayList<String>());
           localMappings.get(user).add(entry.getKey());
         }
       }
@@ -301,7 +299,7 @@ public class LocalPersistentBasedGroupsMapping extends Configured
   }
 
   @VisibleForTesting
-  protected void setConfWithoutServiceInit(Configuration conf) {
+  synchronized protected void setConfWithoutServiceInit(Configuration conf) {
     super.setConf(conf);
     if (conf != null) {
       refreshInterval = conf.getTimeDuration(
@@ -317,7 +315,7 @@ public class LocalPersistentBasedGroupsMapping extends Configured
     }
   }
 
-  protected void initializeMappingRefreshService() {
+  synchronized protected void initializeMappingRefreshService() {
     if (refreshInterval <= 0) {
       LOG.warn("Invalid refresh interval: {}", refreshInterval);
       return;
@@ -339,7 +337,7 @@ public class LocalPersistentBasedGroupsMapping extends Configured
   }
 
   @VisibleForTesting
-  protected void setRefreshInterval(long milliseconds) {
+  synchronized protected void setRefreshInterval(long milliseconds) {
     this.refreshInterval = milliseconds;
     if (refreshTask != null) {
       refreshTask.cancel(true);

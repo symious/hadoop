@@ -19,6 +19,7 @@
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -161,6 +162,7 @@ public class SlowDiskTracker {
   /**
    * This structure is a thin wrapper over disk latencies.
    */
+  @JsonIgnoreProperties(value = { "latency" })
   public static class DiskLatency {
     @JsonProperty("SlowDiskID")
     final private String slowDiskID;
