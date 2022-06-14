@@ -586,7 +586,7 @@ public class CapacityScheduler extends
       // Allocate containers of node [start, end)
       for (FiCaSchedulerNode node : nodes) {
         if (current++ >= start) {
-          if ((node, cs, printSkippedNodeLogging)) {
+          if (shouldSkipNodeSchedule(node, cs, printSkippedNodeLogging)) {
             continue;
           }
           cs.allocateContainersToNode(node.getNodeID(), false);
