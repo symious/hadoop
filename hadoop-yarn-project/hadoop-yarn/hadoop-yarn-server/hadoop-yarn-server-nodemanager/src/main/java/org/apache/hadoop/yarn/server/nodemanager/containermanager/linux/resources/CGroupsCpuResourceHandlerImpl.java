@@ -305,10 +305,13 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
               strictCoreNumber = strictCoreNumberFromUser;
             }
           }
-
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("nodeVCores is: " + nodeVCores + ", containerVCores: " + containerVCores +
+                ", yarnProcessors: " + yarnProcessors + ", strictCoreNumber: " + strictCoreNumber);
+          }
           // If overload will change to let it less than max
-          if (strictCoreNumber > yarnProcessors) {
-            strictCoreNumber = Double.valueOf(yarnProcessors).intValue();
+          if (strictCoreNumber > nodeVCores) {
+            strictCoreNumber = nodeVCores;
           }
 
           containerVCores = strictCoreNumber;
@@ -372,6 +375,14 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
 
   private void setupLimitsInternal(int containerVCores, String cgroupId)
       throws ResourceHandlerException {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("nodeVCores is: " + nodeVCores + ", containerVCores: " + containerVCores +
+          ", yarnProcessors: " + yarnProcessors);
+    }
+    cGroupsHandler.updateCGroupParam(CPU, cgroupId,
+        CGroupsHandler.CGROUP_CPU_PERIOD_US, String.valueOf(MAX_QUOTA_US));
+    cGroupsHandler.updateCGroupParam(CPU, cgroupId,
+        CGroupsHandler.CGROUP_CPU_QUOTA_US, "-1");
     if (nodeVCores != containerVCores) {
       float containerCPU =
           (containerVCores * yarnProcessors) / (float) nodeVCores;
