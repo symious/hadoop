@@ -117,6 +117,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_BACKOFF_ENABLE;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_BACKOFF_ENABLE_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_NAMESPACE;
+import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_SERVER_RPC_CATEGORY_INTERNAL;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
@@ -763,6 +764,7 @@ public class NameNode extends ReconfigurableBase implements
       }
     }
 
+    conf.set(IPC_SERVER_RPC_CATEGORY_INTERNAL, this.getClass().getName());
     UserGroupInformation.setConfiguration(conf);
     loginAsNameNodeUser(conf);
 

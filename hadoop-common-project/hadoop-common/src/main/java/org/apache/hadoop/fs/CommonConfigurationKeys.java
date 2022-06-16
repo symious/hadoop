@@ -57,6 +57,11 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
       "ipc.client.rpc-timeout.ms";
   /** Default value for IPC_CLIENT_RPC_TIMEOUT_KEY. */
   public static final int IPC_CLIENT_RPC_TIMEOUT_DEFAULT = 0;
+  /** IPC server category */
+  public static final String  IPC_SERVER_RPC_CATEGORY_INTERNAL =
+      "ipc.server.rpc.category.internal";
+  /** Default value for IPC_SERVER_RPC_CATEGORY_INTERNAL */
+  public static final String  IPC_SERVER_RPC_CATEGORY_INTERNAL_DEFAULT = "";
   /** Responses larger than this will be logged */
   public static final String  IPC_SERVER_RPC_MAX_RESPONSE_SIZE_KEY =
     "ipc.server.max.response.size";
