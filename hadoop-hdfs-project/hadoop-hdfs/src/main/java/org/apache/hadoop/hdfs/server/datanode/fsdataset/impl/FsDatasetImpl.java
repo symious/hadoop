@@ -3333,11 +3333,15 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
         File blockFile, metaFile;
         long blockFileUsed, metaFileUsed;
         final String bpid = replicaState.getBlockPoolId();
+        final FsVolumeImpl lazyPersistVolume =
+            replicaState.getLazyPersistVolume();
 
-        try (AutoCloseableLock lock = lockManager.writeLock(LockLevel.BLOCK_POOl, bpid)) {
+        try (AutoCloseableLock lock = lockManager.readLock(LockLevel.BLOCK_POOl,
+            bpid)) {
           replicaInfo = getReplicaInfo(replicaState.getBlockPoolId(),
-                                       replicaState.getBlockId());
-          Preconditions.checkState(replicaInfo.getVolume().isTransientStorage());
+              replicaState.getBlockId());
+          Preconditions.checkState(
+              replicaInfo.getVolume().isTransientStorage());
           blockFile = replicaInfo.getBlockFile();
           metaFile = replicaInfo.getMetaFile();
           blockFileUsed = blockFile.length();
@@ -3345,30 +3349,29 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           ramDiskReplicaTracker.discardReplica(replicaState.getBlockPoolId(),
               replicaState.getBlockId(), false);
 
-          // Move the replica from lazyPersist/ to finalized/ on
-          // the target volume
-          BlockPoolSlice bpSlice =
-              replicaState.getLazyPersistVolume().getBlockPoolSlice(bpid);
-          File newBlockFile = bpSlice.activateSavedReplica(
-              replicaInfo, replicaState.getSavedMetaFile(),
-              replicaState.getSavedBlockFile());
+          try (AutoCloseableLock lock1 = lockManager.writeLock(LockLevel.VOLUME,
+              bpid, lazyPersistVolume.getStorageID())) {
+            // Move the replica from lazyPersist/ to finalized/ on
+            // the target volume
+            BlockPoolSlice bpSlice = lazyPersistVolume.getBlockPoolSlice(bpid);
+            File newBlockFile = bpSlice.activateSavedReplica(replicaInfo,
+                replicaState.getSavedMetaFile(),
+                replicaState.getSavedBlockFile());
 
-          newReplicaInfo =
-              new FinalizedReplica(replicaInfo.getBlockId(),
-                                   replicaInfo.getBytesOnDisk(),
-                                   replicaInfo.getGenerationStamp(),
-                                   replicaState.getLazyPersistVolume(),
-                                   newBlockFile.getParentFile());
+            newReplicaInfo = new FinalizedReplica(replicaInfo.getBlockId(),
+                replicaInfo.getBytesOnDisk(), replicaInfo.getGenerationStamp(),
+                lazyPersistVolume, newBlockFile.getParentFile());
 
-          // Update the volumeMap entry.
-          volumeMap.add(bpid, newReplicaInfo);
+            // Update the volumeMap entry.
+            volumeMap.add(bpid, newReplicaInfo);
 
-          // Update metrics
-          datanode.getMetrics().incrRamDiskBlocksEvicted();
-          datanode.getMetrics().addRamDiskBlocksEvictionWindowMs(
-              Time.monotonicNow() - replicaState.getCreationTime());
-          if (replicaState.getNumReads() == 0) {
-            datanode.getMetrics().incrRamDiskBlocksEvictedWithoutRead();
+            // Update metrics
+            datanode.getMetrics().incrRamDiskBlocksEvicted();
+            datanode.getMetrics().addRamDiskBlocksEvictionWindowMs(
+                Time.monotonicNow() - replicaState.getCreationTime());
+            if (replicaState.getNumReads() == 0) {
+              datanode.getMetrics().incrRamDiskBlocksEvictedWithoutRead();
+            }
           }
 
           // Delete the block+meta files from RAM disk and release locked
