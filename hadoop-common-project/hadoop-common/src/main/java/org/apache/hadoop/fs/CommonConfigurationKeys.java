@@ -375,6 +375,11 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   /** How often the server scans for idle connections */
   public static final String IPC_CLIENT_CONNECTION_IDLESCANINTERVAL_KEY =
       "ipc.client.connection.idle-scan-interval.ms";
+  /** IPC server category */
+  public static final String  IPC_SERVER_RPC_CATEGORY_INTERNAL =
+      "ipc.server.rpc.category.internal";
+  /** Default value for IPC_SERVER_RPC_CATEGORY_INTERNAL */
+  public static final String  IPC_SERVER_RPC_CATEGORY_INTERNAL_DEFAULT = "";
   /** Default value for IPC_SERVER_CONNECTION_IDLE_SCAN_INTERVAL_KEY */
   public static final int IPC_CLIENT_CONNECTION_IDLESCANINTERVAL_DEFAULT =
       10000;

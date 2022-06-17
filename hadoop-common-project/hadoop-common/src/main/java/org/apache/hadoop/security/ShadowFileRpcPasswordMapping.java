@@ -151,7 +151,7 @@ public class ShadowFileRpcPasswordMapping extends Configured
   @Override
   public void start() {
     if (cacheRefreshService == null && cacheRefreshAsync) {
-      LOG.info("Initialize PRCpassword cache refresh async service!");
+      LOG.info("Initialize RPC password cache refresh async service!");
       initializeCacheRefreshService();
     }
   }
