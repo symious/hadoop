@@ -159,7 +159,6 @@ public abstract class TimelineCollector extends CompositeService {
     // caused by the timeline enitites that are being put here.
     synchronized (writer) {
       response = writeTimelineEntities(entities, callerUgi);
-      flushBufferedTimelineEntities();
     }
 
     return response;
