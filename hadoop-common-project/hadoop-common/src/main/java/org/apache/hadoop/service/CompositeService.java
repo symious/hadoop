@@ -69,7 +69,7 @@ public class CompositeService extends AbstractService {
    * {@link CompositeService}
    * @param service the {@link Service} to be added
    */
-  protected void addService(Service service) {
+  public void addService(Service service) {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Adding service " + service.getName());
     }
@@ -93,7 +93,7 @@ public class CompositeService extends AbstractService {
     }
   }
 
-  protected synchronized boolean removeService(Service service) {
+  public synchronized boolean removeService(Service service) {
     synchronized (serviceList) {
       return serviceList.remove(service);
     }

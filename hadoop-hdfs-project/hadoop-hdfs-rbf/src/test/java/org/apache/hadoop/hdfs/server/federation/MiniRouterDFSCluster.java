@@ -56,6 +56,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Random;
@@ -824,9 +825,14 @@ public class MiniRouterDFSCluster {
   }
 
   public void registerNamenodes() throws IOException {
+    registerNamenodes(false);
+  }
+
+  public void registerNamenodes(boolean onlyMonitoredNns) throws IOException {
     for (RouterContext r : this.routers) {
       ActiveNamenodeResolver resolver = r.router.getNamenodeResolver();
-      for (NamenodeContext nn : this.namenodes) {
+      for (NamenodeContext nn : (onlyMonitoredNns ? getMonitoredNamenodes() :
+          this.namenodes)) {
         // Generate a report
         NamenodeStatusReport report = new NamenodeStatusReport(
             nn.nameserviceId, nn.namenodeId,
@@ -854,9 +860,15 @@ public class MiniRouterDFSCluster {
   }
 
   public void waitNamenodeRegistration() throws Exception {
+    waitNamenodeRegistration(false);
+  }
+
+
+  public void waitNamenodeRegistration(boolean onlyMonitoredNns) throws Exception {
     for (RouterContext r : this.routers) {
       Router router = r.router;
-      for (NamenodeContext nn : this.namenodes) {
+      for (NamenodeContext nn : (onlyMonitoredNns ? getMonitoredNamenodes() :
+          this.namenodes)) {
         ActiveNamenodeResolver nnResolver = router.getNamenodeResolver();
         waitNamenodeRegistered(
             nnResolver, nn.nameserviceId, nn.namenodeId, null);
@@ -1176,5 +1188,31 @@ public class MiniRouterDFSCluster {
     } catch (Exception e) {
       throw new IOException("Cannot wait for the namenodes", e);
     }
+  }
+
+  public void waitClusterUp(boolean onlyMonitoredNns) throws IOException {
+    cluster.waitClusterUp();
+    registerNamenodes(onlyMonitoredNns);
+    try {
+      waitNamenodeRegistration(onlyMonitoredNns);
+    } catch (Exception e) {
+      throw new IOException("Cannot wait for the namenodes", e);
+    }
+  }
+
+  private List<NamenodeContext> getMonitoredNamenodes() {
+    List<NamenodeContext> nns = new ArrayList<>();
+    Collection<String> monitored = routers.get(0).getConf()
+        .getTrimmedStringCollection(DFS_ROUTER_MONITOR_NAMENODE);
+    for (NamenodeContext nn: this.namenodes) {
+      String nnId = nn.getNameserviceId();
+      if (nn.getNamenodeId() != null) {
+        nnId += "." + nn.getNamenodeId();
+      }
+      if (monitored.contains(nnId)) {
+        nns.add(nn);
+      }
+    }
+    return nns;
   }
 }

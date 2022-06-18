@@ -88,6 +88,14 @@ public class NamenodeHeartbeatService extends PeriodicService {
   /** HTTP address for the namenode. */
   private String webAddress;
 
+  public String getNameserviceId() {
+    return this.nameserviceId;
+  }
+
+  public String getNamenodeId() {
+    return this.namenodeId;
+  }
+
   /**
    * Create a new Namenode status updater.
    * @param resolver Namenode resolver service to handle NN registration.

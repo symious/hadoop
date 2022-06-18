@@ -22,6 +22,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.security.PrivilegedExceptionAction;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -42,6 +43,8 @@ import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster.NamenodeCon
 import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster.RouterContext;
 import org.apache.hadoop.hdfs.server.federation.RouterConfigBuilder;
 import org.apache.hadoop.hdfs.server.federation.StateStoreDFSCluster;
+import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeContext;
+import org.apache.hadoop.hdfs.server.federation.resolver.MembershipNamenodeResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableResolver;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.AddMountTableEntryRequest;
@@ -50,6 +53,7 @@ import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntr
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntriesResponse;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.RemoveMountTableEntryRequest;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
+import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.test.LambdaTestUtils;
@@ -58,6 +62,7 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.function.ThrowingRunnable;
 
 import static org.junit.Assert.*;
 
@@ -82,16 +87,18 @@ public class TestRouterMountTable {
     startTime = Time.now();
 
     // Build and start a federated cluster
-    cluster = new StateStoreDFSCluster(false, 2);
+    cluster = new StateStoreDFSCluster(false, 3);
     Configuration conf = new RouterConfigBuilder()
         .stateStore()
+        .heartbeat()
         .admin()
         .rpc()
         .build();
+    conf.set(RBFConfigKeys.DFS_ROUTER_MONITOR_NAMENODE, "ns0,ns1");
     cluster.addRouterOverrides(conf);
     cluster.startCluster();
     cluster.startRouters();
-    cluster.waitClusterUp();
+    cluster.waitClusterUp(true);
 
     // Get the end points
     nnContext0 = cluster.getNamenode("ns0", null);
@@ -510,5 +517,64 @@ public class TestRouterMountTable {
     assertEquals("owner1", finfo1[0].getOwner());
     assertEquals("group1", finfo.getGroup());
     assertEquals("group1", finfo1[0].getGroup());
+  }
+
+  @Test
+  public void testRefreshRouterNamenodesWithNewNamespace() throws Exception {
+    final Configuration conf =
+        new Configuration(routerContext.getRouter().getConfig());
+    final String oldNns = conf.get(RBFConfigKeys.DFS_ROUTER_MONITOR_NAMENODE);
+    final RouterAdminServer admin =
+        routerContext.getRouter().getRouterAdminServer();
+    try {
+      // Add mount table entry
+      MountTable addEntry = MountTable.newInstance("/testdir1",
+          Collections.singletonMap("ns1", "/testdir1"));
+      assertTrue(addMountTable(addEntry));
+      addEntry = MountTable.newInstance("/testdir2",
+          Collections.singletonMap("ns2", "/testdir2"));
+      assertTrue(addMountTable(addEntry));
+
+      // Create test dir in NN
+      // Should pass
+      assertThrows(FileNotFoundException.class,
+          new ThrowingRunnable() {
+            @Override
+            public void run() throws Throwable {
+              routerFs.listStatus(new Path("/testdir1"));
+            }
+          });
+      // Should fail with RemoteException due to no ns2
+      assertThrows(RemoteException.class,
+          new ThrowingRunnable() {
+            @Override
+            public void run() throws Throwable {
+              routerFs.listStatus(new Path("/testdir2"));
+            }
+          });
+
+      // Refresh namenodes with ns2
+      conf.set(RBFConfigKeys.DFS_ROUTER_MONITOR_NAMENODE, oldNns + ",ns2");
+      admin.refreshNameservicesAndNamenodes(conf);
+      Collection<NamenodeHeartbeatService> heartbeatServices =
+          routerContext.getRouter().getNamenodeHearbeatServices();
+      for (NamenodeHeartbeatService service : heartbeatServices) {
+        service.periodicInvoke();
+      }
+      ((MembershipNamenodeResolver) routerContext.getRouter()
+          .getNamenodeResolver()).loadCache(true);
+
+      // Should pass
+      assertThrows(FileNotFoundException.class,
+          new ThrowingRunnable() {
+            @Override
+            public void run() throws Throwable {
+              routerFs.listStatus(new Path("/testdir2"));
+            }
+          });
+    } finally {
+      conf.set(RBFConfigKeys.DFS_ROUTER_MONITOR_NAMENODE, oldNns);
+      admin.refreshNameservicesAndNamenodes(conf);
+    }
   }
 }

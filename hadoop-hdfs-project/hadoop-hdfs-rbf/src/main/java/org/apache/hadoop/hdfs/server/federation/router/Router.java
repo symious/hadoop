@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.federation.router;
 
+import static org.apache.hadoop.hdfs.server.federation.router.FederationUtil.getAllConfiguredNSNN;
 import static org.apache.hadoop.hdfs.server.federation.router.FederationUtil.newActiveNamenodeResolver;
 import static org.apache.hadoop.hdfs.server.federation.router.FederationUtil.newFileSubclusterResolver;
 
@@ -24,9 +25,11 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -81,6 +84,8 @@ public class Router extends CompositeService {
   /** Router address/identifier. */
   private String routerId;
 
+  private Map<String, Set<String>> nsToNnMap;
+
   /** RPC interface to the client. */
   private RouterRpcServer rpcServer;
   private InetSocketAddress rpcAddress;
@@ -101,7 +106,8 @@ public class Router extends CompositeService {
   /** Interface to identify the active NN for a nameservice or blockpool ID. */
   private ActiveNamenodeResolver namenodeResolver;
   /** Updates the namenode status in the namenode resolver. */
-  private Collection<NamenodeHeartbeatService> namenodeHeartbeatServices;
+  final private Collection<NamenodeHeartbeatService> namenodeHeartbeatServices =
+      new ArrayList<>();
 
   /** Router metrics. */
   private RouterMetricsService metrics;
@@ -143,6 +149,7 @@ public class Router extends CompositeService {
   @Override
   protected void serviceInit(Configuration configuration) throws Exception {
     this.conf = configuration;
+    this.nsToNnMap = getAllConfiguredNSNN(conf);
     updateRouterState(RouterServiceState.INITIALIZING);
 
     if (conf.getBoolean(
@@ -196,7 +203,7 @@ public class Router extends CompositeService {
         RBFConfigKeys.DFS_ROUTER_HEARTBEAT_ENABLE_DEFAULT)) {
 
       // Create status updater for each monitored Namenode
-      this.namenodeHeartbeatServices = createNamenodeHeartbeatServices();
+      createNamenodeHeartbeatServices();
       for (NamenodeHeartbeatService hearbeatService :
           this.namenodeHeartbeatServices) {
         addService(hearbeatService);
@@ -433,8 +440,7 @@ public class Router extends CompositeService {
    *
    * @return List of heartbeat services.
    */
-  protected Collection<NamenodeHeartbeatService>
-      createNamenodeHeartbeatServices() {
+  protected void createNamenodeHeartbeatServices() {
 
     Map<String, NamenodeHeartbeatService> ret = new HashMap<>();
 
@@ -476,7 +482,7 @@ public class Router extends CompositeService {
       }
     }
 
-    return ret.values();
+    namenodeHeartbeatServices.addAll(ret.values());
   }
 
   /**
@@ -684,9 +690,20 @@ public class Router extends CompositeService {
   /**
    * Get the list of namenode heartbeat service.
    */
-  @VisibleForTesting
   Collection<NamenodeHeartbeatService> getNamenodeHearbeatServices() {
     return this.namenodeHeartbeatServices;
+  }
+
+  public void addNamenodeHeartbeatService(NamenodeHeartbeatService service) {
+    synchronized (namenodeHeartbeatServices) {
+      namenodeHeartbeatServices.add(service);
+    }
+  }
+
+  public void removeNamenodeHeartbeatService(NamenodeHeartbeatService service) {
+    synchronized (namenodeHeartbeatServices) {
+      namenodeHeartbeatServices.remove(service);
+    }
   }
 
   /**
@@ -698,5 +715,21 @@ public class Router extends CompositeService {
 
   public void updateConf(String key, String value) {
     conf.set(key, value);
+  }
+
+  /**
+   * Get all namenodes in a map of nameservice:namenode.
+   */
+  public Map<String, Set<String>> getNsToNnMap() {
+    return nsToNnMap;
+  }
+
+  public void setNsToNnMap(Map<String, Set<String>> map) {
+    nsToNnMap = map;
+  }
+
+  @VisibleForTesting
+  public RouterAdminServer getRouterAdminServer() {
+    return adminServer;
   }
 }
