@@ -324,6 +324,10 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   @Private
   public static final String QUEUE_PREEMPTION_DISABLED = "disable_preemption";
 
+  public static final String AM_PREEMPTION_ENABLED = PREFIX + "am-preemption-enabled";
+
+  public static final boolean DEFAULT_AM_PREEMPTION = true;
+
   @Private
   public static final String DEFAULT_APPLICATION_PRIORITY = "default-application-priority";
 
@@ -570,6 +574,10 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     } else {
       return intraQueuePreemptionOrderPolicyGlobal.toUpperCase();
     }
+  }
+
+  public boolean getAMPreemptionEnabled() {
+    return getBoolean(AM_PREEMPTION_ENABLED, DEFAULT_AM_PREEMPTION);
   }
 
   /**
