@@ -795,6 +795,7 @@ public class ParentQueue extends AbstractCSQueue {
     for (Iterator<CSQueue> iter = sortAndGetChildrenAllocationIterator(
         candidates.getPartition()); iter.hasNext(); ) {
       CSQueue childQueue = iter.next();
+      childQueue.getMetrics().incrQueueChooseCount();
       LOG.debug("Trying to assign to queue: {} stats: {}",
           childQueue.getQueuePath(), childQueue);
 

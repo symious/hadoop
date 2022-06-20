@@ -101,6 +101,9 @@ public class QueueMetrics implements MetricsSource {
   @Metric("Reserved CPU in virtual cores") MutableGaugeInt reservedVCores;
   @Metric("# of reserved containers") MutableGaugeInt reservedContainers;
 
+  @Metric("Aggregate # of choose queue number")
+  MutableCounterLong aggregateQueueChooseCount;
+
   private final MutableGaugeInt[] runningTime;
   private TimeBucketMetrics<ApplicationId> runBuckets;
 
@@ -1191,6 +1194,15 @@ public class QueueMetrics implements MetricsSource {
   public long getAggregatePreemptedContainers() {
     return aggregateContainersPreempted.value();
   }
+
+  public void incrQueueChooseCount() {
+    aggregateQueueChooseCount.incr();
+  }
+
+  public long getAggregateQueueChooseCount() {
+    return aggregateQueueChooseCount.value();
+  }
+
 
   /**
    * Fills in Resource values from available metrics values of custom resources
