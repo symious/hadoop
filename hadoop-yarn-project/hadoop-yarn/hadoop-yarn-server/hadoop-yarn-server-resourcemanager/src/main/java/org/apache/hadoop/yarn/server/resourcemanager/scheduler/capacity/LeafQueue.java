@@ -1300,10 +1300,16 @@ public class LeafQueue extends AbstractCSQueue {
             appResUsageReport.getUsedResources().getVirtualCores();
         long runningMemoryMB =
             appResUsageReport.getUsedResources().getMemorySize();
+        int reservedCpuVcores =
+            appResUsageReport.getReservedResources().getVirtualCores();
+        long reservedMemoryMB =
+            appResUsageReport.getReservedResources().getMemorySize();
         int newAssignedCpuVcores = assigned.getVirtualCores();
         long newAssignedMemoryMB = assigned.getMemorySize();
-        int appPlanCpuVcores = runningCpuVcores + newAssignedCpuVcores;
-        long appPlanMemoryMB = runningMemoryMB + newAssignedMemoryMB;
+        int appPlanCpuVcores =
+            runningCpuVcores + reservedCpuVcores + newAssignedCpuVcores;
+        long appPlanMemoryMB =
+            runningMemoryMB + reservedMemoryMB + newAssignedMemoryMB;
         int queuePerAppMaxVcores = this.getQueuePerAppMaxVcores();
         boolean canKillApp = this.getKillAppWhenOverResources();
         long queuePerAppMaxMemoryMB = this.getQueuePerAppMaxMemoryMB();
@@ -1316,12 +1322,15 @@ public class LeafQueue extends AbstractCSQueue {
             appPlanMemoryMB > queuePerAppMaxMemoryMB) {
           ApplicationId appId = application.getApplicationId();
           String message =
-              "application: " + appId + " current used resources: [" +
+              " queue: " + getQueuePath() + " ,application: " + appId +
+                  " current used resources: [" +
                   runningCpuVcores + " VCores, " + runningMemoryMB +
                   " MB], nearly reach queue max resources limit: " + "[" +
                   queuePerAppMaxVcores + " VCores, " + queuePerAppMaxMemoryMB +
                   " MB], can't assign new containers!";
-          LOG.warn(message);
+          if (Calendar.getInstance().get(Calendar.SECOND) == 0) {
+            LOG.warn(message);
+          }
           if (!canKillApp) {
             application
                 .updateAMContainerDiagnostics(AMState.ACTIVATED, message);
