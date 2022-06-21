@@ -65,6 +65,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerState;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.ResourcePluginManager;
 import org.apache.hadoop.yarn.server.nodemanager.logaggregation.tracker.NMLogAggregationStatusTracker;
+import org.apache.hadoop.yarn.server.nodemanager.metrics.EventQueueMetrics;
 import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
 import org.apache.hadoop.yarn.server.nodemanager.nodelabels.ConfigurationNodeLabelsProvider;
 import org.apache.hadoop.yarn.server.nodemanager.nodelabels.NodeLabelsProvider;
@@ -83,22 +84,15 @@ import org.apache.hadoop.yarn.server.scheduler.DistributedOpportunisticContainer
 import org.apache.hadoop.yarn.server.scheduler.OpportunisticContainerAllocator;
 import org.apache.hadoop.yarn.server.security.ApplicationACLsManager;
 import org.apache.hadoop.yarn.state.MultiStateTransitionListener;
-import org.apache.hadoop.yarn.webapp.YarnJacksonJaxbJsonProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ws.rs.core.MediaType;
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.UndeclaredThrowableException;
-import java.net.HttpURLConnection;
-import java.net.URI;
-import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.NavigableSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
@@ -135,6 +129,7 @@ public class NodeManager extends CompositeService
        LoggerFactory.getLogger(NodeManager.class);
   private static long nmStartupTime = System.currentTimeMillis();
   protected final NodeManagerMetrics metrics = NodeManagerMetrics.create();
+  protected final EventQueueMetrics eventQueueMetrics = EventQueueMetrics.create();
   private JvmPauseMonitor pauseMonitor;
   private ApplicationACLsManager aclsManager;
   private NodeHealthCheckerService nodeHealthChecker;
@@ -484,6 +479,7 @@ public class NodeManager extends CompositeService
     dispatcher.register(ContainerManagerEventType.class, containerManager);
     dispatcher.register(NodeManagerEventType.class, this);
     addService(dispatcher);
+    countDispatcherEventQueue((NMContext) context, conf);
 
     pauseMonitor = new JvmPauseMonitor();
     addService(pauseMonitor);
@@ -1127,4 +1123,49 @@ public class NodeManager extends CompositeService
       Context ctxt) {
     return new NMLogAggregationStatusTracker(ctxt);
   }
+
+  private void countDispatcherEventQueue(NMContext nmContext, Configuration conf) {
+
+    long monitoringEventQueueInterval =
+        conf.getLong(YarnConfiguration.NM_MONITOR_EVENT_QUEUE_INTERVAL_MS,
+            YarnConfiguration.DEFAULT_NM_MONITOR_EVENT_QUEUE_INTERVAL_MS);
+
+    if (monitoringEventQueueInterval > 0) {
+
+      Runnable r = () -> {
+        while (true) {
+          try {
+            int nmEventQueueSize =
+                this.dispatcher.getCurrentEventQueueSize();
+            int nmContainerManagerQueueSize =
+                this.getContainerManager().getDispatcher()
+                    .getCurrentEventQueueSize();
+            int nmTimelineQueueSize =
+                nmContext.getNMTimelinePublisher().getDispatcher()
+                    .getCurrentEventQueueSize();
+            if (LOG.isDebugEnabled()) {
+              LOG.debug(
+                  "countEventQueueThread nmEventQueueSize: " +
+                      nmEventQueueSize +
+                      " ,nmContainerManagerQueueSize: " +
+                      nmContainerManagerQueueSize + " ,nmTimelineQueueSize: " +
+                      nmTimelineQueueSize);
+            }
+            eventQueueMetrics.setNMEventQueueSize(nmEventQueueSize);
+            eventQueueMetrics
+                .setNmContainerManagerQueueSize(nmContainerManagerQueueSize);
+            eventQueueMetrics.setnmTimelineQueueSize(nmTimelineQueueSize);
+            Thread.sleep(monitoringEventQueueInterval);
+          } catch (Exception e) {
+            LOG.error("countDispatcherEventQueue failed!", e);
+          }
+        }
+      };
+
+      new Thread(r).start();
+      LOG.info("NM countEventQueueThread start!");
+    }
+
+  }
+
 }

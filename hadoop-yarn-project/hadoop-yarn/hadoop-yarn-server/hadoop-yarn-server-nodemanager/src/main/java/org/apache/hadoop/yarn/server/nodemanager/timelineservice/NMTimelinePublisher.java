@@ -570,4 +570,9 @@ public class NMTimelinePublisher extends CompositeService {
   private TimelineV2Client getTimelineClient(ApplicationId appId) {
     return appToClientMap.get(appId);
   }
+
+  public AsyncDispatcher getDispatcher() {
+    return (AsyncDispatcher) this.dispatcher;
+  }
+
 }

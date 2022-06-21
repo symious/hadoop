@@ -2038,4 +2038,9 @@ public class ContainerManagerImpl extends CompositeService implements
   public ResourceLocalizationService getResourceLocalizationService() {
     return rsrcLocalizationSrvc;
   }
+
+  public AsyncDispatcher getDispatcher() {
+    return this.dispatcher;
+  }
+
 }

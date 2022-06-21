@@ -404,4 +404,8 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
       Class<? extends Enum> eventClass) {
     eventTypeMetricsMap.put(eventClass, metrics);
   }
+
+  public int getCurrentEventQueueSize(){
+    return eventQueue.size();
+  }
 }

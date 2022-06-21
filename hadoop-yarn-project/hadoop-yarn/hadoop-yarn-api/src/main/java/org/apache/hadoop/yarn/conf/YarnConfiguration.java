@@ -2109,6 +2109,11 @@ public class YarnConfiguration extends Configuration {
       NM_PREFIX + "failed-containers-monitor.interval-ms";
   public static final int DEFAULT_NM_FAILED_CONTAINERS_MON_INTERVAL_MS = -1;
 
+  /** How often to monitor NM event queue size.*/
+  public static final String NM_MONITOR_EVENT_QUEUE_INTERVAL_MS =
+      NM_PREFIX + "event-queue-monitor.interval-ms";
+  public static final int DEFAULT_NM_MONITOR_EVENT_QUEUE_INTERVAL_MS = -1;
+
   public static final String NM_CONTAINER_MONITOR_ENABLED =
       NM_PREFIX + "container-monitor.enabled";
   public static final boolean DEFAULT_NM_CONTAINER_MONITOR_ENABLED = true;
