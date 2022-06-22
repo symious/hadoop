@@ -34,6 +34,7 @@ import org.apache.hadoop.service.CompositeService;
 import org.apache.hadoop.util.ExitUtil;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.JvmPauseMonitor;
+import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.server.nodemanager.health.NodeHealthCheckerService;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Shell;
@@ -655,6 +656,9 @@ public class NodeManager extends CompositeService
         org.apache.hadoop.yarn.api.records.Container> increasedContainers =
             new ConcurrentHashMap<>();
 
+    protected final ConcurrentMap<ContainerId, UpdateContainerRequest>
+        tobeUpdatedContainers = new ConcurrentHashMap<>();
+
     private final NMContainerTokenSecretManager containerTokenSecretManager;
     private final NMTokenSecretManagerInNM nmTokenSecretManager;
     private ContainerManager containerManager;
@@ -742,6 +746,11 @@ public class NodeManager extends CompositeService
     public ConcurrentMap<ContainerId, org.apache.hadoop.yarn.api.records.Container>
         getIncreasedContainers() {
       return this.increasedContainers;
+    }
+
+    @Override
+    public ConcurrentMap<ContainerId, UpdateContainerRequest> getTobeUpdatedContainers() {
+      return this.tobeUpdatedContainers;
     }
 
     @Override

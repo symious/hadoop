@@ -27,6 +27,7 @@ import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.NodeId;
+import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.LogAggregationReport;
 import org.apache.hadoop.yarn.server.api.records.AppCollectorData;
 import org.apache.hadoop.yarn.server.api.records.NodeHealthStatus;
@@ -86,6 +87,8 @@ public interface Context {
 
   ConcurrentMap<ContainerId, org.apache.hadoop.yarn.api.records.Container>
       getIncreasedContainers();
+
+  ConcurrentMap<ContainerId, UpdateContainerRequest> getTobeUpdatedContainers();
 
   NMContainerTokenSecretManager getContainerTokenSecretManager();
   

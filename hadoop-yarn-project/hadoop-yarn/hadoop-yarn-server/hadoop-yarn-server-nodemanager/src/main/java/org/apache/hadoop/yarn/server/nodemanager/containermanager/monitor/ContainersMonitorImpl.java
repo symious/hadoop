@@ -21,6 +21,7 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager.monitor;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.dynamicresource.DynamicResourceController;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.CGroupElasticMemoryController;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.ResourceHandlerModule;
 import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
@@ -76,6 +77,7 @@ public class ContainersMonitorImpl extends AbstractService implements
   private long logDirSizeLimit;
   private long logTotalSizeLimit;
   private CGroupElasticMemoryController oomListenerThread;
+  private DynamicResourceController dynamicAdjustThread;
   private boolean containerMetricsEnabled;
   private long containerMetricsPeriodMs;
   private long containerMetricsUnregisterDelayMs;
@@ -103,6 +105,7 @@ public class ContainersMonitorImpl extends AbstractService implements
   private boolean strictMemoryEnforcement;
   private boolean containersMonitorEnabled;
   private boolean logMonitorEnabled;
+  private boolean dynamicResourceEnabled;
 
   private long maxVCoresAllottedForContainers;
 
@@ -231,6 +234,14 @@ public class ContainersMonitorImpl extends AbstractService implements
       }
     }
 
+    dynamicResourceEnabled =
+        conf.getBoolean(YarnConfiguration.NM_DYNAMIC_ADJUSTMENT_ENABLED,
+            YarnConfiguration.DEFAULT_NM_DYNAMIC_ADJUSTMENT_ENABLED);
+
+    if (dynamicResourceEnabled) {
+      this.dynamicAdjustThread = new DynamicResourceController(conf, context);
+    }
+
     containersMonitorEnabled =
         isContainerMonitorEnabled() && monitoringInterval > 0;
     LOG.info("ContainersMonitor enabled: {}", containersMonitorEnabled);
@@ -309,6 +320,9 @@ public class ContainersMonitorImpl extends AbstractService implements
     }
     if (oomListenerThread != null) {
       oomListenerThread.start();
+    }
+    if (dynamicAdjustThread != null) {
+      dynamicAdjustThread.start();
     }
     if (logMonitorEnabled) {
       this.logMonitorThread.start();
@@ -742,6 +756,9 @@ public class ContainersMonitorImpl extends AbstractService implements
                             ProcessTreeInfo ptInfo,
                             long currentVmemUsage,
                             long currentPmemUsage) {
+      if (elasticMemoryEnforcement && dynamicResourceEnabled) {
+        return;
+      }
       if (strictMemoryEnforcement && !elasticMemoryEnforcement) {
         // When cgroup-based strict memory enforcement is used alone without
         // elastic memory control, the oom-kill would take care of it.
@@ -970,6 +987,7 @@ public class ContainersMonitorImpl extends AbstractService implements
       pmemLimitMBs = (int) (startEvent.getPmemLimit() >> 20);
       usageMetrics.recordResourceLimit(
           vmemLimitMBs, pmemLimitMBs, cpuVcores);
+      usageMetrics.recordInitMemory(pmemLimitMBs);
       break;
     case STOP_MONITORING_CONTAINER:
       ContainerStopMonitoringEvent stopEvent =

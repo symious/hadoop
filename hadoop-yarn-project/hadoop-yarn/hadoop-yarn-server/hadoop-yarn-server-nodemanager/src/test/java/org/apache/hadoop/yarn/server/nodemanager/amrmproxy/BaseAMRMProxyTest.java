@@ -38,6 +38,7 @@ import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.AsyncDispatcher;
 import org.apache.hadoop.yarn.exceptions.YarnException;
@@ -716,6 +717,11 @@ public abstract class BaseAMRMProxyTest {
 
     @Override
     public ConcurrentMap<ContainerId, org.apache.hadoop.yarn.api.records.Container> getIncreasedContainers() {
+      return null;
+    }
+
+    @Override
+    public ConcurrentMap<ContainerId, UpdateContainerRequest> getTobeUpdatedContainers() {
       return null;
     }
 

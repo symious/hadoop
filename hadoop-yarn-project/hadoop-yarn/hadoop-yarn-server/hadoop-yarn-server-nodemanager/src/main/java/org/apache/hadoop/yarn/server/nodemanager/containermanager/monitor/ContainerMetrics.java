@@ -36,6 +36,7 @@ import org.apache.hadoop.metrics2.lib.MutableQuantiles;
 import org.apache.hadoop.metrics2.lib.MutableStat;
 import org.apache.hadoop.metrics2.util.Quantile;
 import org.apache.hadoop.metrics2.util.QuantileEstimator;
+import org.apache.hadoop.metrics2.util.SampleStat;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 
 import java.util.HashMap;
@@ -108,6 +109,12 @@ public class ContainerMetrics implements MetricsSource {
 
   @Metric
   public MutableGaugeInt exitCode;
+
+  public SampleStat.MinMax minMax= new SampleStat.MinMax();
+
+  public int latestMemoryMbs;
+
+  public int initMemoryMbs;
 
   static final MetricsInfo RECORD_INFO =
       info("ContainerResource", "Resource limit and usage by container");
@@ -263,6 +270,8 @@ public class ContainerMetrics implements MetricsSource {
     if (memoryMBs >= 0) {
       this.pMemMBsStat.add(memoryMBs);
       this.pMemMBQuantiles.add(memoryMBs);
+      this.minMax.add(memoryMBs);
+      this.latestMemoryMbs = memoryMBs;
     }
   }
 
@@ -285,6 +294,10 @@ public class ContainerMetrics implements MetricsSource {
     this.vMemLimitMbs.set(vmemLimit);
     this.pMemLimitMbs.set(pmemLimit);
     this.cpuVcoreLimit.set(cpuVcores);
+  }
+
+  public void recordInitMemory(int memoryMBs) {
+    this.initMemoryMbs = memoryMBs;
   }
 
   public void recordStateChangeDurations(long launchDuration,

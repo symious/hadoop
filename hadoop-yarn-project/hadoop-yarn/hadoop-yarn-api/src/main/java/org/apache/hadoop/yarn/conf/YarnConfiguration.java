@@ -1826,6 +1826,22 @@ public class YarnConfiguration extends Configuration {
       NM_MEMORY_RESOURCE_PREFIX + "enforced";
   public static final boolean DEFAULT_NM_MEMORY_RESOURCE_ENFORCED = true;
 
+  public static final String NM_DYNAMIC_ADJUSTMENT_ENABLED =
+      NM_PREFIX + "dynamic.adjustment.enabled";
+  public static final boolean DEFAULT_NM_DYNAMIC_ADJUSTMENT_ENABLED = false;
+
+  public static final String NM_DYNAMIC_ADJUSTMENT_INTERVAL_MS =
+      NM_PREFIX + "dynamic.adjustment.interval-ms";
+  public static final int DEFAULT_NM_DYNAMIC_ADJUSTMENT_INTERVAL_MS = 60000;
+
+  public static final String NM_DYNAMIC_ADJUSTMENT_POLICY_CLASS =
+      NM_PREFIX + "dynamic.adjustment.policy.class";
+
+  public static final String NM_DYNAMIC_ADJUSTMENT_DEFAULT_POLICY_INTERVAL_MS =
+      NM_PREFIX + "dynamic.adjustment.defaultpolicy.interval-ms";
+  public static final int
+      DEFAULT_NM_DYNAMIC_ADJUSTMENT_DEFAULT_POLICY_INTERVAL_MS = 300000;
+
   public static final String NM_MEMORY_RESOURCE_CGROUPS_SWAPPINESS =
       NM_MEMORY_RESOURCE_PREFIX + "cgroups.swappiness";
   public static final int DEFAULT_NM_MEMORY_RESOURCE_CGROUPS_SWAPPINESS = 0;
