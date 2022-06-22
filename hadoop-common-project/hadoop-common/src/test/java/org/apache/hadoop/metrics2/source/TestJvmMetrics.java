@@ -79,7 +79,7 @@ public class TestJvmMetrics {
       } else if (info.name().startsWith("Gc") &&
           !info.name().equals("GcTimePercentage")) {
         verify(rb).addCounter(eq(info), anyLong());
-      } else if (info.name().startsWith("Threads")) {
+      } else if (info.name().startsWith("ThreadsCount")) {
         verify(rb).addGauge(eq(info), anyInt());
       } else if (info.name().startsWith("Log")) {
         verify(rb).addCounter(eq(info), anyLong());

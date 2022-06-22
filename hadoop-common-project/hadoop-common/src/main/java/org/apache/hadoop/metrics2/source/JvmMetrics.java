@@ -137,7 +137,8 @@ public class JvmMetrics implements MetricsSource {
         .tag(SessionId, sessionId);
     getMemoryUsage(rb);
     getGcUsage(rb);
-    getThreadUsage(rb);
+    //getThreadUsage(rb);
+    getThreadsCount(rb);
     getEventCounters(rb);
   }
 
@@ -206,6 +207,10 @@ public class JvmMetrics implements MetricsSource {
       }
     }
     return gcInfo;
+  }
+
+  private void getThreadsCount(MetricsRecordBuilder rb) {
+    rb.addGauge(ThreadsCount, threadMXBean.getThreadCount());
   }
 
   private void getThreadUsage(MetricsRecordBuilder rb) {

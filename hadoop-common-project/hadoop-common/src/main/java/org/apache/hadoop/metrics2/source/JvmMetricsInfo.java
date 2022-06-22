@@ -37,6 +37,7 @@ public enum JvmMetricsInfo implements MetricsInfo {
   MemMaxM("Max memory size in MB"),
   GcCount("Total GC count"),
   GcTimeMillis("Total GC time in milliseconds"),
+  ThreadsCount("Total number of threads"),
   ThreadsNew("Number of new threads"),
   ThreadsRunnable("Number of runnable threads"),
   ThreadsBlocked("Number of blocked threads"),

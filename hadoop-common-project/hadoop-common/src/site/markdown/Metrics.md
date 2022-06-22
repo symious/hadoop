@@ -40,6 +40,7 @@ Each metrics record contains tags such as ProcessName, SessionID and Hostname as
 | `MemHeapCommittedM` | Current heap memory committed in MB |
 | `MemHeapMaxM` | Max heap memory size in MB |
 | `MemMaxM` | Max memory size in MB |
+| `ThreadsCount` | Total number of threads |
 | `ThreadsNew` | Current number of NEW threads |
 | `ThreadsRunnable` | Current number of RUNNABLE threads |
 | `ThreadsBlocked` | Current number of BLOCKED threads |
