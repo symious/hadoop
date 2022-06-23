@@ -68,6 +68,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.Ap
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.ApplicationEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.ApplicationEventType;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.dynamicresource.DynamicResourceRequestInterceptor;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService.RecoveredAMRMProxyState;
 import org.apache.hadoop.yarn.server.nodemanager.scheduler.DistributedScheduler;
 import org.apache.hadoop.yarn.server.nodemanager.security.authorize
@@ -373,7 +374,7 @@ public class AMRMProxyService extends CompositeService implements
 
       long endTime = clock.getTime();
       this.metrics.succeededAllocateRequests(endTime - startTime);
-      LOG.info("Allocate processing finished in {} ms for application {}",
+      LOG.debug("Allocate processing finished in {} ms for application {}",
           endTime - startTime, pipeline.getApplicationAttemptId());
       return allocateResponse;
     } catch (Throwable t) {
@@ -750,6 +751,12 @@ public class AMRMProxyService extends CompositeService implements
     // Make sure DistributedScheduler is present at the beginning of the chain.
     if (this.nmContext.isDistributedSchedulingEnabled()) {
       interceptorClassNames.add(0, DistributedScheduler.class.getName());
+    }
+
+    if (conf.getBoolean(YarnConfiguration.NM_DYNAMIC_ADJUSTMENT_ENABLED,
+        YarnConfiguration.DEFAULT_NM_DYNAMIC_ADJUSTMENT_ENABLED)) {
+      interceptorClassNames
+          .add(0, DynamicResourceRequestInterceptor.class.getName());
     }
 
     return interceptorClassNames;
