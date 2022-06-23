@@ -24,6 +24,7 @@ import java.util.Map;
 
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.ApplicationSimpleReport;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.Resource;
@@ -47,6 +48,8 @@ public abstract class NodeHeartbeatResponse {
   public abstract List<ContainerId> getContainersToBeRemovedFromNM();
 
   public abstract List<ApplicationId> getApplicationsToCleanup();
+
+  public abstract List<ApplicationSimpleReport> getApplicationsToCleanupV2();
 
   // This tells NM the collectors' address info of related apps
   public abstract Map<ApplicationId, AppCollectorData> getAppCollectors();
@@ -75,6 +78,9 @@ public abstract class NodeHeartbeatResponse {
 
   public abstract void addAllApplicationsToCleanup(
       List<ApplicationId> applications);
+
+  public abstract void addAllApplicationsToCleanupV2(
+      List<ApplicationSimpleReport> applications);
 
   public abstract List<SignalContainerRequest> getContainersToSignalList();
 

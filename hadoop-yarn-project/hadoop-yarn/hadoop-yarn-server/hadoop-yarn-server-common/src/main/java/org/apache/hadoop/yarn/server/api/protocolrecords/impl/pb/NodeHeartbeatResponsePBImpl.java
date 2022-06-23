@@ -31,6 +31,7 @@ import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SignalContainerRequest
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos;
 import org.apache.hadoop.yarn.server.api.records.AppCollectorData;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.ApplicationSimpleReport;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.Resource;
@@ -41,6 +42,7 @@ import org.apache.hadoop.yarn.api.records.impl.pb.ProtoUtils;
 import org.apache.hadoop.yarn.api.records.impl.pb.ResourcePBImpl;
 import org.apache.hadoop.yarn.api.records.impl.pb.TokenPBImpl;
 import org.apache.hadoop.yarn.proto.YarnProtos.ApplicationIdProto;
+import org.apache.hadoop.yarn.proto.YarnProtos.ApplicationSimpleReportProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ContainerIdProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ContainerProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ResourceProto;
@@ -73,6 +75,7 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
   private List<ContainerId> containersToCleanup = null;
   private List<ContainerId> containersToBeRemovedFromNM = null;
   private List<ApplicationId> applicationsToCleanup = null;
+  private List<ApplicationSimpleReport> applicationsToCleanupV2 = null;
   private Resource resource = null;
   private Map<ApplicationId, AppCollectorData> appCollectorsMap = null;
 
@@ -108,6 +111,9 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
     }
     if (this.applicationsToCleanup != null) {
       addApplicationsToCleanupToProto();
+    }
+    if (this.applicationsToCleanupV2 != null) {
+      addApplicationsToCleanupV2ToProto();
     }
     if (this.containersToBeRemovedFromNM != null) {
       addContainersToBeRemovedFromNMToProto();
@@ -503,12 +509,40 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
   }
 
   @Override
+  public List<ApplicationSimpleReport> getApplicationsToCleanupV2() {
+    initApplicationsToCleanupV2();
+    return this.applicationsToCleanupV2;
+  }
+
+  private void initApplicationsToCleanupV2() {
+    if (this.applicationsToCleanupV2 != null) {
+      return;
+    }
+    NodeHeartbeatResponseProtoOrBuilder p = viaProto ? proto : builder;
+    List<ApplicationSimpleReportProto> list = p.getApplicationsToCleanupV2List();
+    this.applicationsToCleanupV2 = new ArrayList<ApplicationSimpleReport>();
+
+    for (ApplicationSimpleReportProto c : list) {
+      this.applicationsToCleanupV2.add(ProtoUtils.convertFromProtoFormat(c));
+    }
+  }
+
+  @Override
   public void addAllApplicationsToCleanup(
       final List<ApplicationId> applicationsToCleanup) {
     if (applicationsToCleanup == null)
       return;
     initApplicationsToCleanup();
     this.applicationsToCleanup.addAll(applicationsToCleanup);
+  }
+
+  @Override
+  public void addAllApplicationsToCleanupV2(
+      final List<ApplicationSimpleReport> applicationsToCleanupV2) {
+    if (applicationsToCleanupV2 == null)
+      return;
+    initApplicationsToCleanupV2();
+    this.applicationsToCleanupV2.addAll(applicationsToCleanupV2);
   }
 
   private void addApplicationsToCleanupToProto() {
@@ -544,6 +578,41 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
       }
     };
     builder.addAllApplicationsToCleanup(iterable);
+  }
+
+  private void addApplicationsToCleanupV2ToProto() {
+    maybeInitBuilder();
+    builder.clearApplicationsToCleanupV2();
+    if (applicationsToCleanupV2 == null)
+      return;
+    Iterable<ApplicationSimpleReportProto> iterable = new Iterable<ApplicationSimpleReportProto>() {
+
+      @Override
+      public Iterator<ApplicationSimpleReportProto> iterator() {
+        return new Iterator<ApplicationSimpleReportProto>() {
+
+          Iterator<ApplicationSimpleReport> iter = applicationsToCleanupV2.iterator();
+
+          @Override
+          public boolean hasNext() {
+            return iter.hasNext();
+          }
+
+          @Override
+          public ApplicationSimpleReportProto next() {
+            return ProtoUtils.convertToProtoFormat(iter.next());
+          }
+
+          @Override
+          public void remove() {
+            throw new UnsupportedOperationException();
+
+          }
+        };
+
+      }
+    };
+    builder.addAllApplicationsToCleanupV2(iterable);
   }
 
   private void initContainersToUpdate() {

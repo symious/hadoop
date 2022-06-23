@@ -20,17 +20,28 @@ package org.apache.hadoop.yarn.server.resourcemanager.rmnode;
 
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.NodeId;
+import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 
 public class RMNodeCleanAppEvent extends RMNodeEvent {
 
   private ApplicationId appId;
+  private YarnApplicationState state;
 
-  public RMNodeCleanAppEvent(NodeId nodeId, ApplicationId appId) {
+  public RMNodeCleanAppEvent(NodeId nodeId, ApplicationId appId, YarnApplicationState state) {
     super(nodeId, RMNodeEventType.CLEANUP_APP);
     this.appId = appId;
+    this.state = state;
+  }
+
+  public RMNodeCleanAppEvent(NodeId nodeId, ApplicationId appId) {
+    this(nodeId, appId, null);
   }
 
   public ApplicationId getAppId() {
     return this.appId;
+  }
+
+  public YarnApplicationState getState() {
+    return this.state;
   }
 }

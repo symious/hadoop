@@ -23,7 +23,6 @@ import org.apache.hadoop.thirdparty.protobuf.ByteString;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.yarn.api.protocolrecords.GetLocalizationStatusesRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetLocalizationStatusesResponse;
-import org.apache.hadoop.yarn.api.records.LocalizationStatus;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.UpdateContainerTokenEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.loghandler.event.LogHandlerTokenUpdatedEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.scheduler.ContainerSchedulerEvent;
@@ -70,12 +69,14 @@ import org.apache.hadoop.yarn.api.protocolrecords.StopContainersResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.SignalContainerResponsePBImpl;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.ApplicationSimpleReport;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.ExecutionType;
+import org.apache.hadoop.yarn.api.records.LocalizationStatus;
 import org.apache.hadoop.yarn.api.records.LocalResource;
 import org.apache.hadoop.yarn.api.records.LocalResourceVisibility;
 import org.apache.hadoop.yarn.api.records.LogAggregationContext;
@@ -733,9 +734,11 @@ public class ContainerManagerImpl extends CompositeService implements
         return;
       }
     }
-
-    List<ApplicationId> appIds =
-        new ArrayList<ApplicationId>(applications.keySet());
+    List<ApplicationSimpleReport> appIds =
+        new ArrayList<>();
+    for (ApplicationId id : applications.keySet()) {
+      appIds.add(ApplicationSimpleReport.newInstance(id, null));
+    }
     this.handle(new CMgrCompletedAppsEvent(appIds,
             CMgrCompletedAppsEvent.Reason.ON_SHUTDOWN));
 
@@ -1672,8 +1675,10 @@ public class ContainerManagerImpl extends CompositeService implements
     case FINISH_APPS:
       CMgrCompletedAppsEvent appsFinishedEvent =
           (CMgrCompletedAppsEvent) event;
-      for (ApplicationId appID : appsFinishedEvent.getAppsToCleanup()) {
+      for (ApplicationSimpleReport appReport : appsFinishedEvent.getAppsToCleanup()) {
+        ApplicationId appID = appReport.getApplicationId();
         Application app = this.context.getApplications().get(appID);
+
         if (app == null) {
           LOG.info("couldn't find application " + appID + " while processing"
               + " FINISH_APPS event. The ResourceManager allocated resources"
@@ -1704,7 +1709,7 @@ public class ContainerManagerImpl extends CompositeService implements
         }
         this.dispatcher.getEventHandler().handle(
             new ApplicationFinishEvent(appID,
-                diagnostic));
+                diagnostic, appReport.getYarnApplicationState()));
       }
       break;
     case FINISH_CONTAINERS:

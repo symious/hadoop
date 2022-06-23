@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -93,7 +94,7 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
   private final Path remoteNodeLogFileForApp;
   private final Path remoteNodeTmpLogFileForApp;
 
-  private final BlockingQueue<ContainerId> pendingContainers;
+  private final BlockingQueue<ContainerWrapper> pendingContainers;
   private final AtomicBoolean appFinishing = new AtomicBoolean();
   private final AtomicBoolean appAggregationFinished = new AtomicBoolean();
   private final AtomicBoolean aborted = new AtomicBoolean();
@@ -166,7 +167,7 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
     this.applicationId = appId.toString();
     this.userUgi = userUgi;
     this.dirsHandler = dirsHandler;
-    this.pendingContainers = new LinkedBlockingQueue<ContainerId>();
+    this.pendingContainers = new LinkedBlockingQueue<>();
     this.appAcls = appAcls;
     this.lfs = lfs;
     this.logAggregationContext = logAggregationContext;
@@ -271,6 +272,21 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
     return params;
   }
 
+  private void secondCheck(Set<ContainerWrapper> containers) {
+    LOG.debug("Application " + appId + " final state: " + this.context
+        .getApplications().get(this.appId).getYarnApplicationState());
+    Iterator<ContainerWrapper> iter = containers.iterator();
+    while (iter.hasNext()) {
+      ContainerWrapper container = iter.next();
+      container.context.setYarnApplicationState(
+          this.context.getApplications().get(this.appId)
+              .getYarnApplicationState());
+      if (!shouldUploadLogs(container.context)) {
+        iter.remove();
+      }
+    }
+  }
+
   private void uploadLogsForContainers(boolean appFinished)
       throws LogAggregationDFSException {
     if (this.logAggregationDisabled) {
@@ -287,7 +303,20 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
     //    we use exitCode of 0 to find those which satisfy the
     //    ContainerLogAggregationPolicy.
     Set<ContainerId> pendingContainerInThisCycle = new HashSet<ContainerId>();
-    this.pendingContainers.drainTo(pendingContainerInThisCycle);
+    Set<ContainerWrapper> pendingContainerWrapper= new HashSet<>();
+    this.pendingContainers.drainTo(pendingContainerWrapper);
+    if (appFinished) {
+      // When container finish, it will be add into pendingContainers set.
+      // While NodeManager may not receive the application final state, so
+      // it will always satisfy the specific ContainerLogAggregationPolicy.
+      // If the flag appFinished is true, it means that NodeManager has received
+      // the final state. Therefore, we should traverse the container set to see
+      // whether those satisfy the ContainerLogAggregationPolicy.
+      secondCheck(pendingContainerWrapper);
+      for (ContainerWrapper wrapper : pendingContainerWrapper) {
+        pendingContainerInThisCycle.add(wrapper.containerId);
+      }
+    }
     Set<ContainerId> finishedContainers =
         new HashSet<ContainerId>(pendingContainerInThisCycle);
     if (this.context.getApplications().get(this.appId) != null) {
@@ -295,8 +324,10 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
         .get(this.appId).getContainers().values()) {
         ContainerType containerType =
             container.getContainerTokenIdentifier().getContainerType();
-        if (shouldUploadLogs(new ContainerLogContext(
-            container.getContainerId(), containerType, 0))) {
+        if (shouldUploadLogs(
+            new ContainerLogContext(container.getContainerId(), containerType,
+                0, this.context.getApplications().get(this.appId)
+                .getYarnApplicationState()))) {
           pendingContainerInThisCycle.add(container.getContainerId());
         }
       }
@@ -570,7 +601,8 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
     if (shouldUploadLogs(logContext)) {
       LOG.info("Considering container " + logContext.getContainerId()
           + " for log-aggregation");
-      this.pendingContainers.add(logContext.getContainerId());
+      this.pendingContainers
+          .add(new ContainerWrapper(logContext.getContainerId(), logContext));
     }
   }
 
@@ -669,6 +701,17 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
       return Sets.union(logValue.getCurrentUpLoadedFilesPath(),
           logValue.getObsoleteRetentionLogFiles());
 
+    }
+  }
+
+  class ContainerWrapper {
+    private ContainerId containerId;
+    private ContainerLogContext context;
+
+    public ContainerWrapper(ContainerId containerId,
+        ContainerLogContext context) {
+      this.containerId = containerId;
+      this.context = context;
     }
   }
 

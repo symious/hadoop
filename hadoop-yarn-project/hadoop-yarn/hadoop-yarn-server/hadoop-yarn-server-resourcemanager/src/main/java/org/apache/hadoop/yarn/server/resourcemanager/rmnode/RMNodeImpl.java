@@ -49,6 +49,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.ApplicationSimpleReport;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerState;
@@ -61,6 +62,7 @@ import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceOption;
 import org.apache.hadoop.yarn.api.records.ResourceUtilization;
+import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.factories.RecordFactory;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
@@ -204,6 +206,9 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
   /* the list of applications that have finished and need to be purged */
   private final List<ApplicationId> finishedApplications =
       new ArrayList<ApplicationId>();
+
+  private final List<ApplicationSimpleReport> finishedApplicationsReport =
+      new ArrayList<>();
 
   /* the list of applications that are running on this node */
   private final List<ApplicationId> runningApplications =
@@ -714,12 +719,14 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       response.addAllContainersToCleanup(
           new ArrayList<ContainerId>(this.containersToClean));
       response.addAllApplicationsToCleanup(this.finishedApplications);
+      response.addAllApplicationsToCleanupV2(this.finishedApplicationsReport);
       response.addContainersToBeRemovedFromNM(
           new ArrayList<ContainerId>(this.containersToBeRemovedFromNM));
       response.addAllContainersToSignal(this.containersToSignal);
       this.completedContainers.removeAll(this.containersToBeRemovedFromNM);
       this.containersToClean.clear();
       this.finishedApplications.clear();
+      this.finishedApplicationsReport.clear();
       this.containersToSignal.clear();
       this.containersToBeRemovedFromNM.clear();
 
@@ -962,6 +969,8 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       LOG.warn("Cannot get RMApp by appId=" + appId
           + ", just added it to finishedApplications list for cleanup");
       rmNode.finishedApplications.add(appId);
+      rmNode.finishedApplicationsReport
+          .add(ApplicationSimpleReport.newInstance(appId, null));
       rmNode.runningApplications.remove(appId);
       return;
     }
@@ -1189,7 +1198,10 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
     @Override
     public void transition(RMNodeImpl rmNode, RMNodeEvent event) {
       ApplicationId appId = ((RMNodeCleanAppEvent) event).getAppId();
+      YarnApplicationState state = ((RMNodeCleanAppEvent) event).getState();
       rmNode.finishedApplications.add(appId);
+      rmNode.finishedApplicationsReport
+          .add(ApplicationSimpleReport.newInstance(appId, state));
       rmNode.runningApplications.remove(appId);
     }
   }

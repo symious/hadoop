@@ -1060,9 +1060,9 @@ public class RMAppImpl implements RMApp, Recoverable {
       
       // if final state already stored, notify RMNode
       if (isAppInFinalState(app)) {
-        app.handler.handle(
-            new RMNodeCleanAppEvent(nodeAddedEvent.getNodeId(), nodeAddedEvent
-                .getApplicationId()));
+        app.handler.handle(new RMNodeCleanAppEvent(nodeAddedEvent.getNodeId(),
+            nodeAddedEvent.getApplicationId(),
+            RMServerUtils.createApplicationState(app.getState())));
         return;
       }
       
@@ -1495,8 +1495,8 @@ public class RMAppImpl implements RMApp, Recoverable {
     private void completeAndCleanupApp(RMAppImpl app) {
       //cleanup app in RM Nodes
       for (NodeId nodeId : app.getRanNodes()) {
-        app.handler.handle(
-                new RMNodeCleanAppEvent(nodeId, app.applicationId));
+        app.handler.handle(new RMNodeCleanAppEvent(nodeId, app.applicationId,
+            RMServerUtils.createApplicationState(finalState)));
       }
       app.ranNodes.clear();
       // Recovered apps that are completed were not added to scheduler, so no

@@ -32,6 +32,7 @@ import org.apache.hadoop.yarn.api.records.AMCommand;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationResourceUsageReport;
+import org.apache.hadoop.yarn.api.records.ApplicationSimpleReport;
 import org.apache.hadoop.yarn.api.records.ApplicationTimeoutType;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -65,6 +66,7 @@ import org.apache.hadoop.yarn.proto.YarnProtos;
 import org.apache.hadoop.yarn.proto.YarnProtos.AMCommandProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ApplicationAccessTypeProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ApplicationIdProto;
+import org.apache.hadoop.yarn.proto.YarnProtos.ApplicationSimpleReportProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ApplicationResourceUsageReportProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ApplicationTimeoutTypeProto;
 import org.apache.hadoop.yarn.proto.YarnProtos.ContainerIdProto;
@@ -689,6 +691,16 @@ public class ProtoUtils {
       LocalizationStateProto e) {
     return LocalizationState.valueOf(e.name()
         .replace(LOCALIZATION_STATE_PREFIX, ""));
+  }
+
+  public static ApplicationSimpleReportPBImpl convertFromProtoFormat(
+      ApplicationSimpleReportProto p) {
+    return new ApplicationSimpleReportPBImpl(p);
+  }
+
+  public static ApplicationSimpleReportProto convertToProtoFormat(
+      ApplicationSimpleReport t) {
+    return ((ApplicationSimpleReportPBImpl) t).getProto();
   }
 
 }

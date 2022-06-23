@@ -21,8 +21,6 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.yarn.api.protocolrecords.GetLocalizationStatusesRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetLocalizationStatusesResponse;
-import org.apache.hadoop.yarn.api.records.LocalizationState;
-import org.apache.hadoop.yarn.api.records.LocalizationStatus;
 import org.apache.hadoop.yarn.server.api.AuxiliaryLocalPathHandler;
 import org.apache.hadoop.yarn.server.nodemanager.LocalDirsHandlerService;
 import static org.apache.hadoop.test.MetricsAsserts.assertCounter;
@@ -79,6 +77,7 @@ import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.StartContainersRequest
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.StopContainersRequestPBImpl;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.ApplicationSimpleReport;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
@@ -86,6 +85,8 @@ import org.apache.hadoop.yarn.api.records.ContainerRetryContext;
 import org.apache.hadoop.yarn.api.records.ContainerRetryPolicy;
 import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
+import org.apache.hadoop.yarn.api.records.LocalizationState;
+import org.apache.hadoop.yarn.api.records.LocalizationStatus;
 import org.apache.hadoop.yarn.api.records.LocalResource;
 import org.apache.hadoop.yarn.api.records.LocalResourceType;
 import org.apache.hadoop.yarn.api.records.LocalResourceVisibility;
@@ -1433,8 +1434,11 @@ public class TestContainerManager extends BaseContainerManagerTest {
         targetFile.exists());
 
     // Simulate RM sending an AppFinish event.
-    containerManager.handle(new CMgrCompletedAppsEvent(Arrays
-        .asList(new ApplicationId[] { appId }), CMgrCompletedAppsEvent.Reason.ON_SHUTDOWN));
+    ApplicationSimpleReport report =
+        ApplicationSimpleReport.newInstance(appId, null);
+    containerManager.handle(new CMgrCompletedAppsEvent(
+        Arrays.asList(new ApplicationSimpleReport[] { report }),
+        CMgrCompletedAppsEvent.Reason.ON_SHUTDOWN));
 
     BaseContainerManagerTest.waitForApplicationState(containerManager, 
         cId.getApplicationAttemptId().getApplicationId(),

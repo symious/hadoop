@@ -136,6 +136,7 @@ message NodeHeartbeatResponseProto {
   optional bool areNodeAttributesAcceptedByRM = 18 [default = false];
   optional int64 tokenSequenceNo = 19;
   repeated ApplicationLevelProto application_level = 20;
+  repeated ApplicationSimpleReportProto applications_to_cleanup_v2 = 21;
 }
 
 message ApplicationLevelProto {

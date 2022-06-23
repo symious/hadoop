@@ -39,6 +39,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.LogAggregationContext;
+import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationIdPBImpl;
 import org.apache.hadoop.yarn.api.records.impl.pb.LogAggregationContextPBImpl;
 import org.apache.hadoop.yarn.api.records.impl.pb.ProtoUtils;
@@ -86,6 +87,7 @@ public class ApplicationImpl implements Application {
   private final ReadLock readLock;
   private final WriteLock writeLock;
   private final Context context;
+  private YarnApplicationState finalState = null;
 
   private static final Logger LOG =
        LoggerFactory.getLogger(ApplicationImpl.class);
@@ -378,6 +380,11 @@ public class ApplicationImpl implements Application {
     this.applicationLogInitedTimestamp = appLogInitedTimestamp;
   }
 
+  void setYarnApplicationState(YarnApplicationState state) {
+    if (state != null)
+      this.finalState = state;
+  }
+
   static ContainerManagerApplicationProto buildAppProto(ApplicationImpl app)
       throws IOException {
     ContainerManagerApplicationProto.Builder builder =
@@ -537,6 +544,7 @@ public class ApplicationImpl implements Application {
     public ApplicationState transition(ApplicationImpl app,
         ApplicationEvent event) {
       ApplicationFinishEvent appEvent = (ApplicationFinishEvent)event;
+      app.setYarnApplicationState(appEvent.getFinalState());
       if (app.containers.isEmpty()) {
         // No container to cleanup. Cleanup app level resources.
         app.handleAppFinishWithContainersCleanedup();
@@ -688,6 +696,11 @@ public class ApplicationImpl implements Application {
   @Override
   public long getFlowRunId() {
     return flowContext == null ? 0L : flowContext.getFlowRunId();
+  }
+
+  @Override
+  public YarnApplicationState getYarnApplicationState() {
+    return finalState;
   }
 
   public void setFlowContext(FlowContext fc) {

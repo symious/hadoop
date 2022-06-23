@@ -21,6 +21,7 @@ package org.apache.hadoop.yarn.server.api;
 import org.apache.hadoop.classification.InterfaceAudience.Public;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 
 /**
  * Context class for {@link ContainerLogAggregationPolicy}.
@@ -31,14 +32,21 @@ public class ContainerLogContext {
   private final ContainerId containerId;
   private final ContainerType containerType;
   private int exitCode;
+  private YarnApplicationState state;
+
+  public ContainerLogContext(ContainerId containerId,
+      ContainerType containerType, int exitCode) {
+    this(containerId, containerType, exitCode, null);
+  }
 
   @Public
   @Unstable
   public ContainerLogContext(ContainerId containerId,
-      ContainerType containerType, int exitCode) {
+      ContainerType containerType, int exitCode, YarnApplicationState state) {
     this.containerId = containerId;
     this.containerType = containerType;
     this.exitCode = exitCode;
+    this.state = state;
   }
 
   /**
@@ -68,4 +76,11 @@ public class ContainerLogContext {
     return exitCode;
   }
 
+  public YarnApplicationState getYarnApplicationState() {
+    return state;
+  }
+
+  public void setYarnApplicationState(YarnApplicationState state) {
+    this.state = state;
+  }
 }

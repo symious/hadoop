@@ -56,6 +56,7 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.VersionUtil;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.ApplicationSimpleReport;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
@@ -1524,11 +1525,13 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
             }
             List<ApplicationId> appsToCleanup =
                 response.getApplicationsToCleanup();
+            List<ApplicationSimpleReport> appsToCleanupV2 =
+                response.getApplicationsToCleanupV2();
             //Only start tracking for keepAlive on FINISH_APP
             trackAppsForKeepAlive(appsToCleanup);
-            if (!appsToCleanup.isEmpty()) {
+            if (!appsToCleanupV2.isEmpty()) {
               dispatcher.getEventHandler().handle(
-                  new CMgrCompletedAppsEvent(appsToCleanup,
+                  new CMgrCompletedAppsEvent(appsToCleanupV2,
                       CMgrCompletedAppsEvent.Reason.BY_RESOURCEMANAGER));
             }
             Map<ApplicationId, ByteBuffer> systemCredentials =

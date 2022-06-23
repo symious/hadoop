@@ -88,6 +88,7 @@ import org.apache.hadoop.yarn.api.protocolrecords.StartContainersRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.ApplicationSimpleReport;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.api.records.ContainerState;
@@ -1179,8 +1180,10 @@ public class TestLogAggregationService extends BaseContainerManagerTest {
     BaseContainerManagerTest.waitForContainerState(this.containerManager,
         cId, ContainerState.COMPLETE);
 
+    ApplicationSimpleReport report =
+        ApplicationSimpleReport.newInstance(appId, null);
     this.containerManager.handle(new CMgrCompletedAppsEvent(Arrays
-        .asList(appId), CMgrCompletedAppsEvent.Reason.ON_SHUTDOWN));
+        .asList(report), CMgrCompletedAppsEvent.Reason.ON_SHUTDOWN));
     this.containerManager.stop();
   }
 

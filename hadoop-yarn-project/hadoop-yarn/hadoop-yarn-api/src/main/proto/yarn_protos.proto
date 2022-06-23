@@ -265,6 +265,11 @@ message ApplicationResourceUsageReportProto {
   repeated StringLongMapProto application_preempted_resource_usage_map = 13;
 }
 
+message ApplicationSimpleReportProto {
+  optional ApplicationIdProto applicationId = 1;
+  optional YarnApplicationStateProto yarn_application_state = 2;
+}
+
 message ApplicationReportProto {
   optional ApplicationIdProto applicationId = 1;
   optional string user = 2;

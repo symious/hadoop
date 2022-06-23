@@ -19,12 +19,14 @@
 package org.apache.hadoop.yarn.server.nodemanager.containermanager.application;
 
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 
 /**
  * Finish/abort event
  */
 public class ApplicationFinishEvent extends ApplicationEvent {
   private final String diagnostic;
+  private final YarnApplicationState finalState;
 
   /**
    * Application event to abort all containers associated with the app
@@ -32,8 +34,13 @@ public class ApplicationFinishEvent extends ApplicationEvent {
    * @param diagnostic reason for the abort
    */
   public ApplicationFinishEvent(ApplicationId appId, String diagnostic) {
+    this(appId, diagnostic, null);
+  }
+
+  public ApplicationFinishEvent(ApplicationId appId, String diagnostic, YarnApplicationState finalState) {
     super(appId, ApplicationEventType.FINISH_APPLICATION);
     this.diagnostic = diagnostic;
+    this.finalState = finalState;
   }
 
   /**
@@ -42,5 +49,9 @@ public class ApplicationFinishEvent extends ApplicationEvent {
    */
   public String getDiagnostic() {
     return diagnostic;
+  }
+
+  public YarnApplicationState getFinalState() {
+    return finalState;
   }
 }
