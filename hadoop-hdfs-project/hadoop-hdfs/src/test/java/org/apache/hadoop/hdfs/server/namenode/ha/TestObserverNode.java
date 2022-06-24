@@ -17,16 +17,17 @@
  */
 package org.apache.hadoop.hdfs.server.namenode.ha;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_STATE_CONTEXT_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter.getServiceState;
 import static org.apache.hadoop.hdfs.server.namenode.ha.ObserverReadProxyProvider.*;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyLong;
-import static org.mockito.Mockito.doAnswer;
 
 import java.io.File;
 import java.io.IOException;
@@ -36,6 +37,7 @@ import java.util.List;
 
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileEncryptionInfo;
 import org.apache.hadoop.fs.FileUtil;
@@ -55,9 +57,11 @@ import org.apache.hadoop.hdfs.qjournal.MiniQJMHACluster;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoContiguous;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
 import org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter;
+import org.apache.hadoop.hdfs.server.namenode.NameNodeRpcServer;
 import org.apache.hadoop.hdfs.server.namenode.TestFsck;
 import org.apache.hadoop.hdfs.tools.GetGroups;
 import org.apache.hadoop.ipc.ObserverRetryOnActiveException;
+import org.apache.hadoop.ipc.metrics.RpcMetrics;
 import org.apache.hadoop.util.Time;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -88,6 +92,7 @@ public class TestObserverNode {
   public static void startUpCluster() throws Exception {
     conf = new Configuration();
     conf.setBoolean(DFS_NAMENODE_STATE_CONTEXT_ENABLED_KEY, true);
+    conf.setInt(DFS_HA_TAILEDITS_PERIOD_KEY, 10);
     // Set observer probe retry period to 0. Required by the tests that restart
     // Observer and immediately try to read from it.
     conf.setTimeDuration(
@@ -117,6 +122,26 @@ public class TestObserverNode {
     if (qjmhaCluster != null) {
       qjmhaCluster.shutdown();
     }
+  }
+
+  @Test
+  public void testObserverRequeue() throws Exception {
+    // Sleep a little time to wait EditlogTailer in ObserverNameNode entered sleeping.
+    Thread.sleep(3000);
+    // Create a new pat to not mess up other tests
+    Path tmpTestPath = new Path("/TestObserverRequeue");
+    dfs.create(tmpTestPath, (short)1).close();
+    assertSentTo(0);
+
+    RpcMetrics obRpcMetrics = ((NameNodeRpcServer)dfsCluster
+        .getNameNodeRpc(2)).getClientRpcServer().getRpcMetrics();
+    long oldRequeueNum = obRpcMetrics.getRpcRequeueCalls();
+    // This operation will be blocked in ObserverNameNode
+    // until EditlogTailer tailed edits from journalNode.
+    FileStatus fileStatus = dfs.getFileStatus(tmpTestPath);
+    assertSentTo(2);
+    assertNotNull(fileStatus);
+    assertTrue(obRpcMetrics.getRpcRequeueCalls() > oldRequeueNum);
   }
 
   @Test

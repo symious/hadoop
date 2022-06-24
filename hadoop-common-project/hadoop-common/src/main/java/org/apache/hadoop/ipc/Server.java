@@ -595,11 +595,11 @@ public abstract class Server {
   }
 
   void updateMetrics(Call call, long startTime, boolean connDropped) {
-    updateMetrics(call, startTime, connDropped, false, -1);
+    updateMetrics(call, startTime, connDropped, -1);
   }
 
-  void updateMetrics(Call call, long startTime, boolean connDropped,
-      boolean isRequeueCall, int handlerId) {
+  void updateMetrics(Call call, long startTime,
+      boolean connDropped, int handlerId) {
     // delta = handler + processing + response
     long deltaNanos = Time.monotonicNowNanos() - startTime;
     long timestampNanos = call.timestampNanos;
@@ -616,7 +616,7 @@ public abstract class Server {
     long queueTime = details.get(Timing.QUEUE, RpcMetrics.TIMEUNIT);
     rpcMetrics.addRpcQueueTime(queueTime);
 
-    if (call.isResponseDeferred() || connDropped || isRequeueCall) {
+    if (call.isResponseDeferred() || connDropped) {
       // call was skipped; don't include it in processing metrics
       return;
     }
@@ -2998,7 +2998,6 @@ public abstract class Server {
         // Set to true by default and update to false later if the connection
         // can be succesfully read.
         boolean connDropped = true;
-        boolean isRequeueCall=  false;
 
         try {
           call = callQueue.take(); // pop the queue; maybe blocked here
@@ -3019,7 +3018,7 @@ public abstract class Server {
              */
             // Re-queue the call and continue
             requeueCall(call);
-            isRequeueCall = true;
+            call = null;
             continue;
           }
           if (LOG.isDebugEnabled()) {
@@ -3058,7 +3057,7 @@ public abstract class Server {
           CurCall.set(null);
           IOUtils.cleanupWithLogger(LOG, traceScope);
           if (call != null) {
-            updateMetrics(call, startTimeNanos, connDropped, isRequeueCall, id);
+            updateMetrics(call, startTimeNanos, connDropped, id);
             ProcessingDetails.LOG.debug(
                 "Served: [{}]{} name={} user={} details={}",
                 call, (call.isResponseDeferred() ? ", deferred" : ""),
@@ -3074,6 +3073,7 @@ public abstract class Server {
         throws IOException, InterruptedException {
       try {
         internalQueueCall(call, false);
+        rpcMetrics.incrRequeueCalls();
       } catch (RpcServerException rse) {
         call.doResponse(rse.getCause(), rse.getRpcStatusProto());
       }

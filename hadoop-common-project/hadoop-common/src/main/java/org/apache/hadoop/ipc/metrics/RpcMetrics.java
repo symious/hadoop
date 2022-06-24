@@ -20,6 +20,7 @@ package org.apache.hadoop.ipc.metrics;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.cache.CacheStats;
+import org.apache.hadoop.classification.VisibleForTesting;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -120,6 +121,8 @@ public class RpcMetrics {
   MutableCounterLong rpcClientBackoff;
   @Metric("Number of Slow RPC calls")
   MutableCounterLong rpcSlowCalls;
+  @Metric("Number of requeue calls")
+  MutableCounterLong rpcRequeueCalls;
 
   @Metric("Total request count of PasswordMatchedCached")
   public long passwordMatchedCacheTotalRequest() {
@@ -290,6 +293,14 @@ public class RpcMetrics {
   public  void incrSlowRpc() {
     rpcSlowCalls.incr();
   }
+
+  /**
+   * Increments the Requeue Calls counter.
+   */
+  public void incrRequeueCalls() {
+    rpcRequeueCalls.incr();
+  }
+
   /**
    * Returns a MutableRate Counter.
    * @return Mutable Rate
@@ -328,6 +339,15 @@ public class RpcMetrics {
    */
   public long getRpcSlowCalls() {
     return rpcSlowCalls.value();
+  }
+
+  /**
+   * Returns the number of requeue calls;
+   * @return long
+   */
+  @VisibleForTesting
+  public long getRpcRequeueCalls() {
+    return rpcRequeueCalls.value();
   }
 
   public MutableRate getDeferredRpcProcessingTime() {
