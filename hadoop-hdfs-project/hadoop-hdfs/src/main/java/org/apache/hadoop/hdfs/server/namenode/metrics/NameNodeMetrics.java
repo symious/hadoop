@@ -32,6 +32,7 @@ import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableGaugeInt;
 import org.apache.hadoop.metrics2.lib.MutableQuantiles;
 import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.metrics2.lib.MutableStat;
 import org.apache.hadoop.metrics2.source.JvmMetrics;
 
 /**
@@ -121,6 +122,11 @@ public class NameNodeMetrics {
   final MutableQuantiles[] blockReportQuantiles;
   @Metric("Cache report") MutableRate cacheReport;
   final MutableQuantiles[] cacheReportQuantiles;
+  @Metric MutableRate editLogFetchTime;
+  private final MutableQuantiles[] editLogFetchTimeQuantiles;
+  @Metric(value = "Number of edits loaded", valueName = "Count")
+  MutableStat numEditLogLoaded;
+  private final MutableQuantiles[] numEditLogLoadedQuantiles;
   @Metric("Generate EDEK time") private MutableRate generateEDEKTime;
   private final MutableQuantiles[] generateEDEKTimeQuantiles;
   @Metric("Warm-up EDEK time") private MutableRate warmUpEDEKTime;
@@ -154,6 +160,8 @@ public class NameNodeMetrics {
     generateEDEKTimeQuantiles = new MutableQuantiles[len];
     warmUpEDEKTimeQuantiles = new MutableQuantiles[len];
     resourceCheckTimeQuantiles = new MutableQuantiles[len];
+    editLogFetchTimeQuantiles = new MutableQuantiles[len];
+    numEditLogLoadedQuantiles = new MutableQuantiles[len];
     
     for (int i = 0; i < len; i++) {
       int interval = intervals[i];
@@ -175,6 +183,12 @@ public class NameNodeMetrics {
       resourceCheckTimeQuantiles[i] = registry.newQuantiles(
           "resourceCheckTime" + interval + "s",
           "resource check time", "ops", "latency", interval);
+      editLogFetchTimeQuantiles[i] = registry.newQuantiles(
+          "editLogFetchTime" + interval + "s",
+          "Edit log fetch time", "ops", "latency", interval);
+      numEditLogLoadedQuantiles[i] = registry.newQuantiles(
+          "numEditLogLoaded" + interval + "s",
+          "Number of edits loaded", "ops", "count", interval);
     }
   }
 
@@ -382,6 +396,20 @@ public class NameNodeMetrics {
     resourceCheckTime.add(latency);
     for (MutableQuantiles q : resourceCheckTimeQuantiles) {
       q.add(latency);
+    }
+  }
+
+  public void addEditLogFetchTime(long elapsed) {
+    editLogFetchTime.add(elapsed);
+    for (MutableQuantiles q : editLogFetchTimeQuantiles) {
+      q.add(elapsed);
+    }
+  }
+
+  public void addNumEditLogLoaded(long loaded) {
+    numEditLogLoaded.add(loaded);
+    for (MutableQuantiles q : numEditLogLoadedQuantiles) {
+      q.add(loaded);
     }
   }
 }

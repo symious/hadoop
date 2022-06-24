@@ -64,6 +64,7 @@ import static org.apache.hadoop.util.ExitUtil.terminate;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import org.apache.hadoop.util.Time;
 
 
 /**
@@ -343,31 +344,41 @@ public class EditLogTailer {
 
   public long doTailEdits(boolean onlyDurableTxns)
       throws IOException, InterruptedException {
+    FSImage image = namesystem.getFSImage();
+    long startTime = Time.monotonicNow();
+    long lastTxnId = image.getLastAppliedTxId();
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("lastTxnId: " + lastTxnId);
+    }
+    Collection<EditLogInputStream> streams;
+    try {
+      streams = editLog.selectInputStreams(lastTxnId + 1, 0,
+          null, inProgressOk, onlyDurableTxns);
+    } catch (IOException ioe) {
+      // This is acceptable. If we try to tail edits in the middle of an edits
+      // log roll, i.e. the last one has been finalized but the new inprogress
+      // edits file hasn't been started yet.
+      LOG.warn("Edits tailer failed to find any streams. Will try again " +
+          "later.", ioe);
+      return 0;
+    } finally {
+      NameNode.getNameNodeMetrics().addEditLogFetchTime(
+          Time.monotonicNow() - startTime);
+    }
     // Write lock needs to be interruptible here because the 
     // transitionToActive RPC takes the write lock before calling
     // tailer.stop() -- so if we're not interruptible, it will
     // deadlock.
     namesystem.writeLockInterruptibly();
     try {
-      FSImage image = namesystem.getFSImage();
-
-      long lastTxnId = image.getLastAppliedTxId();
-
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("lastTxnId: " + lastTxnId);
-      }
-      Collection<EditLogInputStream> streams;
-      try {
-        streams = editLog.selectInputStreams(lastTxnId + 1, 0,
-            null, inProgressOk, onlyDurableTxns);
-      } catch (IOException ioe) {
-        // This is acceptable. If we try to tail edits in the middle of an edits
-        // log roll, i.e. the last one has been finalized but the new inprogress
-        // edits file hasn't been started yet.
-        LOG.warn("Edits tailer failed to find any streams. Will try again " +
-            "later.", ioe);
+      long currentLastTxnId = image.getLastAppliedTxId();
+      if (currentLastTxnId != lastTxnId) {
+        LOG.warn("The current LastTxnId(" + currentLastTxnId
+            + ") is not same with the one(" + lastTxnId
+            + ") used in selecting inputStreams.");
         return 0;
       }
+
       if (LOG.isDebugEnabled()) {
         LOG.debug("edit streams to load from: " + streams.size());
       }
@@ -387,6 +398,7 @@ public class EditLogTailer {
           LOG.debug(String.format("Loaded %d edits starting from txid %d ",
               editsLoaded, lastTxnId));
         }
+        NameNode.getNameNodeMetrics().addNumEditLogLoaded(editsLoaded);
       }
 
       if (editsLoaded > 0) {
