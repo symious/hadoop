@@ -15,6 +15,7 @@
 .classpath
 .project
 .settings
+*.xml.versionsBackup
 target
 build
 dependency-reduced-pom.xml
