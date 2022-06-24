@@ -75,7 +75,6 @@ public class TestGenericRefresh {
     Mockito.when(firstHandler.handleRefresh(Mockito.anyString(), Mockito.any(String[].class)))
       .thenReturn(RefreshResponse.successResponse());
     RefreshRegistry.defaultRegistry().register("firstHandler", firstHandler);
-
     // Second handler has conditional response for testing args
     secondHandler = Mockito.mock(RefreshHandler.class);
     Mockito.when(secondHandler.handleRefresh("secondHandler", new String[]{"one", "two"}))

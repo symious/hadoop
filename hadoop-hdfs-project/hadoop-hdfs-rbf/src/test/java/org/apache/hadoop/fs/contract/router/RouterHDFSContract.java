@@ -80,7 +80,6 @@ public class RouterHDFSContract extends HDFSContract {
           cluster.switchToStandby(ns, NAMENODES[1]);
         }
       }
-
       cluster.waitActiveNamespaces();
     } catch (Exception e) {
       destroyCluster();

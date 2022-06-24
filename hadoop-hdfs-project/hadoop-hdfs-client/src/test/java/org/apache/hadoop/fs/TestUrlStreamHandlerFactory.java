@@ -56,7 +56,6 @@ public class TestUrlStreamHandlerFactory {
     final Random random = new Random();
     ExecutorService executor = Executors.newFixedThreadPool(THREADS);
     ArrayList<Future<?>> futures = new ArrayList<Future<?>>(TASKS);
-
     for (int i = 0; i < TASKS ; i++) {
       final int aux = i;
       futures.add(executor.submit(new Runnable() {
