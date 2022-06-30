@@ -480,4 +480,33 @@ public class TestJournal {
             QJMTestUtil.createTxnData(startTxn, expectedTxnCount)),
         result.getEditLog().toByteArray());
   }
+
+  @Test
+  public void testMultiInProgressSegment() throws Exception {
+    journal.newEpoch(FAKE_NSINFO, 1);
+
+    // Start a segment at txid 1, and write a batch of 3 txns.
+    journal.startLogSegment(makeRI(1), 1,
+        NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION);
+    journal.journal(makeRI(2), 1, 1, 3,
+        QJMTestUtil.createTxnData(1, 3));
+
+    GenericTestUtils.assertExists(
+        journal.getStorage().getInProgressEditLog(1));
+
+    // Try to start new segment at txid 6, this should abort old segment and
+    // then succeed, allowing us to write txid 6-9.
+    journal.startLogSegment(makeRI(3), 6,
+        NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION);
+    journal.journal(makeRI(4), 6, 6, 3,
+        QJMTestUtil.createTxnData(6, 3));
+
+    // The old segment should *not* be finalized.
+    GenericTestUtils.assertExists(
+        journal.getStorage().getInProgressEditLog(1));
+    GenericTestUtils.assertExists(
+        journal.getStorage().getInProgressEditLog(6));
+
+    journal.getEditLogManifest(1, true);
+  }
 }
