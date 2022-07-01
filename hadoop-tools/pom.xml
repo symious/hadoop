@@ -51,6 +51,7 @@
     <module>hadoop-azure-datalake</module>
     <module>hadoop-aliyun</module>
     <module>hadoop-fastcopy</module>
+    <module>hadoop-externaltrash</module>
   </modules>
 
   <build>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<configuration>
+
+    <property>
+        <name>fs.external.trash.interval.enable</name>
+        <value>true</value>
+        <description>if false (default) only print log, else process trash.</description>
+    </property>
+
+    <property>
+         <name>fs.user.manage.enable</name>
+         <value>false</value>
+         <description>if false (default) will manage trash by using united configuration for namespace</description>
+    </property>
+
+    <property>
+         <name>fs.ns1.trash.constraint</name>
+         <value>5000</value>
+         <description>deletion constraint for namespace ns1</description>
+    </property>
+
+    <property>
+        <name>fs.trash.checkpoint.interval.delta</name>
+        <value>60</value>
+    </property>
+
+    <property>
+        <name>fs.user.A.trash.interval</name>
+        <value>2880</value>
+        <description>trash interval in minutes of user A.</description>
+    </property>
+
+    <property>
+        <name>fs.user.B.trash.interval</name>
+        <value>4320</value>
+        <description>trash interval in minutes of user B.</description>
+    </property>
+
+</configuration>

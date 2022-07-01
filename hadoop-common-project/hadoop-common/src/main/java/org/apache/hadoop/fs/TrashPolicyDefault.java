@@ -19,6 +19,8 @@ package org.apache.hadoop.fs;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CHECKPOINT_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CHECKPOINT_INTERVAL_KEY;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CONSTRAINT_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CONSTRAINT_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 
@@ -36,6 +38,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Options.Rename;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.fs.shell.PathData;
 import org.apache.hadoop.util.Time;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -59,7 +62,7 @@ public class TrashPolicyDefault extends TrashPolicy {
 
   private static final Path CURRENT = new Path("Current");
 
-  private static final FsPermission PERMISSION =
+  protected static final FsPermission PERMISSION =
     new FsPermission(FsAction.ALL, FsAction.NONE, FsAction.NONE);
 
   private static final DateFormat CHECKPOINT = new SimpleDateFormat("yyMMddHHmmss");
@@ -69,6 +72,7 @@ public class TrashPolicyDefault extends TrashPolicy {
   private static final int MSECS_PER_MINUTE = 60*1000;
 
   private long emptierInterval;
+  protected long trashConstraint;
 
   public TrashPolicyDefault() { }
 
@@ -90,6 +94,7 @@ public class TrashPolicyDefault extends TrashPolicy {
     this.emptierInterval = (long)(conf.getFloat(
         FS_TRASH_CHECKPOINT_INTERVAL_KEY, FS_TRASH_CHECKPOINT_INTERVAL_DEFAULT)
         * MSECS_PER_MINUTE);
+    this.trashConstraint = conf.getLong(FS_TRASH_CONSTRAINT_KEY, FS_TRASH_CONSTRAINT_DEFAULT);
    }
 
   @Override
@@ -101,9 +106,10 @@ public class TrashPolicyDefault extends TrashPolicy {
     this.emptierInterval = (long)(conf.getFloat(
         FS_TRASH_CHECKPOINT_INTERVAL_KEY, FS_TRASH_CHECKPOINT_INTERVAL_DEFAULT)
         * MSECS_PER_MINUTE);
+    this.trashConstraint = conf.getLong(FS_TRASH_CONSTRAINT_KEY, FS_TRASH_CONSTRAINT_DEFAULT);
   }
 
-  private Path makeTrashRelativePath(Path basePath, Path rmFilePath) {
+  protected Path makeTrashRelativePath(Path basePath, Path rmFilePath) {
     return Path.mergePaths(basePath, rmFilePath);
   }
 
@@ -163,8 +169,7 @@ public class TrashPolicyDefault extends TrashPolicy {
         }
         
         // move to current trash
-        fs.rename(path, trashPath,
-            Rename.TO_TRASH);
+        moveToTrashInternal(fs, path, trashPath);
 
         // SPDI-16065. Only correct the client output, since the actual control is at NN side.
         trashPath = correctTrashPath(path, trashPath);
@@ -176,6 +181,11 @@ public class TrashPolicyDefault extends TrashPolicy {
     }
     throw (IOException)
       new IOException("Failed to move to trash: " + path).initCause(cause);
+  }
+
+  protected void moveToTrashInternal(FileSystem fs, Path srcPath, Path trashPath)
+      throws IOException {
+    fs.rename(srcPath, trashPath, Rename.TO_TRASH);
   }
 
   private Path correctTrashPath(Path src, Path dst) {
@@ -235,6 +245,11 @@ public class TrashPolicyDefault extends TrashPolicy {
     return new Emptier(getConf(), emptierInterval);
   }
 
+  @Override
+  public Runnable getEmptier(Configuration conf, long emptierInterval) throws IOException {
+    return new Emptier(conf, emptierInterval);
+  }
+
   protected class Emptier implements Runnable {
 
     private Configuration conf;
@@ -251,7 +266,7 @@ public class TrashPolicyDefault extends TrashPolicy {
                  " minutes that is used for deletion instead");
         this.emptierInterval = deletionInterval;
       }
-      LOG.info("Namenode trash configuration: Deletion interval = "
+      LOG.info("Trash configuration: Deletion interval = "
           + (deletionInterval / MSECS_PER_MINUTE)
           + " minutes, Emptier interval = "
           + (emptierInterval / MSECS_PER_MINUTE) + " minutes.");
@@ -281,7 +296,7 @@ public class TrashPolicyDefault extends TrashPolicy {
               if (!trashRoot.isDirectory())
                 continue;
               try {
-                TrashPolicyDefault trash = new TrashPolicyDefault(fs, conf);
+                TrashPolicyDefault trash = (TrashPolicyDefault) TrashPolicy.getInstance(conf, fs);
                 trash.deleteCheckpoint(trashRoot.getPath());
                 trash.createCheckpoint(trashRoot.getPath(), new Date(now));
               } catch (IOException e) {
@@ -314,7 +329,23 @@ public class TrashPolicyDefault extends TrashPolicy {
     }
   }
 
-  private void createCheckpoint(Path trashRoot, Date date) throws IOException {
+  @Override
+  public void deleteFromTrash(Path path, boolean deleteDirs) throws IOException {
+    if (!deleteFromTrashInternal(path, deleteDirs)) {
+      throw new PathIOException(path.toString());
+    }
+    LOG.info("Deleted " + path);
+  }
+
+  protected boolean deleteFromTrashInternal(Path path, boolean deleteDirs) throws IOException {
+    if (trashConstraint > 0) {
+      LOG.warn("Trash policy({}) don't supports constraint deletion and will delete {} at once.",
+          this.getClass().getName(), path);
+    }
+    return fs.delete(path, deleteDirs);
+  }
+
+  protected void createCheckpoint(Path trashRoot, Date date) throws IOException {
     if (!fs.exists(new Path(trashRoot, CURRENT))) {
       return;
     }
@@ -368,7 +399,7 @@ public class TrashPolicyDefault extends TrashPolicy {
       }
 
       if ((now - deletionInterval) > time) {
-        if (fs.delete(path, true)) {
+        if (deleteFromTrashInternal(path, true)) {
           LOG.info("Deleted trash checkpoint: "+dir);
         } else {
           LOG.warn("Couldn't delete checkpoint: " + dir + " Ignoring.");
@@ -376,7 +407,6 @@ public class TrashPolicyDefault extends TrashPolicy {
       }
     }
   }
-
   private long getTimeFromCheckpoint(String name) throws ParseException {
     long time;
 

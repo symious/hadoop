@@ -115,6 +115,9 @@ case $COMMAND in
     elif [ "$COMMAND" = "distcp" ] ; then
       CLASS=org.apache.hadoop.tools.DistCp
       CLASSPATH=${CLASSPATH}:${TOOL_PATH}
+    elif [ "$COMMAND" = "trashservice" ] ; then
+      CLASS=org.apache.hadoop.TrashManagementService
+      CLASSPATH=${CLASSPATH}:${TOOL_PATH}
     elif [ "$COMMAND" = "daemonlog" ] ; then
       CLASS=org.apache.hadoop.log.LogLevel
     elif [ "$COMMAND" = "archive" ] ; then

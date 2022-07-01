@@ -102,6 +102,13 @@
       </includes>
     </fileSet>
     <fileSet>
+      <directory>../hadoop-externaltrash/target</directory>
+      <outputDirectory>/share/hadoop/${hadoop.component}/sources</outputDirectory>
+      <includes>
+        <include>*-sources.jar</include>
+      </includes>
+    </fileSet>
+    <fileSet>
       <directory>../hadoop-extras/target</directory>
       <outputDirectory>/share/hadoop/${hadoop.component}/sources</outputDirectory>
       <includes>

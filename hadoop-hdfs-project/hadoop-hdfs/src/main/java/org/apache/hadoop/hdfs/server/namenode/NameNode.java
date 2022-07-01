@@ -114,6 +114,8 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_TRASH_EMPTIER_ENABLE_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_TRASH_EMPTIER_ENABLE_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_BACKOFF_ENABLE;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_BACKOFF_ENABLE_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_NAMESPACE;
@@ -417,6 +419,7 @@ public class NameNode extends ReconfigurableBase implements
   private final boolean haEnabled;
   private final HAContext haContext;
   protected final boolean allowStaleStandbyReads;
+  private boolean emptierEnable = HADOOP_TRASH_EMPTIER_ENABLE_DEFAULT;
   private AtomicBoolean started = new AtomicBoolean(false);
 
   private final static int HEALTH_MONITOR_WARN_THRESHOLD_MS = 5000;
@@ -763,6 +766,9 @@ public class NameNode extends ReconfigurableBase implements
           intervals);
       }
     }
+    // enable trash emptier or not
+    emptierEnable = conf.getBoolean(HADOOP_TRASH_EMPTIER_ENABLE_KEY,
+        HADOOP_TRASH_EMPTIER_ENABLE_DEFAULT);
 
     conf.set(IPC_SERVER_RPC_CATEGORY_INTERNAL, this.getClass().getName());
     UserGroupInformation.setConfiguration(conf);
@@ -2044,7 +2050,10 @@ public class NameNode extends ReconfigurableBase implements
     public void startActiveServices() throws IOException {
       try {
         namesystem.startActiveServices();
-        startTrashEmptier(getConf());
+        if (emptierEnable) {
+          startTrashEmptier(getConf());
+          LOG.info("Trash emptier for namenode is started");
+        }
       } catch (Throwable t) {
         doImmediateShutdown(t);
       }

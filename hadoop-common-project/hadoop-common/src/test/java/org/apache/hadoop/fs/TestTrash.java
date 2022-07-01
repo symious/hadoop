@@ -459,7 +459,7 @@ public class TestTrash extends TestCase {
       assertTrue(count==num_runs);
     }
     
-    //Verify skipTrash option is suggested when rm fails due to its absence
+    // Verify skipTrash option is suggested when rm fails due to its absence
     {
       String[] args = new String[2];
       args[0] = "-rmr";
@@ -972,6 +972,10 @@ public class TestTrash extends TestCase {
     }
 
     @Override
+    public void deleteFromTrash(Path path, boolean deleteDirs) throws IOException {
+    }
+
+    @Override
     public void createCheckpoint() throws IOException {
     }
 
@@ -996,6 +1000,11 @@ public class TestTrash extends TestCase {
 
     @Override
     public Runnable getEmptier() throws IOException {
+      return null;
+    }
+
+    @Override
+    public Runnable getEmptier(Configuration conf, long emptierInterval) throws IOException {
       return null;
     }
   }
@@ -1034,6 +1043,10 @@ public class TestTrash extends TestCase {
     }
 
     @Override
+    public void deleteFromTrash(Path path, boolean deleteDirs) throws IOException {
+    }
+
+    @Override
     public void createCheckpoint() throws IOException {
       AuditableCheckpoints.add();
     }
@@ -1056,6 +1069,11 @@ public class TestTrash extends TestCase {
     @Override
     public Runnable getEmptier() throws IOException {
       return new AuditableEmptier(getConf());
+    }
+
+    @Override
+    public Runnable getEmptier(Configuration conf, long emptierInterval) throws IOException {
+      return new AuditableEmptier(conf);
     }
 
     public int getNumberOfCheckpoints() {

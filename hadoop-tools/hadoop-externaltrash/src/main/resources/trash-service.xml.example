@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<configuration>
+
+    <property>
+        <name>fs.trash.interval</name>
+        <value>1440</value>
+        <description>Default deletion interval in minutes for all namespaces.</description>
+    </property>
+
+    <property>
+         <name>fs.trash.checkpoint.interval</name>
+         <value>240</value>
+         <description>Default emptier interval in minutes for all namespaces.</description>
+    </property>
+
+    <property>
+         <name>fs.trash.constraint</name>
+        <value>5000</value>
+        <description>Default deletion constraint for all namespaces.</description>
+    </property>
+
+    <property>
+         <name>fs.ns1.trash.constraint</name>
+         <value>1000</value>
+         <description>deletion constraint for namespace ns1.</description>
+    </property>
+
+    <property>
+        <name>fs.ns1.trash.interval</name>
+        <value>60</value>
+        <description>trash deletion interval in minutes for namespace ns1.</description>
+    </property>
+
+    <property>
+        <name>fs.ns1.trash.checkpoint.interval</name>
+        <value>20</value>
+        <description>trash emptier interval in minutes of namespace ns1.</description>
+    </property>
+
+</configuration>
