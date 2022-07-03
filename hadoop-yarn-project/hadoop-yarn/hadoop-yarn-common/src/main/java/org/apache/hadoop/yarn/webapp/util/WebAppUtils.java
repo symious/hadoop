@@ -189,10 +189,10 @@ public class WebAppUtils {
   public static List<String> getProxyHostsAndPortsForAmFilter(
       Configuration conf) {
     List<String> addrs = new ArrayList<String>();
-    String proxyAddr = conf.get(YarnConfiguration.PROXY_ADDRESS);
+    String[] proxyAddr = conf.getStrings(YarnConfiguration.PROXY_ADDRESS);
     // If PROXY_ADDRESS isn't set, fallback to RM_WEBAPP(_HTTPS)_ADDRESS
     // There could be multiple if using RM HA
-    if (proxyAddr == null || proxyAddr.isEmpty()) {
+    if (proxyAddr == null || proxyAddr.length == 0) {
       // If RM HA is enabled, try getting those addresses
       if (HAUtil.isHAEnabled(conf)) {
         List<String> haAddrs =
@@ -211,7 +211,7 @@ public class WebAppUtils {
         addrs.add(getResolvedRMWebAppURLWithoutScheme(conf));
       }
     } else {
-      addrs.add(proxyAddr);
+      addrs.addAll(Arrays.asList(proxyAddr));
     }
     return addrs;
   }
