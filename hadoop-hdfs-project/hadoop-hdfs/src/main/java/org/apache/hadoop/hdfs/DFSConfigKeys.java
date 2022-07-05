@@ -472,6 +472,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final long DFS_LOCK_SUPPRESS_WARNING_INTERVAL_DEFAULT =
       10000; //ms
 
+  public static final String DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_KEY =
+      "dfs.lock.wait.threshold.ms";
+  public static final long DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_DEFAULT = 100;
   public static final String  DFS_UPGRADE_DOMAIN_FACTOR = "dfs.namenode.upgrade.domain.factor";
   public static final int DFS_UPGRADE_DOMAIN_FACTOR_DEFAULT = DFS_REPLICATION_DEFAULT;
 

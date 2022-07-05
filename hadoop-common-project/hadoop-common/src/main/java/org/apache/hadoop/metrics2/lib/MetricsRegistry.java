@@ -322,6 +322,16 @@ public class MetricsRegistry {
     return rollingAverages;
   }
 
+  public synchronized MutableRollingAveragesWithRateAndMax newMutableRollingAveragesWithRate(
+      String name, String valueName,
+      MutableRatesWithAggregation externalMetrics) {
+    checkMetricName(name);
+    MutableRollingAveragesWithRateAndMax rollingAverages =
+        new MutableRollingAveragesWithRateAndMax(valueName, externalMetrics);
+    metricsMap.put(name, rollingAverages);
+    return rollingAverages;
+  }
+
   synchronized void add(String name, MutableMetric metric) {
     checkMetricName(name);
     metricsMap.put(name, metric);

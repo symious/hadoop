@@ -165,7 +165,8 @@ public class MutableRatesWithAggregation extends MutableMetric {
 
     synchronized void snapshotInto(MutableRate metric) {
       if (stat.numSamples() > 0) {
-        metric.add(stat.numSamples(), Math.round(stat.total()));
+        metric.add(stat.numSamples(), Math.round(stat.total()),
+            stat.getMinmax());
         stat.reset();
       }
     }

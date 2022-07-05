@@ -31,6 +31,7 @@ import org.apache.hadoop.util.FakeTimer;
 import org.apache.hadoop.util.Time;
 import org.apache.log4j.Level;
 import org.junit.Test;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
@@ -56,17 +57,18 @@ public class TestFSNamesystemLock {
     Configuration conf = new Configuration();
 
     conf.setBoolean(DFS_NAMENODE_FSLOCK_FAIR_KEY, true);
-    FSNamesystemLock fsnLock = new FSNamesystemLock(conf, null);
+    FSNamesystemLock fsnLock = new FSNamesystemLock(conf, null, null);
     assertTrue(fsnLock.coarseLock.isFair());
 
     conf.setBoolean(DFS_NAMENODE_FSLOCK_FAIR_KEY, false);
-    fsnLock = new FSNamesystemLock(conf, null);
+    fsnLock = new FSNamesystemLock(conf, null, null);
     assertFalse(fsnLock.coarseLock.isFair());
   }
 
   @Test
   public void testFSNamesystemLockCompatibility() {
-    FSNamesystemLock rwLock = new FSNamesystemLock(new Configuration(), null);
+    FSNamesystemLock rwLock = new FSNamesystemLock(new Configuration(), null,
+        null);
 
     assertEquals(0, rwLock.getReadHoldCount());
     rwLock.readLock();
@@ -106,7 +108,7 @@ public class TestFSNamesystemLock {
     final CountDownLatch latch = new CountDownLatch(threadCount);
     final Configuration conf = new Configuration();
     conf.setBoolean(DFS_NAMENODE_FSLOCK_FAIR_KEY, true);
-    final FSNamesystemLock rwLock = new FSNamesystemLock(conf, null);
+    final FSNamesystemLock rwLock = new FSNamesystemLock(conf, null, null);
     rwLock.writeLock();
     ExecutorService helper = Executors.newFixedThreadPool(threadCount);
 
@@ -149,7 +151,8 @@ public class TestFSNamesystemLock {
         writeLockSuppressWarningInterval, TimeUnit.MILLISECONDS);
 
     final FakeTimer timer = new FakeTimer();
-    final FSNamesystemLock fsnLock = new FSNamesystemLock(conf, null, timer);
+    final FSNamesystemLock fsnLock = new FSNamesystemLock(conf, null, null,
+        timer);
     timer.advance(writeLockSuppressWarningInterval);
 
     LogCapturer logs = LogCapturer.captureLogs(FSNamesystem.LOG);
@@ -232,7 +235,8 @@ public class TestFSNamesystemLock {
         readLockSuppressWarningInterval, TimeUnit.MILLISECONDS);
 
     final FakeTimer timer = new FakeTimer();
-    final FSNamesystemLock fsnLock = new FSNamesystemLock(conf, null, timer);
+    final FSNamesystemLock fsnLock = new FSNamesystemLock(conf, null, null,
+        timer);
     timer.advance(readLockSuppressWarningInterval);
 
     LogCapturer logs = LogCapturer.captureLogs(FSNamesystem.LOG);
@@ -363,30 +367,32 @@ public class TestFSNamesystemLock {
     conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY, true);
     FakeTimer timer = new FakeTimer();
     MetricsRegistry registry = new MetricsRegistry("Test");
-    MutableRatesWithAggregation rates =
+    MutableRatesWithAggregation holds =
         registry.newRatesWithAggregation("Test");
-    FSNamesystemLock fsLock = new FSNamesystemLock(conf, rates, timer);
+    MutableRatesWithAggregation waits =
+        registry.newRatesWithAggregation("____");
+    FSNamesystemLock fsLock = new FSNamesystemLock(conf, holds, waits, timer);
 
-    fsLock.readLock();
+    fsLock.readLock("foo");
     timer.advanceNanos(1300000);
     fsLock.readUnlock("foo");
-    fsLock.readLock();
+    fsLock.readLock("foo");
     timer.advanceNanos(2400000);
     fsLock.readUnlock("foo");
 
-    fsLock.readLock();
+    fsLock.readLock("bar");
     timer.advance(1);
-    fsLock.readLock();
+    fsLock.readLock("bar");
     timer.advance(1);
     fsLock.readUnlock("bar");
     fsLock.readUnlock("bar");
 
-    fsLock.writeLock();
+    fsLock.writeLock("baz");
     timer.advance(1);
     fsLock.writeUnlock("baz");
 
     MetricsRecordBuilder rb = MetricsAsserts.mockMetricsRecordBuilder();
-    rates.snapshot(rb, true);
+    holds.snapshot(rb, true);
 
     assertGauge("FSNReadLockFooNanosAvgTime", 1850000.0, rb);
     assertCounter("FSNReadLockFooNanosNumOps", 2L, rb);
@@ -402,4 +408,105 @@ public class TestFSNamesystemLock {
     assertCounter("FSNWriteLockOverallNanosNumOps", 1L, rb);
   }
 
+  @Test
+  public void testDetailedWaitMetrics() throws Exception {
+    Configuration conf = new Configuration();
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY, true);
+    final FakeTimer timer = new FakeTimer();
+    MetricsRegistry registry = new MetricsRegistry("Test");
+    MutableRatesWithAggregation holds =
+        registry.newRatesWithAggregation("Test");
+    MutableRatesWithAggregation waits =
+        registry.newRatesWithAggregation("Test2");
+    final FSNamesystemLock fsLock = new FSNamesystemLock(conf, holds, waits, timer);
+
+    // Slow write thread, create long wait
+    Thread thread1 = new Thread() {
+      @Override
+      public void run() {
+        try {
+          fsLock.writeLock("foo");
+          Thread.sleep(200);
+          timer.advanceNanos(4200000);
+          Thread.sleep(200);
+          fsLock.writeUnlock("foo");
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    };
+
+    // Fast write thread, does not create long wait
+    Thread thread2 = new Thread() {
+      @Override
+      public void run() {
+        try {
+          fsLock.writeLock("foo");
+          Thread.sleep(200);
+          timer.advanceNanos(42);
+          Thread.sleep(200);
+          fsLock.writeUnlock("foo");
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+      }
+    };
+
+    thread1.start();
+    Thread.sleep(50);
+    fsLock.writeLock("foo");
+    thread1.join();
+    timer.advanceNanos(2100000);
+    fsLock.writeUnlock("foo");
+
+    thread2.start();
+    Thread.sleep(50);
+    fsLock.writeLock("foo");
+    thread2.join();
+    timer.advanceNanos(2100000);
+    fsLock.writeUnlock("foo");
+
+    MetricsRecordBuilder rb = MetricsAsserts.mockMetricsRecordBuilder();
+    waits.snapshot(rb, true);
+
+    assertGauge("FSNWriteLockFooWaitNanosAvgTime", 4200000.0, rb);
+    assertCounter("FSNWriteLockFooWaitNanosNumOps", 1L, rb);
+  }
+
+
+  @Test
+  public void testRefreshConfigs() throws Exception {
+    Configuration conf = new Configuration();
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY, true);
+    conf.setLong(DFSConfigKeys.DFS_LOCK_SUPPRESS_WARNING_INTERVAL_KEY, 10);
+    conf.setLong(DFSConfigKeys.DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY, 10);
+
+    GenericTestUtils.LogCapturer logs =
+        GenericTestUtils.LogCapturer.captureLogs(
+            LoggerFactory.getLogger(FSNamesystem.class));
+
+    FakeTimer timer = new FakeTimer();
+    MetricsRegistry registry = new MetricsRegistry("Test");
+    MutableRatesWithAggregation holds =
+        registry.newRatesWithAggregation("Test");
+    MutableRatesWithAggregation waits =
+        registry.newRatesWithAggregation("____");
+    FSNamesystemLock fsLock = new FSNamesystemLock(conf, holds, waits, timer);
+
+    fsLock.readLock("foo");
+    timer.advanceNanos(10000000);
+    fsLock.readUnlock("foo");
+
+    assertTrue(logs.getOutput().contains("Longest read-lock held at"));
+    logs.clearOutput();
+
+    conf.setLong(DFSConfigKeys.DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY, 1000);
+    fsLock.refreshLockMetricsConfigs(conf);
+
+    fsLock.readLock("foo");
+    timer.advanceNanos(100000);
+    fsLock.readUnlock("foo");
+
+    assertFalse(logs.getOutput().contains("Longest read-lock held at"));
+  }
 }

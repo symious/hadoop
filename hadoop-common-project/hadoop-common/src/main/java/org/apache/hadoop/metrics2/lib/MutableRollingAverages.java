@@ -61,7 +61,7 @@ import static org.apache.hadoop.metrics2.lib.Interns.*;
 @InterfaceStability.Evolving
 public class MutableRollingAverages extends MutableMetric implements Closeable {
 
-  private MutableRatesWithAggregation innerMetrics =
+  protected MutableRatesWithAggregation innerMetrics =
       new MutableRatesWithAggregation();
 
   @VisibleForTesting
@@ -74,34 +74,41 @@ public class MutableRollingAverages extends MutableMetric implements Closeable {
   @Nullable
   private Map<String, MutableRate> currentSnapshot;
 
-  private final String avgInfoNameTemplate;
-  private final String avgInfoDescTemplate;
-  private int numWindows;
+  protected final String avgInfoNameTemplate;
+  protected final String avgInfoDescTemplate;
+  protected int numWindows;
 
   /**
    * This class maintains sub-sum and sub-total of SampleStat.
    */
-  private static class SumAndCount {
+  protected static class SumAndMaxAndCount {
     private final double sum;
+    private final double max;
     private final long count;
     private final long snapshotTimeStamp;
 
     /**
-     * Constructor for {@link SumAndCount}.
+     * Constructor for {@link SumAndMaxAndCount}.
      *
      * @param sum sub-sum in sliding windows
+     * @param max sub-max in sliding windows
      * @param count sub-total in sliding windows
      * @param snapshotTimeStamp when is a new SampleStat snapshot.
      */
-    SumAndCount(final double sum, final long count,
+    SumAndMaxAndCount(final double sum, final double max, final long count,
         final long snapshotTimeStamp) {
       this.sum = sum;
+      this.max = max;
       this.count = count;
       this.snapshotTimeStamp = snapshotTimeStamp;
     }
 
     public double getSum() {
       return sum;
+    }
+
+    public double getMax() {
+      return max;
     }
 
     public long getCount() {
@@ -122,7 +129,7 @@ public class MutableRollingAverages extends MutableMetric implements Closeable {
    * maintained.
    * </p>
    */
-  private ConcurrentMap<String, LinkedBlockingDeque<SumAndCount>> averages =
+  protected ConcurrentMap<String, LinkedBlockingDeque<SumAndMaxAndCount>> averages =
       new ConcurrentHashMap<>();
 
   private static final long WINDOW_SIZE_MS_DEFAULT = 300_000;
@@ -135,7 +142,7 @@ public class MutableRollingAverages extends MutableMetric implements Closeable {
    * as the valid time to make sure some too old record won't be use to compute
    * average.
    */
-  private long recordValidityMs =
+  protected long recordValidityMs =
       NUM_WINDOWS_DEFAULT * WINDOW_SIZE_MS_DEFAULT;
 
   /**
@@ -170,7 +177,7 @@ public class MutableRollingAverages extends MutableMetric implements Closeable {
   @Override
   public void snapshot(MetricsRecordBuilder builder, boolean all) {
     if (all || changed()) {
-      for (final Entry<String, LinkedBlockingDeque<SumAndCount>> entry
+      for (final Entry<String, LinkedBlockingDeque<SumAndMaxAndCount>> entry
           : averages.entrySet()) {
         final String name = entry.getKey();
         final MetricsInfo avgInfo = info(
@@ -179,7 +186,7 @@ public class MutableRollingAverages extends MutableMetric implements Closeable {
         double totalSum = 0;
         long totalCount = 0;
 
-        for (final SumAndCount sumAndCount : entry.getValue()) {
+        for (final SumAndMaxAndCount sumAndCount : entry.getValue()) {
           totalCount += sumAndCount.getCount();
           totalSum += sumAndCount.getSum();
         }
@@ -253,20 +260,21 @@ public class MutableRollingAverages extends MutableMetric implements Closeable {
     for (Map.Entry<String, MutableRate> entry : currentSnapshot.entrySet()) {
       final MutableRate rate = entry.getValue();
 
-      LinkedBlockingDeque<SumAndCount> deque = averages.get(entry.getKey());
+      LinkedBlockingDeque<SumAndMaxAndCount> deque = averages.get(entry.getKey());
       if (deque == null) {
         deque = new LinkedBlockingDeque<>(numWindows);
         averages.put(entry.getKey(), deque);
       }
 
-      final SumAndCount sumAndCount = new SumAndCount(
+      final SumAndMaxAndCount sumAndMaxAndCount = new SumAndMaxAndCount(
           rate.lastStat().total(),
+          rate.lastStat().max(),
           rate.lastStat().numSamples(),
           rate.getSnapshotTimeStamp());
       /* put newest sum and count to the end */
-      if (!deque.offerLast(sumAndCount)) {
+      if (!deque.offerLast(sumAndMaxAndCount)) {
         deque.pollFirst();
-        deque.offerLast(sumAndCount);
+        deque.offerLast(sumAndMaxAndCount);
       }
     }
 
@@ -291,17 +299,17 @@ public class MutableRollingAverages extends MutableMetric implements Closeable {
   public synchronized Map<String, Double> getStats(long minSamples) {
     final Map<String, Double> stats = new HashMap<>();
 
-    for (final Entry<String, LinkedBlockingDeque<SumAndCount>> entry
+    for (final Entry<String, LinkedBlockingDeque<SumAndMaxAndCount>> entry
         : averages.entrySet()) {
       final String name = entry.getKey();
       double totalSum = 0;
       long totalCount = 0;
 
-      for (final SumAndCount sumAndCount : entry.getValue()) {
-        if (Time.monotonicNow() - sumAndCount.getSnapshotTimeStamp()
+      for (final SumAndMaxAndCount sumAndMaxAndCount : entry.getValue()) {
+        if (Time.monotonicNow() - sumAndMaxAndCount.getSnapshotTimeStamp()
             < recordValidityMs) {
-          totalCount += sumAndCount.getCount();
-          totalSum += sumAndCount.getSum();
+          totalCount += sumAndMaxAndCount.getCount();
+          totalSum += sumAndMaxAndCount.getSum();
         }
       }
 

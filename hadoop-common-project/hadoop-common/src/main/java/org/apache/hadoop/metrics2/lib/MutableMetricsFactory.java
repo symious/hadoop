@@ -83,6 +83,10 @@ public class MutableMetricsFactory {
       return registry.newMutableRollingAverages(info.name(),
           annotation.valueName());
     }
+    if (cls == MutableRollingAveragesWithRateAndMax.class) {
+      return registry.newMutableRollingAveragesWithRate(info.name(),
+          annotation.valueName(), null);
+    }
     if (cls == MutableQuantiles.class) {
       return registry.newQuantiles(info.name(), annotation.about(),
           annotation.sampleName(), annotation.valueName(), annotation.interval());

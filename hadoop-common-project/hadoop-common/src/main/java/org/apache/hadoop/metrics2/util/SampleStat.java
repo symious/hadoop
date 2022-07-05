@@ -56,6 +56,14 @@ public class SampleStat {
     this.minmax.reset(minmax);
   }
 
+  public void resetMinMax(MinMax minmax) {
+    this.minmax.reset(minmax);
+  }
+
+  public MinMax getMinmax() {
+    return minmax;
+  }
+
   /**
    * Copy the values to other (saves object creation and gc.)
    * @param other the destination to hold our values

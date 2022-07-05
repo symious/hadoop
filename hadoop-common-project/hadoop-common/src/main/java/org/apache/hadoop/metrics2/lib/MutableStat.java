@@ -126,6 +126,19 @@ public class MutableStat extends MutableMetric {
   }
 
   /**
+   * Do the same as add(long numSamples, long sum) but keep minmax values
+   * @param numSamples number of samples
+   * @param sum sum of the samples
+   * @param minmax MinMax object of the samples to add
+   */
+  public synchronized void add(long numSamples, long sum,
+      SampleStat.MinMax minmax) {
+    intervalStat.add(numSamples, sum);
+    intervalStat.resetMinMax(minmax);
+    setChanged();
+  }
+
+  /**
    * Add a snapshot to the metric.
    * @param value of the metric
    */
@@ -139,14 +152,14 @@ public class MutableStat extends MutableMetric {
     if (all || changed()) {
       numSamples += intervalStat.numSamples();
       builder.addCounter(numInfo, numSamples)
-             .addGauge(avgInfo, lastStat().mean());
+          .addGauge(iMaxInfo, lastStat().max())
+          .addGauge(avgInfo, lastStat().mean())
+          .addGauge(iNumInfo, lastStat().numSamples());
       if (extended) {
         builder.addGauge(stdevInfo, lastStat().stddev())
                .addGauge(iMinInfo, lastStat().min())
-               .addGauge(iMaxInfo, lastStat().max())
                .addGauge(minInfo, minMax.min())
-               .addGauge(maxInfo, minMax.max())
-               .addGauge(iNumInfo, lastStat().numSamples());
+               .addGauge(maxInfo, minMax.max());
       }
       if (changed()) {
         if (numSamples > 0) {

@@ -3067,6 +3067,16 @@
 </property>
 
 <property>
+  <name>dfs.lock.wait.threshold.ms</name>
+  <value>100</value>
+  <description>The minimum time in milliseconds that a FSN lock acquisition has
+    to take before it's considered to be waiting. This value is needed because
+    a lock acquisition will always take some time even if the lock is free and
+    without a threshold, a lot of lock wait metrics will have false positives.
+  </description>
+</property>
+
+<property>
   <name>dfs.namenode.fslock.fair</name>
   <value>true</value>
   <description>If this is true, the FS Namesystem lock will be used in Fair mode,
