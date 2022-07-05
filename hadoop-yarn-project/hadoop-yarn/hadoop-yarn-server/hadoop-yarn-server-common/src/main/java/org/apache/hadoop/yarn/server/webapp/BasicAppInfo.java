@@ -28,11 +28,11 @@ import org.apache.hadoop.yarn.server.webapp.dao.AppInfo;
  */
 @InterfaceAudience.LimitedPrivate({"YARN"})
 @InterfaceStability.Unstable
-class BasicAppInfo {
+public class BasicAppInfo {
   private final YarnApplicationState appState;
   private final String user;
 
-  BasicAppInfo(YarnApplicationState appState, String user) {
+  public BasicAppInfo(YarnApplicationState appState, String user) {
     this.appState = appState;
     this.user = user;
   }

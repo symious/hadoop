@@ -47,7 +47,14 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.core.StreamingOutput;
 import java.nio.charset.Charset;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 
 /**
  * Extracts aggregated logs and related information.
@@ -66,7 +73,7 @@ public class LogServlet extends Configured {
 
   private Map<String, List<RemoteLogInfo>> clusterToLogDir = new HashMap<>();
   private Map<String, LogAggregationFileControllerFactory> clusterToFactory =
-      new HashMap<>();
+      new ConcurrentHashMap<>();
 
 
   public LogServlet(Configuration conf, AppInfoProvider appInfoProvider) {
@@ -105,7 +112,7 @@ public class LogServlet extends Configured {
   private LogAggregationFileControllerFactory getOrCreateFactory(
       String clusterId) {
     if (clusterId == null) {
-      getOrCreateFactory();
+      return null;
     }
     if (clusterToLogDir.containsKey(clusterId)) {
       if (!clusterToFactory.containsKey(clusterId)) {
@@ -129,7 +136,7 @@ public class LogServlet extends Configured {
       }
       return clusterToFactory.get(clusterId);
     } else {
-      return getOrCreateFactory();
+      return null;
     }
   }
 
@@ -440,6 +447,13 @@ public class LogServlet extends Configured {
     }
 
     LogAggregationFileControllerFactory factory = getOrCreateFactory(clusterId);
+    if (factory == null) {
+      LOG.warn(
+          "Can't find LogAggregationFileControllerFactory for " + clusterId);
+      throw new WebApplicationException(
+          new Exception("Can't find FileControllerFactory"),
+          Response.Status.INTERNAL_SERVER_ERROR);
+    }
 
     final long length = LogWebServiceUtils.parseLongParam(size);
     final long startIndex = LogWebServiceUtils.parseLongParam(start);

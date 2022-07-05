@@ -185,7 +185,7 @@ public final class LogWebServiceUtils {
     return appState == YarnApplicationState.RUNNING;
   }
 
-  protected static UserGroupInformation getUser(HttpServletRequest req) {
+  public static UserGroupInformation getUser(HttpServletRequest req) {
     String remoteUser = req.getRemoteUser();
     UserGroupInformation callerUGI = null;
     if (remoteUser != null) {
