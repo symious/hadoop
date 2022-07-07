@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.federation.fairness;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
+
 import javax.management.openmbean.CompositeData;
 
 /**
@@ -47,7 +48,7 @@ public interface RouterRpcFairnessPolicyController {
    * @param nsId NS id for which a permission to continue is requested.
    * @return true or false based on whether permit is given.
    */
-  boolean acquirePermit(String nsId);
+  Permit acquirePermit(String nsId);
 
   /**
    * Handler threads are expected to invoke this method that signals
@@ -57,7 +58,7 @@ public interface RouterRpcFairnessPolicyController {
    *
    * @param nsId Name service id for which permission release request is made.
    */
-  void releasePermit(String nsId);
+  void releasePermit(String nsId, Permit permit);
 
   /**
    * Shutdown steps to stop accepting new permission requests and clean-up.
@@ -79,4 +80,10 @@ public interface RouterRpcFairnessPolicyController {
    * Return the max number of permits allowed per namespace as a CompositeData object used by MBean.
    */
   CompositeData getPermitCapacityPerNsAsJson();
+
+  /**
+   * A version to ensure that we can correctly recycle permits
+   * after dynamically refreshing the RpcFairnessPolicyController.
+   */
+  int getVersion();
 }

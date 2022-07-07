@@ -34,7 +34,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hdfs.server.federation.utils.AdjustableSemaphore;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
 
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_DYNAMIC_FAIRNESS_CONTROLLER_REFRESH_INTERVAL_SECONDS_DEFAULT;
@@ -60,21 +59,19 @@ public class DynamicRouterRpcFairnessPolicyController
   private static final ScheduledExecutorService SCHEDULED_EXECUTOR = HadoopExecutors
       .newSingleThreadScheduledExecutor(new ThreadFactoryBuilder().setDaemon(true)
           .setNameFormat("DynamicRouterRpcFairnessPolicyControllerPermitsResizer").build());
-  private PermitsResizerService permitsResizerService;
-  private ScheduledFuture<?> refreshTask;
-  private int handlerCount;
-  private int minimumHandlerPerNs;
+  private final PermitsResizerService permitsResizerService;
+  private final ScheduledFuture<?> refreshTask;
+  private final int handlerCount;
+  private final int minimumHandlerPerNs;
   private final Map<String, AtomicLong> rejectedPermitsPerNs = new ConcurrentHashMap<>();
   private final Map<String, AtomicLong> acceptedPermitsPerNs = new ConcurrentHashMap<>();
 
   /**
    * Initializes using the same logic as {@link StaticRouterRpcFairnessPolicyController}
    * and starts a periodic semaphore resizer thread.
-   *
-   * @param conf configuration
    */
-  public DynamicRouterRpcFairnessPolicyController(Configuration conf) {
-    super(conf);
+  public DynamicRouterRpcFairnessPolicyController(Configuration conf, int version) {
+    super(conf, version);
     minimumHandlerPerNs = conf.getInt(DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_KEY,
         DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_DEFAULT);
     handlerCount = conf.getInt(DFS_ROUTER_HANDLER_COUNT_KEY, DFS_ROUTER_HANDLER_COUNT_DEFAULT);
@@ -90,7 +87,7 @@ public class DynamicRouterRpcFairnessPolicyController
 
   @VisibleForTesting
   public DynamicRouterRpcFairnessPolicyController(Configuration conf, long refreshInterval) {
-    super(conf);
+    super(conf, 0);
     minimumHandlerPerNs = conf.getInt(DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_KEY,
         DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_DEFAULT);
     handlerCount = conf.getInt(DFS_ROUTER_HANDLER_COUNT_KEY, DFS_ROUTER_HANDLER_COUNT_DEFAULT);
@@ -119,9 +116,9 @@ public class DynamicRouterRpcFairnessPolicyController
   }
 
   @Override
-  public boolean acquirePermit(String nsId) {
-    boolean result = super.acquirePermit(nsId);
-    if (result) {
+  public Permit acquirePermit(String nsId) {
+    Permit permit = super.acquirePermit(nsId);
+    if (!permit.isNoPermit()) {
       if (!acceptedPermitsPerNs.containsKey(nsId)) {
         acceptedPermitsPerNs.put(nsId, new AtomicLong(1));
       } else {
@@ -134,7 +131,7 @@ public class DynamicRouterRpcFairnessPolicyController
         rejectedPermitsPerNs.get(nsId).incrementAndGet();
       }
     }
-    return result;
+    return permit;
   }
 
   @VisibleForTesting
@@ -181,25 +178,22 @@ public class DynamicRouterRpcFairnessPolicyController
       }
       long totalOps = 0;
       Map<String, Long> nsOps = new HashMap<>();
-      for (Map.Entry<String, AdjustableSemaphore> entry : getPermits().entrySet()) {
-        long ops = (rejectedPermitsPerNs.containsKey(entry.getKey()) ?
-            rejectedPermitsPerNs.get(entry.getKey()).longValue() :
-            0) + (acceptedPermitsPerNs.containsKey(entry.getKey()) ?
-            acceptedPermitsPerNs.get(entry.getKey()).longValue() :
+      for (String nsId : getPermits().keySet()) {
+        long ops = (rejectedPermitsPerNs.containsKey(nsId) ?
+            rejectedPermitsPerNs.get(nsId).longValue() :
+            0) + (acceptedPermitsPerNs.containsKey(nsId) ?
+            acceptedPermitsPerNs.get(nsId).longValue() :
             0);
-        nsOps.put(entry.getKey(), ops);
+        nsOps.put(nsId, ops);
         totalOps += ops;
       }
 
       List<String> underMinimumNss = new ArrayList<>();
       List<String> overMinimumNss = new ArrayList<>();
       int effectiveOps = 0;
-
       // First iteration: split namespaces into those underused and those that are not.
-      for (Map.Entry<String, AdjustableSemaphore> entry : getPermits().entrySet()) {
-        String ns = entry.getKey();
+      for (String ns : getPermits().keySet()) {
         int newPermitCap = (int) Math.ceil((float) nsOps.get(ns) / totalOps * handlerCount);
-
         if (newPermitCap <= minimumHandlerPerNs) {
           underMinimumNss.add(ns);
         } else {
@@ -226,21 +220,28 @@ public class DynamicRouterRpcFairnessPolicyController
       for (String key: acceptedPermitsPerNs.keySet()) {
         acceptedPermitsPerNs.put(key, new AtomicLong(0));
       }
+      LOG.info("Successfully resized handlers");
     }
 
     private void resizeNsHandlerCapacity(String ns, int newPermitCap) {
-      AdjustableSemaphore semaphore = getPermits().get(ns);
-      int oldPermitCap = getPermitSizes().get(ns);
-      if (newPermitCap <= minimumHandlerPerNs) {
-        newPermitCap = minimumHandlerPerNs;
+      AbstractPermitManager permitManager = getPermits().get(ns);
+      if (permitManager instanceof StaticPermitManager) {
+        StaticPermitManager staticNSPermitManager = (StaticPermitManager) permitManager;
+        int oldPermitCap = permitManager.getPermitCap();
+        if (newPermitCap <= minimumHandlerPerNs) {
+          newPermitCap = minimumHandlerPerNs;
+        }
+        if (newPermitCap > oldPermitCap) {
+          staticNSPermitManager.release(newPermitCap - oldPermitCap);
+        } else if (newPermitCap < oldPermitCap) {
+          staticNSPermitManager.reducePermits(oldPermitCap - newPermitCap);
+        }
+        staticNSPermitManager.resetPermitCap(newPermitCap);
+        LOG.info("Resized handlers for nsId {} from {} to {}", ns, oldPermitCap, newPermitCap);
+      } else {
+        LOG.warn("There is a abnormal PermitManager {}, please check it.",
+            permitManager.toString());
       }
-      getPermitSizes().put(ns, newPermitCap);
-      if (newPermitCap > oldPermitCap) {
-        semaphore.release(newPermitCap - oldPermitCap);
-      } else if (newPermitCap < oldPermitCap) {
-        semaphore.reducePermits(oldPermitCap - newPermitCap);
-      }
-      LOG.info("Resized handlers for nsId {} from {} to {}", ns, oldPermitCap, newPermitCap);
     }
   }
 }
