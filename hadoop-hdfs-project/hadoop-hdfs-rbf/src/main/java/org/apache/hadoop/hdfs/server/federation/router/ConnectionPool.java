@@ -47,7 +47,6 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.io.retry.RetryUtils;
 import org.apache.hadoop.ipc.AlignmentContext;
-import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.ipc.FederationConnectionId;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
@@ -103,6 +102,9 @@ public class ConnectionPool {
 
   private final AlignmentContext alignmentContext;
 
+  /** Max Concurrency of each connection. */
+  private final int maxConcurrencyPerConn;
+
 
   protected ConnectionPool(Configuration config, String address,
       UserGroupInformation user, int minPoolSize, int maxPoolSize,
@@ -116,6 +118,10 @@ public class ConnectionPool {
     this.protocol = proto;
     this.connectionPoolId =
         new ConnectionPoolId(this.ugi, this.namenodeAddress, this.protocol);
+
+    this.maxConcurrencyPerConn = conf.getInt(
+        RBFConfigKeys.DFS_ROUTER_MAX_CONCURRENCY_PER_CONNECTION_KEY,
+        RBFConfigKeys.DFS_ROUTER_MAX_CONCURRENCY_PER_CONNECTION_DEFAULT);
 
     // Set configuration parameters for the pool
     this.minSize = minPoolSize;
@@ -172,24 +178,23 @@ public class ConnectionPool {
    * @return Connection context.
    */
   protected ConnectionContext getConnection() {
-
     this.lastActiveTime = Time.now();
 
     // Get a connection from the pool following round-robin
-    ConnectionContext conn = null;
     List<ConnectionContext> tmpConnections = this.connections;
-    int size = tmpConnections.size();
-    // Inc and mask off sign bit, lookup index should be non-negative int
-    int threadIndex = this.clientIndex.getAndIncrement() & 0x7FFFFFFF;
-    for (int i=0; i<size; i++) {
-      int index = (threadIndex + i) % size;
-      conn = tmpConnections.get(index);
-      if (conn != null && conn.isUsable()) {
-        return conn;
+    for (ConnectionContext tmpConnection : tmpConnections) {
+      if (tmpConnection != null && tmpConnection.isUsable()) {
+        return tmpConnection;
       }
     }
 
+    ConnectionContext conn = null;
     // We return a connection even if it's active
+    int size = tmpConnections.size();
+    if (size > 0) {
+      int threadIndex = this.clientIndex.getAndIncrement() & 0x7FFFFFFF;
+      conn = tmpConnections.get(threadIndex % size);
+    }
     return conn;
   }
 
@@ -324,7 +329,7 @@ public class ConnectionPool {
   public ConnectionContext newConnection() throws IOException {
     return newConnection(
         this.conf, this.namenodeAddress, this.ugi, this.protocol,
-        getNextIndex(), alignmentContext);
+        getNextIndex(), alignmentContext, maxConcurrencyPerConn);
   }
 
   /**
@@ -344,7 +349,7 @@ public class ConnectionPool {
    */
   protected static ConnectionContext newConnection(Configuration conf,
       String nnAddress, UserGroupInformation ugi, Class<?> proto, int index,
-      AlignmentContext alignmentContext)
+      AlignmentContext alignmentContext, int maxConcurrencyPerConn)
           throws IOException {
     LOG.debug("Trying to add new Connection in index: " + index + ".");
     ConnectionContext ret;
@@ -353,17 +358,19 @@ public class ConnectionPool {
           RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE,
               DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE_DEFAULT)) {
         ret = newClientConnectionMulti(conf, nnAddress, ugi, index,
-            alignmentContext);
+            alignmentContext, maxConcurrencyPerConn);
       } else {
-        ret = newClientConnection(conf, nnAddress, ugi, alignmentContext);
+        ret = newClientConnection(conf, nnAddress, ugi,
+            alignmentContext, maxConcurrencyPerConn);
       }
     } else if (proto == NamenodeProtocol.class) {
       if (conf.getBoolean(
           RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE,
               DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE_DEFAULT)) {
-        ret = newNamenodeConnectionMulti(conf, nnAddress, ugi, index);
+        ret = newNamenodeConnectionMulti(conf, nnAddress, ugi,
+            index, maxConcurrencyPerConn);
       } else {
-        ret = newNamenodeConnection(conf, nnAddress, ugi);
+        ret = newNamenodeConnection(conf, nnAddress, ugi, maxConcurrencyPerConn);
       }
     } else {
       String msg = "Unsupported protocol for connection to NameNode: " +
@@ -392,8 +399,8 @@ public class ConnectionPool {
    */
   private static ConnectionContext newClientConnection(
       Configuration conf, String nnAddress, UserGroupInformation ugi,
-      AlignmentContext alignmentContext)
-          throws IOException {
+      AlignmentContext alignmentContext, int maxConcurrencyPerConn)
+      throws IOException {
     RPC.setProtocolEngine(
         conf, ClientNamenodeProtocolPB.class, ProtobufRpcEngine.class);
 
@@ -420,17 +427,16 @@ public class ConnectionPool {
 
     ProxyAndInfo<ClientProtocol> clientProxy =
         new ProxyAndInfo<ClientProtocol>(client, dtService, socket);
-    ConnectionContext connection = new ConnectionContext(clientProxy);
-    return connection;
+    return new ConnectionContext(clientProxy, maxConcurrencyPerConn);
   }
 
   /**
    * Version newClientConnection of which allows using multiple connections.
    */
   private static ConnectionContext newClientConnectionMulti(
-      Configuration conf, String nnAddress, UserGroupInformation ugi, int index,
-      AlignmentContext alignmentContext)
-          throws IOException {
+      Configuration conf, String nnAddress, UserGroupInformation ugi,
+      int index, AlignmentContext alignmentContext,
+      int maxConcurrencyPerConn) throws IOException {
     RPC.setProtocolEngine(
         conf, ClientNamenodeProtocolPB.class, ProtobufRpcEngine.class);
 
@@ -459,8 +465,7 @@ public class ConnectionPool {
 
     ProxyAndInfo<ClientProtocol> clientProxy =
         new ProxyAndInfo<ClientProtocol>(client, dtService, socket);
-    ConnectionContext connection = new ConnectionContext(clientProxy);
-    return connection;
+    return new ConnectionContext(clientProxy, maxConcurrencyPerConn);
   }
 
   /**
@@ -477,8 +482,8 @@ public class ConnectionPool {
    * @throws IOException If it cannot be created.
    */
   private static ConnectionContext newNamenodeConnection(
-      Configuration conf, String nnAddress, UserGroupInformation ugi)
-          throws IOException {
+      Configuration conf, String nnAddress, UserGroupInformation ugi,
+      int maxConcurrencyPerConn) throws IOException {
     RPC.setProtocolEngine(
         conf, NamenodeProtocolPB.class, ProtobufRpcEngine.class);
 
@@ -504,16 +509,15 @@ public class ConnectionPool {
 
     ProxyAndInfo<NamenodeProtocol> clientProxy =
         new ProxyAndInfo<NamenodeProtocol>(client, dtService, socket);
-    ConnectionContext connection = new ConnectionContext(clientProxy);
-    return connection;
+    return new ConnectionContext(clientProxy, maxConcurrencyPerConn);
   }
 
   /**
    * Version newNamenodeConnection of which allows using multiple connections.
    */
   private static ConnectionContext newNamenodeConnectionMulti(
-      Configuration conf, String nnAddress, UserGroupInformation ugi, int index)
-          throws IOException {
+      Configuration conf, String nnAddress, UserGroupInformation ugi,
+      int index, int maxConcurrencyPerConn) throws IOException {
     RPC.setProtocolEngine(
         conf, NamenodeProtocolPB.class, ProtobufRpcEngine.class);
 
@@ -542,7 +546,6 @@ public class ConnectionPool {
 
     ProxyAndInfo<NamenodeProtocol> clientProxy =
         new ProxyAndInfo<NamenodeProtocol>(client, dtService, socket);
-    ConnectionContext connection = new ConnectionContext(clientProxy);
-    return connection;
+    return new ConnectionContext(clientProxy, maxConcurrencyPerConn);
   }
 }

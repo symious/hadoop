@@ -99,6 +99,9 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
       TimeUnit.SECONDS.toMillis(5);
 
   // HDFS Router NN client
+  public static final String DFS_ROUTER_MAX_CONCURRENCY_PER_CONNECTION_KEY =
+      FEDERATION_ROUTER_PREFIX + "max.concurrency.per.connection";
+  public static final int DFS_ROUTER_MAX_CONCURRENCY_PER_CONNECTION_DEFAULT = 20;
   public static final String
       DFS_ROUTER_NAMENODE_CONNECTION_CREATOR_QUEUE_SIZE =
       FEDERATION_ROUTER_PREFIX + "connection.creator.queue-size";

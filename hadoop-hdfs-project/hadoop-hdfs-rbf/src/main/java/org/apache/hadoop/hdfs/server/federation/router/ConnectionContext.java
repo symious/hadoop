@@ -42,10 +42,13 @@ public class ConnectionContext {
   private int numThreads = 0;
   /** If the connection is closed. */
   private boolean closed = false;
+  /** Maximum number of simultaneous requests handled by this connection. **/
+  private final int maxConcurrencyPerConn;
 
 
-  public ConnectionContext(ProxyAndInfo<?> connection) {
+  public ConnectionContext(ProxyAndInfo<?> connection, int maxConcurrencyPerConn) {
     this.client = connection;
+    this.maxConcurrencyPerConn = maxConcurrencyPerConn;
   }
 
   /**
@@ -73,7 +76,15 @@ public class ConnectionContext {
    * @return True if the connection can be used.
    */
   public synchronized boolean isUsable() {
-    return !isActive() && !isClosed();
+    return hasAvailableConcurrency() && !isClosed();
+  }
+
+  /**
+   * Return true if this connection context still has available concurrency,
+   * else return false.
+   */
+  private synchronized boolean hasAvailableConcurrency() {
+    return this.numThreads < maxConcurrencyPerConn;
   }
 
   /**

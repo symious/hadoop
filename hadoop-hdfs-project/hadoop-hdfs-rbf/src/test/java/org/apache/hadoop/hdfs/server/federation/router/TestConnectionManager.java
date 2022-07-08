@@ -23,13 +23,16 @@ import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.util.Map;
 
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_MAX_CONCURRENCY_PER_CONNECTION_DEFAULT;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assert.assertNotNull;
@@ -122,6 +125,39 @@ public class TestConnectionManager {
   }
 
   @Test
+  public void testGetConnectionWithConcurrency() throws Exception {
+    Map<ConnectionPoolId, ConnectionPool> poolMap = connManager.getPools();
+
+    ConnectionPool pool = new ConnectionPool(
+        conf, TEST_NN_ADDRESS, TEST_USER1, 1, 10, ClientProtocol.class, null);
+    poolMap.put(
+        new ConnectionPoolId(TEST_USER1, TEST_NN_ADDRESS, ClientProtocol.class),
+        pool);
+    Assert.assertEquals(1, pool.getNumConnections());
+    for (int i = 0; i < DFS_ROUTER_MAX_CONCURRENCY_PER_CONNECTION_DEFAULT; i++) {
+      ConnectionContext cc = pool.getConnection();
+      assertTrue(cc.isUsable());
+      cc.getClient();
+    }
+    Assert.assertEquals(1, pool.getNumConnections());
+    ConnectionContext cc1 = pool.getConnection();
+    assertFalse(cc1.isUsable());
+
+    pool.addConnection(pool.newConnection());
+
+    ConnectionContext cc2 = pool.getConnection();
+    assertTrue(cc2.isUsable());
+    cc2.getClient();
+    Assert.assertEquals(2, pool.getNumConnections());
+
+    checkPoolConnections(TEST_USER1, 2, 2);
+
+    // Ask for more and this returns an active connection
+    ConnectionContext cc = pool.getConnection();
+    assertTrue(cc.isActive());
+  }
+
+  @Test
   public void testGetConnection() throws Exception {
     Map<ConnectionPoolId, ConnectionPool> poolMap = connManager.getPools();
     final int totalConns = 10;
@@ -140,7 +176,9 @@ public class TestConnectionManager {
       ConnectionContext cc = pool.getConnection();
       assertTrue(cc.isUsable());
       cc.getClient();
-      activeConns++;
+      if (i > (activeConns * DFS_ROUTER_MAX_CONCURRENCY_PER_CONNECTION_DEFAULT - activeConns)) {
+        activeConns++;
+      }
     }
 
     checkPoolConnections(TEST_USER1, totalConns, activeConns);
@@ -182,7 +220,9 @@ public class TestConnectionManager {
       ConnectionContext cc = pool.getConnection();
       assertTrue(cc.isUsable());
       cc.getClient();
-      activeConns++;
+      if (i > (activeConns * DFS_ROUTER_MAX_CONCURRENCY_PER_CONNECTION_DEFAULT - activeConns)) {
+        activeConns++;
+      }
     }
 
     checkPoolConnections(TEST_USER1, totalConns, activeConns);
