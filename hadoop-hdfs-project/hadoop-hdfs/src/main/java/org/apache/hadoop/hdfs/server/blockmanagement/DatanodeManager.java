@@ -50,12 +50,13 @@ import org.apache.hadoop.hdfs.server.namenode.CachedBlock;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.Namesystem;
 import org.apache.hadoop.hdfs.server.namenode.UnsupportedActionException;
+import org.apache.hadoop.hdfs.server.namenode.handler.DatanodeManagerRefreshHandler;
 import org.apache.hadoop.hdfs.server.protocol.*;
 import org.apache.hadoop.hdfs.server.protocol.BlockRecoveryCommand.RecoveringBlock;
+import org.apache.hadoop.ipc.RefreshRegistry;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.net.*;
 import org.apache.hadoop.net.NetworkTopology.InvalidTopologyException;
-import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Timer;
@@ -68,7 +69,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
@@ -373,6 +373,22 @@ public class DatanodeManager {
     this.blocksPerPostponedMisreplicatedBlocksRescan = conf.getLong(
         DFSConfigKeys.DFS_NAMENODE_BLOCKS_PER_POSTPONEDBLOCKS_RESCAN_KEY,
         DFSConfigKeys.DFS_NAMENODE_BLOCKS_PER_POSTPONEDBLOCKS_RESCAN_KEY_DEFAULT);
+
+    RefreshRegistry.defaultRegistry()
+        .register(DatanodeManagerRefreshHandler.DATANODE_MANAGER_REFRESH_HANDLER_IDENTIFIER,
+            new DatanodeManagerRefreshHandler(this));
+  }
+
+  /**
+   * Reload DNSToSwitchMapping.
+   */
+  public void reloadDNSToSwitchMapping(Configuration conf) {
+    if (conf == null) {
+      conf = new HdfsConfiguration();
+    }
+    if (dnsToSwitchMapping != null && dnsToSwitchMapping instanceof IpRangeScriptBasedMapping) {
+      ((IpRangeScriptBasedMapping) dnsToSwitchMapping).reloadIpRange2DC(conf);
+    }
   }
 
   private void startSlowPeerCollector() {

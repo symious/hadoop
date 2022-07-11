@@ -247,6 +247,24 @@ public class NetUtils {
     }
     return addr;
   }
+
+  /**
+   * Try to get the segment of an ip based on maskBit.
+   * @param ip input ip
+   * @param maskBit mask bit
+   * @return ip segment
+   */
+  public static String getIpSegment(String ip, int maskBit) {
+    int mask = 0xffffffff <<  (32 - maskBit);
+    String[] data = ip.split("\\.");
+
+    int firstSegment = mask >> 24 & Integer.parseInt(data[0]);
+    int secondSegment = mask >> 16 & Integer.parseInt(data[1]);
+    int thirdSegment = mask >> 8 & Integer.parseInt(data[2]);
+    int fourthSegment = mask &  Integer.parseInt(data[3]);
+
+    return firstSegment + "." + secondSegment + "." + thirdSegment + "." + fourthSegment;
+  }
   
   /**
    * Resolve the uri's hostname and add the default port if not in the uri
