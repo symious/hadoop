@@ -1077,7 +1077,7 @@ public class LeafQueue extends AbstractCSQueue {
     // CapacityScheduler#allocateFromReservedContainer invokes with.
     // Else In Multi Node Placement, there won't be any Allocation or
     // Reserve of new containers when there is a RESERVED container on
-    // a node which is full.
+    // a node which  is full.
     FiCaSchedulerNode node = CandidateNodeSetUtils.getSingleNode(candidates);
     if (node != null) {
       RMContainer reservedContainer = node.getReservedContainer();
@@ -1285,68 +1285,6 @@ public class LeafQueue extends AbstractCSQueue {
 
       // Did we schedule or reserve a container?
       Resource assigned = assignment.getResource();
-
-      // Check whether the resource used by the app exceeds the maximum
-      // resource limit for a single app in the queue
-      boolean enableCheckAppMaxResources = this.getEnableCheckAppMaxResources();
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Queue: " + queueName + " ,enableCheckAppMaxResources: " +
-            enableCheckAppMaxResources);
-      }
-      if (enableCheckAppMaxResources) {
-        long start = System.nanoTime();
-        ApplicationResourceUsageReport appResUsageReport =
-            application.getResourceUsageReport();
-        int runningCpuVcores =
-            appResUsageReport.getUsedResources().getVirtualCores();
-        long runningMemoryMB =
-            appResUsageReport.getUsedResources().getMemorySize();
-        int reservedCpuVcores =
-            appResUsageReport.getReservedResources().getVirtualCores();
-        long reservedMemoryMB =
-            appResUsageReport.getReservedResources().getMemorySize();
-        int newAssignedCpuVcores = assigned.getVirtualCores();
-        long newAssignedMemoryMB = assigned.getMemorySize();
-        int appPlanCpuVcores =
-            runningCpuVcores + reservedCpuVcores + newAssignedCpuVcores;
-        long appPlanMemoryMB =
-            runningMemoryMB + reservedMemoryMB + newAssignedMemoryMB;
-        int queuePerAppMaxVcores = this.getQueuePerAppMaxVcores();
-        boolean canKillApp = this.getKillAppWhenOverResources();
-        long queuePerAppMaxMemoryMB = this.getQueuePerAppMaxMemoryMB();
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("Queue: " + queueName + " ,queuePerAppMaxVcores: " +
-              queuePerAppMaxVcores + " ,queuePerAppMaxMemoryMB: " +
-              queuePerAppMaxMemoryMB + " ,canKillApp: " + canKillApp);
-        }
-        if (appPlanCpuVcores > queuePerAppMaxVcores ||
-            appPlanMemoryMB > queuePerAppMaxMemoryMB) {
-          ApplicationId appId = application.getApplicationId();
-          String message =
-              " queue: " + getQueuePath() + " ,application: " + appId +
-                  " current used resources: [" +
-                  runningCpuVcores + " VCores, " + runningMemoryMB +
-                  " MB], nearly reach queue max resources limit: " + "[" +
-                  queuePerAppMaxVcores + " VCores, " + queuePerAppMaxMemoryMB +
-                  " MB], can't assign new containers!";
-          if (Calendar.getInstance().get(Calendar.SECOND) == 0) {
-            LOG.warn(message);
-          }
-          if (!canKillApp) {
-            application
-                .updateAMContainerDiagnostics(AMState.ACTIVATED, message);
-          } else {
-            csContext.getRMContext().getDispatcher().getEventHandler().handle(
-                new RMAppEvent(appId, RMAppEventType.KILL, message));
-          }
-          continue;
-        }
-        long end = System.nanoTime();
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("Check single app resources limit cost time: " +
-              (end - start) / 1000 + " us!");
-        }
-      }
 
       if (Resources.greaterThan(resourceCalculator, clusterResource, assigned,
           Resources.none())) {

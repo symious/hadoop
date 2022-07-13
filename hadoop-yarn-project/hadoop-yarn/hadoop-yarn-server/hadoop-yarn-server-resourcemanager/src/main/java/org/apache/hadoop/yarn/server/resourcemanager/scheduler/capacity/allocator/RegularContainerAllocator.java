@@ -90,6 +90,12 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
           constraint.initialize(rmContext.getYarnConfiguration());
           constraints.add(constraint);
           break;
+        case YarnConfiguration.APPLICATION_MAX_RESOURCES_CONSTRAINTS:
+          SingleAppMaxResourcesConstraint appMaxResourcesConstraint =
+              new SingleAppMaxResourcesConstraint();
+          appMaxResourcesConstraint.setRMContext(rmContext);
+          constraints.add(appMaxResourcesConstraint);
+          break;
       }
     }
   }

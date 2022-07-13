@@ -340,6 +340,9 @@ public class YarnConfiguration extends Configuration {
   public static final int DEFAULT_RM_APPLICATION_BALANCE_CONSTRAINTS_MAX_ASSIGNMENT =
       5;
 
+  public static final String APPLICATION_MAX_RESOURCES_CONSTRAINTS =
+      "single-app-max-resources";
+
   /**
    * Enable periodic monitor threads.
    * @see #RM_SCHEDULER_MONITOR_POLICIES

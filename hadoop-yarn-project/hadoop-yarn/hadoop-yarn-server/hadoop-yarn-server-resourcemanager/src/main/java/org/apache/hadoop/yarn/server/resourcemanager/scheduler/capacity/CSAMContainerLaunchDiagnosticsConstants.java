@@ -38,4 +38,7 @@ public interface CSAMContainerLaunchDiagnosticsConstants {
       "Skipped scheduling for this Node as its co locate node. ";
   String SKIP_AM_ALLOCATION_DUE_TO_BALANCE_CONSTRAINT =
       "Skipped assigning to Node as allocate too many containers on this node. ";
+  String SKIP_CONTAINER_ALLOCATION_DUE_TO_APP_MAX_RESOURCES_CONSTRAINT =
+      "Skipped assigning to this app as resources beyond queue max resources " +
+          "for a app ";
 }

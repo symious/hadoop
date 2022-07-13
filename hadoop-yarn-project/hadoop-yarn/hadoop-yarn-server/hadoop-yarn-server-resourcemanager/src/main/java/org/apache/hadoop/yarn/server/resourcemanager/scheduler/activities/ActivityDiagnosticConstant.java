@@ -69,6 +69,8 @@ public class ActivityDiagnosticConstant {
 
   public final static String APPLICATION_DO_NOT_NEED_RESOURCE =
       "Application does not need more resource";
+  public final static String APPLICATION_OVER_RESOURCE =
+      "Application reached max resources, couldn't get more containers";
 
   /*
    * Request level diagnostics
