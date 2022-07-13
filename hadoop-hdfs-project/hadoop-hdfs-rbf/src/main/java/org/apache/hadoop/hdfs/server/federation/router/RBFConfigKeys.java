@@ -340,4 +340,8 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
       FEDERATION_ROUTER_FAIRNESS_PREFIX + "elastic.permits.percent.default";
   public static final int DFS_ROUTER_ELASTIC_PERMITS_PERCENT_DEFAULT = 20;
 
+  public static final String DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_KEY =
+      FEDERATION_ROUTER_FAIRNESS_PREFIX + "wait.time.for.acquiring.permit";
+  public static final int  DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_DEFAULT = 1000;
+
 }

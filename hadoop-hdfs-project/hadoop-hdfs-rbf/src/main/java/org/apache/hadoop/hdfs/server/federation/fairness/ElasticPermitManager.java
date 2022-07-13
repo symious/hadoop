@@ -45,9 +45,11 @@ public class ElasticPermitManager implements AbstractPermitManager {
   private final int version;
   /** A cached permits Map **/
   private final Map<PermitType, Permit> cachedPermits;
+  private final int maxWaitingTime;
 
   ElasticPermitManager(String nsId, int dedicatedNumber,
-      int maximumELNumberCanUse, Semaphore totalElasticPermits, int version) {
+      int maximumELNumberCanUse, Semaphore totalElasticPermits,
+      int version, int maxWaitingTime) {
     this.nsId = nsId;
     this.dedicatedNumber = dedicatedNumber;
     this.dedicatedPermits = new Semaphore(dedicatedNumber);
@@ -56,6 +58,7 @@ public class ElasticPermitManager implements AbstractPermitManager {
     this.totalElasticPermits = totalElasticPermits;
     this.version = version;
     this.cachedPermits = Permit.getPermitBaseOnVersion(version);
+    this.maxWaitingTime = maxWaitingTime;
     LOG.info("New NSPermitManager " + this);
   }
 
@@ -65,7 +68,8 @@ public class ElasticPermitManager implements AbstractPermitManager {
         + ", dedicatedPermitsNumber=" + dedicatedNumber
         + ", sharedPermitsNumber=" + maximumELNumberCanUse
         + ", totalSharedPermits=" + totalElasticPermits
-        + ", version=" + version + "]";
+        + ", version=" + version
+        + ", maxWaitingTime=" + maxWaitingTime + "]";
   }
 
   @Override
@@ -97,8 +101,8 @@ public class ElasticPermitManager implements AbstractPermitManager {
   private boolean acquireElasticPermit() throws InterruptedException {
     boolean result = false;
     if (maximumELNumberCanUse > 0 && totalElasticPermits != null) {
-      if (this.maximumELPermitsCanUse.tryAcquire(1, TimeUnit.SECONDS)) {
-        if (this.totalElasticPermits.tryAcquire(1, TimeUnit.SECONDS)) {
+      if (this.maximumELPermitsCanUse.tryAcquire(this.maxWaitingTime, TimeUnit.MILLISECONDS)) {
+        if (this.totalElasticPermits.tryAcquire(this.maxWaitingTime, TimeUnit.MILLISECONDS)) {
           result = true;
         } else {
           this.maximumELPermitsCanUse.release();

@@ -45,6 +45,8 @@ import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_KEY;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_DEFAULT;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_KEY;
 
 /**
  * Base fairness policy that implements @RouterRpcFairnessPolicyController.
@@ -62,13 +64,18 @@ public class AbstractRouterRpcFairnessPolicyController
   public static final String ERROR_NS_MSG =
       "Configured handlers %s=%d is less than the minimum required handlers %d";
 
+  protected volatile int maxWaitingTime = DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_DEFAULT;
+
   /** Hash table to hold AbstractNSPermitManager for each name service. */
   private Map<String, AbstractPermitManager> permits = new HashMap<>();
   /** Version to support dynamically change permits. **/
   private final int version;
 
-  AbstractRouterRpcFairnessPolicyController(int version) {
+  AbstractRouterRpcFairnessPolicyController(int version, Configuration conf) {
     this.version = version;
+    this.maxWaitingTime = conf.getInt(
+        DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_KEY,
+        DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_DEFAULT);
   }
 
   public int getVersion() {
@@ -80,6 +87,10 @@ public class AbstractRouterRpcFairnessPolicyController
    */
   public void initPermits(Map<String, AbstractPermitManager> newPermits) {
     this.permits = newPermits;
+  }
+
+  protected int getMaxWaitingTime() {
+    return this.maxWaitingTime;
   }
 
   @Override

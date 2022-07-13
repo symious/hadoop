@@ -31,6 +31,8 @@ import static org.apache.hadoop.hdfs.server.federation.fairness.RouterRpcFairnes
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_DEFAULT;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_KEY;
 
 /**
  * Static fairness policy extending @AbstractRouterRpcFairnessPolicyController
@@ -44,7 +46,7 @@ public class StaticRouterRpcFairnessPolicyController extends
       LoggerFactory.getLogger(StaticRouterRpcFairnessPolicyController.class);
 
   public StaticRouterRpcFairnessPolicyController(Configuration conf, int version) {
-    super(version);
+    super(version, conf);
     init(conf);
   }
 
@@ -72,7 +74,7 @@ public class StaticRouterRpcFairnessPolicyController extends
       if (dedicatedHandlers > 0) {
         handlerCount -= dedicatedHandlers;
         newPermits.put(nsId, new StaticPermitManager(
-            nsId, getVersion(), dedicatedHandlers));
+            nsId, getVersion(), dedicatedHandlers, getMaxWaitingTime()));
         logAssignment(nsId, dedicatedHandlers);
       } else {
         unassignedNS.add(nsId);
@@ -88,7 +90,7 @@ public class StaticRouterRpcFairnessPolicyController extends
       for (String nsId : unassignedNS) {
         // Each NS should have at least one handler assigned.
         newPermits.put(nsId, new StaticPermitManager(
-            nsId, getVersion(), handlersPerNS));
+            nsId, getVersion(), handlersPerNS, getMaxWaitingTime()));
         logAssignment(nsId, handlersPerNS);
       }
     }
@@ -100,7 +102,8 @@ public class StaticRouterRpcFairnessPolicyController extends
     if (leftOverHandlers > 0) {
       LOG.info("Assigned extra {} handlers to commons pool", leftOverHandlers);
       newPermits.put(CONCURRENT_NS, new StaticPermitManager(
-          CONCURRENT_NS, getVersion(), existingPermits + leftOverHandlers));
+          CONCURRENT_NS, getVersion(), existingPermits + leftOverHandlers,
+          getMaxWaitingTime()));
     }
     LOG.info("Final permit allocation for concurrent ns: {}",
         newPermits.get(CONCURRENT_NS).availablePermits());

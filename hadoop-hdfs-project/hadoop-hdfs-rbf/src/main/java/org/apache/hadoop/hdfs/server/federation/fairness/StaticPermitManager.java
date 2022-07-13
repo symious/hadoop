@@ -35,21 +35,24 @@ public class StaticPermitManager implements AbstractPermitManager {
   private volatile int permitCap;
   private final AdjustableSemaphore dedicatedPermits;
   private final Map<PermitType, Permit> cachedPermits;
+  private final int maxWaitingTime;
 
-  public StaticPermitManager(final String nsId, final int version,
-                             final int permitCap) {
+  public StaticPermitManager(
+      final String nsId, final int version,
+      final int permitCap, int maxWaitingTime) {
     this.nsId = nsId;
     this.version = version;
     this.permitCap = permitCap;
     this.dedicatedPermits = new AdjustableSemaphore(permitCap);
     this.cachedPermits = Permit.getPermitBaseOnVersion(version);
+    this.maxWaitingTime = maxWaitingTime;
   }
 
   @Override
   public Permit acquirePermit() {
     Permit permit = this.cachedPermits.get(PermitType.NO_PERMIT);
     try {
-      if (dedicatedPermits.tryAcquire(1, TimeUnit.SECONDS)) {
+      if (dedicatedPermits.tryAcquire(this.maxWaitingTime, TimeUnit.MILLISECONDS)) {
         permit = this.cachedPermits.get(PermitType.DEDICATED);
       }
     } catch (InterruptedException e) {
