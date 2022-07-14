@@ -19,11 +19,13 @@
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.allocator;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.activities.ActivityLevel;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.activities.DiagnosticsCollector;
 import org.slf4j.Logger;
@@ -68,10 +70,30 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
   private static final Logger LOG =
       LoggerFactory.getLogger(RegularContainerAllocator.class);
 
+  private List<ApplicationConstraint> constraints = new ArrayList<>();
+
   public RegularContainerAllocator(FiCaSchedulerApp application,
       ResourceCalculator rc, RMContext rmContext,
       ActivitiesManager activitiesManager) {
     super(application, rc, rmContext, activitiesManager);
+    createApplicationConstraints();
+  }
+
+  private void createApplicationConstraints() {
+    constraints.add(new NodeBlackList());
+    Collection<String> constraintsStrs = rmContext.getYarnConfiguration()
+        .getStringCollection(YarnConfiguration.RM_APPLICATION_CONSTRAINTS);
+    for (String constraintsStr : constraintsStrs) {
+      switch (constraintsStr) {
+        /*
+          case YarnConfiguration.PLACEMENT_BALANCE_APPLICATION_CONSTRAINTS:
+          ApplicationConstraint constraint = new PlacementBalance();
+          constraint.initialize(rmContext.getYarnConfiguration());
+          constraints.add(constraint);
+          break;
+         */
+      }
+    }
   }
 
   private boolean checkHeadroom(ResourceLimits currentResourceLimits,
@@ -264,15 +286,17 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
       RMContainer reservedContainer) {
     ContainerAllocation result;
 
-    // Sanity checks before assigning to this node
-    result = checkIfNodeBlackListed(node, schedulerKey);
-    if (null != result) {
-      return result;
-    }
     // Co-Locate Check
     result = checkIfCanAssignForApp(node,schedulerKey);
     if (null != result) {
       return result;
+    }
+
+    for (ApplicationConstraint constraint : constraints) {
+      result = constraint.check(node, schedulerKey, application, activitiesManager);
+      if (null != result) {
+        return result;
+      }
     }
 
     // Inform the application it is about to get a scheduling opportunity

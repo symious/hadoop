@@ -327,6 +327,9 @@ public class YarnConfiguration extends Configuration {
   public static final long DEFAULT_RM_RESERVATION_SYSTEM_MAX_PERIODICITY =
       86400000L;
 
+  public static final String RM_APPLICATION_CONSTRAINTS =
+      RM_PREFIX + "application.constraints";
+
   /**
    * Enable periodic monitor threads.
    * @see #RM_SCHEDULER_MONITOR_POLICIES
