@@ -68,7 +68,7 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
 
   private static final Pattern PROCFS_STAT_FILE_FORMAT = Pattern.compile(
       "^([\\d-]+)\\s\\((.*)\\)\\s[^\\s]\\s([\\d-]+)\\s([\\d-]+)\\s" +
-      "([\\d-]+)\\s([\\d-]+\\s){7}(\\d+)\\s(\\d+)\\s([\\d-]+\\s){7}(\\d+)\\s" +
+      "([\\d-]+)\\s([\\d-]+\\s){7}(\\d+)\\s(\\d+)\\s(?:[\\d-]+\\s){4}(\\d+)\\s(?:[\\d-]+\\s){2}(\\d+)\\s" +
       "(\\d+)(\\s[\\d-]+){15}");
 
   public static final String PROCFS_STAT_FILE = "stat";
@@ -367,6 +367,19 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
     return isAvailable ? totalPages * PAGE_SIZE : UNAVAILABLE; // convert # pages to byte
   }
 
+  @Override
+  public int getThreadNum() {
+    int total = 0;
+    boolean isAvailable = false;
+    for (ProcessInfo p : processTree.values()) {
+      if (p != null) {
+        isAvailable = true;
+        total += p.getThreadNum();
+      }
+    }
+    return isAvailable ? total : UNAVAILABLE;
+  }
+
   /**
    * Get the resident set size (RSS) memory used by all the processes
    * in the process-tree that are older than the passed in age. RSS is
@@ -535,9 +548,10 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
         String processName = "(" + m.group(2) + ")";
         // Set (name) (ppid) (pgrpId) (session) (utime) (stime) (vsize) (rss)
         pinfo.updateProcessInfo(processName, m.group(3),
-                Integer.parseInt(m.group(4)), Integer.parseInt(m.group(5)),
-                Long.parseLong(m.group(7)), new BigInteger(m.group(8)),
-                Long.parseLong(m.group(10)), Long.parseLong(m.group(11)));
+            Integer.parseInt(m.group(4)), Integer.parseInt(m.group(5)),
+            Long.parseLong(m.group(7)), new BigInteger(m.group(8)),
+            Integer.parseInt(m.group(9)), Long.parseLong(m.group(10)),
+            Long.parseLong(m.group(11)));
       } else {
         LOG.warn("Unexpected: procfs stat file is not in the expected format"
             + " for process with pid " + pinfo.getPid());
@@ -600,6 +614,7 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
     private Long utime = 0L; // # of jiffies in user mode
     private final BigInteger MAX_LONG = BigInteger.valueOf(Long.MAX_VALUE);
     private BigInteger stime = new BigInteger("0"); // # of jiffies in kernel mode
+    private Integer threadNum;
     // how many times has this process been seen alive
     private int age;
 
@@ -649,6 +664,10 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
       return stime;
     }
 
+    public Integer getThreadNum() {
+      return threadNum;
+    }
+
     public Long getDtime() {
       return dtime;
     }
@@ -662,13 +681,14 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
     }
 
     public void updateProcessInfo(String name, String ppid, Integer pgrpId,
-        Integer sessionId, Long utime, BigInteger stime, Long vmem, Long rssmem) {
+        Integer sessionId, Long utime, BigInteger stime, Integer threadNum, Long vmem, Long rssmem) {
       this.name = name;
       this.ppid = ppid;
       this.pgrpId = pgrpId;
       this.sessionId = sessionId;
       this.utime = utime;
       this.stime = stime;
+      this.threadNum = threadNum;
       this.vmem = vmem;
       this.rssmemPage = rssmem;
     }

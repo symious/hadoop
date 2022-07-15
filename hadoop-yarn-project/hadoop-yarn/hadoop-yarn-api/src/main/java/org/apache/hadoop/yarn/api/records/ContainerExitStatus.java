@@ -83,4 +83,6 @@ public class ContainerExitStatus {
    */
   public static final int KILLED_FOR_EXCESS_LOGS = -109;
 
+  public static final int KILLED_EXCEEDED_THREAD_NUMBER = -110;
+
 }

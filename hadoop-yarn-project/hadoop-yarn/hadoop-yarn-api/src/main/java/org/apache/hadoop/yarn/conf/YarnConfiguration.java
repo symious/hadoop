@@ -1776,6 +1776,13 @@ public class YarnConfiguration extends Configuration {
       + "vmem-check-enabled";
   public static final boolean DEFAULT_NM_VMEM_CHECK_ENABLED = true;
 
+  public static final String NM_THREAD_NUM_CHECK_ENABLED = NM_PREFIX
+      + "thread-num-check-enabled";
+  public static final boolean DEFAULT_NM_THREAD_NUM_CHECK_ENABLED = true;
+  public static final String NM_THREAD_NUM_LIMIT = NM_PREFIX
+      + "thread-num-limit";
+  public static final int DEFAULT_NM_THREAD_NUM_LIMIT = 1000;
+
   /** Conversion ratio for physical memory to virtual memory. */
   public static final String NM_VMEM_PMEM_RATIO =
     NM_PREFIX + "vmem-pmem-ratio";
