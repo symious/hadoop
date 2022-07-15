@@ -140,8 +140,7 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   protected static JSONObject processMessage(String rawMessage) {
     JSONObject jsonObject = new JSONObject();
     try {
-      List<String> listString = Arrays
-          .asList(rawMessage.split("[ \t]"));
+      List<String> listString = extractCompletePath(rawMessage);
       for (int i = 0; i < listString.size(); i++) {
         listString.set(i,listString.get(i).replace(':','/'));
         listString.set(i,listString.get(i).replaceFirst("=", "\":\""));
@@ -160,6 +159,22 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
       LOG.warn("[INDEX] Audit log format is irregular: " + rawMessage);
     }
     return jsonObject;
+  }
+
+  /**
+   * Extract complete path from audit log, no matter what kind of special character path contains
+   */
+  private static List<String> extractCompletePath(String rawMessage)
+      throws ArrayIndexOutOfBoundsException {
+    List<String> result;
+    String[] s1 = rawMessage.split("src=");
+    String[] s2 = s1[1].split("dst=");
+    String[] s3 = s2[1].split("perm=");
+    result = new ArrayList<>(Arrays.asList(s1[0].split("[ \t]")));
+    result.add("src=" + s2[0].trim());
+    result.add("dst=" + s3[0].trim());
+    result.addAll(Arrays.asList(("perm=" + s3[1]).split("[ \t]")));
+    return result;
   }
 
   /**
