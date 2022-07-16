@@ -108,4 +108,6 @@ public class ActivityDiagnosticConstant {
       NODE_CAN_NOT_FIND_CONTAINER_TO_BE_UNRESERVED_WHEN_NEEDED =
       "Node can't find a container to be unreserved when needed";
   public final static String NODE_IS_CO_LOCATED = "Node is co locate";
+  public final static String NODE_ALLOCATE_TOO_MANY_CONTAINERS =
+      "Node allocate too many containers for this application";
 }

@@ -329,6 +329,16 @@ public class YarnConfiguration extends Configuration {
 
   public static final String RM_APPLICATION_CONSTRAINTS =
       RM_PREFIX + "application.constraints";
+  public static final String PLACEMENT_BALANCE_APPLICATION_CONSTRAINTS =
+      "placement-balance";
+  public static final String RM_APPLICATION_BALANCE_CONSTRAINTS_SKIP_THRESOLD =
+      RM_PREFIX + "application-balance.constraint.skip-thresold";
+  public static final int
+      DEFAULT_RM_APPLICATION_BALANCE_CONSTRAINTS_SKIP_THRESOLD = 10;
+  public static final String RM_APPLICATION_BALANCE_CONSTRAINTS_MAX_ASSIGNMENT =
+      RM_PREFIX + "application-balance.constraint.max-assignment";
+  public static final int DEFAULT_RM_APPLICATION_BALANCE_CONSTRAINTS_MAX_ASSIGNMENT =
+      5;
 
   /**
    * Enable periodic monitor threads.

@@ -85,13 +85,11 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
         .getStringCollection(YarnConfiguration.RM_APPLICATION_CONSTRAINTS);
     for (String constraintsStr : constraintsStrs) {
       switch (constraintsStr) {
-        /*
-          case YarnConfiguration.PLACEMENT_BALANCE_APPLICATION_CONSTRAINTS:
+        case YarnConfiguration.PLACEMENT_BALANCE_APPLICATION_CONSTRAINTS:
           ApplicationConstraint constraint = new PlacementBalance();
           constraint.initialize(rmContext.getYarnConfiguration());
           constraints.add(constraint);
           break;
-         */
       }
     }
   }

@@ -666,6 +666,60 @@ public class TestContainerAllocation {
   }
 
   @Test(timeout = 60000)
+  public void testPlacementBalanceConstraint() throws Exception {
+    conf.set(YarnConfiguration.RM_APPLICATION_CONSTRAINTS,
+        YarnConfiguration.PLACEMENT_BALANCE_APPLICATION_CONSTRAINTS);
+    conf.setInt(
+        YarnConfiguration.RM_APPLICATION_BALANCE_CONSTRAINTS_SKIP_THRESOLD, 2);
+    conf.setInt(
+        YarnConfiguration.RM_APPLICATION_BALANCE_CONSTRAINTS_MAX_ASSIGNMENT, 3);
+    MockRM rm1 = new MockRM(conf);
+    rm1.getRMContext().setNodeLabelManager(mgr);
+    rm1.start();
+    MockNM nm1 = rm1.registerNode("h1:1234", 80 * GB);
+
+    MockRMAppSubmissionData data =
+        MockRMAppSubmissionData.Builder.createWithMemory(1 * GB, rm1)
+            .withAppName("app")
+            .withUser("user")
+            .withAcls(null)
+            .withQueue("default")
+            .withUnmanagedAM(false)
+            .build();
+    RMApp app1 = MockRMAppSubmitter.submit(rm1, data);
+    MockAM am1 = MockRM.launchAndRegisterAM(app1, rm1, nm1);
+
+    am1.allocate("*", 1 * GB, 5, new ArrayList<ContainerId>());
+
+    CapacityScheduler cs = (CapacityScheduler) rm1.getResourceScheduler();
+    RMNode rmNode1 = rm1.getRMContext().getRMNodes().get(nm1.getNodeId());
+
+    // Set assign multiple off-switch containers to 3
+    CapacitySchedulerConfiguration newCSConf = new CapacitySchedulerConfiguration();
+    newCSConf.setInt(
+        CapacitySchedulerConfiguration.OFFSWITCH_PER_HEARTBEAT_LIMIT, 50);
+
+    cs.reinitialize(newCSConf, rm1.getRMContext());
+
+    // Do node heartbeats once
+    cs.handle(new NodeUpdateSchedulerEvent(rmNode1));
+
+    FiCaSchedulerApp schedulerApp1 =
+        cs.getApplicationAttempt(am1.getApplicationAttemptId());
+
+    Assert.assertEquals(3, schedulerApp1.getLiveContainers().size());
+
+    cs.handle(new NodeUpdateSchedulerEvent(rmNode1));
+    Assert.assertEquals(3, schedulerApp1.getLiveContainers().size());
+
+    cs.handle(new NodeUpdateSchedulerEvent(rmNode1));
+    Assert.assertEquals(3, schedulerApp1.getLiveContainers().size());
+
+    cs.handle(new NodeUpdateSchedulerEvent(rmNode1));
+    Assert.assertEquals(6, schedulerApp1.getLiveContainers().size());
+  }
+
+  @Test(timeout = 60000)
   public void testAssignMultipleOffswitchContainers() throws Exception {
     MockRM rm1 = new MockRM();
 

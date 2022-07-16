@@ -36,4 +36,6 @@ public interface CSAMContainerLaunchDiagnosticsConstants {
       "Skipping AM assignment as cluster resource is empty. ";
   String SKIP_AM_ALLOCATION_IN_CO_LOCATE_NODE =
       "Skipped scheduling for this Node as its co locate node. ";
+  String SKIP_AM_ALLOCATION_DUE_TO_BALANCE_CONSTRAINT =
+      "Skipped assigning to Node as allocate too many containers on this node. ";
 }

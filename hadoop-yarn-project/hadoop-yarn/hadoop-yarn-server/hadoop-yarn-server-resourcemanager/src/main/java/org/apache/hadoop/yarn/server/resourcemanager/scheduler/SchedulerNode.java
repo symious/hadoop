@@ -33,6 +33,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.util.Time;
+import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ExecutionType;
@@ -450,6 +451,16 @@ public abstract class SchedulerNode {
       container = info.container;
     }
     return container;
+  }
+
+  public synchronized int getNumContainers(ApplicationAttemptId attemptId) {
+    int count = 0;
+    for (ContainerId id : launchedContainers.keySet()) {
+      if (id.getApplicationAttemptId().equals(attemptId)) {
+        count++;
+      }
+    }
+    return count;
   }
 
   /**
