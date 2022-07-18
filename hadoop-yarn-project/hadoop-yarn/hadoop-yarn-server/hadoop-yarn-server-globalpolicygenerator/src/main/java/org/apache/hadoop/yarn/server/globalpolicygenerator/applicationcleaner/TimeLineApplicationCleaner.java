@@ -20,7 +20,6 @@ package org.apache.hadoop.yarn.server.globalpolicygenerator.applicationcleaner;
 
 import com.sun.jersey.api.client.Client;
 import com.sun.jersey.api.client.ClientResponse;
-import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.api.records.timelineservice.TimelineEntity;
@@ -34,7 +33,6 @@ import static org.apache.hadoop.yarn.server.globalpolicygenerator.GPGUtils.*;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.GPGMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 
 import java.net.URI;
 import java.util.Date;
@@ -65,6 +63,7 @@ public class TimeLineApplicationCleaner extends ApplicationCleaner {
     LOG.info("TimeLineApplicationCleaner run at time {}", now);
 
     FederationStateStoreFacade facade = getGPGContext().getStateStoreFacade();
+
     try {
 
       // Get all apps from StateStore
@@ -78,7 +77,8 @@ public class TimeLineApplicationCleaner extends ApplicationCleaner {
       LOG.debug("applicationHomeSubClusterList: " + applicationHomeSubClusterList);
       gpgMetrics.incrSumAppStateStores(applicationHomeSubClusterList.size());
 
-      Client httpClient = createClient();
+      Client httpClient = null;
+      ClientResponse resp = null;
 
       for (ApplicationHomeSubCluster app : applicationHomeSubClusterList) {
         try{
@@ -95,7 +95,8 @@ public class TimeLineApplicationCleaner extends ApplicationCleaner {
           URI uri = URI.create(queryUrl);
           LOG.debug("query timeline Url: " + queryUrl);
 
-          ClientResponse resp = getResponse(httpClient, uri);
+          httpClient = createClient();
+          resp = getResponse(httpClient, uri);
           TimelineEntity entity = resp.getEntity(TimelineEntity.class);
 
           //get app state
@@ -132,6 +133,11 @@ public class TimeLineApplicationCleaner extends ApplicationCleaner {
           gpgMetrics.incrFailedQueryAppsFromTimeline();
           LOG.error("Query app: " + app.getApplicationId() + " from timeline " +
               "failed!",e);
+        } finally {
+          if (resp != null) {
+            resp.close();
+          }
+          httpClient.destroy();
         }
       }
 
