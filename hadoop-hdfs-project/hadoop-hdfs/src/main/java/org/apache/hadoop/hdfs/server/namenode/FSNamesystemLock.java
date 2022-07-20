@@ -110,7 +110,6 @@ class FSNamesystemLock {
   private final AtomicLong timeStampOfLastReadLockReportMs = new AtomicLong(0);
   private final AtomicReference<LockHeldInfo> longestReadLockHeldInfo =
       new AtomicReference<>(new LockHeldInfo(0, 0, null));
-  private LockHeldInfo longestWriteLockHeldInfo = new LockHeldInfo(0, 0, null);
 
   @VisibleForTesting
   static final String OP_NAME_OTHER = "OTHER";
@@ -273,25 +272,8 @@ class FSNamesystemLock {
     final long writeLockIntervalMs =
         TimeUnit.NANOSECONDS.toMillis(writeLockIntervalNanos);
 
-    LogAction logAction = LogThrottlingHelper.DO_NOT_LOG;
     boolean needLogSlowWrite = needReport &&
         writeLockIntervalMs >= this.writeLockReportingThresholdMs;
-    if (needLogSlowWrite) {
-      if (longestWriteLockHeldInfo.getIntervalMs() < writeLockIntervalMs) {
-          longestWriteLockHeldInfo =
-              new LockHeldInfo(currentTimeMs, writeLockIntervalMs,
-                  StringUtils.getStackTrace(Thread.currentThread()));
-      }
-
-      logAction = writeLockReportLogger
-          .record("write", currentTimeMs, writeLockIntervalMs);
-    }
-
-    LockHeldInfo lockHeldInfo = longestWriteLockHeldInfo;
-    if (logAction.shouldLog()) {
-      longestWriteLockHeldInfo = new LockHeldInfo(0, 0, null);
-    }
-
     coarseLock.writeLock().unlock();
 
     if (needReport) {
@@ -299,14 +281,10 @@ class FSNamesystemLock {
     }
 
     if (needLogSlowWrite) {
-      FSNamesystem.LOG.info("\tNumber of suppressed write-lock reports: " +
-          (logAction.getCount() - 1) +
-          "\n\tLongest write-lock held at " +
-          Time.formatTime(lockHeldInfo.getStartTimeMs()) + " for " +
-          lockHeldInfo.getIntervalMs() + "ms via " +
-          lockHeldInfo.getStackTrace() +
-          "\\n\\tTotal suppressed write-lock held time: " +
-          (logAction.getStats(0).getSum() - lockHeldInfo.getIntervalMs()));
+      FSNamesystem.LOG.info("\tLongest write-lock held at " +
+          Time.formatTime(currentTimeMs) + " for " +
+          writeLockIntervalMs + "ms via " +
+          StringUtils.getStackTrace(Thread.currentThread()));
     }
   }
 
