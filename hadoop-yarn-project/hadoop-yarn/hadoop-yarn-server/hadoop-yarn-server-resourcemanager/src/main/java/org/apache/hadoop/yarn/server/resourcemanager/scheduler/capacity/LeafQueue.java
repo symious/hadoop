@@ -342,7 +342,8 @@ public class LeafQueue extends AbstractCSQueue {
               + defaultAppPriorityPerQueue + "\npriority = " + priority
               + "\nmaxLifetime = " + getMaximumApplicationLifetime()
               + " seconds" + "\ndefaultLifetime = "
-              + getDefaultApplicationLifetime() + " seconds");
+              + getDefaultApplicationLifetime() + " seconds"
+              + "\nSupportOpportunistic = " + getOpportunisticEnabled());
     } finally {
       writeLock.unlock();
     }

@@ -27,6 +27,9 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import org.apache.hadoop.yarn.api.records.ExecutionType;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.LeafQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -429,6 +432,19 @@ public class ApplicationMasterService extends AbstractService implements
                 lastResponse.getResponseId(), request.getResponseId()));
       }
 
+      RMApp app =
+          this.rmContext.getRMApps().get(appAttemptId.getApplicationId());
+
+      //Before do allocation, change the Container executor type
+      if (this.rmContext.getScheduler() instanceof CapacityScheduler) {
+        CapacityScheduler cs = (CapacityScheduler) this.rmContext.getScheduler();
+        LeafQueue queue = (LeafQueue) cs.getQueue(app.getQueue());
+        boolean opportunisticEnabled = queue.getOpportunisticEnabled();
+        if (opportunisticEnabled) {
+          request.getAskList().forEach(item -> item.getExecutionTypeRequest().setExecutionType(
+              ExecutionType.OPPORTUNISTIC));
+        }
+      }
       AllocateResponse response =
           recordFactory.newRecordInstance(AllocateResponse.class);
       this.amsProcessingChain.allocate(
@@ -441,8 +457,6 @@ public class ApplicationMasterService extends AbstractService implements
       if (nextMasterKey != null
           && nextMasterKey.getMasterKey().getKeyId() != amrmTokenIdentifier
           .getKeyId()) {
-        RMApp app =
-            this.rmContext.getRMApps().get(appAttemptId.getApplicationId());
         RMAppAttempt appAttempt = app.getRMAppAttempt(appAttemptId);
         RMAppAttemptImpl appAttemptImpl = (RMAppAttemptImpl)appAttempt;
         Token<AMRMTokenIdentifier> amrmToken = appAttempt.getAMRMToken();

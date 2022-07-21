@@ -96,6 +96,7 @@ public abstract class AbstractCSQueue implements CSQueue {
   final ResourceCalculator resourceCalculator;
   Set<String> accessibleLabels;
   Set<String> accessMultiLabelTimes;
+  boolean opportunisticEnabled;
   int queuePerAppMaxVcores;
   long queuePerAppMaxMemoryMB;
   boolean canKillApp;
@@ -305,6 +306,10 @@ public abstract class AbstractCSQueue implements CSQueue {
     return accessMultiLabelTimes;
   }
 
+  public boolean getOpportunisticEnabled() {
+    return opportunisticEnabled;
+  }
+
   public int getQueuePerAppMaxVcores() {
     return queuePerAppMaxVcores;
   }
@@ -398,6 +403,8 @@ public abstract class AbstractCSQueue implements CSQueue {
           configuration.getAccessibleNodeLabels(getQueuePath());
       this.accessMultiLabelTimes =
           configuration.getMultiLabelAccessHoursPerQueue(getQueuePath());
+      this.opportunisticEnabled =
+          configuration.getOpportunisticEnabled(getQueuePath());
       this.queuePerAppMaxVcores =
           configuration.getAppMaxVcoresPerQueue(getQueuePath());
       this.queuePerAppMaxMemoryMB =

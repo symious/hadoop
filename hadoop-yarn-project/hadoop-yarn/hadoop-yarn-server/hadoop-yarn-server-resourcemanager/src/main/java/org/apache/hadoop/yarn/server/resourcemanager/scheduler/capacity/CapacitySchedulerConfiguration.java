@@ -94,6 +94,13 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
 
   private static final String DEFAULT_MULTI_LABEL_ACCESS_HOURS = "-1";
 
+  @Private
+  public static final String OPPORTUNISTIC_ENABLED =
+      "opportunistic-enabled";
+
+  private static final boolean DEFAULT_OPPORTUNISTIC_ENABLED = false;
+
+
   public static final float DEFAULT_MULTI_LABEL_RESOURCE_BUFFER_RATIO = 0.05f;
 
   @Private
@@ -488,6 +495,11 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
       }
     }
     return set;
+  }
+
+  public boolean getOpportunisticEnabled(String queue) {
+    return getBoolean(getQueuePrefix(queue) + OPPORTUNISTIC_ENABLED,
+            DEFAULT_OPPORTUNISTIC_ENABLED);
   }
 
   /**
