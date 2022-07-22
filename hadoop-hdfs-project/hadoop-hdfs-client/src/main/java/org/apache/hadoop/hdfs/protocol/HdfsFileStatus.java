@@ -53,6 +53,7 @@ public class HdfsFileStatus {
   private final int childrenNum;
   private final byte storagePolicy;
   private final ErasureCodingPolicy ecPolicy;
+  private String namespace = null;
 
   public static final byte[] EMPTY_NAME = new byte[0];
 
@@ -270,6 +271,14 @@ public class HdfsFileStatus {
    */
   public ErasureCodingPolicy getErasureCodingPolicy() {
     return ecPolicy;
+  }
+
+  public String getNamespace() {
+    return namespace;
+  }
+
+  public void setNamespace(String namespace) {
+    this.namespace = namespace;
   }
 
   public final int getChildrenNum() {

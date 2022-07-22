@@ -114,6 +114,7 @@ public class DFSOutputStream extends FSOutputSummer
 
   protected final String src;
   protected final long fileId;
+  private final String namespace;
   protected final long blockSize;
   protected final int bytesPerChecksum;
 
@@ -196,6 +197,7 @@ public class DFSOutputStream extends FSOutputSummer
     this.dfsClient = dfsClient;
     this.src = src;
     this.fileId = stat.getFileId();
+    this.namespace = stat.getNamespace();
     this.blockSize = stat.getBlockSize();
     this.blockReplication = stat.getReplication();
     this.fileEncryptionInfo = stat.getFileEncryptionInfo();
@@ -1072,6 +1074,11 @@ public class DFSOutputStream extends FSOutputSummer
   @VisibleForTesting
   public long getFileId() {
     return fileId;
+  }
+
+  @VisibleForTesting
+  public String getNamespace() {
+    return namespace;
   }
 
   /**

@@ -251,7 +251,8 @@ public class MockResolver
     MockNamenodeContext context = new MockNamenodeContext(
         report.getRpcAddress(), report.getServiceAddress(),
         report.getLifelineAddress(), report.getWebAddress(),
-        report.getNameserviceId(), report.getNamenodeId(), report.getState());
+        report.getNameserviceId(), report.getNamenodeId(),
+        report.getState());
 
     String nsId = report.getNameserviceId();
     String bpId = report.getBlockPoolId();

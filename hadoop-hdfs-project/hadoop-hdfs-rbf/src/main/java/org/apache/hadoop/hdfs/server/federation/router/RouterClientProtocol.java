@@ -94,6 +94,7 @@ import org.slf4j.LoggerFactory;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -310,6 +311,7 @@ public class RouterClientProtocol implements ClientProtocol {
     try {
       invokeType = INVOKE_TYPE_SEQUENTIAL;
       status = (HdfsFileStatus) rpcClient.invokeSingle(createLocation, method);
+      status.setNamespace(createLocation.getNameserviceId());
     } catch (AccessControlException e) {
       logAuditEvent(false, operationName, invokeType, src);
       throw e;
@@ -332,8 +334,10 @@ public class RouterClientProtocol implements ClientProtocol {
     String invokeType = null;
     try {
       invokeType = INVOKE_TYPE_SEQUENTIAL;
-      lastBlockWithStatus = rpcClient.invokeSequential(
-          locations, method, LastBlockWithStatus.class, null);
+      RemoteResult result = rpcClient.invokeSequential(
+          method, locations, LastBlockWithStatus.class, null);
+      lastBlockWithStatus = (LastBlockWithStatus) result.getResult();
+      lastBlockWithStatus.getFileStatus().setNamespace(result.getLocation().getNameserviceId());
     } catch (AccessControlException e) {
       logAuditEvent(false, operationName, invokeType, src);
       throw e;
@@ -840,18 +844,54 @@ public class RouterClientProtocol implements ClientProtocol {
     return result;
   }
 
+  private Map<String, FederationNamespaceInfo> getAvailableNamespaces()
+      throws IOException {
+    Map<String, FederationNamespaceInfo> allAvailableNamespaces =
+        new HashMap<>();
+    for (FederationNamespaceInfo namespaceInfo : namenodeResolver.getNamespaces()) {
+      allAvailableNamespaces.put(namespaceInfo.getNameserviceId(), namespaceInfo);
+    }
+    return allAvailableNamespaces;
+  }
+
+  /**
+   * Try to get a list of FederationNamespaceInfo for renewLease RPC.
+   */
+  private List<FederationNamespaceInfo> getRenewLeaseNSs(List<String> namespaces)
+      throws IOException {
+    if (namespaces == null || namespaces.isEmpty()) {
+      return new ArrayList<>(namenodeResolver.getNamespaces());
+    }
+    List<FederationNamespaceInfo> result = new ArrayList<>();
+    Map<String, FederationNamespaceInfo> allAvailableNamespaces =
+        getAvailableNamespaces();
+    for (String namespace : namespaces) {
+      if (!allAvailableNamespaces.containsKey(namespace)) {
+        return new ArrayList<>(namenodeResolver.getNamespaces());
+      } else {
+        result.add(allAvailableNamespaces.get(namespace));
+      }
+    }
+    return result;
+  }
+
   @Override
-  public void renewLease(String clientName) throws IOException {
+  public void renewLease(String clientName, List<String> namespaces) throws IOException {
     rpcServer.checkOperation(OperationCategory.WRITE);
 
     RemoteMethod method = new RemoteMethod("renewLease",
-        new Class<?>[] {String.class}, clientName);
-    Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
+        new Class<?>[] {String.class, List.class}, clientName, null);
+    List<FederationNamespaceInfo> nss = getRenewLeaseNSs(namespaces);
     String operationName = "renewLease";
     String invokeType = null;
     try {
-      invokeType = INVOKE_TYPE_CONCURRENT;
-      rpcClient.invokeConcurrent(nss, method, false, false);
+      if (nss.size() == 1) {
+        invokeType = INVOKE_TYPE_SEQUENTIAL;
+        rpcClient.invokeSingle(nss.get(0).getNameserviceId(), method);
+      } else {
+        invokeType = INVOKE_TYPE_CONCURRENT;
+        rpcClient.invokeConcurrent(nss, method, false, false);
+      }
     } catch (AccessControlException e) {
       logAuditEvent(false, operationName, invokeType, null);
       throw e;

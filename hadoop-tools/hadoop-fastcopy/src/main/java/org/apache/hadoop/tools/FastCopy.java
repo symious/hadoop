@@ -208,7 +208,7 @@ public class FastCopy {
 
     @Override
     protected void renew() throws IOException {
-      namenode.renewLease(clientName);
+      namenode.renewLease(clientName, null);
     }
 
     @Override

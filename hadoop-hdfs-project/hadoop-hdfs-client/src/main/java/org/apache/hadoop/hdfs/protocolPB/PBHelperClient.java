@@ -1599,7 +1599,7 @@ public class PBHelperClient {
   public static HdfsFileStatus convert(HdfsFileStatusProto fs) {
     if (fs == null)
       return null;
-    return new HdfsLocatedFileStatus(
+    HdfsLocatedFileStatus hdfsLocatedFileStatus = new HdfsLocatedFileStatus(
         fs.getLength(), fs.getFileType().equals(FileType.IS_DIR),
         fs.getBlockReplication(), fs.getBlocksize(),
         fs.getModificationTime(), fs.getAccessTime(),
@@ -1614,6 +1614,10 @@ public class PBHelperClient {
         fs.hasStoragePolicy() ? (byte) fs.getStoragePolicy()
             : HdfsConstants.BLOCK_STORAGE_POLICY_ID_UNSPECIFIED,
         fs.hasEcPolicy() ? convertErasureCodingPolicy(fs.getEcPolicy()) : null);
+    if (fs.hasNamespace()) {
+      hdfsLocatedFileStatus.setNamespace(fs.getNamespace());
+    }
+    return hdfsLocatedFileStatus;
   }
 
   public static CorruptFileBlocks convert(CorruptFileBlocksProto c) {
@@ -2108,6 +2112,9 @@ public class PBHelperClient {
     if (fs.getErasureCodingPolicy() != null) {
       builder.setEcPolicy(convertErasureCodingPolicy(
           fs.getErasureCodingPolicy()));
+    }
+    if (fs.getNamespace() != null && !fs.getNamespace().isEmpty()) {
+      builder.setNamespace(fs.getNamespace());
     }
     if (fs instanceof HdfsLocatedFileStatus) {
       final HdfsLocatedFileStatus lfs = (HdfsLocatedFileStatus) fs;

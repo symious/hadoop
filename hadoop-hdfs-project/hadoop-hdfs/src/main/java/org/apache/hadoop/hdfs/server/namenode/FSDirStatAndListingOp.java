@@ -380,7 +380,6 @@ class FSDirStatAndListingOp {
    * @param child for a directory listing of the iip, else null
    * @param storagePolicy for the path or closest ancestor
    * @param needLocation if block locations need to be included or not
-   * @param includeStoragePolicy if storage policy should be returned
    * @return a file status
    * @throws java.io.IOException if any error occurs
    */

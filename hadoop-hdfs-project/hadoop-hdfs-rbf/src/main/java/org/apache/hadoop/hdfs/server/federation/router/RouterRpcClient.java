@@ -903,6 +903,14 @@ public class RouterRpcClient {
     return invokeSequential(locations, remoteMethod, null, null);
   }
 
+  public <T> T invokeSequential(
+      final List<? extends RemoteLocationContext> locations,
+      final RemoteMethod remoteMethod, Class<T> expectedResultClass,
+      Object expectedResultValue) throws IOException {
+    return (T) invokeSequential(remoteMethod, locations, expectedResultClass,
+        expectedResultValue).getResult();
+  }
+
   /**
    * Invokes sequential proxy calls to different locations. Continues to invoke
    * calls until the success condition is met, or until all locations have been
@@ -928,10 +936,9 @@ public class RouterRpcClient {
    * @throws IOException if the success condition is not met, return the first
    *                     remote exception generated.
    */
-  public <T> T invokeSequential(
-      final List<? extends RemoteLocationContext> locations,
-      final RemoteMethod remoteMethod, Class<T> expectedResultClass,
-      Object expectedResultValue) throws IOException {
+  public <R extends RemoteLocationContext, T> RemoteResult invokeSequential(
+      final RemoteMethod remoteMethod, final List<R> locations,
+      Class<T> expectedResultClass, Object expectedResultValue) throws IOException {
 
     RouterRpcFairnessPolicyController controller = getRouterRpcFairnessPolicyController();
     final UserGroupInformation ugi = RouterRpcServer.getRemoteUser();
@@ -954,9 +961,9 @@ public class RouterRpcClient {
         if (isExpectedClass(expectedResultClass, result) &&
             isExpectedValue(expectedResultValue, result)) {
           // Valid result, stop here
-          @SuppressWarnings("unchecked")
-          T ret = (T) result;
-          return ret;
+          @SuppressWarnings("unchecked") R location = (R) loc;
+          @SuppressWarnings("unchecked") T ret = (T) result;
+          return new RemoteResult<>(location, ret);
         }
         if (firstResult == null) {
           firstResult = result;
@@ -994,7 +1001,7 @@ public class RouterRpcClient {
     // Return the last result, whether it is the value we are looking for or a
     @SuppressWarnings("unchecked")
     T ret = (T)firstResult;
-    return ret;
+    return new RemoteResult<>(locations.get(0), ret);
   }
 
   /**
