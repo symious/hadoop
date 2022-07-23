@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.namenode;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_IP_PROXY_USERS;
 import static org.apache.hadoop.util.ExitUtil.terminate;
 import static org.apache.hadoop.util.Time.monotonicNow;
 
@@ -31,6 +32,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
@@ -104,7 +106,6 @@ import org.apache.hadoop.hdfs.server.protocol.NamenodeRegistration;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.hdfs.server.protocol.RemoteEditLogManifest;
 import org.apache.hadoop.io.IOUtils;
-import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.security.token.delegation.DelegationKey;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -189,6 +190,9 @@ public class FSEditLog implements LogsPurgeable {
 
   protected final OpInstanceCache cache = new OpInstanceCache();
 
+  // Users who can override the client ip
+  private final String[] ipProxyUsers;
+
   /**
    * The edit directories that are shared between primary and secondary.
    */
@@ -237,6 +241,7 @@ public class FSEditLog implements LogsPurgeable {
    * @param editsDirs List of journals to use
    */
   FSEditLog(Configuration conf, NNStorage storage, List<URI> editsDirs) {
+    ipProxyUsers = conf.getStrings(DFS_NAMENODE_IP_PROXY_USERS);
     isSyncRunning = false;
     this.conf = conf;
     this.storage = storage;
@@ -775,8 +780,10 @@ public class FSEditLog implements LogsPurgeable {
   /** Record the RPC IDs if necessary */
   private void logRpcIds(FSEditLogOp op, boolean toLogRpcIds) {
     if (toLogRpcIds) {
-      op.setRpcClientId(Server.getClientId());
-      op.setRpcCallId(Server.getCallId());
+      Pair<byte[], Integer> clientIdAndCallId =
+          NameNode.getClientIdAndCallId(this.ipProxyUsers);
+      op.setRpcClientId(clientIdAndCallId.getLeft());
+      op.setRpcCallId(clientIdAndCallId.getRight());
     }
   }
 
@@ -1109,7 +1116,7 @@ public class FSEditLog implements LogsPurgeable {
       .setNewHolder(newHolder);
     logEdit(op);
   }
-  
+
   void logCreateSnapshot(String snapRoot, String snapName, boolean toLogRpcIds) {
     CreateSnapshotOp op = CreateSnapshotOp.getInstance(cache.get())
         .setSnapshotRoot(snapRoot).setSnapshotName(snapName);
@@ -1123,7 +1130,7 @@ public class FSEditLog implements LogsPurgeable {
     logRpcIds(op, toLogRpcIds);
     logEdit(op);
   }
-  
+
   void logRenameSnapshot(String path, String snapOldName, String snapNewName,
       boolean toLogRpcIds) {
     RenameSnapshotOp op = RenameSnapshotOp.getInstance(cache.get())
@@ -1318,7 +1325,7 @@ public class FSEditLog implements LogsPurgeable {
       throw new IOException("Unable to start log segment " +
           segmentTxId + ": too few journals successfully started.", ex);
     }
-    
+
     curSegmentTxId = segmentTxId;
     state = State.IN_SEGMENT;
 
@@ -1392,7 +1399,7 @@ public class FSEditLog implements LogsPurgeable {
     if (!isOpenForWrite()) {
       return;
     }
-    
+
     assert curSegmentTxId == HdfsServerConstants.INVALID_TXID || // on format this is no-op
       minTxIdToKeep <= curSegmentTxId :
       "cannot purge logs older than txid " + minTxIdToKeep +

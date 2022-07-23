@@ -78,6 +78,7 @@ import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Time;
 import org.mortbay.util.ajax.JSON;
+import org.apache.hadoop.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -480,7 +481,7 @@ public class RouterRpcClient {
           + router.getRouterId());
     }
 
-    addClientIpToCallerContext();
+    addClientInfoToCallerContext();
     appendProxyHostname();
 
     Object ret = null;
@@ -606,12 +607,13 @@ public class RouterRpcClient {
   }
 
   /**
-   * For tracking which is the actual client address.
-   * It adds trace info "clientIp:ip" and "clientPort:port"
+   * For tracking some information about the actual client.
+   * It adds trace info "clientIp:ip", "clientPort:port",
+   * "clientId:id" and "clientCallId:callId"
    * in the caller context, removing the old values if they were
    * already present.
    */
-  private void addClientIpToCallerContext() {
+  private void addClientInfoToCallerContext() {
     CallerContext ctx = CallerContext.getCurrent();
     String origContext = ctx == null ? null : ctx.getContext();
     byte[] origSignature = ctx == null ? null : ctx.getSignature();
@@ -620,6 +622,10 @@ public class RouterRpcClient {
             .append(CallerContext.CLIENT_IP_STR, Server.getRemoteAddress())
             .append(CallerContext.CLIENT_PORT_STR,
                 Integer.toString(Server.getRemotePort()))
+            .append(CallerContext.CLIENT_ID_STR,
+                StringUtils.byteToHexString(Server.getClientId()))
+            .append(CallerContext.CLIENT_CALL_ID_STR,
+                Integer.toString(Server.getCallId()))
             .setSignature(origSignature);
     // Append the original caller context
     if (origContext != null) {
