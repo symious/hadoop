@@ -126,7 +126,7 @@ public class TestBPOfferService {
     conf.set(DFS_DATANODE_DATA_DIR_KEY, dnDataDir.toURI().toString());
     Mockito.doReturn(conf).when(mockDn).getConf();
     Mockito.doReturn(new DNConf(mockDn)).when(mockDn).getDnConf();
-    Mockito.doReturn(DataNodeMetrics.create(conf, "fake dn"))
+    Mockito.doReturn(DataNodeMetrics.create(conf, "fake dn", null))
         .when(mockDn).getMetrics();
 
     // Set up a simulated dataset with our fake BP
@@ -422,7 +422,7 @@ public class TestBPOfferService {
     conf.set(DFS_DATANODE_DATA_DIR_KEY, dnDataDir.toURI().toString());
     Mockito.doReturn(conf).when(mockDn).getConf();
     Mockito.doReturn(new DNConf(mockDn)).when(mockDn).getDnConf();
-    Mockito.doReturn(DataNodeMetrics.create(conf, "fake dn")).
+    Mockito.doReturn(DataNodeMetrics.create(conf, "fake dn", null)).
       when(mockDn).getMetrics();
     final AtomicInteger count = new AtomicInteger();
     Mockito.doAnswer(new Answer<Void>() {

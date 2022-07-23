@@ -140,4 +140,9 @@ public class DomainPeer implements Peer {
   public String getRemoteHostAddress() {
     return LOCAL_HOST;
   }
+
+  @Override
+  public int getRemotePort() {
+    return -1;
+  }
 }

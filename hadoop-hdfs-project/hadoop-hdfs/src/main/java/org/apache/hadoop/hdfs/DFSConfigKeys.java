@@ -1146,6 +1146,12 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_KEY = "dfs.datanode.xceiver.stop.timeout.millis";
   public static final long   DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_DEFAULT = 60000;
 
+  // DataNode AuditLog
+  public static final String  DFS_DATANODE_AUDIT_ENABLE_KEY = "dfs.datanode.enable.audit.log";
+  public static final boolean DFS_DATANODE_AUDIT_ENABLE_DEFAULT = false;
+  public static final String  DFS_DATANODE_AUDIT_LOG_ASYNC_KEY = "dfs.datanode.audit.log.async";
+  public static final boolean DFS_DATANODE_AUDIT_LOG_ASYNC_DEFAULT = false;
+
   // WebHDFS retry policy
   @Deprecated
   public static final String  DFS_HTTP_CLIENT_RETRY_POLICY_ENABLED_KEY =

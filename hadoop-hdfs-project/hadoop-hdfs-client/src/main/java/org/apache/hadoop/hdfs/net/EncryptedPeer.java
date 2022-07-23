@@ -149,4 +149,9 @@ public class EncryptedPeer implements Peer {
   public String getRemoteHostAddress() {
     return enclosedPeer.getRemoteHostAddress();
   }
+
+  @Override
+  public int getRemotePort() {
+    return enclosedPeer.getRemotePort();
+  }
 }

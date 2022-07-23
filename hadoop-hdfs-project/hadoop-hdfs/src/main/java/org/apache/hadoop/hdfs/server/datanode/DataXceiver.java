@@ -448,6 +448,8 @@ class DataXceiver extends Receiver implements Runnable {
       if (fis != null) {
         IOUtils.cleanup(null, fis);
       }
+      datanode.logAudit(peer.getRemoteHostAddress(), peer.getRemotePort(),
+          "requestShortCircuitFds", blk.toString());
     }
   }
 
@@ -673,6 +675,8 @@ class DataXceiver extends Receiver implements Runnable {
     datanode.metrics.addReadBlockOp(elapsed());
     datanode.metrics.incrReadsFromClient(
         peer.getLocalHostAddress(), peer.getRemoteHostAddress(), read);
+    datanode.logAudit(peer.getLocalHostAddress(), peer.getRemoteHostAddress(),
+        peer.getRemotePort(), "readBlock", true, block.toString(), read);
   }
 
   @Override
@@ -941,6 +945,9 @@ class DataXceiver extends Receiver implements Runnable {
     datanode.getMetrics().addWriteBlockOp(elapsed());
     datanode.getMetrics().incrWritesFromClient(
         peer.getLocalHostAddress(), peer.getRemoteHostAddress(), size);
+    datanode.logAudit(peer.getLocalHostAddress(), peer.getRemoteHostAddress(),
+        peer.getRemotePort(), "writeBlock", false,
+        block.toString(), block.getNumBytes());
   }
 
   @Override
@@ -966,6 +973,8 @@ class DataXceiver extends Receiver implements Runnable {
       throw ioe;
     } finally {
       IOUtils.closeStream(out);
+      datanode.logAudit(peer.getRemoteHostAddress(), peer.getRemotePort(),
+          "transferBlock", blk.toString());
     }
   }
 
@@ -1071,6 +1080,8 @@ class DataXceiver extends Receiver implements Runnable {
       IOUtils.closeStream(metadataIn);
     }
 
+    datanode.logAudit(peer.getRemoteHostAddress(), peer.getRemotePort(),
+        "blockChecksum", block.toString());
     //update metrics
     datanode.metrics.addBlockChecksumOp(elapsed());
   }
@@ -1134,6 +1145,8 @@ class DataXceiver extends Receiver implements Runnable {
       datanode.metrics.incrTotalReadTime(duration);
       
       LOG.info("Copied " + block + " to " + peer.getRemoteAddressString());
+      datanode.logAudit(peer.getLocalHostAddress(), peer.getRemoteHostAddress(),
+          peer.getRemotePort(), "copyBlock", true, block.toString(), read);
     } catch (IOException ioe) {
       isOpSuccess = false;
       LOG.info("opCopyBlock " + block + " received exception " + ioe);
@@ -1255,6 +1268,9 @@ class DataXceiver extends Receiver implements Runnable {
         
         LOG.info("Moved " + block + " from " + peer.getRemoteAddressString()
             + ", delHint=" + delHint);
+        datanode.logAudit(peer.getLocalHostAddress(), peer.getRemoteHostAddress(),
+            peer.getRemotePort(), "replaceBlock", false,
+            r.toString(), r.getNumBytes());
       }
     } catch (IOException ioe) {
       opStatus = ERROR;

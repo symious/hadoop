@@ -23,6 +23,7 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
@@ -169,7 +170,6 @@ public class DataNodeMetrics {
   final String name;
   JvmMetrics jvmMetrics = null;
   private final DNSToSwitchMapping dnsToSwitchMapping;
-  private static final String LOCAL_HOST = "127.0.0.1";
   
   public DataNodeMetrics(String name, String sessionId, int[] intervals,
       final JvmMetrics jvmMetrics, final DNSToSwitchMapping switchMapping) {
@@ -218,7 +218,8 @@ public class DataNodeMetrics {
     this.dnsToSwitchMapping = switchMapping;
   }
 
-  public static DataNodeMetrics create(Configuration conf, String dnName) {
+  public static DataNodeMetrics create(Configuration conf,
+      String dnName, DNSToSwitchMapping switchMapping) {
     String sessionId = conf.get(DFSConfigKeys.DFS_METRICS_SESSION_ID_KEY);
     MetricsSystem ms = DefaultMetricsSystem.instance();
     JvmMetrics jm = JvmMetrics.create("DataNode", sessionId, ms);
@@ -229,11 +230,6 @@ public class DataNodeMetrics {
     // Percentile measurement is off by default, by watching no intervals
     int[] intervals = 
         conf.getInts(DFSConfigKeys.DFS_METRICS_PERCENTILES_INTERVALS_KEY);
-
-    DNSToSwitchMapping switchMapping = ReflectionUtils.newInstance(
-        conf.getClass(DFSConfigKeys.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
-            ScriptBasedMapping.class, DNSToSwitchMapping.class), conf);
-    
     return ms.register(name, null, new DataNodeMetrics(name, sessionId,
         intervals, jm, switchMapping));
   }
@@ -380,7 +376,7 @@ public class DataNodeMetrics {
                                    String remoteHostAddress,
                                    long size) {
     // locality: node-local
-    if (remoteHostAddress.equals(LOCAL_HOST) ||
+    if (remoteHostAddress.equals(DataNode.LOCAL_HOST) ||
         localHostAddress.equals(remoteHostAddress)) {
       writesFromLocalClient.incr();
       localBytesWritten.incr(size);
@@ -391,31 +387,31 @@ public class DataNodeMetrics {
     //  with incrWritesFromClient(boolean local, long size)
     writesFromRemoteClient.incr();
     remoteBytesWritten.incr(size);
+    if (dnsToSwitchMapping != null) {
+      List<String> names = new ArrayList<>();
+      names.add(localHostAddress);
+      names.add(remoteHostAddress);
+      List<String> racks = dnsToSwitchMapping.resolve(names);
+      String localLocation = racks.get(0);
+      String remoteLocation = racks.get(1);
+      // locality: rack-local
+      if (localLocation.equals(remoteLocation)) {
+        writesFromLocalRack.incr();
+        localRackBytesWritten.incr(size);
+        return;
+      }
 
-    List<String> names = new ArrayList<>();
-    names.add(localHostAddress);
-    names.add(remoteHostAddress);
-    List<String> racks = dnsToSwitchMapping.resolve(names);
-    String localLocation = racks.get(0);
-    String remoteLocation = racks.get(1);
-    // locality: rack-local
-    if (localLocation.equals(remoteLocation)) {
-      writesFromLocalRack.incr();
-      localRackBytesWritten.incr(size);
-      return;
+      // locality: datacenter-local
+      if (DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation).equals(
+          DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation))) {
+        writesFromLocalDataCenter.incr();
+        localDataCenterBytesWritten.incr(size);
+        return;
+      }
+      // locality: datacenter-off
+      writesFromRemoteDataCenter.incr();
+      remoteDataCenterBytesWritten.incr(size);
     }
-    
-    // locality: datacenter-local
-    if (DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation).equals(
-        DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation))) {
-      writesFromLocalDataCenter.incr();
-      localDataCenterBytesWritten.incr(size);
-      return;
-    }
-    
-    // locality: datacenter-off
-    writesFromRemoteDataCenter.incr();
-    remoteDataCenterBytesWritten.incr(size);
   }
 
   public void incrReadsFromClient(boolean local, long size) {
@@ -432,7 +428,7 @@ public class DataNodeMetrics {
                                   String remoteHostAddress, 
                                   long size) {
     // locality: node-local
-    if (remoteHostAddress.equals(LOCAL_HOST) ||
+    if (remoteHostAddress.equals(DataNode.LOCAL_HOST) ||
         localHostAddress.equals(remoteHostAddress)) {
       readsFromLocalClient.incr();
       localBytesRead.incr(size);
@@ -443,31 +439,32 @@ public class DataNodeMetrics {
     //  with incrReadsFromClient(boolean local, long size)
     readsFromRemoteClient.incr();
     remoteBytesRead.incr(size);
+    if (dnsToSwitchMapping != null) {
+      List<String> names = new ArrayList<>();
+      names.add(localHostAddress);
+      names.add(remoteHostAddress);
+      List<String> racks = dnsToSwitchMapping.resolve(names);
+      String localLocation = racks.get(0);
+      String remoteLocation = racks.get(1);
+      // locality: rack-local
+      if (localLocation.equals(remoteLocation)) {
+        readsFromLocalRack.incr();
+        localRackBytesRead.incr(size);
+        return;
+      }
 
-    List<String> names = new ArrayList<>();
-    names.add(localHostAddress);
-    names.add(remoteHostAddress);
-    List<String> racks = dnsToSwitchMapping.resolve(names);
-    String localLocation = racks.get(0);
-    String remoteLocation = racks.get(1);
-    // locality: rack-local
-    if (localLocation.equals(remoteLocation)) {
-      readsFromLocalRack.incr();
-      localRackBytesRead.incr(size);
-      return;
-    }
-    
-    // locality: datacenter-local
-    if (DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation).equals(
-        DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation))) {
-      readsFromLocalDataCenter.incr();
-      localDataCenterBytesRead.incr(size);
-      return;
-    }
+      // locality: datacenter-local
+      if (DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation).equals(
+          DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation))) {
+        readsFromLocalDataCenter.incr();
+        localDataCenterBytesRead.incr(size);
+        return;
+      }
 
-    // locality: datacenter-off
-    readsFromRemoteDataCenter.incr();
-    remoteDataCenterBytesRead.incr(size);
+      // locality: datacenter-off
+      readsFromRemoteDataCenter.incr();
+      remoteDataCenterBytesRead.incr(size);
+    }
   }
   
   public void incrVolumeFailures() {

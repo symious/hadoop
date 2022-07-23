@@ -147,4 +147,9 @@ public class BasicInetPeer implements Peer {
   public String getRemoteHostAddress() {
     return socket.getInetAddress().getHostAddress();
   }
+
+  @Override
+  public int getRemotePort() {
+    return socket.getPort();
+  }
 }
