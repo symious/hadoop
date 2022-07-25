@@ -746,10 +746,14 @@ public class UsersManager implements AbstractUsersManager {
     Resource consumed = Resources.multiplyAndNormalizeUp(resourceCalculator,
         partitionResource, getUsageRatio(nodePartition),
         lQueue.getMinimumAllocation());
-    Resource currentCapacity = Resources.lessThan(resourceCalculator,
-        partitionResource, consumed, queueCapacity)
-            ? queueCapacity
-            : Resources.add(consumed, required);
+//    Resource currentCapacity = Resources.lessThan(resourceCalculator,
+//        partitionResource, consumed, queueCapacity)
+//            ? queueCapacity
+//            : Resources.add(consumed, required);
+    Resource currentCapacity = Resources.componentwiseMax(consumed, queueCapacity);
+    if (!Resources.equals(currentCapacity, queueCapacity)) {
+      currentCapacity = Resources.addTo(currentCapacity, required);
+    }
 
     /*
      * Never allow a single user to take more than the queue's configured

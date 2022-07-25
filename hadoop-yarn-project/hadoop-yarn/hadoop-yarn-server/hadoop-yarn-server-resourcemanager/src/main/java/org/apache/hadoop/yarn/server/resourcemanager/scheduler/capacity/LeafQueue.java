@@ -1662,8 +1662,9 @@ public class LeafQueue extends AbstractCSQueue {
 
       // Note: We aren't considering the current request since there is a fixed
       // overhead of the AM, but it's a > check, not a >= check, so...
-      if (Resources.greaterThan(resourceCalculator, clusterResource,
-          user.getUsed(nodePartition), limit)) {
+      if (!Resources.fitsIn(user.getUsed(nodePartition), limit)) {
+      /*if (Resources.greaterThan(resourceCalculator, clusterResource,
+          user.getUsed(nodePartition), limit)) {*/
         // if enabled, check to see if could we potentially use this node instead
         // of a reserved node if the application has reserved containers
         if (this.reservationsContinueLooking) {
