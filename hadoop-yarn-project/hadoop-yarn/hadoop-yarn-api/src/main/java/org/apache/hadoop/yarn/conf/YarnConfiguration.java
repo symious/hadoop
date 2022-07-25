@@ -2147,6 +2147,15 @@ public class YarnConfiguration extends Configuration {
   @Deprecated
   public final static int DEFAULT_NM_CONTAINER_MON_INTERVAL_MS = 3000;
 
+  public final static String NM_DISK_UTILIZATION_PERCENTAGE_THRESHOLD =
+      NM_PREFIX +"disk-utilization-threshold";
+  public final static float DEFAULT_NM_DISK_UTILIZATION_PERCENTAGE_THRESHOLD =
+      80.0F;
+  public final static String NM_APP_DISK_UTILIZATION_THRESHOLD =
+      NM_PREFIX + "app-disk-utilization-threshold";
+  public final static long DEFAULT_NM_APP_DISK_UTILIZATION_THRESHOLD =
+      53687091200l;
+
   /** Class that calculates current resource utilization.*/
   public static final String NM_MON_RESOURCE_CALCULATOR =
       NM_PREFIX + "resource-calculator.class";

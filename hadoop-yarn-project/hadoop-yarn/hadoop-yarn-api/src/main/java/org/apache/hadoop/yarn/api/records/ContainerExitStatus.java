@@ -85,4 +85,6 @@ public class ContainerExitStatus {
 
   public static final int KILLED_EXCEEDED_THREAD_NUMBER = -110;
 
+  public static final int KILLED_EXCEEDED_SHUFFLE_DISK_USAGE = -111;
+
 }

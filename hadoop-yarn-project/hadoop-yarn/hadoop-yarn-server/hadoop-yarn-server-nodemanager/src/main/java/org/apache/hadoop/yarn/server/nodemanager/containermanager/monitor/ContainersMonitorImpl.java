@@ -18,12 +18,17 @@
 
 package org.apache.hadoop.yarn.server.nodemanager.containermanager.monitor;
 
+import org.apache.commons.io.filefilter.RegexFileFilter;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.Application;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.deletion.task.FileDeletionTask;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.dynamicresource.DynamicResourceController;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.CGroupElasticMemoryController;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.ResourceHandlerModule;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ContainerLocalizer;
 import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +37,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.StringUtils.TraditionalBinaryPrefix;
+import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.Resource;
@@ -51,12 +57,17 @@ import org.apache.hadoop.yarn.server.nodemanager.webapp.ContainerLogsUtils;
 import org.apache.hadoop.yarn.util.ResourceCalculatorPlugin;
 import org.apache.hadoop.yarn.util.ResourceCalculatorProcessTree;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.io.File;
 import java.util.Map;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Monitors containers collecting resource usage and preempting the container
@@ -74,6 +85,10 @@ public class ContainersMonitorImpl extends AbstractService implements
   private MonitoringThread monitoringThread;
   private int logCheckInterval;
   private LogMonitorThread logMonitorThread;
+  private DiskMonitorThread diskMonitorThread;
+  private float diskUtilizationPercentageThreshold;
+  private float appDiskUsedThreshold;
+
   private long logDirSizeLimit;
   private long logTotalSizeLimit;
   private CGroupElasticMemoryController oomListenerThread;
@@ -138,6 +153,8 @@ public class ContainersMonitorImpl extends AbstractService implements
 
     this.logMonitorThread = new LogMonitorThread();
 
+    this.diskMonitorThread = new DiskMonitorThread();
+
     this.containersUtilization = ResourceUtilization.newInstance(0, 0, 0.0f);
   }
 
@@ -158,6 +175,11 @@ public class ContainersMonitorImpl extends AbstractService implements
     this.logTotalSizeLimit =
         conf.getLong(YarnConfiguration.NM_CONTAINER_LOG_TOTAL_SIZE_LIMIT_BYTES,
             YarnConfiguration.DEFAULT_NM_CONTAINER_LOG_TOTAL_SIZE_LIMIT_BYTES);
+    this.diskUtilizationPercentageThreshold = conf.getFloat(
+        YarnConfiguration.NM_DISK_UTILIZATION_PERCENTAGE_THRESHOLD,
+        YarnConfiguration.DEFAULT_NM_DISK_UTILIZATION_PERCENTAGE_THRESHOLD);
+    this.appDiskUsedThreshold = conf.getLong(YarnConfiguration.NM_APP_DISK_UTILIZATION_THRESHOLD,
+        YarnConfiguration.DEFAULT_NM_APP_DISK_UTILIZATION_THRESHOLD);
 
     this.resourceCalculatorPlugin =
         ResourceCalculatorPlugin.getContainersMonitorPlugin(this.conf);
@@ -329,6 +351,7 @@ public class ContainersMonitorImpl extends AbstractService implements
   protected void serviceStart() throws Exception {
     if (containersMonitorEnabled) {
       this.monitoringThread.start();
+      this.diskMonitorThread.start();
     }
     if (oomListenerThread != null) {
       oomListenerThread.start();
@@ -339,6 +362,7 @@ public class ContainersMonitorImpl extends AbstractService implements
     if (logMonitorEnabled) {
       this.logMonitorThread.start();
     }
+
     super.serviceStart();
   }
 
@@ -351,6 +375,12 @@ public class ContainersMonitorImpl extends AbstractService implements
         this.monitoringThread.join();
       } catch (InterruptedException e) {
         LOG.info("ContainersMonitorImpl monitoring thread interrupted");
+      }
+      this.diskMonitorThread.interrupt();
+      try {
+        this.diskMonitorThread.join();
+      } catch (InterruptedException e) {
+        LOG.info("ContainersMonitorImpl monitoring disk usage interrupted");
       }
       if (this.oomListenerThread != null) {
         this.oomListenerThread.stopListening();
@@ -978,6 +1008,73 @@ public class ContainersMonitorImpl extends AbstractService implements
         } catch (InterruptedException e) {
           LOG.info("Log monitor thread was interrupted. "
               + "Stopping container log monitoring.");
+        }
+      }
+    }
+  }
+
+  private class DiskMonitorThread extends Thread {
+    DiskMonitorThread() {
+      super("Disk Usage Monitor");
+    }
+
+    @Override
+    public void run() {
+      while (!stopped && !Thread.currentThread().isInterrupted()) {
+        List<String> nmLocalDirs = new ArrayList<>();
+        nmLocalDirs.addAll(context.getLocalDirsHandler().getLocalDirs());
+        nmLocalDirs.addAll(context.getLocalDirsHandler().getDiskFullLocalDirs());
+
+        ConcurrentMap<ApplicationId, Application> applications =
+            context.getApplications();
+        for (String localDir : nmLocalDirs) {
+          File rootDir = new File(localDir);
+          float freePercentage =
+              100 * rootDir.getUsableSpace() / (float) rootDir.getTotalSpace();
+          float usedPercentage = 100.0F - freePercentage;
+          LOG.info(localDir + " used " + usedPercentage + " percentage.");
+          if (usedPercentage > diskUtilizationPercentageThreshold) {
+            for (Application application : applications.values()) {
+              String user = application.getUser();
+              String appId = application.getAppId().toString();
+              String appLocalDir =
+                  localDir + "/" + ContainerLocalizer.USERCACHE + "/" + user
+                      + "/" + ContainerLocalizer.APPCACHE + "/" + appId;
+              long currentDirSizeBytes = FileUtil.getDU(new File(appLocalDir));
+              if (currentDirSizeBytes > appDiskUsedThreshold) {
+                LOG.info("Application " + appId + " take up disk size "
+                    + currentDirSizeBytes);
+                for (Container container : application.getContainers()
+                    .values()) {
+                  eventDispatcher.getEventHandler().handle(
+                      new ContainerKillEvent(container.getContainerId(),
+                          ContainerExitStatus.KILLED_EXCEEDED_SHUFFLE_DISK_USAGE,
+                          "Application disk usage: " + currentDirSizeBytes
+                              + " beyond the limit: " + appDiskUsedThreshold));
+                }
+                List<Path> dirs = new ArrayList<>();
+                File baseFile = new File(appLocalDir);
+                String[] subDirsStr = baseFile
+                    .list(new RegexFileFilter("blockmgr[A-Za-z0-9_-]+"));
+                for (String subDir : subDirsStr) {
+                  dirs.add(new Path(appLocalDir, subDir));
+                }
+                if (!dirs.isEmpty()) {
+                  context.getDeletionService().delete(
+                      new FileDeletionTask(context.getDeletionService(),
+                          application.getUser(), null, dirs));
+                }
+                break;
+              }
+            }
+          }
+        }
+        try {
+          Thread.sleep(logCheckInterval);
+        } catch (InterruptedException e) {
+          LOG.warn("{} is interrupted. Exiting.",
+              ContainersMonitorImpl.class.getName());
+          break;
         }
       }
     }
