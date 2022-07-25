@@ -206,6 +206,8 @@ class CapacitySchedulerPage extends RmView {
               lqinfo.getPreemptionDisabled() ? "disabled" : "enabled").
           __("Intra-queue Preemption:", lqinfo.getIntraQueuePreemptionDisabled()
                   ? "disabled" : "enabled").
+          __("Intra-queue Preemption order policy:",
+              lqinfo.getIntraQueueOrderingPolicyDisplayName()).
           __("Default Node Label Expression:",
               lqinfo.getDefaultNodeLabelExpression() == null
                   ? NodeLabel.DEFAULT_NODE_LABEL_PARTITION

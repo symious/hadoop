@@ -61,6 +61,8 @@ public class CapacitySchedulerLeafQueueInfo extends CapacitySchedulerQueueInfo {
   @XmlTransient
   protected String orderingPolicyDisplayName;
 
+  protected String intraQueuePreemptionOrderPolicyDisplayName;
+
   CapacitySchedulerLeafQueueInfo() {
   };
 
@@ -99,6 +101,8 @@ public class CapacitySchedulerLeafQueueInfo extends CapacitySchedulerQueueInfo {
     }
     defaultApplicationLifetime = q.getDefaultApplicationLifetime();
     maxApplicationLifetime = q.getMaximumApplicationLifetime();
+    intraQueuePreemptionOrderPolicyDisplayName =
+        q.getIntraQueuePreemptionOrderPolicy().toLowerCase();
   }
 
   @Override
@@ -171,6 +175,10 @@ public class CapacitySchedulerLeafQueueInfo extends CapacitySchedulerQueueInfo {
 
   public String getOrderingPolicyDisplayName() {
     return orderingPolicyDisplayName;
+  }
+
+  public String getIntraQueueOrderingPolicyDisplayName() {
+    return intraQueuePreemptionOrderPolicyDisplayName;
   }
   
   public String getDefaultNodeLabelExpression() {
