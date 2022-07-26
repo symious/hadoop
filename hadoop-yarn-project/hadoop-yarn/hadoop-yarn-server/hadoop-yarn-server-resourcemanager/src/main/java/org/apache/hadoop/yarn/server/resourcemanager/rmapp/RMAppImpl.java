@@ -1496,7 +1496,7 @@ public class RMAppImpl implements RMApp, Recoverable {
       //cleanup app in RM Nodes
       for (NodeId nodeId : app.getRanNodes()) {
         app.handler.handle(new RMNodeCleanAppEvent(nodeId, app.applicationId,
-            RMServerUtils.createApplicationState(finalState)));
+            RMServerUtils.createApplicationState(app.getFinalApplicationStatus())));
       }
       app.ranNodes.clear();
       // Recovered apps that are completed were not added to scheduler, so no

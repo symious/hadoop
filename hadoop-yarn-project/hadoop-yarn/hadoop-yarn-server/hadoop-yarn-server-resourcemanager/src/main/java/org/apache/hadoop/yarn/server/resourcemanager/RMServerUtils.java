@@ -45,6 +45,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationTimeoutType;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerUpdateType;
 import org.apache.hadoop.yarn.api.records.ExecutionType;
+import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.QueueInfo;
@@ -425,6 +426,21 @@ public class RMServerUtils {
       LOG.trace(method + " invoked by user " + user.getShortUserName());
     }
     return user;
+  }
+
+  public static YarnApplicationState createApplicationState(
+      FinalApplicationStatus rmAppStatus) {
+    switch (rmAppStatus) {
+      case UNDEFINED:
+        return YarnApplicationState.RUNNING;
+      case SUCCEEDED:
+        return YarnApplicationState.FINISHED;
+      case FAILED:
+        return YarnApplicationState.FAILED;
+      case KILLED:
+        return YarnApplicationState.KILLED;
+    }
+    throw new YarnRuntimeException("Unknown status passed!");
   }
 
   public static YarnApplicationState createApplicationState(
