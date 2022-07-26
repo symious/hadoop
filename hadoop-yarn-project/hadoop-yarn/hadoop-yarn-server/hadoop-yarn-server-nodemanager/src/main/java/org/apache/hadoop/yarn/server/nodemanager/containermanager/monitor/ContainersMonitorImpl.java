@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.apache.hadoop.yarn.server.api.ContainerType;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.Application;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.deletion.task.FileDeletionTask;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.dynamicresource.DynamicResourceController;
@@ -1046,11 +1047,15 @@ public class ContainersMonitorImpl extends AbstractService implements
                     + currentDirSizeBytes);
                 for (Container container : application.getContainers()
                     .values()) {
-                  eventDispatcher.getEventHandler().handle(
-                      new ContainerKillEvent(container.getContainerId(),
-                          ContainerExitStatus.KILLED_EXCEEDED_SHUFFLE_DISK_USAGE,
-                          "Application disk usage: " + currentDirSizeBytes
-                              + " beyond the limit: " + appDiskUsedThreshold));
+                  if (container.getContainerTokenIdentifier().getContainerType()
+                      .equals(ContainerType.TASK)) {
+                    eventDispatcher.getEventHandler().handle(
+                        new ContainerKillEvent(container.getContainerId(),
+                            ContainerExitStatus.KILLED_EXCEEDED_SHUFFLE_DISK_USAGE,
+                            "Application disk usage: " + currentDirSizeBytes
+                                + " beyond the limit: "
+                                + appDiskUsedThreshold));
+                  }
                 }
                 List<Path> dirs = new ArrayList<>();
                 File baseFile = new File(appLocalDir);
