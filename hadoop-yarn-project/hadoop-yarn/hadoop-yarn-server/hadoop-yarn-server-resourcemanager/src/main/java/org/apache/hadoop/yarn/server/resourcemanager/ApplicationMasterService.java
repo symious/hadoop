@@ -440,7 +440,11 @@ public class ApplicationMasterService extends AbstractService implements
         CapacityScheduler cs = (CapacityScheduler) this.rmContext.getScheduler();
         LeafQueue queue = (LeafQueue) cs.getQueue(app.getQueue());
         boolean opportunisticEnabled = queue.getOpportunisticEnabled();
-        if (opportunisticEnabled) {
+        int priority = app.getApplicationPriority().getPriority();
+        int mediumPriority = getConfig().getInt(YarnConfiguration.RM_APPLICATION_LEVEL_MEDIUM,
+            YarnConfiguration.RM_APPLICATION_LEVEL_MEDIUM_DEFAULT);
+        // Enabled on queue and the job level is low
+        if (opportunisticEnabled && priority < mediumPriority) {
           request.getAskList().forEach(item -> item.getExecutionTypeRequest().setExecutionType(
               ExecutionType.OPPORTUNISTIC));
         }
