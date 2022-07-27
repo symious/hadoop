@@ -194,6 +194,16 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_HA_TAILEDITS_INPROGRESS_KEY =
       "dfs.ha.tail-edits.in-progress";
   public static final boolean DFS_HA_TAILEDITS_INPROGRESS_DEFAULT = false;
+
+  public static final String  DFS_HA_TAILEDITS_INPROGRESS_STANDBY_KEY =
+      "dfs.ha.tail-edits.in-progress.standby";
+  public static final boolean DFS_HA_TAILEDITS_INPROGRESS_STANDBY_DEFAULT =
+      false;
+
+  public static final String  DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_KEY =
+      "dfs.ha.tail-edits.in-progress.observer";
+  public static final boolean DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_DEFAULT =
+      false;
   public static final String  DFS_NAMENODE_CHECKPOINT_PERIOD_KEY =
       HdfsClientConfigKeys.DeprecatedKeys.DFS_NAMENODE_CHECKPOINT_PERIOD_KEY;
   public static final long    DFS_NAMENODE_CHECKPOINT_PERIOD_DEFAULT = 3600;

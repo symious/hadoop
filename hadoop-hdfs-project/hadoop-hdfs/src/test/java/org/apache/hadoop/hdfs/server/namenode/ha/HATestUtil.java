@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.namenode.ha;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_LOGROLL_PERIOD_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_NAMENODES_KEY_PREFIX;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSUtil.createUri;
@@ -221,6 +222,7 @@ public abstract class HATestUtil {
     conf.setInt(DFSConfigKeys.DFS_DATANODE_SCAN_PERIOD_HOURS_KEY, -1);
 
     conf.setBoolean(DFS_HA_TAILEDITS_INPROGRESS_KEY, fastTailing);
+    conf.setBoolean(DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_KEY, fastTailing);
     if(fastTailing) {
       // TODO: In trunk, the below setting is 100ms. But
       // without backporting HDFS-9847, specifying time unit is not supported

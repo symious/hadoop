@@ -44,6 +44,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.ha.HAServiceProtocol;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.HAUtil;
 import org.apache.hadoop.hdfs.protocolPB.NamenodeProtocolPB;
@@ -176,6 +177,11 @@ public class EditLogTailer {
       DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT;
 
   public EditLogTailer(FSNamesystem namesystem, Configuration conf) {
+    this(namesystem, conf, null);
+  }
+
+  public EditLogTailer(FSNamesystem namesystem, Configuration conf,
+      HAServiceProtocol.HAServiceState hass) {
     this.tailerThread = new EditLogTailerThread();
     this.conf = conf;
     this.namesystem = namesystem;
@@ -241,9 +247,23 @@ public class EditLogTailer {
       maxRetries = DFSConfigKeys.DFS_HA_TAILEDITS_ALL_NAMESNODES_RETRY_DEFAULT;
     }
 
-    inProgressOk = conf.getBoolean(
-        DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY,
-        DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_DEFAULT);
+    switch (hass) {
+      case STANDBY:
+        inProgressOk = conf.getBoolean(
+            DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_STANDBY_KEY,
+            DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_STANDBY_DEFAULT);
+        break;
+      case OBSERVER:
+        inProgressOk = conf.getBoolean(
+            DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_KEY,
+            DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_DEFAULT);
+        break;
+      default:
+        inProgressOk = conf.getBoolean(
+            DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY,
+            DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_DEFAULT);
+        break;
+    }
 
     this.maxTxnsPerLock = conf.getLong(
         DFS_HA_TAILEDITS_MAX_TXNS_PER_LOCK_KEY,

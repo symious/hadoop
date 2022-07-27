@@ -2074,8 +2074,7 @@ public class NameNode extends ReconfigurableBase implements
     @Override
     public void startStandbyServices() throws IOException {
       try {
-        namesystem.startStandbyServices(getConf(),
-            state == NameNode.OBSERVER_STATE);
+        namesystem.startStandbyServices(getConf(), state);
       } catch (Throwable t) {
         doImmediateShutdown(t);
       }

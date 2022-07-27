@@ -47,6 +47,7 @@ public class TestObserverWithSyncFlagInRouter {
     conf.setBoolean(RBFConfigKeys.DFS_ROUTER_OBSERVER_READ_ENABLE, true);
     conf.setInt(RBFConfigKeys.DFS_ROUTER_OBSERVER_AUTO_MSYNC_PERIOD, 60000);
     conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY, true);
+    conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_KEY, true);
     conf.setInt(DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY, 0);
 
     cluster = new MiniRouterDFSCluster(true, 1, 4);
@@ -85,7 +86,7 @@ public class TestObserverWithSyncFlagInRouter {
     }
   }
 
-  @Test
+  @Test(timeout = 60000)
   public void testSyncForwardByClient() throws Exception {
     int msyncPeriod = 60000;
     MiniRouterDFSCluster.RouterContext routerContext = cluster.getRandomRouter();

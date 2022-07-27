@@ -97,6 +97,7 @@ import static org.apache.hadoop.hdfs.server.namenode.FSDirStatAndListingOp.*;
 import static org.apache.hadoop.ha.HAServiceProtocol.HAServiceState.ACTIVE;
 import static org.apache.hadoop.ha.HAServiceProtocol.HAServiceState.OBSERVER;
 import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
+import org.apache.hadoop.hdfs.server.namenode.ha.HAState;
 import org.apache.hadoop.hdfs.server.namenode.handler.FSNamesystemLockMetricsRefreshHandler;
 import org.apache.hadoop.hdfs.server.protocol.SlowDiskReports;
 
@@ -1394,8 +1395,10 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * 
    * @throws IOException
    */
-  void startStandbyServices(final Configuration conf, boolean isObserver)
+  void startStandbyServices(final Configuration conf, HAState haState)
       throws IOException {
+    boolean isObserver = haState == NameNode.OBSERVER_STATE;
+
     LOG.info("Starting services required for " +
         (isObserver ? "observer" : "standby") + " state");
     if (!getFSImage().editLog.isOpenForRead()) {
@@ -1406,7 +1409,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
     // Disable quota checks while in standby.
     dir.disableQuotaChecks();
-    editLogTailer = new EditLogTailer(this, conf);
+    editLogTailer = new EditLogTailer(this, conf, haState.getServiceState());
     editLogTailer.start();
     if (!isObserver && standbyShouldCheckpoint) {
       standbyCheckpointer = new StandbyCheckpointer(conf, this);

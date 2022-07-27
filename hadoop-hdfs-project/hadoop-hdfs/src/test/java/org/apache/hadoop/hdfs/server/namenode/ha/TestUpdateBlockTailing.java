@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.namenode.ha;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_STANDBY_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -71,6 +72,7 @@ public class TestUpdateBlockTailing {
   public static void startUpCluster() throws Exception {
     Configuration conf = new Configuration();
     conf.setBoolean(DFS_HA_TAILEDITS_INPROGRESS_KEY, true);
+    conf.setBoolean(DFS_HA_TAILEDITS_INPROGRESS_STANDBY_KEY, true);
     MiniQJMHACluster.Builder qjmBuilder = new MiniQJMHACluster.Builder(conf)
         .setNumNameNodes(2);
     qjmBuilder.getDfsBuilder().numDataNodes(1);

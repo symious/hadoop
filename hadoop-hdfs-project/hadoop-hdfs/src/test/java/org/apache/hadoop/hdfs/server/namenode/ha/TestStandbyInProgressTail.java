@@ -72,6 +72,7 @@ public class TestStandbyInProgressTail {
     // Set period of tail edits to a large value (20 mins) for test purposes
     conf.setInt(DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY, 20 * 60);
     conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY, true);
+    conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_STANDBY_KEY, true);
     conf.setInt(DFSConfigKeys.DFS_QJOURNAL_SELECT_INPUT_STREAMS_TIMEOUT_KEY,
         500);
     // Set very samll limit of transactions per a journal rpc call
