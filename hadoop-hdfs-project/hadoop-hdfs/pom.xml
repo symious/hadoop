@@ -33,7 +33,7 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <properties>
     <hadoop.component>hdfs</hadoop.component>
     <is.hadoop.component>true</is.hadoop.component>
-    <kafka.version>1.1.1</kafka.version>
+    <kafka.version>2.7.2</kafka.version>
     <org.eclipse.jetty.version>9.4.43.v20210629</org.eclipse.jetty.version>
   </properties>
 
