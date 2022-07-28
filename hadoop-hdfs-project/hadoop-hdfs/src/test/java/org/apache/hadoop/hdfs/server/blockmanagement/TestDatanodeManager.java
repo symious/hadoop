@@ -331,15 +331,15 @@ public class TestDatanodeManager {
     StaticMapping.addNodeToRack(clientMachine, "/dc0/rack1");
     Assert.assertEquals(1, blocks.size());
     Assert.assertEquals(3, blocks.get(0).getLocations().length);
-    Assert.assertFalse(dm.isInterDCRead(clientMachine, blocks));
+    Assert.assertFalse(dm.checkInterDCRead(clientMachine, blocks, 1024));
 
     // client in /dc1
     StaticMapping.addNodeToRack(clientMachine, "/dc1/rack1");
-    Assert.assertFalse(dm.isInterDCRead(clientMachine, blocks));
+    Assert.assertFalse(dm.checkInterDCRead(clientMachine, blocks, 1024));
 
     // client in /dc2
     StaticMapping.addNodeToRack(clientMachine, "/dc2/rack1");
-    Assert.assertTrue(dm.isInterDCRead(clientMachine, blocks));
+    Assert.assertTrue(dm.checkInterDCRead(clientMachine, blocks, 1024));
 
     cluster.shutdown();
   }

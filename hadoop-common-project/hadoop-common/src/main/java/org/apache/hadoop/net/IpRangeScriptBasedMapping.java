@@ -117,7 +117,7 @@ public class IpRangeScriptBasedMapping extends ScriptBasedMapping {
 
         String currentIpSegment = NetUtils.getIpSegment(ip, maskBit);
         if (currentIpSegment.equals(ipSegment)) {
-          return "/" + dcInfo;
+          return "/" + dcInfo + NetworkTopology.DEFAULT_RACK;
         }
       }
       return null;

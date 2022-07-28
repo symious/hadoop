@@ -58,8 +58,8 @@ public class TestIpRangeScriptBasedMapping {
 
     List<String> result = mapping.resolve(names);
     assertEquals(names.size(), result.size());
-    assertEquals("/dc1", result.get(0));
-    assertEquals("/dc2", result.get(1));
+    assertEquals("/dc1" + NetworkTopology.DEFAULT_RACK, result.get(0));
+    assertEquals("/dc2" + NetworkTopology.DEFAULT_RACK, result.get(1));
     assertEquals(NetworkTopology.DEFAULT_RACK, result.get(2));
   }
 
@@ -81,8 +81,8 @@ public class TestIpRangeScriptBasedMapping {
 
     List<String> result1 = mapping.resolve(names);
     assertEquals(names.size(), result1.size());
-    assertEquals("/dc1", result1.get(0));
-    assertEquals("/dc2", result1.get(1));
+    assertEquals("/dc1" + NetworkTopology.DEFAULT_RACK, result1.get(0));
+    assertEquals("/dc2" + NetworkTopology.DEFAULT_RACK, result1.get(1));
 
     // unset the file, see if it gets read again
     conf.set(NET_TOPOLOGY_IP_RANGE_DC_MAPPING_FILE_KEY, "some bad value for a file");
@@ -147,8 +147,8 @@ public class TestIpRangeScriptBasedMapping {
 
     List<String> result = mapping.resolve(names);
     assertEquals(names.size(), result.size());
-    assertEquals("/dc1", result.get(0));
-    assertEquals("/dc2", result.get(1));
+    assertEquals("/dc1" + NetworkTopology.DEFAULT_RACK, result.get(0));
+    assertEquals("/dc2" + NetworkTopology.DEFAULT_RACK, result.get(1));
     assertEquals(NetworkTopology.DEFAULT_RACK, result.get(2));
 
     ipRange2DCFile = File.createTempFile(getClass().getSimpleName() +
@@ -169,8 +169,8 @@ public class TestIpRangeScriptBasedMapping {
 
     result = mapping.resolve(names);
     assertEquals(names.size(), result.size());
-    assertEquals("/dc3", result.get(0));
-    assertEquals("/dc4", result.get(1));
+    assertEquals("/dc3" + NetworkTopology.DEFAULT_RACK, result.get(0));
+    assertEquals("/dc4" + NetworkTopology.DEFAULT_RACK, result.get(1));
     // Tips: hostName3 be cached by ScriptBasedMapping,
     // so it will not be reloaded by IpRangeScriptBasedMapping.
     assertEquals(NetworkTopology.DEFAULT_RACK, result.get(2));

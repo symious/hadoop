@@ -25,6 +25,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.net.InetAddresses;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.protocol.HdfsConstants.FILE_LENGTH_DC_STR;
+import static org.apache.hadoop.hdfs.protocol.HdfsConstants.TRAFFIC_DC_STR;
+import static org.apache.hadoop.hdfs.protocol.HdfsConstants.IS_INTER_DC_READ_STR;
+import static org.apache.hadoop.hdfs.protocol.HdfsConstants.CLIENT_DC_STR;
+import static org.apache.hadoop.hdfs.protocol.HdfsConstants.DATANODE_DC_STR;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -53,6 +58,7 @@ import org.apache.hadoop.hdfs.server.namenode.UnsupportedActionException;
 import org.apache.hadoop.hdfs.server.namenode.handler.DatanodeManagerRefreshHandler;
 import org.apache.hadoop.hdfs.server.protocol.*;
 import org.apache.hadoop.hdfs.server.protocol.BlockRecoveryCommand.RecoveringBlock;
+import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.ipc.RefreshRegistry;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.net.*;
@@ -527,8 +533,9 @@ public class DatanodeManager {
   }
 
   /** Check if the read traffic is inter-dc. */
-  public boolean isInterDCRead(final String clientMachine,
-      final List<LocatedBlock> locatedblocks) {
+  @VisibleForTesting
+  public boolean checkInterDCRead(final String clientMachine,
+      final List<LocatedBlock> locatedblocks, final long fileLength) {
     if (locatedblocks.size() == 0) {
       return false;
     }
@@ -550,14 +557,46 @@ public class DatanodeManager {
       }
     }
     String clientDC = NetworkTopologyUtil.getDataCenter(clientLocation);
-
+    // The first DN node is big probability to be read, so record its DC information.
+    String firstDnDC = null;
     DatanodeInfo[] locations = locatedblocks.get(0).getLocations();
-    for (DatanodeInfo location: locations) {
-      if (NetworkTopologyUtil.getDataCenter(location).equals(clientDC)) {
+    for (DatanodeInfo location : locations) {
+      String dnDC = NetworkTopologyUtil.getDataCenter(location);
+      if (firstDnDC == null) {
+        firstDnDC = dnDC;
+      }
+      if (dnDC.equals(clientDC)) {
         return false;
       }
     }
+
+    // for trafficInOrOut is referenced to DN, so set to true.
+    appendInterDCReadToCallerContext(fileLength,
+        clientDC, firstDnDC, true);
     return true;
+  }
+
+  /**
+   * For marking inter-dc reads.
+   * It adds trace info "isInterDCRead:true,clientDC:/dc1,dnDC:/dc2,
+   * trafficDC:out,fileLengthDC:1024"
+   * to caller context.
+   */
+  private void appendInterDCReadToCallerContext(long fileLength, String clientDC,
+      String dnDC, boolean isTrafficOut) {
+    final CallerContext ctx = CallerContext.getCurrent();
+    String origContext = ctx == null ? null : ctx.getContext();
+    byte[] origSignature = ctx == null ? null : ctx.getSignature();
+    String trafficInOrOut = isTrafficOut ? "out" : "in";
+    CallerContext.setCurrent(
+        new CallerContext.Builder(origContext)
+            .append(IS_INTER_DC_READ_STR, Boolean.toString(true))
+            .append(CLIENT_DC_STR, clientDC)
+            .append(DATANODE_DC_STR, dnDC)
+            .append(TRAFFIC_DC_STR, trafficInOrOut)
+            .append(FILE_LENGTH_DC_STR, Long.toString(fileLength))
+            .setSignature(origSignature)
+            .build());
   }
 
   /** Sort the located blocks by the distance to the target host. */
