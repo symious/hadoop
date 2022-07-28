@@ -43,7 +43,7 @@ public class TestZoneMoverKafkaTrigger {
         "/test/test.file\t" +
         "dst=/test/test.file.new\t" +
         "perm=A:Agroup:rwxrwx---\tproto=rpc";
-    JSONObject jsonObject = ZoneMoverKafkaTrigger.processMessage(standardHDFSAuditLog);
+    JSONObject jsonObject = ZoneMoverKafkaTrigger.message2json(standardHDFSAuditLog);
     assertEquals(jsonObject.get("allowed"), "true");
     assertEquals(jsonObject.get("src"), "/test/test.file");
     assertEquals(jsonObject.get("dst"), "/test/test.file.new");
