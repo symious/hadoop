@@ -174,7 +174,7 @@ public class LocalPersistentBasedGroupsMapping extends Configured
             processLine(groupUsers, line);
           } catch (EmptyLocalMappingException e) {
             metrics.mappingLineFailuresTotal.incr();
-            LOG.warn("Empty group: " + line, start);
+            LOG.debug("Empty group: " + line, start);
           } catch (IllegalLocalMappingException e) {
             metrics.mappingLineFailuresTotal.incr();
             LOG.error("Unable to process mapping: " + line, start);
