@@ -24,6 +24,7 @@ import org.apache.hadoop.hdfs.server.namenode.UnsupportedActionException;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneDispatcher.ZoneSource;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneDispatcher.ZoneDDatanode;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
@@ -402,12 +403,20 @@ public class ZoneMover {
     if (paths.isEmpty() && !loadMapFromStore) {
       return ExitStatus.SUCCESS.getExitCode();
     }
+
+    // Initialize ZoneService Metrics
+    ZoneServiceMetrics zoneServiceMetrics;
+    if (loadMapFromStore) { zoneServiceMetrics = ZoneService.getMetrics(); }
+    else { zoneServiceMetrics = ZoneServiceMetrics.create(); }
+
     Class<? extends StoreDriver> driverClass = conf.getClass(
         DFS_ZONESERVICE_STORE_DRIVER_CLASS,
         DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT,
         StoreDriver.class);
     NameNodeConnector nnc = null;
     ZoneMover zs = null;
+    String ns = namenode.getAuthority();
+
     try {
       nnc = new NameNodeConnector(ZoneMover.class.getSimpleName(),
           namenode, getIdPath(RunMode.MONITOR), paths, conf, 1);
@@ -433,7 +442,12 @@ public class ZoneMover {
           LOG.debug("Check path: " + curPath);
           ExitStatus exitStatus = zs.run(curPath);
           if (exitStatus != ExitStatus.SUCCESS) {
+            zoneServiceMetrics.incrFailMoveCount();
+            zoneServiceMetrics.incrNSFailMoveCount(ns);
             LOG.warn("Monitor process file fail: " + curPath);
+          } else {
+            zoneServiceMetrics.incrNSSuccessMoveCount(ns);
+            zoneServiceMetrics.incrSuccessMoveCount();
           }
         } catch (IllegalArgumentException e) {
           LOG.warn(e.toString());

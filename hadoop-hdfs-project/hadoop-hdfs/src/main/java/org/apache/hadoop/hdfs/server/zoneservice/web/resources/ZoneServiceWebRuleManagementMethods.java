@@ -68,7 +68,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_
 
 @Path("replicarule/")
 @Singleton
-public class ZoneServiceRestAPI {
+public class ZoneServiceWebRuleManagementMethods {
   private static final String defaultRatio = "-1";
   private static final String defaultMode = "batch";
   private static final String defaultNull = "N/A";
@@ -92,7 +92,7 @@ public class ZoneServiceRestAPI {
   private final StoreDriver driver =
       ReflectionUtils.newInstance(driverClass, conf);
 
-  public ZoneServiceRestAPI() {
+  public ZoneServiceWebRuleManagementMethods() {
     driver.init(conf, "ReplicationRuleServlet");
     validDataCenters.remove("");
   }
@@ -297,7 +297,7 @@ public class ZoneServiceRestAPI {
       AuditLogger.logRuleProcess(
           "DeletePathRuleMap", nameSpace,
           path, defaultNull, startTime, new Date(),
-          ResultCode.NO_MIGRATION_RECORD.getMsg(), "monitor");
+          ResultCode.NO_MOVE_PROGRESS.getMsg(), "monitor");
       return new ZoneServiceHttpResponse(ResultCode.NO_MIGRATION_RECORD)
           .toString();
     } catch (IOException e) {

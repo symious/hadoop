@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.zoneservice;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.web.resources.ResultCode;
 
 import java.io.IOException;
@@ -27,11 +28,13 @@ import java.util.Date;
 public class MonitorThread extends Thread {
   private final Configuration conf;
   private final URI nameSpace;
+  private ZoneServiceMetrics metrics;
 
   public MonitorThread(String name, Configuration conf, URI nameSpace) {
     super(name);
     this.conf = conf;
     this.nameSpace = nameSpace;
+    metrics = ZoneService.getMetrics();
   }
 
   public Configuration getConf() {
@@ -43,6 +46,7 @@ public class MonitorThread extends Thread {
   }
 
   public void run() {
+    metrics.startMonitorThread();
     Date startTime = new Date();
     try {
       ZoneMover.run(conf, nameSpace, true);
@@ -51,6 +55,8 @@ public class MonitorThread extends Thread {
       AuditLogger.logRuleProcess("monitorThread", nameSpace.getAuthority(),
           "", "", startTime, new Date(),
           ResultCode.IO_EXCEPTION.getMsg(), "monitor");
+    } finally {
+      metrics.stopMonitorThread();
     }
   }
 }

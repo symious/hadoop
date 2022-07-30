@@ -27,6 +27,7 @@ import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.StartupProgress;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.StartupProgressMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
@@ -73,6 +74,8 @@ import static org.apache.hadoop.util.ExitUtil.terminate;
 public class ZoneService extends ReconfigurableBase  {
   public static final Logger LOG =
       LoggerFactory.getLogger(ZoneService.class);
+  /** Metrics to track shadow file activity */
+  static ZoneServiceMetrics metrics = ZoneServiceMetrics.create();
 
   // A list of property that are reconfigurable at runtime.
   private final TreeSet<String> reconfigurableProperties = Sets
@@ -93,7 +96,7 @@ public class ZoneService extends ReconfigurableBase  {
   protected final Tracer tracer;
   protected final TracerConfigurationManager tracerConfigurationManager;
   private final ExecutorService batchThreadPool;
-  
+
   public ZoneService(Configuration conf) throws IOException {
     this.tracer = new Tracer.Builder("ZoneService").
         conf(TraceUtils.wrapHadoopConf(ZONESERVICE_HTRACE_PREFIX, conf)).
@@ -194,6 +197,10 @@ public class ZoneService extends ReconfigurableBase  {
         conf.getTrimmed(DFS_ZONESERVICE_HTTP_ADDRESS_KEY, DFS_ZONESERVICE_HTTP_ADDRESS_DEFAULT));
   }
 
+  public static ZoneServiceMetrics getMetrics() {
+    return metrics;
+  }
+
   private void startHttpServer(final Configuration conf) throws IOException {
     httpServer = new ZoneServiceHttpServer(conf, getHttpServerBindAddress(conf));
     httpServer.start();
@@ -261,6 +268,7 @@ public class ZoneService extends ReconfigurableBase  {
     for (String ns: nsRuleMap.keySet()) {
       SignalRecord signalRecord = new SignalRecord(ns, true);
       driver.put(signalRecord, true, false);
+      LOG.info("Starting monitor thread for {}.", ns);
       Thread monitorThread = new MonitorThread("monitor_" + ns,
           conf, getNamespaceUri(ns, conf));
       monitorThread.start();
@@ -286,6 +294,7 @@ public class ZoneService extends ReconfigurableBase  {
     public void run() {
       Date startTime = new Date();
       try {
+        metrics.startBatchThread();
         ZoneMover.run(conf, namenode, paths, replicationRule);
         for (Path path : paths) {
           MigrationRecord migrationRecord = new MigrationRecord(
@@ -297,8 +306,7 @@ public class ZoneService extends ReconfigurableBase  {
               path.toUri().getPath(), replicationRule.toString(), startTime,
               new Date(), ResultCode.SUCCESS.getMsg(), "batch");
           LOG.info("Remove namespace " + namenode.getAuthority() +
-              "\nPath " + path.toUri().getPath() + "\nRule " +
-              replicationRule.toString());
+              "\nPath " + path.toUri().getPath() + "\nRule " + replicationRule);
         }
       } catch (IOException e) {
         AuditLogger.logRuleProcess(
@@ -312,6 +320,8 @@ public class ZoneService extends ReconfigurableBase  {
             paths.get(0).toUri().getPath(), replicationRule.toString(),
             startTime, new Date(), ResultCode.INTERRUPTED.getMsg(), "batch");
         e.printStackTrace();
+      } finally {
+        metrics.stopBatchThread();
       }
     }
   }

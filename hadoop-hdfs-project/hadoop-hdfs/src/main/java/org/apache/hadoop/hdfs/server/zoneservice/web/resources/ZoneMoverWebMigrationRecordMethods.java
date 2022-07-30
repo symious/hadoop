@@ -39,7 +39,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_
 
 @Singleton
 @Path("migrationrecord/")
-public class ZoneMoverHistoryRecordRestAPI {
+public class ZoneMoverWebMigrationRecordMethods {
   private final static Configuration conf = new Configuration();
   private final static String DEFAULT_MODE = "exact";
 
@@ -49,7 +49,7 @@ public class ZoneMoverHistoryRecordRestAPI {
       StoreDriver.class);
   private final StoreDriver driver = ReflectionUtils.newInstance(driverClass, conf);
 
-  public ZoneMoverHistoryRecordRestAPI() {
+  public ZoneMoverWebMigrationRecordMethods() {
     driver.init(conf, "historyServlet");
   }
 
