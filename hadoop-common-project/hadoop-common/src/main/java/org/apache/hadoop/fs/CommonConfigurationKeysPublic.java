@@ -210,8 +210,10 @@ public class CommonConfigurationKeysPublic {
    */
   public static final String  FS_TRASH_INTERVAL_KEY = "fs.trash.interval";
   public static final String  FS_TRASH_CONSTRAINT_KEY = "fs.trash.constraint";
-  public static final long  FS_TRASH_CONSTRAINT_DEFAULT = -1;
+  public static final long    FS_TRASH_CONSTRAINT_DEFAULT = -1;
   public static final String  FS_TRASH_ROOT = "fs.trash.root";
+  public static final String  FS_TRASH_CREATE_ROOT_KEY = "fs.trash.create.root.enable";
+  public static final boolean FS_TRASH_CREATE_ROOT_DEFAULT = true;
   /** Default value for FS_TRASH_INTERVAL_KEY */
   public static final long    FS_TRASH_INTERVAL_DEFAULT = 1440;
   /**

@@ -21,6 +21,8 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CHECKP
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CHECKPOINT_INTERVAL_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CONSTRAINT_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CONSTRAINT_KEY;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CREATE_ROOT_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CREATE_ROOT_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 
@@ -38,7 +40,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Options.Rename;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.fs.shell.PathData;
 import org.apache.hadoop.util.Time;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -71,6 +72,7 @@ public class TrashPolicyDefault extends TrashPolicy {
       new SimpleDateFormat("yyMMddHHmm");
   private static final int MSECS_PER_MINUTE = 60*1000;
 
+  private static boolean createTrashRootEnable;
   private long emptierInterval;
   protected long trashConstraint;
 
@@ -94,6 +96,8 @@ public class TrashPolicyDefault extends TrashPolicy {
     this.emptierInterval = (long)(conf.getFloat(
         FS_TRASH_CHECKPOINT_INTERVAL_KEY, FS_TRASH_CHECKPOINT_INTERVAL_DEFAULT)
         * MSECS_PER_MINUTE);
+    this.createTrashRootEnable = conf.getBoolean(FS_TRASH_CREATE_ROOT_KEY,
+        FS_TRASH_CREATE_ROOT_DEFAULT);
     this.trashConstraint = conf.getLong(FS_TRASH_CONSTRAINT_KEY, FS_TRASH_CONSTRAINT_DEFAULT);
    }
 
@@ -106,6 +110,8 @@ public class TrashPolicyDefault extends TrashPolicy {
     this.emptierInterval = (long)(conf.getFloat(
         FS_TRASH_CHECKPOINT_INTERVAL_KEY, FS_TRASH_CHECKPOINT_INTERVAL_DEFAULT)
         * MSECS_PER_MINUTE);
+    this.createTrashRootEnable = conf.getBoolean(FS_TRASH_CREATE_ROOT_KEY,
+        FS_TRASH_CREATE_ROOT_DEFAULT);
     this.trashConstraint = conf.getLong(FS_TRASH_CONSTRAINT_KEY, FS_TRASH_CONSTRAINT_DEFAULT);
   }
 
@@ -149,15 +155,17 @@ public class TrashPolicyDefault extends TrashPolicy {
 
     // try twice, in case checkpoint between the mkdirs() & rename()
     for (int i = 0; i < 2; i++) {
-      try {
-        if (!fs.mkdirs(baseTrashPath, PERMISSION)) {      // create current
-          LOG.warn("Can't create(mkdir) trash directory: " + baseTrashPath);
-          return false;
+      if (createTrashRootEnable) {
+        try {
+          if (!fs.mkdirs(baseTrashPath, PERMISSION)) {      // create current
+            LOG.warn("Can't create(mkdir) trash directory: " + baseTrashPath);
+            return false;
+          }
+        } catch (IOException e) {
+          LOG.warn("Can't create trash directory: " + baseTrashPath, e);
+          cause = e;
+          break;
         }
-      } catch (IOException e) {
-        LOG.warn("Can't create trash directory: " + baseTrashPath, e);
-        cause = e;
-        break;
       }
       try {
         // if the target path in Trash already exists, then append with 
