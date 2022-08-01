@@ -177,7 +177,7 @@ public class LocalPersistentBasedGroupsMapping extends Configured
             LOG.debug("Empty group: " + line, start);
           } catch (IllegalLocalMappingException e) {
             metrics.mappingLineFailuresTotal.incr();
-            LOG.error("Unable to process mapping: " + line, start);
+            LOG.warn("Unable to process mapping: " + line, start);
           }
         }
       } finally {
@@ -293,7 +293,7 @@ public class LocalPersistentBasedGroupsMapping extends Configured
   @Override
   synchronized public void setConf(Configuration conf) {
     this.setConfWithoutServiceInit(conf);
-    if (mappingRefreshService == null) {
+    if (conf != null && mappingRefreshService == null) {
       initializeMappingRefreshService();
     }
   }
@@ -329,6 +329,7 @@ public class LocalPersistentBasedGroupsMapping extends Configured
     refreshTask = scheduledExecutor
         .scheduleWithFixedDelay(mappingRefreshService, refreshInterval,
             refreshInterval, TimeUnit.MILLISECONDS);
+    LOG.info("Initialized mapping loader with refreshInterval: " + refreshInterval + "ms");
   }
 
   @VisibleForTesting
