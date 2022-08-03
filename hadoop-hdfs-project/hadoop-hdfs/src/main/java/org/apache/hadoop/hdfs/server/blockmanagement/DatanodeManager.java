@@ -570,6 +570,8 @@ public class DatanodeManager {
       }
     }
 
+    NameNode.getNameNodeMetrics().incrCrossDCTraffic(clientDC, firstDnDC, true, fileLength);
+
     // for trafficInOrOut is referenced to DN, so set to true.
     appendInterDCReadToCallerContext(fileLength,
         clientDC, firstDnDC, true);

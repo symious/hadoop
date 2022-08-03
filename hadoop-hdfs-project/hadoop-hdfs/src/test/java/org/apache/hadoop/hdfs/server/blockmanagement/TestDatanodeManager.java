@@ -57,7 +57,10 @@ import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.security.token.block.ExportedBlockKeys;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.hdfs.server.common.StorageInfo;
+import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
+import org.apache.hadoop.metrics2.lib.MutableStat;
+import org.apache.hadoop.metrics2.util.SampleStat;
 import org.apache.hadoop.net.DNSToSwitchMapping;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.net.StaticMapping;
@@ -340,6 +343,20 @@ public class TestDatanodeManager {
     // client in /dc2
     StaticMapping.addNodeToRack(clientMachine, "/dc2/rack1");
     Assert.assertTrue(dm.checkInterDCRead(clientMachine, blocks, 1024));
+
+    MutableStat overallMutableStat = NameNode.getNameNodeMetrics().getCrossDCTraffic("Overall");
+    assertNotNull(overallMutableStat);
+    SampleStat overallSampleStat = overallMutableStat.lastStat();
+    assertNotNull(overallSampleStat);
+    assertEquals(1, overallSampleStat.numSamples());
+    assertEquals(1024, overallSampleStat.total(), 0.1);
+
+    MutableStat detailDCMutableStat = NameNode.getNameNodeMetrics().getCrossDCTraffic("Dc0_dc2");
+    assertNotNull(detailDCMutableStat);
+    SampleStat detailDCSampleStat = detailDCMutableStat.lastStat();
+    assertNotNull(detailDCSampleStat);
+    assertEquals(1, detailDCSampleStat.numSamples());
+    assertEquals(1024, detailDCSampleStat.total(), 0.1);
 
     cluster.shutdown();
   }

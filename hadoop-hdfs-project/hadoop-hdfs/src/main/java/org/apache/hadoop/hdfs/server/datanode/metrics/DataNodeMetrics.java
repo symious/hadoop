@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.datanode.metrics;
 
 import static org.apache.hadoop.metrics2.impl.MsInfo.SessionId;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
@@ -33,13 +34,13 @@ import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableQuantiles;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
+import org.apache.hadoop.metrics2.lib.MutableStat;
 import org.apache.hadoop.metrics2.source.JvmMetrics;
 import org.apache.hadoop.net.DNSToSwitchMapping;
-import org.apache.hadoop.net.ScriptBasedMapping;
-import org.apache.hadoop.util.ReflectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -166,6 +167,9 @@ public class DataNodeMetrics {
   @Metric("Count of blocks at deleted status in pending IBR")
   private MutableGaugeLong blocksDeletedInPendingIBR;
 
+  private final ConcurrentHashMap<String, MutableStat> dnCrossDCTraffic = new ConcurrentHashMap<>();
+  private final MutableStat overallDNCrossDCTraffic;
+
   final MetricsRegistry registry = new MetricsRegistry("datanode");
   final String name;
   JvmMetrics jvmMetrics = null;
@@ -176,6 +180,8 @@ public class DataNodeMetrics {
     this.name = name;
     this.jvmMetrics = jvmMetrics;    
     registry.tag(SessionId, sessionId);
+    this.overallDNCrossDCTraffic = registry.newStat("OverallCrossDCTraffic",
+        "OverallCrossDCTraffic", "Ops", "Size");
     
     final int len = intervals.length;
     packetAckRoundTripTimeNanosQuantiles = new MutableQuantiles[len];
@@ -454,8 +460,9 @@ public class DataNodeMetrics {
       }
 
       // locality: datacenter-local
-      if (DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation).equals(
-          DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation))) {
+      String localDC = DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation);
+      String remoteDC = DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation);
+      if (localDC.equals(remoteDC)) {
         readsFromLocalDataCenter.incr();
         localDataCenterBytesRead.incr(size);
         return;
@@ -464,6 +471,8 @@ public class DataNodeMetrics {
       // locality: datacenter-off
       readsFromRemoteDataCenter.incr();
       remoteDataCenterBytesRead.incr(size);
+
+      incrCrossDCTraffic(remoteDC, localDC, true, size);
     }
   }
   
@@ -574,5 +583,40 @@ public class DataNodeMetrics {
     if (dnsToSwitchMapping != null) {
       dnsToSwitchMapping.reloadCachedMappings();
     }
+  }
+
+  private String formatDC(String dc) {
+    if (dc.startsWith("/")) {
+      return dc.substring(1);
+    } else {
+      return dc;
+    }
+  }
+
+  private String getTrafficKey(String clientDC, String dnDC, boolean isTrafficOut) {
+    clientDC = formatDC(clientDC);
+    dnDC = formatDC(dnDC);
+    if (isTrafficOut) {
+      return dnDC + "_" + clientDC;
+    } else {
+      return clientDC + "_"+ dnDC;
+    }
+  }
+
+  private void incrCrossDCTraffic(String remoteDC, String localDC, boolean isTrafficOut, long size) {
+    String metricKey = getTrafficKey(remoteDC, localDC, isTrafficOut);
+    MutableStat metricValue = dnCrossDCTraffic.get(metricKey);
+    if (metricValue == null) {
+      synchronized (this) {
+        metricValue = dnCrossDCTraffic.get(metricKey);
+        if (metricValue == null) {
+          String metricName = StringUtils.capitalize(metricKey + "DNCrossDCTraffic");
+          metricValue = registry.newStat(metricName, metricName, "Ops", "Size", false);
+          dnCrossDCTraffic.put(metricKey, metricValue);
+        }
+      }
+    }
+    metricValue.add(size);
+    overallDNCrossDCTraffic.add(size);
   }
 }
