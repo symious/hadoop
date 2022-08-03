@@ -78,6 +78,7 @@ import org.apache.hadoop.hdfs.server.federation.MockResolver;
 import org.apache.hadoop.hdfs.server.federation.RouterConfigBuilder;
 import org.apache.hadoop.hdfs.server.federation.metrics.FederationRPCMetrics;
 import org.apache.hadoop.hdfs.server.federation.metrics.NamenodeBeanMetrics;
+import org.apache.hadoop.hdfs.server.federation.metrics.RBFMetrics;
 import org.apache.hadoop.hdfs.server.federation.resolver.FileSubclusterResolver;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations;
@@ -90,6 +91,7 @@ import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.Service.STATE;
 import org.apache.hadoop.test.GenericTestUtils;
+import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -1205,5 +1207,35 @@ public class TestRouterRpc {
     assertTrue(auditlog.getOutput()
         .contains("callerContext=clientContext,clientIp:"));
     assertTrue(verifyFileExists(routerFS, dirPath));
+  }
+
+  @Test
+  public void testDisableNodeUsageInRBFMetrics() throws JSONException {
+    RBFMetrics rbfMetrics = router.getRouter().getMetrics();
+    FederationRPCMetrics federationRPCMetrics = router.getRouter().getRpcServer().getRPCMetrics();
+
+    long proxyOpBefore = federationRPCMetrics.getProxyOps();
+    String nodeUsageEnable = router.getRouter().getMetrics().getNodeUsage();
+    assertNotNull(nodeUsageEnable);
+    long proxyOpAfterWithEnable = federationRPCMetrics.getProxyOps();
+    assertEquals(proxyOpBefore + 2, proxyOpAfterWithEnable);
+
+    rbfMetrics.setIsGetDNUsageEnabled(false);
+    String nodeUsageDisable = rbfMetrics.getNodeUsage();
+    assertNotNull(nodeUsageDisable);
+    long proxyOpAfterWithDisable = federationRPCMetrics.getProxyOps();
+    assertEquals(proxyOpAfterWithEnable, proxyOpAfterWithDisable);
+    JSONObject jsonObject = new JSONObject(nodeUsageDisable);
+    JSONObject json = jsonObject.getJSONObject("nodeUsage");
+    assertEquals("0.00%", json.get("min"));
+    assertEquals("0.00%", json.get("median"));
+    assertEquals("0.00%", json.get("max"));
+    assertEquals("0.00%", json.get("stdDev"));
+
+    rbfMetrics.setIsGetDNUsageEnabled(true);
+    String nodeUsageWithReEnable = rbfMetrics.getNodeUsage();
+    assertNotNull(nodeUsageWithReEnable);
+    long proxyOpAfterWithReEnable = federationRPCMetrics.getProxyOps();
+    assertEquals(proxyOpAfterWithDisable + 2, proxyOpAfterWithReEnable);
   }
 }
