@@ -32,6 +32,7 @@ import java.util.TreeMap;
 import java.util.concurrent.Callable;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -575,6 +576,33 @@ public class TestRouterMountTable {
     } finally {
       conf.set(RBFConfigKeys.DFS_ROUTER_MONITOR_NAMENODE, oldNns);
       admin.refreshNameservicesAndNamenodes(conf);
+    }
+  }
+
+  @Test
+  public void testNestedCount() throws Exception {
+    try {
+      // Add mount table entry
+      MountTable addEntry = MountTable.newInstance("/projects/2020",
+          Collections.singletonMap("ns0", "/projects/2020"));
+      assertTrue(addMountTable(addEntry));
+      addEntry = MountTable.newInstance("/projects/2021",
+          Collections.singletonMap("ns0", "/projects/2021"));
+      assertTrue(addMountTable(addEntry));
+
+      // Create test dir in NN
+      routerFs.mkdirs(new Path("/projects"));
+      routerFs.mkdirs(new Path("/projects/2020"));
+      routerFs.mkdirs(new Path("/projects/2021"));
+
+      routerFs.create(new Path("/projects/2021/a")).close();
+      routerFs.create(new Path("/projects/2021/b")).close();
+
+      ContentSummary summary =
+          routerFs.getContentSummary(new Path("/projects"));
+      assertEquals(2, summary.getFileCount());
+    } finally {
+      routerFs.delete(new Path("/projects"), true);
     }
   }
 }

@@ -99,6 +99,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
@@ -106,6 +107,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 /**
  * Module that implements all the RPC calls in {@link ClientProtocol} in the
@@ -1331,6 +1333,11 @@ public class RouterClientProtocol implements ClientProtocol {
 
   @Override
   public ContentSummary getContentSummary(String path) throws IOException {
+    return getContentSummary(path, new HashMap<String, Set<String>>());
+  }
+
+  public ContentSummary getContentSummary(String path, Map<String, Set<String>> excludeNamespace) throws IOException {
+
     rpcServer.checkOperation(OperationCategory.READ);
 
     // Get the summaries from regular files
@@ -1339,11 +1346,38 @@ public class RouterClientProtocol implements ClientProtocol {
     try {
       final List<RemoteLocation> locations =
           rpcServer.getLocationsForPath(path, false);
+
+      Set<String> curExcludeNamespace = new HashSet<>();
+      String destPath = subclusterResolver.getDestinationForPath(path).getDefaultLocation().getDest();
+      List<String> parentExistLocations = new ArrayList<>();
+      for (String namespace : excludeNamespace.keySet()) {
+        if (destPath.startsWith(namespace + "/")) {
+          parentExistLocations.add(namespace);
+        }
+      }
+      boolean parentAlreadyComputed = parentExistLocations.size() > 0;
+      List<RemoteLocation> filteredLocations = new ArrayList<>();
+      for (RemoteLocation location: locations) {
+        if (excludeNamespace.isEmpty() || !parentAlreadyComputed
+            || !isParentPathNamespaceComputed(location, excludeNamespace,
+            parentExistLocations)) {
+          filteredLocations.add(location);
+        }
+      }
+      for (RemoteLocation location: filteredLocations) {
+        curExcludeNamespace.add(location.getNameserviceId());
+      }
+      if (excludeNamespace.get(destPath) != null) {
+        excludeNamespace.get(destPath).addAll(curExcludeNamespace);
+      } else {
+        excludeNamespace.put(destPath, curExcludeNamespace);
+      }
+
       RemoteMethod method = new RemoteMethod("getContentSummary",
           new Class<?>[] {String.class}, new RemoteParam());
       Map<RemoteLocation, ContentSummary> results =
           rpcClient.invokeConcurrent(
-              locations, method, false, false, ContentSummary.class);
+              filteredLocations, method, false, false, ContentSummary.class);
       summaries.addAll(results.values());
     } catch (FileNotFoundException e) {
       notFoundException = e;
@@ -1355,7 +1389,7 @@ public class RouterClientProtocol implements ClientProtocol {
       for (String child : children) {
         Path childPath = new Path(path, child);
         try {
-          ContentSummary mountSummary = getContentSummary(childPath.toString());
+          ContentSummary mountSummary = getContentSummary(childPath.toString(), excludeNamespace);
           if (mountSummary != null) {
             summaries.add(mountSummary);
           }
@@ -1375,6 +1409,19 @@ public class RouterClientProtocol implements ClientProtocol {
     ContentSummary ret = aggregateContentSummary(summaries);
     logAuditEvent(true, "getContentSummary", INVOKE_TYPE_CONCURRENT, null);
     return ret;
+  }
+
+  private boolean isParentPathNamespaceComputed(RemoteLocation location,
+      Map<String, Set<String>> excludeNamespace, List<String> parentExistLocations) {
+    boolean isComputed = false;
+    String curNsId = location.getNameserviceId();
+    for (String loc : parentExistLocations) {
+      Set<String> parentPathNamespaces = excludeNamespace.get(loc);
+      if (parentPathNamespaces.contains(curNsId)) {
+        return true;
+      }
+    }
+    return isComputed;
   }
 
   @Override
