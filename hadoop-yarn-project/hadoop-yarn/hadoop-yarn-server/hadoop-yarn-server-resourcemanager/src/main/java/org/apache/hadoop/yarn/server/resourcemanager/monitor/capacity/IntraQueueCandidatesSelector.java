@@ -181,6 +181,9 @@ public class IntraQueueCandidatesSelector extends PreemptionCandidatesSelector {
         leafQueue.getReadLock().lock();
         try {
           for (FiCaSchedulerApp app : apps) {
+            if (skipHighestAppPreemption(app)) {
+              continue;
+            }
             preemptFromLeastStarvedApp(leafQueue, app, selectedCandidates,
                 curCandidates, clusterResource, totalPreemptedResourceAllowed,
                 resToObtainByPartition, rollingResourceUsagePerUser);

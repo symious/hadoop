@@ -18,12 +18,17 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.monitor.capacity;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerApp;
 import org.apache.hadoop.yarn.util.resource.ResourceCalculator;
 
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.Comparator;
@@ -35,6 +40,8 @@ public abstract class PreemptionCandidatesSelector {
   protected CapacitySchedulerPreemptionContext preemptionContext;
   protected ResourceCalculator rc;
   private long maximumKillWaitTime = -1;
+
+  private static final Logger LOG = LoggerFactory.getLogger(PreemptionCandidatesSelector.class);
 
   PreemptionCandidatesSelector(
       CapacitySchedulerPreemptionContext preemptionContext) {
@@ -87,5 +94,20 @@ public abstract class PreemptionCandidatesSelector {
 
   public void setMaximumKillWaitTime(long maximumKillWaitTime) {
     this.maximumKillWaitTime = maximumKillWaitTime;
+  }
+
+  //Avoid preempting the highest app resource
+  public boolean skipHighestAppPreemption(FiCaSchedulerApp fiCaSchedulerApp) {
+    int priority = fiCaSchedulerApp.getPriority().getPriority();
+    Configuration conf = preemptionContext.getRMContext().getYarnConfiguration();
+    int highestPriority = conf.getInt(YarnConfiguration.RM_APPLICATION_LEVEL_CRITICAL,
+        YarnConfiguration.RM_APPLICATION_LEVEL_CRITICAL_DEFAULT);
+    if (priority >= highestPriority) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Skip preemption for App:" + fiCaSchedulerApp.getId() + ", Priority is:" + priority);
+      }
+      return true;
+    }
+    return false;
   }
 }
