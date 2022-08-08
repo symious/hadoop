@@ -859,6 +859,8 @@ public class RouterClientProtocol implements ClientProtocol {
    */
   private List<FederationNamespaceInfo> getRenewLeaseNSs(List<String> namespaces)
       throws IOException {
+    LOG.debug("RenewLease parameter namespaces is {} from client {}:{} with context {}.",
+        namespaces, Server.getRemoteAddress(), Server.getRemotePort(), CallerContext.getCurrent());
     if (namespaces == null || namespaces.isEmpty()) {
       return new ArrayList<>(namenodeResolver.getNamespaces());
     }
