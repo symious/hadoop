@@ -46,6 +46,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.regex.Matcher;
@@ -612,17 +613,23 @@ class CGroupsHandlerImpl implements CGroupsHandler {
     String cgPath = this.cGroupsMountConfig.getMountPath() + "/cpu/" + this.cGroupPrefix;
     // find /sys/fs/cgroup/cpu/yarn/ -type d |grep container|xargs -r rmdir
     String command = "find " + cgPath + " -type d | grep container | xargs -r rmdir ";
+    Process p = null;
     try {
       String[] commands = {"/bin/sh", "-c", command};
       if (Shell.LINUX) {
         if (LOG.isDebugEnabled()) {
           LOG.debug("command is: " + commands);
         }
-        Runtime.getRuntime().exec(commands);
+        p = Runtime.getRuntime().exec(commands);
+        p.waitFor(5000, TimeUnit.MILLISECONDS);
       }
     } catch (Exception e) {
       if (LOG.isDebugEnabled()) {
         LOG.debug("clean leak containers, ", e);
+      }
+    } finally {
+      if (null != p) {
+        p.destroy();
       }
     }
   }
