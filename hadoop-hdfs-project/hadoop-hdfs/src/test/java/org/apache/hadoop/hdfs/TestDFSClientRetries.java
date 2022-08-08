@@ -391,7 +391,7 @@ public class TestDFSClientRetries {
       cluster.waitActive();
       NamenodeProtocols spyNN = spy(cluster.getNameNodeRpc());
       Mockito.doThrow(new SocketTimeoutException()).when(spyNN).renewLease(
-          Mockito.anyString());
+          Mockito.anyString(), any());
       DFSClient client = new DFSClient(null, spyNN, conf, null);
       // Get hold of the lease renewer instance used by the client
       LeaseRenewer leaseRenewer = client.getLeaseRenewer();
@@ -399,7 +399,8 @@ public class TestDFSClientRetries {
       OutputStream out1 = client.create(file1, false);
 
       Mockito.verify(spyNN, timeout(10000).times(1)).renewLease(
-          Mockito.anyString());
+          Mockito.anyString(), any());
+      verifyEmptyLease(leaseRenewer);
       verifyEmptyLease(leaseRenewer);
       try {
         out1.write(new byte[256]);
@@ -412,12 +413,12 @@ public class TestDFSClientRetries {
       // Verify DFSClient can do write operation after renewLease no longer
       // throws SocketTimeoutException.
       Mockito.doNothing().when(spyNN).renewLease(
-          Mockito.anyString());
+          Mockito.anyString(), any());
       leaseRenewer = client.getLeaseRenewer();
       leaseRenewer.setRenewalTime(100);
       OutputStream out2 = client.create(file2, false);
       Mockito.verify(spyNN, timeout(10000).times(2)).renewLease(
-          Mockito.anyString());
+          Mockito.anyString(), any());
       out2.write(new byte[256]);
       out2.close();
       verifyEmptyLease(leaseRenewer);
@@ -1290,7 +1291,7 @@ public class TestDFSClientRetries {
           try {
             //1. trigger get LeaseRenewer lock
             Mockito.doThrow(new SocketTimeoutException()).when(spyNN)
-                .renewLease(Mockito.anyString());
+                .renewLease(Mockito.anyString(), any());
           } catch (IOException e) {
             e.printStackTrace();
           }

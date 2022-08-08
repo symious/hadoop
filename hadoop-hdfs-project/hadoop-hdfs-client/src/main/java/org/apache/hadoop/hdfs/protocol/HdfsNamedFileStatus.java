@@ -43,6 +43,7 @@ public class HdfsNamedFileStatus extends FileStatus implements HdfsFileStatus {
   // Used by dir, not including dot and dotdot. Always zero for a regular file.
   private final int childrenNum;
   private final byte storagePolicy;
+  private String namespace = null;
 
   /**
    * Constructor.
@@ -177,4 +178,13 @@ public class HdfsNamedFileStatus extends FileStatus implements HdfsFileStatus {
     return super.hashCode();
   }
 
+  @Override
+  public String getNamespace() {
+    return namespace;
+  }
+
+  @Override
+  public void setNamespace(String namespace) {
+    this.namespace = namespace;
+  }
 }
