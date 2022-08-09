@@ -22,6 +22,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.NET_TOPOLOGY_NO
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_CLIENT_CONNECT_MAX_RETRIES_ON_SASL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_CLIENT_CONNECT_MAX_RETRIES_ON_SASL_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_SCANNER_VOLUME_JOIN_TIMEOUT_MSEC_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_DATA_TRANSFER_PROTECTION_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCKREPORT_INITIAL_DELAY_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_ADDRESS_KEY;
@@ -966,6 +967,8 @@ public class MiniDFSCluster implements AutoCloseable {
         DFS_NAMENODE_LIFELINE_RPC_ADDRESS_KEY);
     copyKey(srcConf, destConf, nameserviceId, nnId,
         DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY);
+    copyKey(srcConf, destConf, nameserviceId, nnId,
+        DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY);
   }
 
   private static void copyKey(Configuration srcConf, Configuration destConf,
@@ -1359,6 +1362,11 @@ public class MiniDFSCluster implements AutoCloseable {
       hdfsConf.set(DFSUtil.addKeySuffixes(DFS_NAMENODE_LIFELINE_RPC_ADDRESS_KEY,
           nameserviceId, nnId),
           hdfsConf.get(DFS_NAMENODE_LIFELINE_RPC_ADDRESS_KEY));
+    }
+    if (hdfsConf.get(DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY) != null) {
+      hdfsConf.set(DFSUtil.addKeySuffixes(DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY,
+              nameserviceId, nnId),
+          hdfsConf.get(DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY));
     }
     copyKeys(hdfsConf, conf, nameserviceId, nnId);
     DFSUtil.setGenericConf(hdfsConf, nameserviceId, nnId,

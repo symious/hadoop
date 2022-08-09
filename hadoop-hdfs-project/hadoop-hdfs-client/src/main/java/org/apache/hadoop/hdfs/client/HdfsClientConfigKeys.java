@@ -73,6 +73,8 @@ public interface HdfsClientConfigKeys {
   String DFS_NAMENODE_RPC_ADDRESS_KEY = "dfs.namenode.rpc-address";
   int     DFS_NAMENODE_HTTP_PORT_DEFAULT = 50070;
 
+  String DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY = "dfs.namenode.msync.rpc-address";
+
   String DFS_NAMENODE_RPC_ADDRESS_AUXILIARY_SUFFIX = "auxiliary-ports";
   String DFS_NAMENODE_RPC_ADDRESS_AUXILIARY_KEY = DFS_NAMENODE_RPC_ADDRESS_KEY
       + "." + DFS_NAMENODE_RPC_ADDRESS_AUXILIARY_SUFFIX;

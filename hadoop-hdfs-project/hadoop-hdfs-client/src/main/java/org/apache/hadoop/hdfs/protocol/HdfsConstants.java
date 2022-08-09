@@ -88,6 +88,12 @@ public class HdfsConstants {
   public static final String CLIENT_NAMENODE_PROTOCOL_NAME =
       "org.apache.hadoop.hdfs.protocol.ClientProtocol";
 
+  /**
+   * HDFS Msync Protocol Names:
+   */
+  public static final String CLIENT_NAMENODE_MSYNC_PROTOCOL_NAME =
+      "org.apache.hadoop.hdfs.protocol.ClientMsyncProtocol";
+
   // Timeouts for communicating with DataNode for streaming writes/reads
   public static final int READ_TIMEOUT = 60 * 1000;
   public static final int READ_TIMEOUT_EXTENSION = 5 * 1000;
