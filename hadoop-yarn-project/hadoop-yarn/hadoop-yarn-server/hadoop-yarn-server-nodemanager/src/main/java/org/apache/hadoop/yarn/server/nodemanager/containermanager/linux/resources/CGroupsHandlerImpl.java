@@ -612,13 +612,13 @@ class CGroupsHandlerImpl implements CGroupsHandler {
   public void cleanLeakContainers(Set<String> containerIDs) throws IOException {
     String cgPath = this.cGroupsMountConfig.getMountPath() + "/cpu/" + this.cGroupPrefix;
     // find /sys/fs/cgroup/cpu/yarn/ -type d |grep container|xargs -r rmdir
-    String command = "find " + cgPath + " -type d | grep container | xargs -r rmdir ";
+    String command = "find " + cgPath + " -mmin +1 -type d | grep container | xargs -r rmdir ";
     Process p = null;
     try {
       String[] commands = {"/bin/sh", "-c", command};
       if (Shell.LINUX) {
         if (LOG.isDebugEnabled()) {
-          LOG.debug("command is: " + commands);
+          LOG.debug("command is: " + Arrays.toString(commands));
         }
         p = Runtime.getRuntime().exec(commands);
         p.waitFor(5000, TimeUnit.MILLISECONDS);
