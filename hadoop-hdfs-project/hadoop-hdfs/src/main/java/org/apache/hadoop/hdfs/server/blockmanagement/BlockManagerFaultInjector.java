@@ -49,4 +49,9 @@ public class BlockManagerFaultInjector {
   @VisibleForTesting
   public void removeBlockReportLease(DatanodeDescriptor node, long leaseId) {
   }
+
+  @VisibleForTesting
+  public void mockJNStreams() throws IOException {
+
+  }
 }

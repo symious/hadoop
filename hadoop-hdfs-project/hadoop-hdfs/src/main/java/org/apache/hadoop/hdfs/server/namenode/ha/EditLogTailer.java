@@ -322,7 +322,7 @@ public class EditLogTailer {
   }
 
   @VisibleForTesting
-  FSEditLog getEditLog() {
+  public FSEditLog getEditLog() {
     return editLog;
   }
 
@@ -347,7 +347,7 @@ public class EditLogTailer {
           try {
             // It is already under the name system lock and the checkpointer
             // thread is already stopped. No need to acquire any other lock.
-            editsTailed = doTailEdits();
+            editsTailed = doTailEdits(false);
           } catch (InterruptedException e) {
             throw new IOException(e);
           }
