@@ -737,4 +737,9 @@ class BlockReaderLocalLegacy implements BlockReader {
   public int getNetworkDistance() {
     return 0;
   }
+
+  @Override
+  public boolean getInterDCRead() {
+    return false;
+  }
 }

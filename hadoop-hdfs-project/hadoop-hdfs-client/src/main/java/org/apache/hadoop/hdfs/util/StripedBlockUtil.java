@@ -88,12 +88,14 @@ public class StripedBlockUtil {
     private final int bytesRead;
     private final boolean isShortCircuit;
     private final int networkDistance;
+    private final boolean interDCRead;
 
     public BlockReadStats(int numBytesRead, boolean shortCircuit,
-                          int distance) {
+                          int distance, boolean interDCRead) {
       bytesRead = numBytesRead;
       isShortCircuit = shortCircuit;
       networkDistance = distance;
+      this.interDCRead = interDCRead;
     }
 
     public int getBytesRead() {
@@ -106,6 +108,10 @@ public class StripedBlockUtil {
 
     public int getNetworkDistance() {
       return networkDistance;
+    }
+
+    public boolean isInterDCRead() {
+      return interDCRead;
     }
 
     @Override

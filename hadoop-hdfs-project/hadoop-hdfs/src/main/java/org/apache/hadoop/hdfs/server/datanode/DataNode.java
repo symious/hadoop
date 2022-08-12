@@ -3860,4 +3860,20 @@ public class DataNode extends ReconfigurableBase
   boolean isSlownode() {
     return blockPoolManager.isSlownode();
   }
+
+  public boolean isInterDcRead(String localHost, String remoteHost) {
+    if (remoteHost.equals(LOCAL_HOST) || localHost.equals(remoteHost)) {
+      return false;
+    }
+    List<String> hosts = new ArrayList<>();
+    hosts.add(localHost);
+    hosts.add(remoteHost);
+    List<String> topologies = this.switchMapping.resolve(hosts);
+
+    String localDC = DFSNetworkTopologyWithDataCenter.getDataCenter(topologies.get(0));
+    String remoteDC = DFSNetworkTopologyWithDataCenter.getDataCenter(topologies.get(1));
+
+    return !localDC.equals(remoteDC);
+  }
+
 }

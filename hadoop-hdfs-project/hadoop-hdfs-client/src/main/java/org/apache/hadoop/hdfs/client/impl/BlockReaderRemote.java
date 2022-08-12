@@ -107,6 +107,8 @@ public class BlockReaderRemote extends FSInputChecker implements BlockReader {
 
   private final int networkDistance;
 
+  private boolean interDCRead = false;
+
   /* FSInputChecker interface */
 
   /* same interface as inputStream java.io.InputStream#read()
@@ -341,7 +343,7 @@ public class BlockReaderRemote extends FSInputChecker implements BlockReader {
       DataInputStream in, DataChecksum checksum, boolean verifyChecksum,
       long startOffset, long firstChunkOffset, long bytesToRead, Peer peer,
       DatanodeID datanodeID, PeerCache peerCache, Tracer tracer,
-      int networkDistance) {
+      int networkDistance, boolean interDCRead) {
     // Path is used only for printing block and file information in debug
     super(new Path("/" + Block.BLOCK_FILE_PREFIX + blockId +
             ":" + bpid + ":of:"+ file)/*too non path-like?*/,
@@ -372,6 +374,7 @@ public class BlockReaderRemote extends FSInputChecker implements BlockReader {
     this.peerCache = peerCache;
     this.tracer = tracer;
     this.networkDistance = networkDistance;
+    this.interDCRead = interDCRead;
   }
 
   /**
@@ -432,8 +435,9 @@ public class BlockReaderRemote extends FSInputChecker implements BlockReader {
     }
 
     return new BlockReaderRemote(file, block.getBlockPoolId(), block.getBlockId(),
-        in, checksum, verifyChecksum, startOffset, firstChunkOffset, len,
-        peer, datanodeID, peerCache, tracer, networkDistance);
+        in, checksum, verifyChecksum, startOffset, firstChunkOffset, len, peer,
+        datanodeID, peerCache, tracer, networkDistance,
+        status.getIsInterDCRead());
   }
 
   @Override
@@ -503,5 +507,10 @@ public class BlockReaderRemote extends FSInputChecker implements BlockReader {
   @Override
   public int getNetworkDistance() {
     return networkDistance;
+  }
+
+  @Override
+  public boolean getInterDCRead() {
+    return interDCRead;
   }
 }

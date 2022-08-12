@@ -314,7 +314,7 @@ abstract class StripeReader {
           ret += bytesReead;
         }
         return new BlockReadStats(ret, reader.isShortCircuit(),
-            reader.getNetworkDistance());
+            reader.getNetworkDistance(), reader.getInterDCRead());
       }
     };
   }

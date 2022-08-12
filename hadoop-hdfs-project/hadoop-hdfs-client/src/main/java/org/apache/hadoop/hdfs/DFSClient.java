@@ -2919,10 +2919,14 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     }
   }
 
-  void updateFileSystemReadStats(int distance, int nRead) {
+  void updateFileSystemReadStats(int distance, int nRead, boolean interDCRead) {
     if (stats != null) {
       stats.incrementBytesRead(nRead);
       stats.incrementBytesReadByDistance(distance, nRead);
+      if (interDCRead) {
+        stats.incrementInterDcReads();
+        stats.incrementInterDcBytesRead(nRead);
+      }
     }
   }
 

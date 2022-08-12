@@ -130,6 +130,8 @@ public class BlockReaderRemote2 implements BlockReader {
 
   private final int networkDistance;
 
+  private boolean interDCRead = false;
+
   private final HdfsCrcComposer crcComposer;
 
   @VisibleForTesting
@@ -333,7 +335,7 @@ public class BlockReaderRemote2 implements BlockReader {
       DataChecksum checksum, boolean verifyChecksum,
       long startOffset, long firstChunkOffset, long bytesToRead, Peer peer,
       DatanodeID datanodeID, PeerCache peerCache, Tracer tracer,
-      int networkDistance, HdfsCrcComposer crcComposer) {
+      int networkDistance, HdfsCrcComposer crcComposer, boolean interDCRead) {
     // Path is used only for printing block and file information in debug
     this.peer = peer;
     this.datanodeID = datanodeID;
@@ -355,6 +357,7 @@ public class BlockReaderRemote2 implements BlockReader {
     this.tracer = tracer;
     this.networkDistance = networkDistance;
     this.crcComposer = crcComposer;
+    this.interDCRead = interDCRead;
   }
 
 
@@ -502,7 +505,8 @@ public class BlockReaderRemote2 implements BlockReader {
 
     return new BlockReaderRemote2(file, block.getBlockId(), checksum,
         verifyChecksum, startOffset, firstChunkOffset, len, peer, datanodeID,
-        peerCache, tracer, networkDistance, hdfsCrcComposer);
+        peerCache, tracer, networkDistance, hdfsCrcComposer,
+        status.getIsInterDCRead());
   }
 
   static void checkSuccess(
@@ -538,5 +542,10 @@ public class BlockReaderRemote2 implements BlockReader {
   @Override
   public int getNetworkDistance() {
     return networkDistance;
+  }
+
+  @Override
+  public boolean getInterDCRead() {
+    return interDCRead;
   }
 }

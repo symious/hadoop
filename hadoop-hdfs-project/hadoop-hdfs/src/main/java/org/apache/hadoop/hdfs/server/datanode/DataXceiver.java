@@ -621,7 +621,10 @@ class DataXceiver extends Receiver implements Runnable {
       }
       
       // send op status
-      writeSuccessWithChecksumInfo(blockSender, new DataOutputStream(getOutputStream()));
+      writeSuccessWithChecksumInfo(blockSender,
+          new DataOutputStream(getOutputStream()),
+          datanode.isInterDcRead(peer.getLocalHostAddress(),
+              peer.getRemoteHostAddress()));
 
       long beginRead = Time.monotonicNow();
       read = blockSender.sendBlock(out, baseStream, null); // send data
@@ -1133,7 +1136,8 @@ class DataXceiver extends Receiver implements Runnable {
       OutputStream baseStream = getOutputStream();
 
       // send status first
-      writeSuccessWithChecksumInfo(blockSender, reply);
+      // set interdc read = false for copyBlock
+      writeSuccessWithChecksumInfo(blockSender, reply, false);
 
       long beginRead = Time.monotonicNow();
       // send block content to the target
@@ -1370,17 +1374,21 @@ class DataXceiver extends Receiver implements Runnable {
   }
   
   private void writeSuccessWithChecksumInfo(BlockSender blockSender,
-      DataOutputStream out) throws IOException {
+      DataOutputStream out, boolean interDCRead) throws IOException {
 
     ReadOpChecksumInfoProto ckInfo = ReadOpChecksumInfoProto.newBuilder()
       .setChecksum(DataTransferProtoUtil.toProto(blockSender.getChecksum()))
       .setChunkOffset(blockSender.getOffset())
       .build();
       
-    BlockOpResponseProto response = BlockOpResponseProto.newBuilder()
+    BlockOpResponseProto.Builder builder = BlockOpResponseProto.newBuilder()
       .setStatus(SUCCESS)
-      .setReadOpChecksumInfo(ckInfo)
-      .build();
+      .setReadOpChecksumInfo(ckInfo);
+    if (interDCRead) {
+      builder.setIsInterDCRead(true);
+    }
+
+    BlockOpResponseProto response = builder.build();
     response.writeDelimitedTo(out);
     out.flush();
   }

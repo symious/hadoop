@@ -27,4 +27,6 @@ public enum FileSystemCounter {
   READ_OPS,
   LARGE_READ_OPS,
   WRITE_OPS,
+  INTERDC_READ_OPS,
+  INTERDC_BYTES_READ;
 }

@@ -125,4 +125,9 @@ public final class ExternalBlockReader implements BlockReader {
   public int getNetworkDistance() {
     return accessor.getNetworkDistance();
   }
+
+  @Override
+  public boolean getInterDCRead() {
+    return false;
+  }
 }

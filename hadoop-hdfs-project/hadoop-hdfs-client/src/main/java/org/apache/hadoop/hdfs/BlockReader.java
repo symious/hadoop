@@ -98,4 +98,9 @@ public interface BlockReader extends ByteBufferReadable {
    * Return the network distance between local machine and the remote machine.
    */
    int getNetworkDistance();
+
+  /**
+   * Return true if the read goes across datacenters, else false.
+   */
+   boolean getInterDCRead();
 }
