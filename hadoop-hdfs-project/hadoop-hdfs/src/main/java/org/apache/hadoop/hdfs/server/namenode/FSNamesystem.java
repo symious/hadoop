@@ -100,6 +100,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import static org.apache.hadoop.hdfs.server.namenode.FSDirStatAndListingOp.*;
 import static org.apache.hadoop.ha.HAServiceProtocol.HAServiceState.ACTIVE;
 import static org.apache.hadoop.ha.HAServiceProtocol.HAServiceState.OBSERVER;
+
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManagerFaultInjector;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAState;
@@ -1435,6 +1437,26 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   void startStandbyServices(final Configuration conf, HAState haState)
       throws IOException {
     boolean isObserver = haState == NameNode.OBSERVER_STATE;
+
+    if (isObserver) {
+      long maximumStackedRequest = conf.getLong(
+          CommonConfigurationKeys.IPC_CONNECTION_MAXIMUM_STACKED_CALL_OBSERVER,
+          CommonConfigurationKeys.IPC_CONNECTION_MAXIMUM_STACKED_CALL_DEFAULT);
+      if (maximumStackedRequest >= 0) {
+        conf.setLong(CommonConfigurationKeys.IPC_CONNECTION_MAXIMUM_STACKED_CALL,
+            maximumStackedRequest);
+      }
+    } else {
+      // Get the value from the conf file and try to reset the value in memory.
+      Configuration tmpConf = new Configuration();
+      long maximumStackedRequest = tmpConf.getLong(
+          CommonConfigurationKeys.IPC_CONNECTION_MAXIMUM_STACKED_CALL,
+          CommonConfigurationKeys.IPC_CONNECTION_MAXIMUM_STACKED_CALL_DEFAULT);
+      if (maximumStackedRequest >= 0) {
+        conf.setLong(CommonConfigurationKeys.IPC_CONNECTION_MAXIMUM_STACKED_CALL,
+            maximumStackedRequest);
+      }
+    }
 
     LOG.info("Starting services required for " +
         (isObserver ? "observer" : "standby") + " state");
