@@ -56,7 +56,7 @@ public class PreemptionManager {
       }
 
       if (current.getChildQueues() != null) {
-        for (CSQueue child : current.getChildQueues()) {
+        for (CSQueue child : current.getChildQueuesByTryLock()) {
           refreshQueues(current, child);
         }
       }

@@ -26,6 +26,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.locks.LockSupport;
 
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -1165,7 +1166,19 @@ public class ParentQueue extends AbstractCSQueue {
     }
 
   }
-  
+
+  @Override
+  public List<CSQueue> getChildQueuesByTryLock() {
+    try {
+      while (!readLock.tryLock()) {
+        LockSupport.parkNanos(10000);
+      }
+      return new ArrayList<CSQueue>(childQueues);
+    } finally {
+      readLock.unlock();
+    }
+  }
+
   @Override
   public void recoverContainer(Resource clusterResource,
       SchedulerApplicationAttempt attempt, RMContainer rmContainer) {

@@ -157,7 +157,14 @@ public interface CSQueue extends SchedulerQueue<CSQueue> {
    * @return child queues
    */
   public List<CSQueue> getChildQueues();
-  
+
+  /**
+   * Get child queues And tryLock
+   *
+   * @return child queues
+   */
+  public List<CSQueue> getChildQueuesByTryLock();
+
   /**
    * Check if the <code>user</code> has permission to perform the operation
    * @param acl ACL
