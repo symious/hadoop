@@ -286,6 +286,7 @@ public class MiniRouterDFSCluster {
     private int rpcPort;
     private int servicePort;
     private int lifelinePort;
+    private int msyncPort;
     private int httpPort;
     private URI fileSystemUri;
     private int index;
@@ -322,6 +323,7 @@ public class MiniRouterDFSCluster {
       this.rpcPort = nn.getNameNodeAddress().getPort();
       this.servicePort = nn.getServiceRpcAddress().getPort();
       this.lifelinePort = nn.getServiceRpcAddress().getPort();
+      this.msyncPort = nn.getNameNodeMSyncAddress().getPort();
       this.httpPort = nn.getHttpAddress().getPort();
       this.fileSystemUri = new URI("hdfs://" + namenode.getHostAndPort());
       DistributedFileSystem.setDefaultUri(this.conf, this.fileSystemUri);
@@ -343,6 +345,10 @@ public class MiniRouterDFSCluster {
 
     public String getLifelineAddress() {
       return namenode.getServiceRpcAddress().getHostName() + ":" + lifelinePort;
+    }
+
+    public String getMsyncAddress() {
+      return namenode.getNameNodeMSyncAddress().getHostName() + ":" + msyncPort;
     }
 
     public String getHttpAddress() {
@@ -837,7 +843,8 @@ public class MiniRouterDFSCluster {
         NamenodeStatusReport report = new NamenodeStatusReport(
             nn.nameserviceId, nn.namenodeId,
             nn.getRpcAddress(), nn.getServiceAddress(),
-            nn.getLifelineAddress(), nn.getHttpAddress());
+            nn.getLifelineAddress(), nn.getMsyncAddress(),
+            nn.getHttpAddress());
         FSImage fsImage = nn.namenode.getNamesystem().getFSImage();
         NamespaceInfo nsInfo = fsImage.getStorage().getNamespaceInfo();
         report.setNamespaceInfo(nsInfo);

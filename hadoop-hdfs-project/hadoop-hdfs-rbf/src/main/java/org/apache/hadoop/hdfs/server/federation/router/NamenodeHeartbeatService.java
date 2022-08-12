@@ -85,6 +85,8 @@ public class NamenodeHeartbeatService extends PeriodicService {
   private String serviceAddress;
   /** Service RPC address for the namenode. */
   private String lifelineAddress;
+  /** Msync RPC address for the namenode. **/
+  private String msyncAddress;
   /** HTTP address for the namenode. */
   private String webAddress;
 
@@ -150,6 +152,13 @@ public class NamenodeHeartbeatService extends PeriodicService {
       this.lifelineAddress = this.serviceAddress;
     }
     LOG.info("{} Lifeline RPC address: {}", nnDesc, lifelineAddress);
+
+    // Get the msync RPC address for faster msyncing
+    this.msyncAddress = DFSUtil.getNamenodeMsyncAddr(conf, nameserviceId, namenodeId);
+    if (this.msyncAddress == null) {
+      this.msyncAddress = this.rpcAddress;
+    }
+    LOG.info("{} Msync RPC address: {}", nnDesc, msyncAddress);
 
     // Get the Web address for UI
     this.webAddress =
@@ -247,7 +256,8 @@ public class NamenodeHeartbeatService extends PeriodicService {
    */
   protected NamenodeStatusReport getNamenodeStatusReport() {
     NamenodeStatusReport report = new NamenodeStatusReport(nameserviceId,
-        namenodeId, rpcAddress, serviceAddress, lifelineAddress, webAddress);
+        namenodeId, rpcAddress, serviceAddress, lifelineAddress,
+        msyncAddress, webAddress);
 
     try {
       LOG.debug("Probing NN at service address: {}", serviceAddress);

@@ -44,6 +44,13 @@ public interface FederationNamenodeContext {
   String getLifelineAddress();
 
   /**
+   * Get the Msync RPC server address of the namenode.
+   *
+   * @return Msync RPC server address in the form of host:port
+   */
+  String getMsyncAddress();
+
+  /**
    * Get the HTTP server address of the namenode.
    *
    * @return HTTP address in the form of host:port.

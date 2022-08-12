@@ -134,6 +134,8 @@ public abstract class MembershipState extends BaseRecord
 
   public abstract void setLifelineAddress(String lifelineAddress);
 
+  public abstract void setMsyncAddress(String msyncAddress);
+
   public abstract void setIsSafeMode(boolean isSafeMode);
 
   public abstract void setClusterId(String clusterId);
@@ -155,6 +157,8 @@ public abstract class MembershipState extends BaseRecord
   public abstract String getServiceAddress();
 
   public abstract String getLifelineAddress();
+
+  public abstract String getMsyncAddress();
 
   public abstract String getWebAddress();
 

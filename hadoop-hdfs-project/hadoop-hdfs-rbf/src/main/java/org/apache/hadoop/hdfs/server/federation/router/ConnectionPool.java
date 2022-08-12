@@ -18,8 +18,10 @@
 package org.apache.hadoop.hdfs.server.federation.router;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -36,8 +38,11 @@ import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.NameNodeProxiesClient.ProxyAndInfo;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
+import org.apache.hadoop.hdfs.protocol.ClientMsyncProtocol;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.hdfs.protocolPB.ClientNamenodeMsyncProtocolPB;
+import org.apache.hadoop.hdfs.protocolPB.ClientNamenodeMsyncProtocolTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.ClientNamenodeProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.ClientNamenodeProtocolTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.NamenodeProtocolPB;
@@ -51,9 +56,15 @@ import org.apache.hadoop.ipc.FederationConnectionId;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.net.NetUtils;
+import org.apache.hadoop.security.RefreshUserMappingsProtocol;
 import org.apache.hadoop.security.SaslRpcServer;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.protocolPB.RefreshUserMappingsProtocolClientSideTranslatorPB;
+import org.apache.hadoop.security.protocolPB.RefreshUserMappingsProtocolPB;
+import org.apache.hadoop.tools.GetUserMappingsProtocol;
+import org.apache.hadoop.tools.protocolPB.GetUserMappingsProtocolClientSideTranslatorPB;
+import org.apache.hadoop.tools.protocolPB.GetUserMappingsProtocolPB;
 import org.apache.hadoop.util.Time;
 import org.mortbay.util.ajax.JSON;
 import org.slf4j.Logger;
@@ -105,6 +116,36 @@ public class ConnectionPool {
   /** Max Concurrency of each connection. */
   private final int maxConcurrencyPerConn;
 
+  /** Map for the protocols and their protobuf implementations. */
+  private final static Map<Class<?>, ProtoImpl> PROTO_MAP = new HashMap<>();
+  static {
+    PROTO_MAP.put(ClientProtocol.class,
+        new ProtoImpl(ClientNamenodeProtocolPB.class,
+            ClientNamenodeProtocolTranslatorPB.class));
+    PROTO_MAP.put(ClientMsyncProtocol.class,
+        new ProtoImpl(ClientNamenodeMsyncProtocolPB.class,
+            ClientNamenodeMsyncProtocolTranslatorPB.class));
+    PROTO_MAP.put(NamenodeProtocol.class,
+        new ProtoImpl(NamenodeProtocolPB.class,
+            NamenodeProtocolTranslatorPB.class));
+    PROTO_MAP.put(RefreshUserMappingsProtocol.class,
+        new ProtoImpl(RefreshUserMappingsProtocolPB.class,
+            RefreshUserMappingsProtocolClientSideTranslatorPB.class));
+    PROTO_MAP.put(GetUserMappingsProtocol.class,
+        new ProtoImpl(GetUserMappingsProtocolPB.class,
+            GetUserMappingsProtocolClientSideTranslatorPB.class));
+  }
+
+  /** Class to store the protocol implementation. */
+  private static class ProtoImpl {
+    private final Class<?> protoPb;
+    private final Class<?> protoClientPb;
+
+    ProtoImpl(Class<?> pPb, Class<?> pClientPb) {
+      this.protoPb = pPb;
+      this.protoClientPb = pClientPb;
+    }
+  }
 
   protected ConnectionPool(Configuration config, String address,
       UserGroupInformation user, int minPoolSize, int maxPoolSize,
@@ -222,6 +263,85 @@ public class ConnectionPool {
   }
 
   /**
+   * Creates a proxy wrapper for a client NN connection. Each proxy contains
+   * context for a single user/security context. To maximize throughput it is
+   * recommended to use multiple connection per user+server, allowing multiple
+   * writes and reads to be dispatched in parallel.
+   * @param <T> Input type T.
+   *
+   * @param conf Configuration for the connection.
+   * @param nnAddress Address of server supporting the ClientProtocol.
+   * @param ugi User context.
+   * @param proto Interface of the protocol.
+   * @return proto for the target ClientProtocol that contains the user's
+   *         security context.
+   * @throws IOException If it cannot be created.
+   */
+  protected static <T> ConnectionContext newConnection(Configuration conf,
+      String nnAddress, UserGroupInformation ugi, Class<T> proto, int socketIndex,
+      AlignmentContext alignmentContext, int maxConcurrencyPerConn) throws IOException {
+    if (!PROTO_MAP.containsKey(proto)) {
+      String msg = "Unsupported protocol for connection to NameNode: "
+          + ((proto != null) ? proto.getName() : "null");
+      LOG.error(msg);
+      throw new IllegalStateException(msg);
+    }
+    ProtoImpl classes = PROTO_MAP.get(proto);
+    RPC.setProtocolEngine(conf, classes.protoPb, ProtobufRpcEngine.class);
+
+    final RetryPolicy defaultPolicy = RetryUtils.getDefaultRetryPolicy(conf,
+        HdfsClientConfigKeys.Retry.POLICY_ENABLED_KEY,
+        HdfsClientConfigKeys.Retry.POLICY_ENABLED_DEFAULT,
+        HdfsClientConfigKeys.Retry.POLICY_SPEC_KEY,
+        HdfsClientConfigKeys.Retry.POLICY_SPEC_DEFAULT,
+        HdfsConstants.SAFEMODE_EXCEPTION_CLASS_NAME);
+
+    SocketFactory factory = SocketFactory.getDefault();
+    if (UserGroupInformation.isSecurityEnabled()) {
+      SaslRpcServer.init(conf);
+    }
+    InetSocketAddress socket = NetUtils.createSocketAddr(nnAddress);
+    final long version = RPC.getProtocolVersion(classes.protoPb);
+    Object proxy;
+    boolean enableMultiSocket = conf.getBoolean(
+        RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE,
+        DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE_DEFAULT);
+    if (enableMultiSocket) {
+      FederationConnectionId connectionId = new FederationConnectionId(
+          socket, classes.protoPb, ugi, RPC.getRpcTimeout(conf),
+          defaultPolicy, conf, socketIndex);
+      proxy = RPC.getProtocolProxy(classes.protoPb, version, connectionId,
+          conf, factory, alignmentContext).getProxy();
+    } else {
+      proxy = RPC.getProtocolProxy(classes.protoPb, version, socket, ugi,
+          conf, factory, RPC.getRpcTimeout(conf), defaultPolicy, null,
+          alignmentContext).getProxy();
+    }
+
+    T client = newProtoClient(proto, classes, proxy);
+    Text dtService = SecurityUtil.buildTokenService(socket);
+
+    ProxyAndInfo<T> clientProxy = new ProxyAndInfo<T>(client, dtService, socket);
+    return new ConnectionContext(clientProxy, maxConcurrencyPerConn);
+  }
+
+  private static <T> T newProtoClient(Class<T> proto, ProtoImpl classes, Object proxy) {
+    try {
+      Constructor<?> constructor =
+          classes.protoClientPb.getConstructor(classes.protoPb);
+      Object o = constructor.newInstance(proxy);
+      if (proto.isAssignableFrom(o.getClass())) {
+        @SuppressWarnings("unchecked")
+        T client = (T) o;
+        return client;
+      }
+    } catch (Exception e) {
+      LOG.error(e.getMessage());
+    }
+    return null;
+  }
+
+  /**
    * Remove connections from the current pool.
    *
    * @param num Number of connections to remove.
@@ -330,222 +450,5 @@ public class ConnectionPool {
     return newConnection(
         this.conf, this.namenodeAddress, this.ugi, this.protocol,
         getNextIndex(), alignmentContext, maxConcurrencyPerConn);
-  }
-
-  /**
-   * Creates a proxy wrapper for a client NN connection. Each proxy contains
-   * context for a single user/security context. To maximize throughput it is
-   * recommended to use multiple connection per user+server, allowing multiple
-   * writes and reads to be dispatched in parallel.
-   *
-   * @param conf Configuration for the connection.
-   * @param nnAddress Address of server supporting the ClientProtocol.
-   * @param ugi User context.
-   * @param proto Interface of the protocol.
-   * @param alignmentContext TODO
-   * @return proto for the target ClientProtocol that contains the user's
-   *         security context.
-   * @throws IOException If it cannot be created.
-   */
-  protected static ConnectionContext newConnection(Configuration conf,
-      String nnAddress, UserGroupInformation ugi, Class<?> proto, int index,
-      AlignmentContext alignmentContext, int maxConcurrencyPerConn)
-          throws IOException {
-    LOG.debug("Trying to add new Connection in index: " + index + ".");
-    ConnectionContext ret;
-    if (proto == ClientProtocol.class) {
-      if (conf.getBoolean(
-          RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE,
-              DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE_DEFAULT)) {
-        ret = newClientConnectionMulti(conf, nnAddress, ugi, index,
-            alignmentContext, maxConcurrencyPerConn);
-      } else {
-        ret = newClientConnection(conf, nnAddress, ugi,
-            alignmentContext, maxConcurrencyPerConn);
-      }
-    } else if (proto == NamenodeProtocol.class) {
-      if (conf.getBoolean(
-          RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE,
-              DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE_DEFAULT)) {
-        ret = newNamenodeConnectionMulti(conf, nnAddress, ugi,
-            index, maxConcurrencyPerConn);
-      } else {
-        ret = newNamenodeConnection(conf, nnAddress, ugi, maxConcurrencyPerConn);
-      }
-    } else {
-      String msg = "Unsupported protocol for connection to NameNode: " +
-          ((proto != null) ? proto.getClass().getName() : "null");
-      LOG.error(msg);
-      throw new IllegalStateException(msg);
-    }
-    return ret;
-  }
-
-  /**
-   * Creates a proxy wrapper for a client NN connection. Each proxy contains
-   * context for a single user/security context. To maximize throughput it is
-   * recommended to use multiple connection per user+server, allowing multiple
-   * writes and reads to be dispatched in parallel.
-   *
-   * Mostly based on NameNodeProxies#createNonHAProxy() but it needs the
-   * connection identifier.
-   *
-   * @param conf Configuration for the connection.
-   * @param nnAddress Address of server supporting the ClientProtocol.
-   * @param ugi User context.
-   * @return Proxy for the target ClientProtocol that contains the user's
-   *         security context.
-   * @throws IOException If it cannot be created.
-   */
-  private static ConnectionContext newClientConnection(
-      Configuration conf, String nnAddress, UserGroupInformation ugi,
-      AlignmentContext alignmentContext, int maxConcurrencyPerConn)
-      throws IOException {
-    RPC.setProtocolEngine(
-        conf, ClientNamenodeProtocolPB.class, ProtobufRpcEngine.class);
-
-    final RetryPolicy defaultPolicy = RetryUtils.getDefaultRetryPolicy(
-        conf,
-        HdfsClientConfigKeys.Retry.POLICY_ENABLED_KEY,
-        HdfsClientConfigKeys.Retry.POLICY_ENABLED_DEFAULT,
-        HdfsClientConfigKeys.Retry.POLICY_SPEC_KEY,
-        HdfsClientConfigKeys.Retry.POLICY_SPEC_DEFAULT,
-        HdfsConstants.SAFEMODE_EXCEPTION_CLASS_NAME);
-
-    SocketFactory factory = SocketFactory.getDefault();
-    if (UserGroupInformation.isSecurityEnabled()) {
-      SaslRpcServer.init(conf);
-    }
-    InetSocketAddress socket = NetUtils.createSocketAddr(nnAddress);
-    final long version = RPC.getProtocolVersion(ClientNamenodeProtocolPB.class);
-    ClientNamenodeProtocolPB proxy = RPC.getProtocolProxy(
-        ClientNamenodeProtocolPB.class, version, socket, ugi, conf, factory,
-        RPC.getRpcTimeout(conf), defaultPolicy, null, alignmentContext)
-        .getProxy();
-    ClientProtocol client = new ClientNamenodeProtocolTranslatorPB(proxy);
-    Text dtService = SecurityUtil.buildTokenService(socket);
-
-    ProxyAndInfo<ClientProtocol> clientProxy =
-        new ProxyAndInfo<ClientProtocol>(client, dtService, socket);
-    return new ConnectionContext(clientProxy, maxConcurrencyPerConn);
-  }
-
-  /**
-   * Version newClientConnection of which allows using multiple connections.
-   */
-  private static ConnectionContext newClientConnectionMulti(
-      Configuration conf, String nnAddress, UserGroupInformation ugi,
-      int index, AlignmentContext alignmentContext,
-      int maxConcurrencyPerConn) throws IOException {
-    RPC.setProtocolEngine(
-        conf, ClientNamenodeProtocolPB.class, ProtobufRpcEngine.class);
-
-    final RetryPolicy defaultPolicy = RetryUtils.getDefaultRetryPolicy(
-        conf,
-        HdfsClientConfigKeys.Retry.POLICY_ENABLED_KEY,
-        HdfsClientConfigKeys.Retry.POLICY_ENABLED_DEFAULT,
-        HdfsClientConfigKeys.Retry.POLICY_SPEC_KEY,
-        HdfsClientConfigKeys.Retry.POLICY_SPEC_DEFAULT,
-        HdfsConstants.SAFEMODE_EXCEPTION_CLASS_NAME);
-
-    SocketFactory factory = SocketFactory.getDefault();
-    if (UserGroupInformation.isSecurityEnabled()) {
-      SaslRpcServer.init(conf);
-    }
-    InetSocketAddress socket = NetUtils.createSocketAddr(nnAddress);
-    final long version = RPC.getProtocolVersion(ClientNamenodeProtocolPB.class);
-    FederationConnectionId connectionId = new FederationConnectionId(
-        socket, ClientNamenodeProtocolPB.class, ugi, RPC.getRpcTimeout(conf),
-        defaultPolicy, conf, index);
-    ClientNamenodeProtocolPB proxy = RPC.getProtocolProxy(
-        ClientNamenodeProtocolPB.class, version, connectionId, conf,
-        factory, alignmentContext).getProxy();
-    ClientProtocol client = new ClientNamenodeProtocolTranslatorPB(proxy);
-    Text dtService = SecurityUtil.buildTokenService(socket);
-
-    ProxyAndInfo<ClientProtocol> clientProxy =
-        new ProxyAndInfo<ClientProtocol>(client, dtService, socket);
-    return new ConnectionContext(clientProxy, maxConcurrencyPerConn);
-  }
-
-  /**
-   * Creates a proxy wrapper for a NN connection. Each proxy contains context
-   * for a single user/security context. To maximize throughput it is
-   * recommended to use multiple connection per user+server, allowing multiple
-   * writes and reads to be dispatched in parallel.
-   *
-   * @param conf Configuration for the connection.
-   * @param nnAddress Address of server supporting the ClientProtocol.
-   * @param ugi User context.
-   * @return Proxy for the target NamenodeProtocol that contains the user's
-   *         security context.
-   * @throws IOException If it cannot be created.
-   */
-  private static ConnectionContext newNamenodeConnection(
-      Configuration conf, String nnAddress, UserGroupInformation ugi,
-      int maxConcurrencyPerConn) throws IOException {
-    RPC.setProtocolEngine(
-        conf, NamenodeProtocolPB.class, ProtobufRpcEngine.class);
-
-    final RetryPolicy defaultPolicy = RetryUtils.getDefaultRetryPolicy(
-        conf,
-        HdfsClientConfigKeys.Retry.POLICY_ENABLED_KEY,
-        HdfsClientConfigKeys.Retry.POLICY_ENABLED_DEFAULT,
-        HdfsClientConfigKeys.Retry.POLICY_SPEC_KEY,
-        HdfsClientConfigKeys.Retry.POLICY_SPEC_DEFAULT,
-        HdfsConstants.SAFEMODE_EXCEPTION_CLASS_NAME);
-
-    SocketFactory factory = SocketFactory.getDefault();
-    if (UserGroupInformation.isSecurityEnabled()) {
-      SaslRpcServer.init(conf);
-    }
-    InetSocketAddress socket = NetUtils.createSocketAddr(nnAddress);
-    final long version = RPC.getProtocolVersion(NamenodeProtocolPB.class);
-    NamenodeProtocolPB proxy = RPC.getProtocolProxy(NamenodeProtocolPB.class,
-        version, socket, ugi, conf,
-        factory, RPC.getRpcTimeout(conf), defaultPolicy, null).getProxy();
-    NamenodeProtocol client = new NamenodeProtocolTranslatorPB(proxy);
-    Text dtService = SecurityUtil.buildTokenService(socket);
-
-    ProxyAndInfo<NamenodeProtocol> clientProxy =
-        new ProxyAndInfo<NamenodeProtocol>(client, dtService, socket);
-    return new ConnectionContext(clientProxy, maxConcurrencyPerConn);
-  }
-
-  /**
-   * Version newNamenodeConnection of which allows using multiple connections.
-   */
-  private static ConnectionContext newNamenodeConnectionMulti(
-      Configuration conf, String nnAddress, UserGroupInformation ugi,
-      int index, int maxConcurrencyPerConn) throws IOException {
-    RPC.setProtocolEngine(
-        conf, NamenodeProtocolPB.class, ProtobufRpcEngine.class);
-
-    final RetryPolicy defaultPolicy = RetryUtils.getDefaultRetryPolicy(
-        conf,
-        HdfsClientConfigKeys.Retry.POLICY_ENABLED_KEY,
-        HdfsClientConfigKeys.Retry.POLICY_ENABLED_DEFAULT,
-        HdfsClientConfigKeys.Retry.POLICY_SPEC_KEY,
-        HdfsClientConfigKeys.Retry.POLICY_SPEC_DEFAULT,
-        HdfsConstants.SAFEMODE_EXCEPTION_CLASS_NAME);
-
-    SocketFactory factory = SocketFactory.getDefault();
-    if (UserGroupInformation.isSecurityEnabled()) {
-      SaslRpcServer.init(conf);
-    }
-    InetSocketAddress socket = NetUtils.createSocketAddr(nnAddress);
-    final long version = RPC.getProtocolVersion(NamenodeProtocolPB.class);
-    FederationConnectionId connectionId = new FederationConnectionId(
-            socket, ClientNamenodeProtocolPB.class, ugi, RPC.getRpcTimeout(conf), defaultPolicy,
-            conf, index);
-    NamenodeProtocolPB proxy = RPC.getProtocolProxy(NamenodeProtocolPB.class,
-        version, connectionId, conf,
-        factory).getProxy();
-    NamenodeProtocol client = new NamenodeProtocolTranslatorPB(proxy);
-    Text dtService = SecurityUtil.buildTokenService(socket);
-
-    ProxyAndInfo<NamenodeProtocol> clientProxy =
-        new ProxyAndInfo<NamenodeProtocol>(client, dtService, socket);
-    return new ConnectionContext(clientProxy, maxConcurrencyPerConn);
   }
 }

@@ -118,6 +118,7 @@ public final class FederationTestUtils {
     Random rand = new Random();
     NamenodeStatusReport report = new NamenodeStatusReport(ns, nn,
         "localhost:" + rand.nextInt(10000), "localhost:" + rand.nextInt(10000),
+        "localhost:" + rand.nextInt(10000),
         "localhost:" + rand.nextInt(10000), "testwebaddress-" + ns + nn);
     if (state == null) {
       // Unavailable, no additional info

@@ -176,6 +176,11 @@ public class ConnectionManager {
     }
   }
 
+  @VisibleForTesting
+  public AlignmentContext getNsAlignmentContext(String nsId) {
+    return this.alignmentContexts.get(nsId);
+  }
+
   /**
    * Fetches the next available proxy client in the pool. Each client connection
    * is reserved for a single user and cannot be reused until free.

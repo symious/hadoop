@@ -1267,7 +1267,8 @@ public class NameNode extends ReconfigurableBase implements
 
   @VisibleForTesting
   public InetSocketAddress getNameNodeMSyncAddress() {
-    return rpcServer.getMsyncRPCAddress();
+    final InetSocketAddress serviceAddr = rpcServer.getMsyncRPCAddress();
+    return serviceAddr == null ? getNameNodeAddress() : serviceAddr;
   }
 
   /**

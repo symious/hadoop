@@ -33,6 +33,7 @@ public class NamenodeStatusReport {
   private String rpcAddress = "";
   private String serviceAddress = "";
   private String lifelineAddress = "";
+  private String msyncAddress = "";
   private String webAddress = "";
 
   /** Namenode state. */
@@ -64,13 +65,14 @@ public class NamenodeStatusReport {
   private boolean statsValid = false;
   private boolean haStateValid = false;
 
-  public NamenodeStatusReport(String ns, String nn, String rpc, String service,
-      String lifeline, String web) {
+  public NamenodeStatusReport(String ns, String nn, String rpc,
+      String service, String lifeline, String msync, String web) {
     this.nameserviceId = ns;
     this.namenodeId = nn;
     this.rpcAddress = rpc;
     this.serviceAddress = service;
     this.lifelineAddress = lifeline;
+    this.msyncAddress = msync;
     this.webAddress = web;
   }
 
@@ -177,6 +179,15 @@ public class NamenodeStatusReport {
    */
   public String getLifelineAddress() {
     return this.lifelineAddress;
+  }
+
+  /**
+   * Get the Msync RPC address.
+   *
+   * @return The Msync RPC address.
+   */
+  public String getMsyncAddress() {
+    return this.msyncAddress;
   }
 
   /**
