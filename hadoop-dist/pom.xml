@@ -147,6 +147,39 @@
                       run cp -r $ROOT/hadoop-yarn-project/target/hadoop-yarn-project-${project.version}/* .
                       run cp -r $ROOT/hadoop-mapreduce-project/target/hadoop-mapreduce-${project.version}/* .
                       run cp -r $ROOT/hadoop-tools/hadoop-tools-dist/target/hadoop-tools-dist-${project.version}/* .
+
+                      run ln -sf hadoop-streaming-${project.version}.jar ./share/hadoop/tools/lib/hadoop-mr-streaming.jar
+                      run sh $ROOT/dev-support/external-dependence/jar/downloadJars.sh
+                      run cp -r $ROOT/dev-support/external-dependence/jar/*.jar ./share/hadoop/common/lib/
+                      run rm -rf $ROOT/dev-support/external-dependence/jar/*.jar
+                      run cp -r $ROOT/dev-support/external-dependence/native/libgplcompression.so ./lib/native/
+                      run cp -r $ROOT/dev-support/external-dependence/native/libzstd.so.1.5.0 ./lib/native/
+                      run cp -r $ROOT/dev-support/external-dependence/native/libzstd.a ./lib/native/
+                      run cp -r $ROOT/dev-support/external-dependence/native/libsnappy.so.1.3.0 ./lib/native/
+                      run cp -r $ROOT/dev-support/external-dependence/native/libisal.so.2.0.23 ./lib/native/
+                      run cp -r $ROOT/dev-support/external-dependence/native/libisal.a ./lib/native/
+                      run cp -r $ROOT/dev-support/external-dependence/native/libisal.la ./lib/native/
+                      run cp -r $ROOT/dev-support/external-dependence/native/libz.so.1.2.7 ./lib/native/
+                      run cp -r $ROOT/dev-support/external-dependence/native/libz.a ./lib/native/
+                      run cp -r $ROOT/dev-support/external-dependence/native/libbz2.so.1.0.8 ./lib/native/
+                      run cp -r $ROOT/dev-support/external-dependence/native/libbz2.a ./lib/native/
+                      run cp -r $ROOT/dev-support/external-dependence/native/liblz4.so.1.9.0 ./lib/native/
+                      run cp -r $ROOT/dev-support/external-dependence/native/liblz4.a ./lib/native/
+                      run cd ./lib/native
+                      run ln -sf libgplcompression.so libgplcompression.so.0
+                      run ln -sf libzstd.so.1.5.0 libzstd.so
+                      run ln -sf libzstd.so.1.5.0 libzstd.so.1
+                      run ln -sf libsnappy.so.1.3.0 libsnappy.so
+                      run ln -sf libsnappy.so.1.3.0 libsnappy.so.1
+                      run ln -sf libisal.so.2.0.23 libisal.so
+                      run ln -sf libisal.so.2.0.23 libisal.so.2
+                      run ln -sf libz.so.1.2.7 libz.so
+                      run ln -sf libz.so.1.2.7 libz.so.1
+                      run ln -sf libbz2.so.1.0.8 libbz2.so
+                      run ln -sf libbz2.so.1.0.8 libbz2.so.1
+                      run ln -sf liblz4.so.1.9.0 liblz4.so
+                      run ln -sf liblz4.so.1.9.0 liblz4.so.1
+                      run cd $ROOT
                       echo
                       echo "Hadoop dist layout available at: ${project.build.directory}/hadoop-${project.version}"
                       echo

@@ -105,7 +105,7 @@ public class NativeLibraryChecker {
       if (isalDetail != null) {
         isalLoaded = false;
       } else {
-        isalDetail = ErasureCodeNative.getLoadingFailureReason();
+        isalDetail = ErasureCodeNative.getLibraryName();
         isalLoaded = true;
       }
       openSslDetail = OpensslCipher.getLoadingFailureReason();
