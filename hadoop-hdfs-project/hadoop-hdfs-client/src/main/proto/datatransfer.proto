@@ -302,7 +302,7 @@ message BlockOpResponseProto {
    */
   optional uint32 shortCircuitAccessVersion = 6;
 
-  optional bool isInterDCRead = 7 [default = false];
+  optional bool isInterDCRead = 100 [default = false];
 }
 
 /**
