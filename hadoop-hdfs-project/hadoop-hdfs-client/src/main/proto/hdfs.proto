@@ -419,6 +419,7 @@ message HdfsFileStatusProto {
   optional uint32 storagePolicy = 16 [default = 0]; // block storage policy id
   // Optional field for erasure coding
   optional ErasureCodingPolicyProto ecPolicy = 17;
+  optional string namespace1 = 18;
   optional string namespace = 19;
 } 
 

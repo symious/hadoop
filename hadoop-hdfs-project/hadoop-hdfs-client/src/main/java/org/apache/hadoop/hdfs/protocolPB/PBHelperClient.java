@@ -1614,6 +1614,9 @@ public class PBHelperClient {
         fs.hasStoragePolicy() ? (byte) fs.getStoragePolicy()
             : HdfsConstants.BLOCK_STORAGE_POLICY_ID_UNSPECIFIED,
         fs.hasEcPolicy() ? convertErasureCodingPolicy(fs.getEcPolicy()) : null);
+    if (fs.hasNamespace1()) {
+      hdfsLocatedFileStatus.setNamespace(fs.getNamespace1());
+    }
     if (fs.hasNamespace()) {
       hdfsLocatedFileStatus.setNamespace(fs.getNamespace());
     }
@@ -2115,6 +2118,7 @@ public class PBHelperClient {
     }
     if (fs.getNamespace() != null && !fs.getNamespace().isEmpty()) {
       builder.setNamespace(fs.getNamespace());
+      builder.setNamespace1(fs.getNamespace());
     }
     if (fs instanceof HdfsLocatedFileStatus) {
       final HdfsLocatedFileStatus lfs = (HdfsLocatedFileStatus) fs;
