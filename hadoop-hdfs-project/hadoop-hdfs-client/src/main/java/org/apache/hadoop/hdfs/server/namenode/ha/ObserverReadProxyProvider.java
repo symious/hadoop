@@ -32,6 +32,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.hdfs.ClientGSIContext;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
+import org.apache.hadoop.hdfs.protocol.ClientMsyncProtocol;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.io.retry.AtMostOnce;
 import org.apache.hadoop.io.retry.Idempotent;
@@ -103,6 +104,9 @@ public class ObserverReadProxyProvider<T>
    */
   private boolean observerReadEnabled;
 
+  /** The inner proxy provider used for msync RPC. */
+  private AbstractNNFailoverProxyProvider<ClientMsyncProtocol> msyncFailoverProxy = null;
+
   /**
    * This adjusts how frequently this proxy provider should auto-msync to the
    * Active NameNode, automatically performing an msync() call to the active
@@ -152,7 +156,7 @@ public class ObserverReadProxyProvider<T>
    * inefficient.
    * The following value specify the period on how often to retry all Standby.
    */
-  private long observerProbeRetryPeriodMs;
+  private final long observerProbeRetryPeriodMs;
 
   /**
    * The previous time where zero observer were found. If there was observer,
@@ -216,6 +220,16 @@ public class ObserverReadProxyProvider<T>
     // TODO : make this configurable or remove this variable
     if (wrappedProxy instanceof ClientProtocol) {
       this.observerReadEnabled = true;
+      try {
+        ClientHAProxyFactory<ClientMsyncProtocol> msyncFactory = new ClientHAProxyFactory<>();
+        msyncFactory.setAlignmentContext(alignmentContext);
+        this.msyncFailoverProxy = new ConfiguredFailoverProxyProvider<>(
+            conf, uri, ClientMsyncProtocol.class, msyncFactory,
+            HdfsClientConfigKeys.DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY);
+      } catch (Throwable e) {
+        LOG.debug("Init MsyncFailedProxy failed for {} because {}.",
+            uri, e.getLocalizedMessage());
+      }
     } else {
       LOG.info("Disabling observer reads for {} because the requested proxy "
           + "class does not implement {}", uri, ClientProtocol.class.getName());
@@ -342,9 +356,33 @@ public class ObserverReadProxyProvider<T>
     if (msynced) {
       return; // No need for an msync
     }
-    getProxyAsClientProtocol(failoverProxy.getProxy().proxy).msync();
+    internalMsync();
     msynced = true;
     lastMsyncTimeMs = Time.monotonicNow();
+  }
+
+  /**
+   * Try to msync by ClientMsyncProtocol if it's valid.
+   * If failed, fallback to the old ClientProtocol.
+   */
+  private void internalMsync() throws IOException {
+    boolean success = false;
+    if (msyncFailoverProxy != null) {
+      ClientMsyncProtocol msycProxy = msyncFailoverProxy.getProxy().proxy;
+      try {
+        msycProxy.msync();
+        success = true;
+      } catch (Throwable e) {
+        LOG.debug("MSync via MsyncFailoverProxy failed, error message is {}.",
+            e.getLocalizedMessage());
+        // Simply fail over to the next namenode
+        msyncFailoverProxy.performFailover(msycProxy);
+      }
+    }
+
+    if (!success) {
+      getProxyAsClientProtocol(failoverProxy.getProxy().proxy).msync();
+    }
   }
 
   /**
@@ -379,7 +417,7 @@ public class ObserverReadProxyProvider<T>
   private void autoMsyncIfNecessary() throws IOException {
     if (autoMsyncPeriodMs == 0) {
       // Always msync
-      getProxyAsClientProtocol(failoverProxy.getProxy().proxy).msync();
+      internalMsync();
     } else if (autoMsyncPeriodMs > 0) {
       if (Time.monotonicNow() - lastMsyncTimeMs > autoMsyncPeriodMs) {
         synchronized (this) {
@@ -388,7 +426,7 @@ public class ObserverReadProxyProvider<T>
           // Re-check the entry criterion since the status may have changed
           // while waiting for the lock.
           if (Time.monotonicNow() - lastMsyncTimeMs > autoMsyncPeriodMs) {
-            getProxyAsClientProtocol(failoverProxy.getProxy().proxy).msync();
+            internalMsync();
             lastMsyncTimeMs = Time.monotonicNow();
           }
         }

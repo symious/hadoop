@@ -143,7 +143,7 @@ public class RouterRpcClient {
 
   private long autoMsyncPeriodMs;
 
-  private boolean enableNewMsyncServer;
+  private final boolean isNewMsyncServerEnabled;
 
   private final Map<String, AtomicLong> lastMsyncTimes;
 
@@ -230,7 +230,7 @@ public class RouterRpcClient {
             RBFConfigKeys.DFS_ROUTER_PROXY_HOSTNAME_ENABLED_DEFAULT);
     String[] ipProxyUsers = conf.getStrings(DFS_NAMENODE_IP_PROXY_USERS);
     this.enableProxyUser = ipProxyUsers != null && ipProxyUsers.length > 0;
-    this.enableNewMsyncServer = conf.getBoolean(
+    this.isNewMsyncServerEnabled = conf.getBoolean(
         RBFConfigKeys.DSF_ROUTER_OBSERVER_ENABLE_NEW_MSYNC_SERVER_KEY,
         RBFConfigKeys.DSF_ROUTER_OBSERVER_ENABLE_NEW_MSYNC_SERVER_DEFAULT);
   }
@@ -1474,7 +1474,7 @@ public class RouterRpcClient {
     final List<? extends FederationNamenodeContext> namenodes =
         getNamenodesForNameservice(ns, false);
     boolean msynced = false;
-    if (enableNewMsyncServer) {
+    if (isNewMsyncServerEnabled) {
       msynced = internalMsyncWithNewServer(ugi, namenodes);
     }
     if (!msynced) {

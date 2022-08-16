@@ -58,6 +58,7 @@ public class TestRouterMsync {
       conf.setBoolean(DFS_NAMENODE_STATE_CONTEXT_ENABLED_KEY, true);
       conf.setInt(RBFConfigKeys.DFS_ROUTER_OBSERVER_AUTO_MSYNC_PERIOD, 60000);
       conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY, true);
+      conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_KEY, true);
       conf.setInt(DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY, 0);
       if (enableNewMsyncInNN) {
         conf.set(DFSConfigKeys.DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY, "0.0.0.0:0");
@@ -125,7 +126,7 @@ public class TestRouterMsync {
 
 
   @Test
-  public void testMsynByNewServer() throws IOException {
+  public void testMsyncByNewServer() throws IOException {
     createCluster(true, true);
     RouterContext routerContext = cluster.getRandomRouter();
     FileSystem fileSystem = routerContext.getFileSystem();

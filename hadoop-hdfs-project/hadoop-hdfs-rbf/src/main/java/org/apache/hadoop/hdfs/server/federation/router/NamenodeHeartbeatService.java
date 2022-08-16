@@ -153,7 +153,7 @@ public class NamenodeHeartbeatService extends PeriodicService {
     }
     LOG.info("{} Lifeline RPC address: {}", nnDesc, lifelineAddress);
 
-    // Get the msync RPC address for faster msyncing
+    // Get the msync RPC address for faster monitoring
     this.msyncAddress = DFSUtil.getNamenodeMsyncAddr(conf, nameserviceId, namenodeId);
     if (this.msyncAddress == null) {
       this.msyncAddress = this.rpcAddress;

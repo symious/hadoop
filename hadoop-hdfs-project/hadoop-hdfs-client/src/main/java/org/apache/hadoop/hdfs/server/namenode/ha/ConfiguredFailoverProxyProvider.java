@@ -41,9 +41,13 @@ public class ConfiguredFailoverProxyProvider<T> extends
 
   public ConfiguredFailoverProxyProvider(Configuration conf, URI uri,
       Class<T> xface, HAProxyFactory<T> factory) {
+    this(conf, uri, xface, factory, HdfsClientConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY);
+  }
+
+  ConfiguredFailoverProxyProvider(Configuration conf, URI uri,
+      Class<T> xface, HAProxyFactory<T> factory, String addressKey) {
     super(conf, uri, xface, factory);
-    this.proxies = getProxyAddresses(uri,
-        HdfsClientConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY);
+    this.proxies = getProxyAddresses(uri, addressKey);
   }
 
   /**
