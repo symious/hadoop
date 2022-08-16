@@ -22,6 +22,7 @@ import static org.apache.hadoop.hdfs.qjournal.QJMTestUtil.JID;
 import static org.apache.hadoop.hdfs.qjournal.QJMTestUtil.verifyEdits;
 import static org.apache.hadoop.hdfs.qjournal.QJMTestUtil.writeSegment;
 import static org.apache.hadoop.hdfs.qjournal.QJMTestUtil.writeTxns;
+import static org.apache.hadoop.hdfs.qjournal.client.SpyQJournalUtil.spyGetJournaledEdits;
 import static org.apache.hadoop.hdfs.qjournal.client.TestQuorumJournalManagerUnit.futureThrows;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -54,7 +55,6 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.qjournal.MiniJournalCluster;
 import org.apache.hadoop.hdfs.qjournal.QJMTestUtil;
 import org.apache.hadoop.hdfs.qjournal.protocol.QJournalProtocolProtos.SegmentStateProto;
-import org.apache.hadoop.hdfs.qjournal.protocol.QJournalProtocolProtos.GetJournaledEditsResponseProto;
 import org.apache.hadoop.hdfs.qjournal.server.JournalFaultInjector;
 import org.apache.hadoop.hdfs.qjournal.server.JournalNode;
 import org.apache.hadoop.hdfs.server.namenode.EditLogInputStream;
@@ -1143,19 +1143,19 @@ public class TestQuorumJournalManager {
     writeTxns(stm, 21, 20);
 
     final Semaphore semaphore = new Semaphore(0);
-    spyGetJournaledEdits(0, 21, new Runnable() {
+    spyGetJournaledEdits(spies, 0, 21, new Runnable() {
       @Override
       public void run() {
         semaphore.release(1);
       }
     });
-    spyGetJournaledEdits(1, 21, new Runnable() {
+    spyGetJournaledEdits(spies, 1, 21, new Runnable() {
       @Override
       public void run() {
         semaphore.release(1);
       }
     });
-    spyGetJournaledEdits(2, 21, new Runnable() {
+    spyGetJournaledEdits(spies, 2, 21, new Runnable() {
       @Override
       public void run() {
         semaphore.acquireUninterruptibly(2);
@@ -1168,21 +1168,6 @@ public class TestQuorumJournalManager {
     assertEquals(1, streams.size());
     assertEquals(21, streams.get(0).getFirstTxId());
     assertEquals(40, streams.get(0).getLastTxId());
-  }
-
-  private void spyGetJournaledEdits(int jnSpyIdx, long fromTxId, final Runnable preHook) {
-    Mockito.doAnswer(new Answer<ListenableFuture<GetJournaledEditsResponseProto>>() {
-      @Override
-      public ListenableFuture<GetJournaledEditsResponseProto> answer(
-          InvocationOnMock invocation) throws Throwable {
-        preHook.run();
-        @SuppressWarnings("unchecked")
-        ListenableFuture<GetJournaledEditsResponseProto> result =
-            (ListenableFuture<GetJournaledEditsResponseProto>) invocation.callRealMethod();
-        return result;
-      }
-    }).when(spies.get(jnSpyIdx)).getJournaledEdits(fromTxId,
-        QuorumJournalManager.QJM_RPC_MAX_TXNS_DEFAULT);
   }
 
   @Test

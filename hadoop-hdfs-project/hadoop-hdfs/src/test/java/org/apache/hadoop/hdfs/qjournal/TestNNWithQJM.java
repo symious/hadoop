@@ -199,7 +199,7 @@ public class TestNNWithQJM {
       fail("New NN with different namespace should have been rejected");
     } catch (IOException ioe) {
       GenericTestUtils.assertExceptionContains(
-          "Unable to start log segment 1: too few journals", ioe);
+          "recoverUnfinalizedSegments failed for too many journals", ioe);
     }
   }
 }

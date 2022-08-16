@@ -30,6 +30,7 @@ import java.util.PriorityQueue;
 import java.util.SortedSet;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -88,7 +89,7 @@ public class JournalSet implements JournalManager {
    * stream, then the stream will be aborted and set to null.
    */
   static class JournalAndStream implements CheckableNameNodeResource {
-    private final JournalManager journal;
+    private JournalManager journal;
     private boolean disabled = false;
     private EditLogOutputStream stream;
     private final boolean required;
@@ -157,6 +158,11 @@ public class JournalSet implements JournalManager {
 
     void setCurrentStreamForTests(EditLogOutputStream stream) {
       this.stream = stream;
+    }
+
+    @VisibleForTesting
+    void setJournalForTests(JournalManager jm) {
+      this.journal = jm;
     }
     
     JournalManager getManager() {

@@ -347,7 +347,8 @@ public class EditLogTailer {
           try {
             // It is already under the name system lock and the checkpointer
             // thread is already stopped. No need to acquire any other lock.
-            editsTailed = doTailEdits();
+            // HDFS-16689. Disable inProgress to use the streaming mechanism
+            editsTailed = doTailEdits(true, false);
           } catch (InterruptedException e) {
             throw new IOException(e);
           }
@@ -359,10 +360,10 @@ public class EditLogTailer {
 
   @VisibleForTesting
   public long doTailEdits() throws IOException, InterruptedException {
-     return doTailEdits(true);
+     return doTailEdits(true, this.inProgressOk);
   }
 
-  public long doTailEdits(boolean onlyDurableTxns)
+  public long doTailEdits(boolean onlyDurableTxns, boolean enableInProgressOk)
       throws IOException, InterruptedException {
     FSImage image = namesystem.getFSImage();
     long startTime = Time.monotonicNow();
@@ -373,7 +374,7 @@ public class EditLogTailer {
     Collection<EditLogInputStream> streams;
     try {
       streams = editLog.selectInputStreams(lastTxnId + 1, 0,
-          null, inProgressOk, onlyDurableTxns);
+          null, enableInProgressOk, onlyDurableTxns);
     } catch (IOException ioe) {
       // This is acceptable. If we try to tail edits in the middle of an edits
       // log roll, i.e. the last one has been finalized but the new inprogress
@@ -546,7 +547,7 @@ public class EditLogTailer {
           // state updates.
           namesystem.cpLockInterruptibly();
           try {
-            editsTailed = doTailEdits(onlyDurableTxns);
+            editsTailed = doTailEdits(onlyDurableTxns, inProgressOk);
           } finally {
             namesystem.cpUnlock();
           }
