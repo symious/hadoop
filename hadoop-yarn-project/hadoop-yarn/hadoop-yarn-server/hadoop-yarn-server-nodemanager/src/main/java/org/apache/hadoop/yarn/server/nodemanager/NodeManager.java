@@ -1126,23 +1126,29 @@ public class NodeManager extends CompositeService
 
   private void countDispatcherEventQueue(NMContext nmContext, Configuration conf) {
 
-    long monitoringEventQueueInterval =
+     long monitoringEventQueueInterval =
         conf.getLong(YarnConfiguration.NM_MONITOR_EVENT_QUEUE_INTERVAL_MS,
             YarnConfiguration.DEFAULT_NM_MONITOR_EVENT_QUEUE_INTERVAL_MS);
-
-    if (monitoringEventQueueInterval > 0) {
+    LOG.info("monitoringEventQueueInterval: " + monitoringEventQueueInterval);
 
       Runnable r = () -> {
+        int nmEventQueueSize = 0, nmContainerManagerQueueSize = 0,
+            nmTimelineQueueSize = 0;
         while (true) {
           try {
-            int nmEventQueueSize =
-                this.dispatcher.getCurrentEventQueueSize();
-            int nmContainerManagerQueueSize =
-                this.getContainerManager().getDispatcher()
-                    .getCurrentEventQueueSize();
-            int nmTimelineQueueSize =
-                nmContext.getNMTimelinePublisher().getDispatcher()
-                    .getCurrentEventQueueSize();
+            if (this.dispatcher != null) {
+              nmEventQueueSize = this.dispatcher.getCurrentEventQueueSize();
+            }
+            if (this.getContainerManager().getDispatcher() != null) {
+              nmContainerManagerQueueSize =
+                  this.getContainerManager().getDispatcher()
+                      .getCurrentEventQueueSize();
+            }
+            if (nmContext.getNMTimelinePublisher().getDispatcher() != null) {
+              nmTimelineQueueSize =
+                  nmContext.getNMTimelinePublisher().getDispatcher()
+                      .getCurrentEventQueueSize();
+            }
             if (LOG.isDebugEnabled()) {
               LOG.debug(
                   "countEventQueueThread nmEventQueueSize: " +
@@ -1162,6 +1168,7 @@ public class NodeManager extends CompositeService
         }
       };
 
+    if (monitoringEventQueueInterval > 0) {
       new Thread(r).start();
       LOG.info("NM countEventQueueThread start!");
     }
