@@ -1101,7 +1101,12 @@ public class Client implements AutoCloseable {
         while (!shouldCloseConnection.get()) {
           ResponseBuffer buf = null;
           try {
-            Pair<Call, ResponseBuffer> pair = rpcRequestQueue.take();
+            // The connection may be idled, using poll to avoid this thread leakage
+            Pair<Call, ResponseBuffer> pair = rpcRequestQueue.poll(10, TimeUnit.MILLISECONDS);
+            if (pair == null) {
+              continue;
+            }
+            // The connection may be closed by other request.
             if (shouldCloseConnection.get()) {
               return;
             }
