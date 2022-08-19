@@ -34,67 +34,34 @@ import javax.ws.rs.core.MediaType;
 import com.google.inject.Singleton;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
-import org.apache.hadoop.hdfs.DFSUtil;
-import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
 import org.apache.hadoop.hdfs.server.zoneservice.AuditLogger;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
-import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRuleSection;
-import org.apache.hadoop.hdfs.server.zoneservice.ZoneChecker;
-import org.apache.hadoop.hdfs.server.zoneservice.ZoneMover;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRuleManager;
 
-import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
-import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
-import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
-import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
-import org.apache.hadoop.util.ReflectionUtils;
-import org.apache.hadoop.hdfs.server.zoneservice.MonitorThread;
 import org.json.JSONObject;
 
-import java.io.IOException;
-import java.net.URI;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Date;
-import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.Semaphore;
-
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT;
 
 @Path("replicarule/")
 @Singleton
 public class ZoneServiceWebRuleManagementMethods {
   private static final String defaultRatio = "-1";
-  private static final String defaultMode = "batch";
   private static final String defaultNull = "N/A";
-  private static final String DC_SEPARATOR = ",";
-  private static final Configuration conf = new Configuration();
-  private static final int maxThread = conf.getInt(
-      DFSConfigKeys.DFS_ZONESERVICE_THREADS_KEY,
-      DFSConfigKeys.DFS_ZONESERVICE_THREADS_DEFAULT);
-  private static final Semaphore semaphore = new Semaphore(maxThread);
-
-  private final String datacenters = conf.get(
-      DFSConfigKeys.DFS_ZONEMOVER_VALID_DATACENTERS_KEY,
-      DFSConfigKeys.DFS_ZONEMOVER_VALID_DATACENTERS_DEFAULT);
-  private final Set<String> validDataCenters = new HashSet<>
-      (Arrays.asList(datacenters.trim().split(DC_SEPARATOR)));
-
-  public Class<? extends StoreDriver> driverClass = conf.getClass(
-      DFS_ZONESERVICE_STORE_DRIVER_CLASS,
-      DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT,
-      StoreDriver.class);
-  private final StoreDriver driver =
-      ReflectionUtils.newInstance(driverClass, conf);
+  private final Semaphore semaphore;
+  private final ReplicationRuleManager replicationRuleManager;
 
   public ZoneServiceWebRuleManagementMethods() {
-    driver.init(conf, "ReplicationRuleServlet");
-    validDataCenters.remove("");
+    Configuration conf = new Configuration();
+    int maxThread = conf.getInt(
+        DFSConfigKeys.DFS_ZONESERVICE_THREADS_KEY,
+        DFSConfigKeys.DFS_ZONESERVICE_THREADS_DEFAULT);
+    semaphore = new Semaphore(maxThread);
+
+    replicationRuleManager = new ReplicationRuleManager(conf);
   }
 
   /**
@@ -151,7 +118,7 @@ public class ZoneServiceWebRuleManagementMethods {
     try {
       semaphore.acquire();
       Map<ReplicationRule, Set<String>> hashMap =
-          checkPath(nameSpace, path, ratio);
+          replicationRuleManager.checkPath(nameSpace, path, ratio);
       semaphore.release();
       AuditLogger.logRuleProcess(
           Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
@@ -194,7 +161,7 @@ public class ZoneServiceWebRuleManagementMethods {
       @QueryParam("rule") String replicaRule,
       @PathParam("path") String path) {
     return new ZoneServiceHttpResponse(
-        setBatchProcess(nameSpace, path, replicaRule)).toString();
+        replicationRuleManager.setBatchProcess(nameSpace, path, replicaRule)).toString();
   }
 
   /**
@@ -214,7 +181,7 @@ public class ZoneServiceWebRuleManagementMethods {
       @QueryParam("rule") String replicaRule,
       @PathParam("path") String path) {
     return new ZoneServiceHttpResponse(
-        setBatchProcess(nameSpace, path, replicaRule)).toString();
+        replicationRuleManager.setBatchProcess(nameSpace, path, replicaRule)).toString();
   }
 
   /**
@@ -232,7 +199,7 @@ public class ZoneServiceWebRuleManagementMethods {
       @QueryParam("namespace") String nameSpace,
       @QueryParam("rule") String replicaRule,
       @PathParam("path") String path) {
-    return new ZoneServiceHttpResponse(createUpdateMap(
+    return new ZoneServiceHttpResponse(replicationRuleManager.createUpdateMap(
         nameSpace, path, replicaRule, true)).toString();
   }
 
@@ -251,7 +218,7 @@ public class ZoneServiceWebRuleManagementMethods {
       @QueryParam("namespace") String nameSpace,
       @QueryParam("rule") String replicaRule,
       @PathParam("path") String path) {
-    return new ZoneServiceHttpResponse(createUpdateMap(
+    return new ZoneServiceHttpResponse(replicationRuleManager.createUpdateMap(
         nameSpace, path, replicaRule, false)).toString();
   }
 
@@ -266,284 +233,7 @@ public class ZoneServiceWebRuleManagementMethods {
   public String removePathRuleMap(@Context HttpServletRequest hsr,
       @QueryParam("namespace") String nameSpace,
       @PathParam("path") String path) {
-    Date startTime = new Date();
-    try {
-      String threadName = "monitor_" + nameSpace;
-      MigrationRecord migrationRecord = new MigrationRecord(nameSpace, path,
-          "");
-      SignalRecord signalRecord = new SignalRecord(nameSpace, true);
-      if (driver.get(new Query<>(migrationRecord),
-          MigrationRecord.class) == null) {
-        AuditLogger.logRuleProcess(
-            "DeletePathRuleMap", nameSpace,
-            path, defaultNull, startTime, new Date(),
-            ResultCode.NO_MIGRATION_RECORD.getMsg(), "monitor");
-        return new ZoneServiceHttpResponse(ResultCode.NO_MIGRATION_RECORD)
-            .toString();
-      }
-      Thread[] ts = new Thread[Thread.activeCount()];
-      Thread.enumerate(ts);
-      for (Thread tt : ts) {
-        if (tt.getName().equals(threadName)) {
-          driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
-          driver.put(signalRecord, true, false);
-          AuditLogger.logRuleProcess(
-              "DeletePathRuleMap", nameSpace,
-              path, defaultNull, startTime, new Date(),
-              ResultCode.SUCCESS.getMsg(), "monitor");
-          return new ZoneServiceHttpResponse(ResultCode.SUCCESS).toString();
-        }
-      }
-      AuditLogger.logRuleProcess(
-          "DeletePathRuleMap", nameSpace,
-          path, defaultNull, startTime, new Date(),
-          ResultCode.NO_MOVE_PROGRESS.getMsg(), "monitor");
-      return new ZoneServiceHttpResponse(ResultCode.NO_MIGRATION_RECORD)
-          .toString();
-    } catch (IOException e) {
-      e.printStackTrace();
-      AuditLogger.logRuleProcess(
-          "DeletePathRuleMap", nameSpace,
-          path, defaultNull, startTime, new Date(),
-          ResultCode.IO_EXCEPTION.getMsg(), "monitor");
-      return new ZoneServiceHttpResponse(ResultCode.IO_EXCEPTION).toString();
-    }
-  }
-
-  /**
-   * Move the path with ZoneMover
-   * @param nameSpace   URI of the NameNode
-   * @param path        the path to apply the rule
-   * @param replicaRule the replica rule to apply
-   * @return ResultCode
-   */
-  protected ResultCode movePath(String nameSpace, String path,
-      String replicaRule) {
-    final Configuration conf = new Configuration();
-    final URI namenode = getNamespaceUri(nameSpace, conf);
-    final ReplicationRule replicationRule =
-        ReplicationRule.parseFromString(replicaRule);
-    final List<org.apache.hadoop.fs.Path> paths = new ArrayList<>();
-    paths.add(new org.apache.hadoop.fs.Path(path));
-
-    try {
-      switch (Objects.requireNonNull(ExitStatus.getExitStatusByCode(
-          ZoneMover.run(conf, namenode, paths, replicationRule)))) {
-        case SUCCESS:
-          return ResultCode.SUCCESS;
-        case IN_PROGRESS:
-          return ResultCode.IN_PROGRESS;
-        case ALREADY_RUNNING:
-          return ResultCode.ALREADY_RUNNING;
-        case NO_MOVE_BLOCK:
-          return ResultCode.NO_MOVE_BLOCK;
-        case NO_MOVE_PROGRESS:
-          return ResultCode.NO_MOVE_PROGRESS;
-        case IO_EXCEPTION:
-          return ResultCode.IO_EXCEPTION;
-        case ILLEGAL_ARGUMENTS:
-          return ResultCode.ILLEGAL_ARGUMENTS;
-        case INTERRUPTED:
-          return ResultCode.INTERRUPTED;
-        case UNFINALIZED_UPGRADE:
-          return ResultCode.UNFINALIZED_UPGRADE;
-      }
-      return ResultCode.UNKNOWNERROR;
-    } catch (IOException e) {
-      e.printStackTrace();
-      return ResultCode.IO_EXCEPTION;
-    } catch (InterruptedException e) {
-      e.printStackTrace();
-      return ResultCode.INTERRUPTED;
-    }
-  }
-
-  /**
-   * set batch mode process and handle the exceptions
-   * @param nameSpace    URI of the NameNode
-   * @param replicaRule  the replica rule to apply
-   * @param path         the path to apply the rule
-   * @return status of result
-   */
-  protected ResultCode setBatchProcess(String nameSpace, String path,
-      String replicaRule) {
-    //Check rule valid for input
-    if (checkRuleInvalid(replicaRule)) {
-      return ResultCode.ILLEGAL_ARGUMENTS;
-    }
-
-    Date startTime = new Date();
-    String currentMethod =
-        Thread.currentThread().getStackTrace()[1].getMethodName();
-    try {
-      MigrationRecord migrationRecord =
-          new MigrationRecord(nameSpace, path, replicaRule);
-      //If there is a rule applying on the path, reject the query
-      if (driver.get(new Query<>(migrationRecord), MigrationRecord.class)
-          != null) {
-        AuditLogger.logRuleProcess(currentMethod, nameSpace,
-            path, replicaRule, startTime, new Date(),
-            ResultCode.REJECT.getMsg(), defaultMode);
-        return ResultCode.REJECT;
-      }
-
-      //Check if there is any available thread
-      if (semaphore.availablePermits() == 0) {
-        AuditLogger.logRuleProcess(currentMethod, nameSpace,
-            path, replicaRule, startTime, new Date(),
-            ResultCode.THREAD_FULL.getMsg(), defaultMode);
-        return ResultCode.THREAD_FULL;
-      }
-
-      semaphore.acquire();
-      driver.put(migrationRecord, false, true);
-      ResultCode result = movePath(nameSpace, path, replicaRule);
-      semaphore.release();
-      driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
-      AuditLogger.logRuleProcess(currentMethod, nameSpace, path, replicaRule,
-          startTime, new Date(), result.getMsg(), defaultMode);
-      return result;
-    } catch (InterruptedException e) {
-      e.printStackTrace();
-      AuditLogger.logRuleProcess(currentMethod, nameSpace,
-          path, replicaRule, startTime, new Date(),
-          ResultCode.INTERRUPTED.getMsg(), defaultMode);
-      return ResultCode.INTERRUPTED;
-    } catch (IOException e) {
-      e.printStackTrace();
-      AuditLogger.logRuleProcess(currentMethod, nameSpace,
-          path, replicaRule, startTime, new Date(),
-          ResultCode.IO_EXCEPTION.getMsg(), defaultMode);
-      return ResultCode.IO_EXCEPTION;
-    }
-  }
-
-  /**
-   * check path with zone checker
-   * @param nameSpace URI of the NameNode
-   * @param path      the path to be checked
-   * @param ratio     the ratio of path will be checked
-   * @return check result: replication-path map
-   */
-  protected Map<ReplicationRule, Set<String>> checkPath(String nameSpace,
-      String path, String ratio) {
-    Configuration conf = new Configuration();
-    URI namenode = getNamespaceUri(nameSpace, conf);
-    return ZoneChecker.getReplicaRule(conf, namenode, path,
-        Float.parseFloat(ratio));
-  }
-
-  /**
-   * Create or update path rule map in zk and let ZoneMover process know
-   * @param nameSpace    name of the namespace
-   * @param path         the path will be updated
-   * @param replicaRule  the rule will be applied
-   * @param allowCreate  allow create new map by this method or not
-   * @return the status of the result
-   */
-  protected ResultCode createUpdateMap(String nameSpace, String path,
-      String replicaRule, boolean allowCreate) {
-    //Check rule valid for input
-    if (checkRuleInvalid(replicaRule)) {
-      return ResultCode.ILLEGAL_ARGUMENTS;
-    }
-
-    Date startTime = new Date();
-    try {
-      String threadName = "monitor_" + nameSpace;
-      SignalRecord signalRecord = new SignalRecord(nameSpace, true);
-      MigrationRecord migrationRecord = new MigrationRecord(nameSpace, path,
-          replicaRule, "monitor");
-      MigrationRecord existedRecord =
-          driver.get(new Query<>(migrationRecord), MigrationRecord.class);
-      //If there is batch mode running on the path, reject the query
-      if (existedRecord != null) {
-        if (existedRecord.getMode().equals("batch")) {
-          AuditLogger.logRuleProcess(
-              "updatePathRuleMap", nameSpace,
-              path, replicaRule, startTime, new Date(),
-              ResultCode.REJECT.getMsg(), "monitor");
-          return ResultCode.REJECT;
-        }
-      }
-      Thread[] ts = new Thread[Thread.activeCount()];
-      Thread.enumerate(ts);
-      for (Thread tt : ts) {
-        //If the thread is existed the new path-rule will add into the thread
-        if (tt.getName().equals(threadName)) {
-          if (existedRecord == null & allowCreate) {
-            driver.put(migrationRecord, true, false);
-            driver.put(signalRecord, true, false);
-            AuditLogger.logRuleProcess(
-                "setPathRuleMap", nameSpace,
-                path, replicaRule, startTime, new Date(),
-                ResultCode.CREATE_SUCCESS.getMsg(), "monitor");
-            return ResultCode.CREATE_SUCCESS;
-          }
-          driver.put(migrationRecord, true, false);
-          driver.put(signalRecord, true, false);
-          AuditLogger.logRuleProcess(
-              "updatePathRuleMap", nameSpace,
-              path, replicaRule, startTime, new Date(),
-              ResultCode.UPDATE_SUCCESS.getMsg(), "monitor");
-          return ResultCode.UPDATE_SUCCESS;
-        }
-      }
-      if (!allowCreate) {
-        //no thread on this namespace, not allow to create thread by this method
-        AuditLogger.logRuleProcess(
-            "refreshPathRuleMap", nameSpace,
-            path, replicaRule, startTime, new Date(),
-            ResultCode.METHOD_ERROR.getMsg(), "monitor");
-        return ResultCode.METHOD_ERROR;
-      }
-      //If there is no monitor thread for this namespace, it will create a new one
-      Thread monitorThread = new MonitorThread(threadName, new Configuration(),
-          getNamespaceUri(nameSpace, new Configuration()));
-      driver.put(migrationRecord, true, true);
-      driver.put(signalRecord, true, false);
-      monitorThread.start();
-      AuditLogger.logRuleProcess(
-          "CreatePathRuleMap", nameSpace,
-          path, replicaRule, startTime, new Date(),
-          ResultCode.CREATE_SUCCESS.getMsg(), "monitor");
-      return ResultCode.CREATE_SUCCESS;
-    } catch (IOException e) {
-      e.printStackTrace();
-      AuditLogger.logRuleProcess(
-          "CreatePathRuleMap", nameSpace,
-          path, replicaRule, startTime, new Date(),
-          ResultCode.IO_EXCEPTION.getMsg(), "monitor");
-      return ResultCode.IO_EXCEPTION;
-    }
-  }
-
-  private boolean checkRuleInvalid(String rule) {
-    try {
-      //Check replica valid
-      ReplicationRule replicationRule = ReplicationRule.parseFromString(rule);
-
-      //Check DC valid
-      for (ReplicationRuleSection section: replicationRule.getSections()) {
-        if (!validDataCenters.contains(section.getDataCenter())) {
-          return true;
-        }
-      }
-    } catch (IllegalArgumentException e) {
-      return true;
-    }
-    return false;
-  }
-
-  private URI getNamespaceUri(String namespace, Configuration conf)
-      throws IllegalArgumentException {
-    Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
-    for (URI namenode: namenodes) {
-      if (namenode.getAuthority().equals(namespace)) {
-        return namenode;
-      }
-    }
-    throw new IllegalArgumentException(
-        "Cannot find the NameNode for namespace: " + namespace);
+    return new ZoneServiceHttpResponse(replicationRuleManager.removePathRulePair(
+        nameSpace, path)).toString();
   }
 }
