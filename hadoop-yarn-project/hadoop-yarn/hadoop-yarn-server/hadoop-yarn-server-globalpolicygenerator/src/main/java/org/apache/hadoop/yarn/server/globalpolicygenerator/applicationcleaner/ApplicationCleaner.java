@@ -159,6 +159,16 @@ public abstract class ApplicationCleaner implements Runnable {
         YarnConfiguration.DEFAULT_GPG_APP_MIN_EXPIRATION_MS);
   }
 
+  public int getHttpURLConnectionCnTimeout(){
+    return this.conf.getInt(YarnConfiguration.GPG_QUERY_CONNECTION_TIMEOUT_MS,
+        YarnConfiguration.DEFAULT_GPG_QUERY_CONNECTION_TIMEOUT_MS);
+  }
+
+  public int getHttpURLConnectionReadTimeout(){
+    return this.conf.getInt(YarnConfiguration.GPG_QUERY_READ_TIMEOUT_MS,
+        YarnConfiguration.DEFAULT_GPG_QUERY_READ_TIMEOUT_MS);
+  }
+
   @Override
   public abstract void run();
 }

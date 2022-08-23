@@ -4362,6 +4362,16 @@ public class YarnConfiguration extends Configuration {
       FEDERATION_GPG_PREFIX + ".app-home.min.expiration-ms";
   public static final long DEFAULT_GPG_APP_MIN_EXPIRATION_MS = 300000;
 
+  //GPG query http connection timeout, default is 30 s
+  public static final String GPG_QUERY_CONNECTION_TIMEOUT_MS =
+      FEDERATION_GPG_PREFIX + "query.connection.timeout-ms";
+  public static final int DEFAULT_GPG_QUERY_CONNECTION_TIMEOUT_MS = 30000;
+
+  //GPG query http read timeout, default is 30 s
+  public static final String GPG_QUERY_READ_TIMEOUT_MS =
+      FEDERATION_GPG_PREFIX + "query.read.timeout-ms";
+  public static final int DEFAULT_GPG_QUERY_READ_TIMEOUT_MS = 30000;
+
   /**
    * Specifications on how (many times) to contact Router for apps. We need to
    * do this because Router might return partial application list because some

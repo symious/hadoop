@@ -29,6 +29,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.RMWSConsts;
 import org.apache.hadoop.yarn.webapp.YarnJacksonJaxbJsonProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.ws.rs.core.MediaType;
 import java.io.IOException;
@@ -44,6 +46,9 @@ import static javax.servlet.http.HttpServletResponse.SC_OK;
  *
  */
 public final class GPGUtils {
+
+  private static final Logger LOG =
+      LoggerFactory.getLogger(GPGUtils.class);
 
   // hide constructor
   private GPGUtils() {
@@ -85,11 +90,11 @@ public final class GPGUtils {
     return invokeRMWebService(conf, webAddr, path, returnType, null);
   }
 
-  public static Client createClient() {
+  public static Client createClient(int connectionTimeout, int readTimeout) {
     ClientConfig cfg = new DefaultClientConfig();
     cfg.getClasses().add(YarnJacksonJaxbJsonProvider.class);
     return new Client(new URLConnectionClientHandler(
-        new DummyURLConnectionFactory()), cfg);
+        new DummyURLConnectionFactory(connectionTimeout, readTimeout)), cfg);
   }
 
   public static ClientResponse getResponse(Client client, URI uri)
@@ -112,12 +117,26 @@ public final class GPGUtils {
 
   private static class DummyURLConnectionFactory
       implements HttpURLConnectionFactory {
+    private int connectionTimeout;
+    private int readTimeout;
+
+    DummyURLConnectionFactory(int connectionTimeout, int readTimeout){
+      this.connectionTimeout = connectionTimeout;
+      this.readTimeout = readTimeout;
+    }
 
     @Override
     public HttpURLConnection getHttpURLConnection(final URL url)
         throws IOException {
       try {
-        return (HttpURLConnection)url.openConnection();
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Create HttpURLConnection, connectionTimeout: " +
+              connectionTimeout + " ,readTimeout: " + readTimeout);
+        }
+        HttpURLConnection httpURLConnection = (HttpURLConnection)url.openConnection();
+        httpURLConnection.setConnectTimeout(this.connectionTimeout);
+        httpURLConnection.setReadTimeout(this.readTimeout);
+        return httpURLConnection;
       } catch (UndeclaredThrowableException e) {
         throw new IOException(e.getCause());
       }

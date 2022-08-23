@@ -95,7 +95,9 @@ public class TimeLineApplicationCleaner extends ApplicationCleaner {
           URI uri = URI.create(queryUrl);
           LOG.debug("query timeline Url: " + queryUrl);
 
-          httpClient = createClient();
+          int httpConnTimeout = getHttpURLConnectionCnTimeout();
+          int httpReadTimeout = getHttpURLConnectionReadTimeout();
+          httpClient = createClient(httpConnTimeout, httpReadTimeout);
           resp = getResponse(httpClient, uri);
           TimelineEntity entity = resp.getEntity(TimelineEntity.class);
 
