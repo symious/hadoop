@@ -25,7 +25,10 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.when;
 
+import org.apache.hadoop.yarn.server.nodemanager.NodeFailedContainersMonitor;
+import org.apache.hadoop.yarn.server.nodemanager.NodeFailedContainersMonitorImpl;
 import org.apache.hadoop.yarn.server.nodemanager.NodeResourceMonitorImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -148,6 +151,13 @@ public abstract class BaseContainerManagerTest {
       doNothing().when(mock).updateLogAggregationStatus(
           any(ApplicationId.class), any(LogAggregationStatus.class),
           anyLong(), anyString(), anyBoolean());
+      return mock;
+    }
+
+    @Override
+    public NodeFailedContainersMonitor getNodeFailedContainersMonitor() {
+      NodeFailedContainersMonitor mock = mock(NodeFailedContainersMonitorImpl.class);
+      when(mock.getPeriodFailedContainers()).thenReturn(0);
       return mock;
     }
   };

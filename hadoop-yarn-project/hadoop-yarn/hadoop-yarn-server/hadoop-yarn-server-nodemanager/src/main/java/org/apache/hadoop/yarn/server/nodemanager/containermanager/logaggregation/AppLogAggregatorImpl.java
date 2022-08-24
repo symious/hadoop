@@ -492,7 +492,9 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
   @Override
   public void run() {
     try {
-      doAppLogAggregation();
+      if (!doAppLogAggregation()) {
+        return;
+      }
     } catch (LogAggregationDFSException e) {
       // if the log aggregation could not be performed due to DFS issues
       // let's not clean up the log files, since that can result in
@@ -504,7 +506,8 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
       LOG.error("Error occurred while aggregating the log for the application "
           + appId, e);
       doAppLogAggregationPostCleanUp();
-    } finally {
+    }
+    if (appFinishing.get()) {
       if (!this.appAggregationFinished.get() && !this.aborted.get()) {
         LOG.warn("Log aggregation did not complete for application " + appId);
         this.dispatcher.getEventHandler().handle(
@@ -515,7 +518,7 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
     }
   }
 
-  private void doAppLogAggregation() throws LogAggregationDFSException {
+  private boolean doAppLogAggregation() throws LogAggregationDFSException {
     while (!this.appFinishing.get() && !this.aborted.get()) {
       synchronized(this) {
         try {
@@ -528,6 +531,7 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
             uploadLogsForContainers(false);
           } else {
             wait(THREAD_SLEEP_TIME);
+            return false;
           }
         } catch (InterruptedException e) {
           LOG.warn("PendingContainers queue is interrupted");
@@ -540,7 +544,8 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
     }
 
     if (this.aborted.get()) {
-      return;
+      this.appAggregationFinished.set(true);
+      return false;
     }
 
     try {
@@ -556,6 +561,7 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
         new ApplicationEvent(this.appId,
             ApplicationEventType.APPLICATION_LOG_HANDLING_FINISHED));
     this.appAggregationFinished.set(true);
+    return true;
   }
 
   private void doAppLogAggregationPostCleanUp() {
@@ -633,6 +639,11 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
   @Override
   public boolean isAggregationEnabled() {
     return !logAggregationDisabled;
+  }
+
+  @Override
+  public boolean isLogAggregationFinished() {
+    return appAggregationFinished.get();
   }
 
   @Private

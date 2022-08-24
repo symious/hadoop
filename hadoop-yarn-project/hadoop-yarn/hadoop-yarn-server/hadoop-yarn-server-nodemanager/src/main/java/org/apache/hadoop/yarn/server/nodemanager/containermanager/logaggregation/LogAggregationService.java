@@ -294,8 +294,12 @@ public class LogAggregationService extends AbstractService implements
         try {
           appLogAggregator.run();
         } finally {
-          appLogAggregators.remove(appId);
-          closeFileSystems(userUgi);
+          if (appLogAggregator.isLogAggregationFinished()) {
+            appLogAggregators.remove(appId);
+            closeFileSystems(userUgi);
+          } else {
+            threadPool.execute(this);
+          }
         }
       }
     };
