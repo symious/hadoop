@@ -180,10 +180,10 @@
                       run ln -sf liblz4.so.1.9.0 ./lib/native/liblz4.so
                       run ln -sf liblz4.so.1.9.0 ./lib/native/liblz4.so.1
                       run cd $CURRENT_DIR
-                      run rm -rf hadoop-dependent-so-${project.version}
-                      run mkdir hadoop-dependent-so-${project.version}
-                      run cd hadoop-dependent-so-${project.version}
-                      echo "Hadoop dist layout available at: ${project.build.directory}/hadoop-dependent-so-${project.version}"
+                      run rm -rf hadoop-native-so-${project.version}
+                      run mkdir hadoop-native-so-${project.version}
+                      run cd hadoop-native-so-${project.version}
+                      echo "Hadoop dist layout available at: ${project.build.directory}/hadoop-native-so-${project.version}"
 
                       run cp -r -d $CURRENT_DIR/hadoop-${project.version}/lib/native/* .
                       run rm -rf examples
@@ -221,10 +221,10 @@
                       echo "Hadoop dist tar available at: ${project.build.directory}/hadoop-${project.version}.tar.gz"
                       echo
 
-                      run tar cf hadoop-dependent-so-${project.version}.tar hadoop-dependent-so-${project.version}
-                      run gzip -f hadoop-dependent-so-${project.version}.tar
+                      run tar cf hadoop-native-so-${project.version}.tar hadoop-native-so-${project.version}
+                      run gzip -f hadoop-native-so-${project.version}.tar
                       echo
-                      echo "Hadoop dist tar available at: ${project.build.directory}/hadoop-dependent-so-${project.version}.tar.gz"
+                      echo "Hadoop dist tar available at: ${project.build.directory}/hadoop-native-so-${project.version}.tar.gz"
                       echo
                     </echo>
                     <exec executable="${shell-executable}" dir="${project.build.directory}" failonerror="true">

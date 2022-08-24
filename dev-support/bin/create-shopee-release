@@ -128,7 +128,8 @@ function hadoop_native_flags
   case "${OSNAME}" in
     Linux)
       # shellcheck disable=SC2086
-      echo -Pnative -Drequire.snappy -Drequire.openssl -Drequire.fuse
+      echo -Pnative -Drequire.snappy -Drequire.openssl -Drequire.fuse \
+           -Drequire.zstd -Drequire.bzip2 -Drequire.isal
     ;;
     Darwin)
       echo \
@@ -484,6 +485,17 @@ function makearelease
   run mv \
     "${BASEDIR}/hadoop-dist/target/hadoop-${HADOOP_VERSION}.tar.gz" \
     "${ARTIFACTS_DIR}/hadoop-${HADOOP_VERSION}.tar.gz"
+
+  run mv \
+    "${BASEDIR}/hadoop-dist/target/hadoop-native-so-${HADOOP_VERSION}.tar.gz" \
+    "${ARTIFACTS_DIR}/hadoop-native-so-${HADOOP_VERSION}.tar.gz"
+
+  # deploy the dependent so to nexus
+  run_and_redirect "${LOGDIR}/mvn_${target}.log" \
+      "${MVN}" deploy:deploy-file \
+        -DgroupId=org.apache.hadoop -DartifactId=hadoop-native-so \
+        -Dversion="${HADOOP_VERSION}" -Dpackaging=tar.gz \
+        -Dfile=${ARTIFACTS_DIR}/hadoop-native-so-${HADOOP_VERSION}.tar.gz"
 }
 
 # find root of the source tree
