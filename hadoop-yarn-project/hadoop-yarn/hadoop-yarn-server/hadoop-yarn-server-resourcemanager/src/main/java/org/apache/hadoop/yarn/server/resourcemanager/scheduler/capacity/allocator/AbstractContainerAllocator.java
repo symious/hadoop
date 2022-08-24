@@ -73,9 +73,10 @@ public abstract class AbstractContainerAllocator {
       RMContainer rmContainer, FiCaSchedulerNode node) {
     // Handle skipped
     CSAssignment.SkippedType skipped =
-        (result.getAllocationState() == AllocationState.APP_SKIPPED) ?
-        CSAssignment.SkippedType.OTHER :
-        CSAssignment.SkippedType.NONE;
+        (result.getAllocationState() == AllocationState.APP_SKIPPED ||
+            result.getAllocationState() == AllocationState.NODE_SKIPPED) ?
+            CSAssignment.SkippedType.OTHER :
+            CSAssignment.SkippedType.NONE;
     CSAssignment assignment = new CSAssignment(skipped);
     assignment.setApplication(application);
 

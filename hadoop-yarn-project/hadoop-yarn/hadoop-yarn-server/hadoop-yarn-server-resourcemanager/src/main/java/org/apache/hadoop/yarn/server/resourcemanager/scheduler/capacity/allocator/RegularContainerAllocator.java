@@ -26,6 +26,7 @@ import java.util.Optional;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.activities.ActivityLevel;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.activities.DiagnosticsCollector;
 import org.slf4j.Logger;
@@ -126,6 +127,21 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
       SchedulerRequestKey schedulerKey) {
     PendingAsk offswitchPendingAsk = application.getPendingAsk(schedulerKey,
         ResourceRequest.ANY);
+
+    RMNode rmNode = node.getRMNode();
+    if (null != rmNode) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("CHECKING: NODE INFO: " + node.getNodeID().getHost() +
+            ", Is good target?:" + rmNode.isGoodTarget());
+      }
+      if (!rmNode.isGoodTarget()) {
+        ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
+            activitiesManager, node, application, schedulerKey,
+            ActivityDiagnosticConstant.NODE_IS_SLOW_NODE,
+            ActivityLevel.NODE);
+        return ContainerAllocation.NODE_SKIPPED;
+      }
+    }
 
     if (offswitchPendingAsk.getCount() <= 0) {
       ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
@@ -903,8 +919,12 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
       if (reservedContainer == null) {
         result = preCheckForNodeCandidateSet(node,
             schedulingMode, resourceLimits, schedulerKey);
-        if (null != result) {
+        if (null != result &&
+            AllocationState.NODE_SKIPPED == result.getAllocationState()) {
           continue;
+        } else if (null != result &&
+            AllocationState.NODE_SKIPPED != result.getAllocationState()) {
+          break;
         }
       } else {
         // pre-check when allocating reserved container
@@ -972,7 +992,8 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
             schedulingMode, resourceLimits, schedulerKey, null);
 
         AllocationState allocationState = result.getAllocationState();
-        if (allocationState == AllocationState.PRIORITY_SKIPPED) {
+        if (allocationState == AllocationState.PRIORITY_SKIPPED ||
+            allocationState == AllocationState.NODE_SKIPPED) {
           continue;
         }
         return getCSAssignmentFromAllocateResult(clusterResource, result,

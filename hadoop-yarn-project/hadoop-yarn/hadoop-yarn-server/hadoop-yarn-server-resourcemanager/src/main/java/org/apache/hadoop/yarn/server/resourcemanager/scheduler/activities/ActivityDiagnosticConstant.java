@@ -112,4 +112,5 @@ public class ActivityDiagnosticConstant {
   public final static String NODE_IS_CO_LOCATED = "Node is co locate";
   public final static String NODE_ALLOCATE_TOO_MANY_CONTAINERS =
       "Node allocate too many containers for this application";
+  public final static String NODE_IS_SLOW_NODE = "Node is slow node";
 }

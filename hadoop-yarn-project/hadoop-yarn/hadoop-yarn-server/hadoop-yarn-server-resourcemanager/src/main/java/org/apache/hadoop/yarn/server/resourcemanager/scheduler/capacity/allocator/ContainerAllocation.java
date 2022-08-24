@@ -54,6 +54,9 @@ public class ContainerAllocation {
   public static final ContainerAllocation QUEUE_SKIPPED =
       new ContainerAllocation(null, null, AllocationState.QUEUE_SKIPPED);
 
+  public static final ContainerAllocation NODE_SKIPPED =
+      new ContainerAllocation(null, null, AllocationState.NODE_SKIPPED);
+
   RMContainer containerToBeUnreserved;
   private Resource resourceToBeAllocated = Resources.none();
   private AllocationState state;
