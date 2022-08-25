@@ -562,6 +562,37 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONESERVICE_THREADS_KEY = "dfs.zoneservice.threads";
   public static final int     DFS_ZONESERVICE_THREADS_DEFAULT = 50;
 
+  //ZoneService Generte ReplicationRule kafka trigger related keys
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_BOOTSTRAP_SERVERS =
+      "dfs.zone.generate.replicationrule.kafka.bootstrap.servers";
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_TOPIC =
+      "dfs.zone.generate.replicationrule.kafka.topic";
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_GROUP_ID =
+      "dfs.zone.generate.replicationrule.kafka.group.id";
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_USERNAME =
+      "dfs.zone.generate.replicationrule.kafka.username";
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_PASSWORD =
+      "dfs.zone.generate.replicationrule.kafka.password";
+
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY =
+      "dfs.zone.generate.replicationrule.enabled";
+  public static final boolean DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY_DEFAULT =
+      false;
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KEY =
+      "dfs.zone.generate.replicationrule";
+  //clientDC:1,dnDC:2
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_DEFAULT = "1:2";
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_PATH_SIZE_LIMIT_KEY =
+      "dfs.zone.generate.replicationrule.path.size.limit";
+  //default pathSizeLimit is 200TB.
+  public static final long  DFS_ZONE_GENERTE_REPLICATION_RULE_PATH_SIZE_LIMIT_DEFAULT =
+      219902325555200L;
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_MIN_CROSS_RAEAD_SIZE_KEY =
+      "dfs.zone.generate.replicationrule.min.crossread.size";
+  //default min for cross-read size is 2TB.
+  public static final long  DFS_ZONE_GENERTE_REPLICATION_RULE_MIN_CROSS_RAEAD_SIZE_DEFAULT =
+      2199023255552L;
+
   public static final String  DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_KEY =
       "dfs.namenode.audit.log.with.remote.port";
   public static final boolean DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_DEFAULT =

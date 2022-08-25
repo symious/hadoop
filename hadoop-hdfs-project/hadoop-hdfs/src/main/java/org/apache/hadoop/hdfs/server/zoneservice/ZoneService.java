@@ -69,6 +69,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_HTTP_ADDRESS_
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_HTTP_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY_DEFAULT;
 import static org.apache.hadoop.util.ExitUtil.terminate;
 
 public class ZoneService extends ReconfigurableBase  {
@@ -96,6 +98,8 @@ public class ZoneService extends ReconfigurableBase  {
   protected final Tracer tracer;
   protected final TracerConfigurationManager tracerConfigurationManager;
   private final ExecutorService batchThreadPool;
+  private boolean replicationRuleGenerateEnabled = false;
+  private ReplicationRuleGenerateKafkaTrigger replicationRuleGenerateKafkaTrigger;
 
   public ZoneService(Configuration conf) throws IOException {
     this.tracer = new Tracer.Builder("ZoneService").
@@ -166,6 +170,8 @@ public class ZoneService extends ReconfigurableBase  {
         + httpServer.getHttpAddress().getPort());
 
     recoverZMProcess(conf);
+
+    initReplicationRuleGenerateKafkaTrigger(conf);
   }
 
   /**
@@ -213,6 +219,7 @@ public class ZoneService extends ReconfigurableBase  {
   public void stop() {
     stopHttpServer();
     tracer.close();
+    stopReplicationRuleGenerateKafkaTrigger();
   }
 
   private void stopHttpServer() {
@@ -336,6 +343,24 @@ public class ZoneService extends ReconfigurableBase  {
     }
     throw new IllegalArgumentException(
         "Cannot find the NameNode for namespace: " + namespace);
+  }
+
+  private void initReplicationRuleGenerateKafkaTrigger(Configuration conf) throws IOException {
+    this.replicationRuleGenerateEnabled = conf.getBoolean(
+        DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY,
+        DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY_DEFAULT);
+    if (replicationRuleGenerateEnabled && replicationRuleGenerateKafkaTrigger == null) {
+      LOG.info("Start replication rule generate kafka trigger.");
+      replicationRuleGenerateKafkaTrigger = new ReplicationRuleGenerateKafkaTrigger(conf);
+    }
+  }
+
+  private void stopReplicationRuleGenerateKafkaTrigger() {
+    LOG.info("Stop replication rule generate kafka trigger.");
+    if (replicationRuleGenerateKafkaTrigger != null) {
+      replicationRuleGenerateKafkaTrigger.shutdown();
+      replicationRuleGenerateKafkaTrigger = null;
+    }
   }
 
   @Override // ReconfigurableBase
