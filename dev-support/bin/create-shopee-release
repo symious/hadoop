@@ -491,7 +491,7 @@ function makearelease
     "${ARTIFACTS_DIR}/hadoop-native-so-${HADOOP_VERSION}.tar.gz"
 
   # deploy the dependent so to nexus
-  run_and_redirect "${LOGDIR}/mvn_${target}.log" \
+  run_and_redirect "${LOGDIR}/mvn_deploy_${target}.log" \
       "${MVN}" deploy:deploy-file \
         -DgroupId=org.apache.hadoop -DartifactId=hadoop-native-so \
         -Dversion="${HADOOP_VERSION}" -Dpackaging=tar.gz \
