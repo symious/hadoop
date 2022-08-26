@@ -74,7 +74,9 @@ public abstract class AbstractContainerAllocator {
     // Handle skipped
     CSAssignment.SkippedType skipped =
         (result.getAllocationState() == AllocationState.APP_SKIPPED ||
-            result.getAllocationState() == AllocationState.NODE_SKIPPED) ?
+            result.getAllocationState() == AllocationState.NODE_SKIPPED ||
+            result.getAllocationState() ==
+                AllocationState.QUEUE_CONSTRAINT_SKIPPED) ?
             CSAssignment.SkippedType.OTHER :
             CSAssignment.SkippedType.NONE;
     CSAssignment assignment = new CSAssignment(skipped);

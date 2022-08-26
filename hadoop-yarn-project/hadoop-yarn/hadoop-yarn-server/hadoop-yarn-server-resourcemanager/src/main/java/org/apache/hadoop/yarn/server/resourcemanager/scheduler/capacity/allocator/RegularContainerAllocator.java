@@ -939,6 +939,10 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
       result = tryAllocateOnNode(clusterResource, node, schedulingMode,
           resourceLimits, schedulerKey, reservedContainer);
 
+      if (AllocationState.QUEUE_CONSTRAINT_SKIPPED == result.getAllocationState()) {
+        break;
+      }
+
       if (AllocationState.ALLOCATED == result.getAllocationState()) {
         result = doAllocation(result, node, schedulerKey, reservedContainer);
         break;

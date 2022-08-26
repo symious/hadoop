@@ -119,7 +119,7 @@ public class SingleAppMaxResourcesConstraint implements ApplicationConstraint {
           LOG.debug("Check single app resources limit cost time: " +
               (end1 - start) / 1000 + " us!");
         }
-        return ContainerAllocation.APP_SKIPPED;
+        return ContainerAllocation.QUEUE_CONSTRAINT_SKIPPED;
       }
       long end2 = System.nanoTime();
       if (LOG.isDebugEnabled()) {
