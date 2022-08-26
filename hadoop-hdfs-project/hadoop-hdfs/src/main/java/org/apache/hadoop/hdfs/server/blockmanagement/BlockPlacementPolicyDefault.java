@@ -710,17 +710,19 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
       return chooseRandom(localRack, excludedNodes,
           blocksize, maxNodesPerRack, results, avoidStaleNodes, storageTypes);
     } catch (NotEnoughReplicasException e) {
-      // find the next replica and retry with its rack
-      for(DatanodeStorageInfo resultStorage : results) {
-        DatanodeDescriptor nextNode = resultStorage.getDatanodeDescriptor();
-        if (nextNode != localMachine) {
-          if (LOG.isDebugEnabled()) {
-            LOG.debug("Failed to choose from local rack (location = " + localRack
-                + "), retry with the rack of the next replica (location = "
-                + nextNode.getNetworkLocation() + ")", e);
+      if  (maxNodesPerRack > 1) {
+        // if maxNodesPerRack > 1 and find the next replica and retry with its rack
+        for(DatanodeStorageInfo resultStorage : results) {
+          DatanodeDescriptor nextNode = resultStorage.getDatanodeDescriptor();
+          if (nextNode != localMachine) {
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("Failed to choose from local rack (location = " + localRack
+                  + "), retry with the rack of the next replica (location = "
+                  + nextNode.getNetworkLocation() + ")", e);
+            }
+            return chooseFromNextRack(nextNode, excludedNodes, blocksize,
+                maxNodesPerRack, results, avoidStaleNodes, storageTypes);
           }
-          return chooseFromNextRack(nextNode, excludedNodes, blocksize,
-              maxNodesPerRack, results, avoidStaleNodes, storageTypes);
         }
       }
 
