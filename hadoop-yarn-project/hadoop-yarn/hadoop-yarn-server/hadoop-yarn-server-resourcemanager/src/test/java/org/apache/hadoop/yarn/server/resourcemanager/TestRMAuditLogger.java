@@ -149,7 +149,7 @@ public class TestRMAuditLogger {
     } else {
       sLog = RMAuditLogger.createSuccessLog(USER, OPERATION, TARGET, appId,
           attemptId, containerId, resource, callerContext, tmpIp, queueName,
-          partition, null, null);
+          partition, null, null, null);
     }
     StringBuilder expLog = new StringBuilder();
     expLog.append("USER=test\t");

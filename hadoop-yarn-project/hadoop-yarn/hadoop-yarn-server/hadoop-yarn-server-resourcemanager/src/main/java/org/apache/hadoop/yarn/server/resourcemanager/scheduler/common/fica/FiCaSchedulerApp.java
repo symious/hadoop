@@ -657,10 +657,21 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
           if (partition != null && partition.isEmpty()) {
             partition = null;
           }
+          SchedulerRequestKey schedulerRequestKey =
+              schedulerContainer.getSchedulerRequestKey();
+          String allocateCostTimeStr = null;
+          try{
+            allocateCostTimeStr = String.valueOf(System.nanoTime() -
+                schedulerRequestKey.getAllocationRequestTimeStamp());
+          }catch(Exception e){
+            LOG.error("container: " +
+                schedulerContainer.getRmContainer().getContainerId() +
+                ", get allocateCostTimeStr failed:", e);
+          }
           RMAuditLogger.logSuccess(getUser(), AuditConstants.ALLOC_CONTAINER,
               "SchedulerApp", getApplicationId(), containerId,
               allocation.getAllocatedOrReservedResource(), getQueueName(),
-              partition);
+              partition, allocateCostTimeStr);
         } else {
           // If the rmContainer's state is already updated to RESERVED, this is
           // a reReservation

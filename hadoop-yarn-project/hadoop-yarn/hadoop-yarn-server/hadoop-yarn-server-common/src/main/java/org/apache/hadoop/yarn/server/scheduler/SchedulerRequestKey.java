@@ -35,6 +35,7 @@ public class SchedulerRequestKey implements
   private final Priority priority;
   private final long allocationRequestId;
   private final ContainerId containerToUpdate;
+  private final long allocationRequestTimeStamp;
 
   /**
    * Factory method to generate a SchedulerRequestKey from a ResourceRequest.
@@ -78,6 +79,7 @@ public class SchedulerRequestKey implements
     this.priority = priority;
     this.allocationRequestId = allocationRequestId;
     this.containerToUpdate = containerToUpdate;
+    this.allocationRequestTimeStamp = System.nanoTime();
   }
 
   /**
@@ -100,6 +102,10 @@ public class SchedulerRequestKey implements
 
   public ContainerId getContainerToUpdate() {
     return containerToUpdate;
+  }
+
+  public long getAllocationRequestTimeStamp() {
+    return allocationRequestTimeStamp;
   }
 
   @Override

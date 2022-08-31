@@ -45,7 +45,7 @@ public class RMAuditLogger {
                     DESCRIPTION, APPID, APPATTEMPTID, CONTAINERID, 
                     CALLERCONTEXT, CALLERSIGNATURE, RESOURCE, QUEUENAME,
                     INCLUDEAPPS, INCLUDECHILDQUEUES, RECURSIVE, NODELABEL,
-                    APPLICATIONTAGS, APPNAME}
+                    APPLICATIONTAGS, APPNAME, ALLOCATECOSTTIME}
 
   public static class AuditConstants {
     static final String SUCCESS = "SUCCESS";
@@ -98,7 +98,7 @@ public class RMAuditLogger {
       ApplicationId appId, ApplicationAttemptId attemptId,
       ContainerId containerId, Resource resource) {
     return createSuccessLog(user, operation, target, appId, attemptId,
-        containerId, resource, null, Server.getRemoteIp(), null, null, null, null);
+        containerId, resource, null, Server.getRemoteIp(), null, null, null, null, null);
   }
 
   /**
@@ -125,7 +125,7 @@ public class RMAuditLogger {
       ApplicationId appId, ApplicationAttemptId attemptId,
       ContainerId containerId, Resource resource, CallerContext callerContext,
       InetAddress ip, String queueName, String partition, Set<String> appTags,
-      String appName) {
+      String appName, String allocateCostTimeStr) {
     StringBuilder b =
         createStringBuilderForSuccessEvent(user, operation, target, ip);
     if (appId != null) {
@@ -152,6 +152,9 @@ public class RMAuditLogger {
     }
     if (appName != null) {
       add(Keys.APPNAME, appName, b);
+    }
+    if (allocateCostTimeStr != null) {
+      add(Keys.ALLOCATECOSTTIME, allocateCostTimeStr, b);
     }
     return b.toString();
   }
@@ -237,7 +240,34 @@ public class RMAuditLogger {
     if (LOG.isInfoEnabled()) {
       LOG.info(createSuccessLog(user, operation, target, appId, null,
           containerId, resource, null, Server.getRemoteIp(), queueName,
-          partition, null, null));
+          partition, null, null, null));
+    }
+  }
+
+  /**
+   * Create a readable and parseable audit log string for a successful event.
+   *
+   * @param user User who made the service request to the ResourceManager
+   * @param operation Operation requested by the user.
+   * @param target The target on which the operation is being performed.
+   * @param appId Application Id in which operation was performed.
+   * @param containerId Container Id in which operation was performed.
+   * @param resource Resource associated with container.
+   * @param queueName Name of queue.
+   * @param partition Name of labeled partition.
+   * @param allocateCostTimeStr allocation time string of the container.
+   *
+   * <br><br>
+   * Note that the {@link RMAuditLogger} uses tabs ('\t') as a key-val delimiter
+   * and hence the value fields should not contains tabs ('\t').
+   */
+  public static void logSuccess(String user, String operation, String target,
+      ApplicationId appId, ContainerId containerId, Resource resource,
+      String queueName, String partition, String allocateCostTimeStr) {
+    if (LOG.isInfoEnabled()) {
+      LOG.info(createSuccessLog(user, operation, target, appId, null,
+          containerId, resource, null, Server.getRemoteIp(), queueName,
+          partition, null, null, allocateCostTimeStr));
     }
   }
 
@@ -289,7 +319,7 @@ public class RMAuditLogger {
       LOG.info(
           createSuccessLog(user, operation, target, appId, null, null, null,
               callerContext, Server.getRemoteIp(), queueName, partition,
-              appTags, appName));
+              appTags, appName, null));
     }
   }
 
@@ -318,7 +348,7 @@ public class RMAuditLogger {
       ApplicationId appId, CallerContext callerContext) {
     if (LOG.isInfoEnabled()) {
       LOG.info(createSuccessLog(user, operation, target, appId, null, null,
-          null, callerContext, Server.getRemoteIp(), null, null, null, null));
+          null, callerContext, Server.getRemoteIp(), null, null, null, null, null));
     }
   }
 
@@ -327,7 +357,7 @@ public class RMAuditLogger {
     if (LOG.isInfoEnabled()) {
       LOG.info(createSuccessLog(user, operation, target, appId, null, null,
           null, callerContext, Server.getRemoteIp(), queueName, null, null,
-          null));
+          null, null));
     }
   }
 
@@ -355,7 +385,7 @@ public class RMAuditLogger {
       ApplicationId appId, InetAddress ip) {
     if (LOG.isInfoEnabled()) {
       LOG.info(createSuccessLog(user, operation, target, appId, null, null,
-          null, null, ip, null, null, null, null));
+          null, null, ip, null, null, null, null, null));
     }
   }
 
