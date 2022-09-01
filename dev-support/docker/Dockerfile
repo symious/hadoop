@@ -217,6 +217,50 @@ RUN curl -L -s -S \
         awk '$1!="734e37c1f6619cbbd86b9b249e69c9af8ee1ea87a2b1ff71dccda412e9dac35e63425225a95d71572091a3f0a11e9a04c2fc25d9e91b840530c26af32b9891ca" {exit(1)}'
 
 ###
+# Install bzip2
+###
+RUN mkdir -p /opt/bzip2-src \
+  && curl -L -s -S \
+      https://github.com/libarchive/bzip2/archive/refs/tags/bzip2-1.0.7.tar.gz \
+      -o /opt/bzip2.tar.gz \
+  && tar xzf /opt/bzip2.tar.gz --strip-components 1 -C /opt/bzip2-src \
+  && cd /opt/bzip2-src \
+  && make \
+  && make install \
+  && cd /root \
+  && rm -rf /opt/bzip2-src
+
+###
+# Install LZ4
+###
+RUN mkdir -p /opt/lz4-src \
+  && curl -L -s -S \
+    https://github.com/lz4/lz4/archive/refs/tags/v1.9.0.tar.gz \
+    -o /opt/lz4.tar.gz \
+  && tar xzf /opt/lz4.tar.gz --strip-components 1 -C /opt/lz4-src \
+  && cd /opt/lz4-src \
+  && make \
+  && make install \
+  && cd /root \
+  && rm -rf /opt/lz4-src
+
+
+###
+# Install Zlib
+###
+RUN mkdir -p /opt/zlib-src \
+  && curl -L -s -S \
+    https://github.com/madler/zlib/archive/refs/tags/v1.2.7.tar.gz \
+    -o /opt/zlib.tar.gz \
+  && tar xzf /opt/zlib.tar.gz --strip-components 1 -C /opt/zlib-src \
+  && cd /opt/zlib-src \
+  && sh ./configure --prefix=/usr/lib/zlib \
+  && make \
+  && make install \
+  && cd /root \
+  && rm -rf /opt/zlib-src
+
+###
 # Avoid out of memory errors in builds
 ###
 ENV MAVEN_OPTS -Xms256m -Xmx1536m -Dhttps.protocols=TLSv1.2 -Dhttps.cipherSuites=TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256
