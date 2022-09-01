@@ -42,3 +42,9 @@ run gzip -f "hadoop-${VERSION}.tar"
 echo
 echo "Hadoop dist tar available at: ${BASEDIR}/hadoop-${VERSION}.tar.gz"
 echo
+
+run tar cf "hadoop-native-so-${VERSION}.tar" "hadoop-native-so-${VERSION}"
+run gzip -f "hadoop-native-so-${VERSION}.tar"
+echo
+echo "Hadoop dist tar available at: ${BASEDIR}/hadoop-native-so-${VERSION}.tar.gz"
+echo

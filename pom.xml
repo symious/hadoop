@@ -113,6 +113,11 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
     <maven-checkstyle-plugin.version>3.0.0</maven-checkstyle-plugin.version>
     <checkstyle.version>8.8</checkstyle.version>
     <dependency-check-maven.version>1.4.3</dependency-check-maven.version>
+    <alluxio.version>2.7.1-sdi-010</alluxio.version>
+    <ozone.version>1.2.sdi-014</ozone.version>
+    <gpl-compression.version>0.1.0</gpl-compression.version>
+    <mc.version>2.2.0</mc.version>
+    <so.version>1.0.sdi-001</so.version>
 
     <shell-executable>bash</shell-executable>
 

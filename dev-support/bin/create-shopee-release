@@ -130,7 +130,8 @@ function hadoop_native_flags
   case "${OSNAME}" in
     Linux)
       # shellcheck disable=SC2086
-      echo -Pnative -Drequire.snappy -Drequire.openssl -Drequire.fuse
+      echo -Pnative -Drequire.snappy -Drequire.openssl -Drequire.fuse \
+          -Drequire.zstd -Drequire.bzip2 -Drequire.isal
     ;;
     Darwin)
       echo \
@@ -207,6 +208,8 @@ function set_defaults
   DOCKERCACHE=false
   DOCKERFILE="${BASEDIR}/dev-support/docker/Dockerfile"
   DOCKERRAN=false
+  SNAPSHOT_URL=https://di-nexus-repo.idata.shopeemobile.com/repository/maven-snapshot
+  RELEASE_URL=https://di-nexus-repo.idata.shopeemobile.com/repository/maven-release
 
   # Extract Java version from ${BASEDIR}/pom.xml
   # doing this outside of maven means we can do this before
@@ -218,6 +221,13 @@ function set_defaults
   GIT=$(command -v git)
 
   HADOOP_VERSION="${DEFAULT_HADOOP_VERSION}"
+
+  if [[ ${HADOOP_VERSION} =~ "SNAPSHOT" ]]
+  then
+    DEPLOY_URL=${SNAPSHOT_URL}
+  else
+    DEPLOY_URL=${RELEASE_URL}
+  fi
 
   INDOCKER=false
 
@@ -472,6 +482,7 @@ function dockermode
     "${extrad[@]}"  \
     -v "${BASEDIR}:/build/source" \
     -v "${HOME}/.m2/settings.xml:/home/${user_name}/.m2/settings.xml" \
+    -v "${HOME}/.m2/repository:/home/${user_name}/.m2/repository" \
     -u "${user_name}" \
     -w "/build/source" \
     "${imgname}" \
@@ -521,6 +532,19 @@ function makearelease
     "${BASEDIR}/hadoop-dist/target/hadoop-${HADOOP_VERSION}.tar.gz" \
     "${ARTIFACTS_DIR}/hadoop-${HADOOP_VERSION}.tar.gz"
 
+  # Deploy the dependent so to nexus
+  run_and_redirect "${LOGDIR}/mvn_deploy_file.log" \
+    "${MVN}" deploy:deploy-file \
+      -DgroupId=org.apache.hadoop -DartifactId=hadoop-native-so \
+      -Dversion="${HADOOP_VERSION}" -Dpackaging=tar.gz \
+      -Dfile="${BASEDIR}/hadoop-dist/target/hadoop-native-so-${HADOOP_VERSION}.tar.gz" \
+      -Durl="${DEPLOY_URL}" \
+      -DrepositoryId=data-infra-release
+
+  # Prepare the dependent tarball
+  #run mv \
+  #  "${BASEDIR}/hadoop-dist/target/hadoop-native-so-${HADOOP_VERSION}.tar.gz" \
+  #  "${ARTIFACTS_DIR}/hadoop-native-so-${HADOOP_VERSION}.tar.gz"
 }
 
 # find root of the source tree
