@@ -111,6 +111,7 @@ function copy()
 
 # shellcheck disable=SC2164
 ROOT=$(cd "${BASEDIR}"/../..;pwd)
+CURRENT_DIR=`pwd`
 echo
 echo "Current directory $(pwd)"
 echo
@@ -150,7 +151,23 @@ run cp -p "${ROOT}/hadoop-client-modules/hadoop-client-minicluster/target/hadoop
 
 run copy "${ROOT}/hadoop-tools/hadoop-tools-dist/target/hadoop-tools-dist-${VERSION}" .
 run copy "${ROOT}/hadoop-tools/hadoop-dynamometer/hadoop-dynamometer-dist/target/hadoop-dynamometer-dist-${VERSION}" .
+run ln -sf "hadoop-streaming-${VERSION}.jar" ./share/hadoop/tools/lib/hadoop-mr-streaming.jar
 
+run sh "${ROOT}/dev-support/external-dependence/jar/downloadJars.sh"
+run cp -r ${ROOT{}/dev-support/external-dependence/jar/*.jar ./share/hadoop/common/lib/
+run rm -rf ${ROOT}/dev-support/external-dependence/jar/*.jar
+
+run sh ${ROOT}/dev-support/external-dependence/so/downloadSo.sh
+run cp -r -d ${ROOT}/dev-support/external-dependence/so/hadoop-so/* ./lib/native
+run rm -rf ${ROOT}/dev-support/external-dependence/so/hadoop*
+
+run cd "${CURRENT_DIR}"
+run rm -rf hadoop-native-so-${VERSION}
+run mkdir hadoop-native-so-${VERSION}
+run cd hadoop-native-so-${VERSION}
+
+run cp -r -d ${CURRENT_DIR}/hadoop-${VERSION}/lib/native/* .
+run rm -rf examples
 
 echo
 echo "Hadoop dist layout available at: ${BASEDIR}/hadoop-${VERSION}"
