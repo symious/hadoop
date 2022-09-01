@@ -504,10 +504,6 @@ function makearelease
           -Dfile="${BASEDIR}/hadoop-dist/target/hadoop-native-so-${HADOOP_VERSION}.tar.gz" \
           -Durl="${DEPLOY_URL}" \
           -DrepositoryId=data-infra-release
-
-  run mv \
-    "${BASEDIR}/hadoop-dist/target/hadoop-native-so-${HADOOP_VERSION}.tar.gz" \
-    "${ARTIFACTS_DIR}/hadoop-native-so-${HADOOP_VERSION}.tar.gz"
 }
 
 # find root of the source tree
