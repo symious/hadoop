@@ -1413,18 +1413,27 @@ public class RouterRpcClient {
         // initialize
         synchronized (lastMsyncTimes) {
           if (!lastMsyncTimes.containsKey(ns)) {
-            invokeMethod(ugi, namenodes, ClientProtocol.class,
-                mSyncMethod);
+            internalMSync(ugi, mSyncMethod, namenodes);
             lastMsyncTimes.put(ns, new AtomicLong(Time.monotonicNow()));
           }
         }
       } else if (autoMsyncPeriodMs == 0) {
-        invokeMethod(ugi, namenodes, ClientProtocol.class, mSyncMethod);
+        internalMSync(ugi, mSyncMethod, namenodes);
       } else if (Time.monotonicNow() - lastMsyncTimes.get(ns).get() > autoMsyncPeriodMs
           || needSyncForwardThisRequest()) {
-        invokeMethod(ugi, namenodes, ClientProtocol.class, mSyncMethod);
+        internalMSync(ugi, mSyncMethod, namenodes);
         lastMsyncTimes.get(ns).set(Time.monotonicNow());
       }
+    }
+  }
+
+  private void internalMSync(UserGroupInformation ugi, Method mSyncMethod,
+      final List<? extends FederationNamenodeContext> namenodes)
+      throws IOException {
+    long beginTime = Time.monotonicNow();
+    invokeMethod(ugi, namenodes, ClientProtocol.class, mSyncMethod);
+    if (rpcMonitor != null) {
+      rpcMonitor.getRPCMetrics().addProxyMsync(Time.monotonicNow() - beginTime);
     }
   }
 
