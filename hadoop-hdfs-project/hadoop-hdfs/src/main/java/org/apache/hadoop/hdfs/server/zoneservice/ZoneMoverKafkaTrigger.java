@@ -178,7 +178,10 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
     result = new ArrayList<>(Arrays.asList(s1[0].split("[ \t]")));
     result.add("src=" + s2[0].trim());
     result.add("dst=" + s3[0].trim());
-    result.addAll(Arrays.asList(("perm=" + s3[1]).split("[ \t]")));
+    List<String> tmpList = Arrays.asList(("perm=" + s3[1].trim()).split("[ \t]"));
+    result.addAll(tmpList);
+    // Ignore "callContext" info in audit log
+    result.remove(result.size() -1);
     return result;
   }
 
