@@ -746,10 +746,6 @@ public class UsersManager implements AbstractUsersManager {
     Resource consumed = Resources.multiplyAndNormalizeUp(resourceCalculator,
         partitionResource, getUsageRatio(nodePartition),
         lQueue.getMinimumAllocation());
-//    Resource currentCapacity = Resources.lessThan(resourceCalculator,
-//        partitionResource, consumed, queueCapacity)
-//            ? queueCapacity
-//            : Resources.add(consumed, required);
     Resource currentCapacity = Resources.componentwiseMax(consumed, queueCapacity);
     if (!Resources.equals(currentCapacity, queueCapacity)) {
       currentCapacity = Resources.addTo(currentCapacity, required);
@@ -775,8 +771,7 @@ public class UsersManager implements AbstractUsersManager {
      * User limit resource is determined by: max(currentCapacity / #activeUsers,
      * currentCapacity * user-limit-percentage%)
      */
-    Resource userLimitResource = Resources.max(resourceCalculator,
-        partitionResource,
+    Resource userLimitResource = Resources.componentwiseMax(
         Resources.divideAndCeil(resourceCalculator, resourceUsed,
             usersSummedByWeight),
         Resources.divideAndCeil(resourceCalculator,
