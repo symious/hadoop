@@ -32,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.FileIoProvider;
@@ -40,6 +41,7 @@ import org.apache.hadoop.hdfs.server.datanode.fsdataset.ReplicaOutputStreams;
 import org.apache.hadoop.hdfs.server.protocol.BlockCommand;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.nativeio.NativeIOException;
+import org.apache.hadoop.util.Preconditions;
 
 /**
  * This class is a container of multiple thread pools, each for a volume,
@@ -60,9 +62,7 @@ class FsDatasetAsyncDiskService {
   public static final Log LOG = LogFactory.getLog(FsDatasetAsyncDiskService.class);
   
   // ThreadPool core pool size
-  private static final int CORE_THREADS_PER_VOLUME = 1;
-  // ThreadPool maximum pool size
-  private static final int MAXIMUM_THREADS_PER_VOLUME = 4;
+  private final int threadsPerVolume;
   // ThreadPool keep-alive time for threads over core pool size
   private static final long THREADS_KEEP_ALIVE_SECONDS = 60; 
   
@@ -87,6 +87,12 @@ class FsDatasetAsyncDiskService {
     this.datanode = datanode;
     this.fsdatasetImpl = fsdatasetImpl;
     this.threadGroup = new ThreadGroup(getClass().getSimpleName());
+    this.threadsPerVolume = datanode.getConf().getInt(
+        DFSConfigKeys.DFS_DATANODE_FSDATASETASYNCDISK_THREADS_PER_VOLUME_KEY,
+        DFSConfigKeys.DFS_DATANODE_FSDATASETASYNCDISK_THREADS_PER_VOLUME_DEFAULT);
+    Preconditions.checkArgument(this.threadsPerVolume > 0,
+        DFSConfigKeys.DFS_DATANODE_FSDATASETASYNCDISK_THREADS_PER_VOLUME_KEY +
+        " must be a positive integer.");
   }
 
   private void addExecutorForVolume(final File volume) {
@@ -107,7 +113,7 @@ class FsDatasetAsyncDiskService {
     };
 
     ThreadPoolExecutor executor = new ThreadPoolExecutor(
-        CORE_THREADS_PER_VOLUME, MAXIMUM_THREADS_PER_VOLUME,
+        this.threadsPerVolume, this.threadsPerVolume,
         THREADS_KEEP_ALIVE_SECONDS, TimeUnit.SECONDS,
         new LinkedBlockingQueue<Runnable>(), threadFactory);
 
