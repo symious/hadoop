@@ -2171,6 +2171,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           LOG.debug("Block file " + removing.getBlockFile().getName()
               + " is to be deleted");
         }
+        datanode.getMetrics().incrBlocksRemoved(1);
         if (removing instanceof ReplicaInPipelineInterface) {
           ((ReplicaInPipelineInterface) removing).releaseAllBytesReserved();
         }
