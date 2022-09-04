@@ -31,5 +31,5 @@ public interface NodeResourceMonitor extends Service {
    */
   public ResourceUtilization getUtilization();
 
-  void updateNodeResource(int coreNumber, long memory) throws Exception;
+  void updateNodeResource(int coreNumber, long memory, int vcoreNumber) throws Exception;
 }

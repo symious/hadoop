@@ -1814,6 +1814,9 @@ public class YarnConfiguration extends Configuration {
   public static final String NM_VCORES = NM_PREFIX + "resource.cpu-vcores";
   public static final int DEFAULT_NM_VCORES = 8;
 
+  public static final String COLOCATION_NM_VCORES_FACTOR = NM_PREFIX + "colocation.vcore.factor";
+  public static final float DEFAULT_COLOCATION_NM_VCORES_FACTOR = 1.0f;
+
   /** Count logical processors(like hyperthreads) as cores. */
   public static final String NM_COUNT_LOGICAL_PROCESSORS_AS_CORES = NM_PREFIX
       + "resource.count-logical-processors-as-cores";

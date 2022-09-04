@@ -736,10 +736,15 @@ public class NMWebServices {
         if (memory < minMB) {
           memory = minMB;
         }
+        float vcoreFactor =
+            nmContext.getConf().getFloat(YarnConfiguration.COLOCATION_NM_VCORES_FACTOR,
+                YarnConfiguration.DEFAULT_COLOCATION_NM_VCORES_FACTOR);
+        int vcoreNumber = Float.valueOf(coreNumber * vcoreFactor).intValue();
         if (coreNumber < minVcores) {
           coreNumber = minVcores;
+          vcoreNumber = coreNumber;
         }
-        this.nmContext.getNodeResourceMonitor().updateNodeResource(coreNumber, memory);
+        this.nmContext.getNodeResourceMonitor().updateNodeResource(coreNumber, memory, vcoreNumber);
         result.put("status", "200");
         result.put("msg", "SUCCESS");
       } else {

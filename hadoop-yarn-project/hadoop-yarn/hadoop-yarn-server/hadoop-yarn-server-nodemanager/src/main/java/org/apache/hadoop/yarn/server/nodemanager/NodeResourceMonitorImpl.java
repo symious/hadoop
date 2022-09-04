@@ -312,9 +312,10 @@ public class NodeResourceMonitorImpl extends AbstractService implements
   }
 
   @Override
-  public void updateNodeResource(int coreNumber, long memory) throws Exception {
-    ResourceManagerAdministrationProtocol adminProtocol =  ClientRMProxy.createRMProxy(this.nmContext.getConf(),
-        ResourceManagerAdministrationProtocol.class);
+  public void updateNodeResource(int coreNumber, long memory, int vcoreNumber) throws Exception {
+    ResourceManagerAdministrationProtocol adminProtocol =
+        ClientRMProxy.createRMProxy(this.nmContext.getConf(),
+            ResourceManagerAdministrationProtocol.class);
     RecordFactory recordFactory =
         RecordFactoryProvider.getRecordFactory(null);
     UpdateNodeResourceRequest request =
@@ -324,7 +325,7 @@ public class NodeResourceMonitorImpl extends AbstractService implements
     Map<NodeId, ResourceOption> resourceMap =
         new HashMap<NodeId, ResourceOption>();
     resourceMap.put(
-        nodeId, ResourceOption.newInstance(Resource.newInstance(memory, coreNumber), 0));
+        nodeId, ResourceOption.newInstance(Resource.newInstance(memory, vcoreNumber), 0));
     request.setNodeResourceMap(resourceMap);
     adminProtocol.updateNodeResource(request);
     // Update Config as well
@@ -339,9 +340,10 @@ public class NodeResourceMonitorImpl extends AbstractService implements
     }
     conf.setInt(YarnConfiguration.NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT, coreRatio);
     conf.setInt(YarnConfiguration.NM_PMEM_MB, Long.valueOf(memory).intValue());
-    conf.setInt(YarnConfiguration.NM_VCORES, coreNumber);
+    conf.setInt(YarnConfiguration.NM_VCORES, vcoreNumber);
     if (LOG.isDebugEnabled()) {
-      LOG.debug("New Resources: Mem-" + memory + ", Vcore-" + coreNumber + ", Ratio-" + coreRatio);
+      LOG.debug("New Resources: Mem-" + memory + ", Vcore-" + vcoreNumber + ", core-" + coreNumber +
+          ", Ratio-" + coreRatio);
     }
   }
 }
