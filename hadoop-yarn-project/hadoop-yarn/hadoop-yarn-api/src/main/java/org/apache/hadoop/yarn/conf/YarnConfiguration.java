@@ -2841,7 +2841,13 @@ public class YarnConfiguration extends Configuration {
    */
   public static final String NM_LINUX_CONTAINER_RESOURCES_HANDLER = 
   NM_PREFIX + "linux-container-executor.resources-handler.class";
-  
+
+  /**
+   * Define the cgroups version of NM
+   */
+  public static final String NM_CGROUPS_VERSION = NM_PREFIX + "cgroups.version";
+  public static final int DEFAULT_NM_CGROUPS_VERSION = 1;
+
   /** The path the linux container executor should use for cgroups */
   public static final String NM_LINUX_CONTAINER_CGROUPS_HIERARCHY =
     NM_PREFIX + "linux-container-executor.cgroups.hierarchy";

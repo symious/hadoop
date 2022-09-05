@@ -89,6 +89,9 @@ public interface CGroupsHandler {
   String CGROUP_CPU_PERIOD_US = "cfs_period_us";
   String CGROUP_CPU_QUOTA_US = "cfs_quota_us";
   String CGROUP_CPU_SHARES = "shares";
+  // Cgroups V2
+  String CGROUP_CPU_MAX = "max";
+  String CGROUP_CPU_WEIGHT = "weight";
 
   /**
    * Mounts or initializes a cgroup controller.

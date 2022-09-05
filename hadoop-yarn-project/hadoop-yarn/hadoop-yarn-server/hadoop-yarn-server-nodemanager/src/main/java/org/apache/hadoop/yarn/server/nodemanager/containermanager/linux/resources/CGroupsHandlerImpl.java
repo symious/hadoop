@@ -75,6 +75,9 @@ class CGroupsHandlerImpl implements CGroupsHandler {
   private final ReadWriteLock rwLock;
   private final PrivilegedOperationExecutor privilegedOperationExecutor;
   private final Clock clock;
+  private boolean cgroupsV2Enabled = false;
+  private final String cgroupsV1TaskPath = "/tasks";
+  private final String cgroupsV2ThreadsPath = "/cgroup.threads";
 
   /**
    * Create cgroup handler object.
@@ -106,6 +109,12 @@ class CGroupsHandlerImpl implements CGroupsHandler {
     this.privilegedOperationExecutor = privilegedOperationExecutor;
     this.clock = SystemClock.getInstance();
     mtabFile = mtab;
+    // If cgroups version is v2
+    int version = conf.getInt(YarnConfiguration.NM_CGROUPS_VERSION,
+        YarnConfiguration.DEFAULT_NM_CGROUPS_VERSION);
+    if (version == 2) {
+      cgroupsV2Enabled = true;
+    }
     init();
   }
 
@@ -129,6 +138,9 @@ class CGroupsHandlerImpl implements CGroupsHandler {
   public String getControllerPath(CGroupController controller) {
     rwLock.readLock().lock();
     try {
+      if (cgroupsV2Enabled) {
+        return this.cGroupsMountConfig.getMountPath() + "/";
+      }
       return controllerPaths.get(controller);
     } finally {
       rwLock.readLock().unlock();
@@ -473,9 +485,13 @@ class CGroupsHandlerImpl implements CGroupsHandler {
   private void logLineFromTasksFile(File cgf) {
     String str;
     if (LOG.isDebugEnabled()) {
+      String taskPath = cgroupsV1TaskPath;
+      if (cgroupsV2Enabled) {
+        taskPath = cgroupsV2ThreadsPath;
+      }
       try (BufferedReader inl =
           new BufferedReader(new InputStreamReader(new FileInputStream(cgf
-              + "/tasks"), "UTF-8"))) {
+              + taskPath), "UTF-8"))) {
         str = inl.readLine();
         if (str != null) {
           LOG.debug("First line in cgroup tasks file: {} {}", cgf, str);
@@ -496,7 +512,11 @@ class CGroupsHandlerImpl implements CGroupsHandler {
     boolean deleted = false;
     // FileInputStream in = null;
     if ( cgf.exists() ) {
-      try (FileInputStream in = new FileInputStream(cgf + "/tasks")) {
+      String taskPath = cgroupsV1TaskPath;
+      if (cgroupsV2Enabled) {
+        taskPath = cgroupsV2ThreadsPath;
+      }
+      try (FileInputStream in = new FileInputStream(cgf + taskPath)) {
         if (in.read() == -1) {
         /*
          * "tasks" file is empty, sleep a bit more and then try to delete the
@@ -610,7 +630,10 @@ class CGroupsHandlerImpl implements CGroupsHandler {
 
   @Override
   public void cleanLeakContainers(Set<String> containerIDs) throws IOException {
-    String cgPath = this.cGroupsMountConfig.getMountPath() + "/cpu/" + this.cGroupPrefix;
+    String cgPath = this.cGroupsMountConfig.getMountPath() + "/" + this.cGroupPrefix;
+    if (!cgroupsV2Enabled) {
+      cgPath = this.cGroupsMountConfig.getMountPath() + "/cpu/" + this.cGroupPrefix;
+    }
     // find /sys/fs/cgroup/cpu/yarn/ -type d |grep container|xargs -r rmdir
     String command = "find " + cgPath + " -mmin +1 -type d | grep container | xargs -r rmdir ";
     Process p = null;
