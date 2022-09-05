@@ -542,6 +542,11 @@ public class NameNode extends ReconfigurableBase implements
       clientMachine = parseSpecialValue(cc, key);
     }
 
+    // Use the proxy address first
+    if (clientMachine == null) {
+      clientMachine = Server.getProxyHostAddress();
+    }
+
     if (clientMachine == null) {
       clientMachine = Server.getRemoteAddress();
       if (clientMachine == null) { //not a RPC client
