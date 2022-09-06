@@ -183,7 +183,7 @@ public class ReplicationRuleGenerateKafkaTrigger {
     public void run() {
       LOG.info("{} {} add replication rule: {} start.", ns, path, replicationRule);
       ResultCode resultCode =
-          replicationRuleManager.setBatchProcess(ns, path, replicationRule);
+          replicationRuleManager.createUpdateMap(ns, path, replicationRule, true);
       LOG.info("{} {} add replication rule: {} {}.", ns, path, replicationRule,
           resultCode.getMsg());
     }
