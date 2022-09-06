@@ -89,4 +89,6 @@ public class DataNodeFaultInjector {
 
   public void throwTooManyOpenFiles() throws FileNotFoundException {
   }
+
+  public void delayDeleteReplica() {}
 }

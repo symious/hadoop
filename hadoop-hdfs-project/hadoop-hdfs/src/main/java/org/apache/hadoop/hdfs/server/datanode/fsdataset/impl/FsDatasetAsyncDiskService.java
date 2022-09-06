@@ -33,14 +33,21 @@ import java.util.concurrent.TimeUnit;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.ExtendedBlockId;
+import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
+import org.apache.hadoop.hdfs.server.datanode.DataNodeFaultInjector;
 import org.apache.hadoop.hdfs.server.datanode.FileIoProvider;
+import org.apache.hadoop.hdfs.server.datanode.ReplicaInPipelineInterface;
+import org.apache.hadoop.hdfs.server.datanode.ReplicaInfo;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeReference;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.ReplicaOutputStreams;
+import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.RamDiskReplicaTracker.RamDiskReplica;
 import org.apache.hadoop.hdfs.server.protocol.BlockCommand;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.nativeio.NativeIOException;
+import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.util.Preconditions;
 
 /**
@@ -316,6 +323,12 @@ class FsDatasetAsyncDiskService {
     @Override
     public void run() {
       try {
+        // For testing. Normally no-op.
+        DataNodeFaultInjector.get().delayDeleteReplica();
+        if (!removeReplicaFromMem()){
+          return;
+        }
+
         final long blockLength = blockFile.length();
         final long metaLength = metaFile.length();
         boolean result;
@@ -340,6 +353,85 @@ class FsDatasetAsyncDiskService {
       } finally {
         IOUtils.cleanupWithLogger(null, this.volumeRef);
       }
+    }
+
+    private boolean removeReplicaFromMem() {
+      try (AutoCloseableLock lock = fsdatasetImpl.datasetLock.acquire()) {
+        final ReplicaInfo info = fsdatasetImpl.volumeMap
+            .get(block.getBlockPoolId(), block.getLocalBlock());
+        if (info == null) {
+          ReplicaInfo infoByBlockId =
+              fsdatasetImpl.volumeMap.get(block.getBlockPoolId(),
+                  block.getLocalBlock().getBlockId());
+          if (infoByBlockId == null) {
+            // It is okay if the block is not found -- it
+            // may be deleted earlier.
+            LOG.info("Failed to delete replica " + block.getLocalBlock()
+                + ": ReplicaInfo not found in removeReplicaFromMem.");
+          } else {
+            LOG.error("Failed to delete replica " + block.getLocalBlock()
+                + ": GenerationStamp not matched, existing replica is "
+                + Block.toString(infoByBlockId) + " in removeReplicaFromMem.");
+          }
+          return false;
+        }
+
+        File f = info.getBlockFile();
+        FsVolumeImpl v = (FsVolumeImpl)info.getVolume();
+        if (v == null) {
+          LOG.error("Failed to delete replica " + block.getLocalBlock()
+              +  ". No volume for this replica, file=" + f + " in removeReplicaFromMem.");
+          return false;
+        }
+        File parent = f.getParentFile();
+        if (parent == null) {
+          LOG.error("Failed to delete replica " + block.getLocalBlock()
+              +  ". Parent not found for file " + f + " in removeReplicaFromMem.");
+          return false;
+        }
+
+        if (!this.volume.getStorageID().equals(v.getStorageID())) {
+          LOG.error("Failed to delete replica " + block.getLocalBlock()
+              +  ". Appear different volumes, oldVolume=" + this.volume + " and newVolume=" + v
+              +  " for this replica in removeReplicaFromMem.");
+          return false;
+        }
+
+        ReplicaInfo removing = fsdatasetImpl.volumeMap.remove(block.getBlockPoolId(),
+            block.getLocalBlock());
+        fsdatasetImpl.addDeletingBlock(block.getBlockPoolId(), removing.getBlockId());
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Block file " + removing.getBlockFile().getName()
+              + " is to be deleted");
+        }
+        datanode.getMetrics().incrBlocksRemoved(1);
+        if (removing instanceof ReplicaInPipelineInterface) {
+          ((ReplicaInPipelineInterface) removing).releaseAllBytesReserved();
+        }
+      }
+
+      if (volume.isTransientStorage()) {
+        RamDiskReplica replicaInfo =
+            fsdatasetImpl.ramDiskReplicaTracker.getReplica(block.getBlockPoolId(),
+                block.getLocalBlock().getBlockId());
+        if (replicaInfo != null) {
+          if (!replicaInfo.getIsPersisted()) {
+            datanode.getMetrics().incrRamDiskBlocksDeletedBeforeLazyPersisted();
+          }
+          fsdatasetImpl.ramDiskReplicaTracker.discardReplica(replicaInfo.getBlockPoolId(),
+              replicaInfo.getBlockId(), true);
+        }
+      }
+
+      // If a DFSClient has the replica in its cache of short-circuit file
+      // descriptors (and the client is using ShortCircuitShm), invalidate it.
+      datanode.getShortCircuitRegistry().processBlockInvalidation(
+          new ExtendedBlockId(block.getLocalBlock().getBlockId(), block.getBlockPoolId()));
+
+      // If the block is cached, start uncaching it.
+      fsdatasetImpl.cacheManager.uncacheBlock(block.getBlockPoolId(),
+          block.getLocalBlock().getBlockId());
+      return true;
     }
   }
   
