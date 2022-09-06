@@ -17,12 +17,17 @@ public class ZoneServiceMetrics {
 
   @Metric MutableGaugeInt monitorThreadCount;
   @Metric MutableGaugeInt batchThreadCount;
+  @Metric Long checkRecordCostTime;
   @Metric MutableCounterLong successTotalMoveCount;
   @Metric MutableCounterLong failTotalMoveCount;
   // For ZoneMover monitor thread of a namespace
-  private ConcurrentHashMap<String, MutableCounterLong> nsSuccessMoveCount
+  private final ConcurrentHashMap<String, MutableCounterLong> nsMonitorSuccessMoveCount
       = new ConcurrentHashMap<>();
-  private ConcurrentHashMap<String, MutableCounterLong> nsFailMoveCount
+  private final ConcurrentHashMap<String, MutableCounterLong> nsMonitorFailMoveCount
+      = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, MutableCounterLong> nsBatchSuccessMoveCount
+      = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, MutableCounterLong> nsBatchFailMoveCount
       = new ConcurrentHashMap<>();
 
   public static ZoneServiceMetrics create() {
@@ -33,40 +38,75 @@ public class ZoneServiceMetrics {
   public void stopMonitorThread() { monitorThreadCount.decr(); }
   public void startBatchThread() { batchThreadCount.incr(); }
   public void stopBatchThread() { batchThreadCount.decr(); }
+  public void setCheckRecordCostTime(long costTime) { checkRecordCostTime = costTime; }
   public void incrSuccessMoveCount() { successTotalMoveCount.incr(); }
   public void incrFailMoveCount() { failTotalMoveCount.incr(); }
 
-  public void incrNSSuccessMoveCount(String ns) {
+  public void incrNSMonitorSuccessMoveCount(String ns) {
     if (ns != null) {
       MutableCounterLong mutableCounterLong =
-          nsSuccessMoveCount.get(ns);
+          nsMonitorSuccessMoveCount.get(ns);
       if (mutableCounterLong == null) {
         synchronized (this) {
           String metricName =
-              StringUtils.capitalize(ns + "NSSuccessMoveCount");
+              StringUtils.capitalize(ns + "nsMonitorSuccessMoveCount");
           mutableCounterLong = registry.newCounter(
-              Interns.info(metricName, metricName), 0l);
-          nsSuccessMoveCount.putIfAbsent(ns, mutableCounterLong);
+              Interns.info(metricName, metricName), 0L);
+          nsMonitorSuccessMoveCount.putIfAbsent(ns, mutableCounterLong);
         }
       }
-      nsSuccessMoveCount.get(ns).incr();
+      nsMonitorSuccessMoveCount.get(ns).incr();
     }
   }
 
-  public void incrNSFailMoveCount(String ns) {
+  public void incrNSMonitorFailMoveCount(String ns) {
     if (ns != null) {
       MutableCounterLong mutableCounterLong =
-          nsFailMoveCount.get(ns);
+          nsMonitorFailMoveCount.get(ns);
       if (mutableCounterLong == null) {
         synchronized (this) {
           String metricName =
-              StringUtils.capitalize(ns + "NSFailMoveCount");
+              StringUtils.capitalize(ns + "nsMonitorFailMoveCount");
           mutableCounterLong = registry.newCounter(
-              Interns.info(metricName, metricName), 0l);
-          nsFailMoveCount.putIfAbsent(ns, mutableCounterLong);
+              Interns.info(metricName, metricName), 0L);
+          nsMonitorFailMoveCount.putIfAbsent(ns, mutableCounterLong);
         }
       }
-      nsFailMoveCount.get(ns).incr();
+      nsMonitorFailMoveCount.get(ns).incr();
+    }
+  }
+
+  public void incrNSBatchSuccessMoveCount(String ns) {
+    if (ns != null) {
+      MutableCounterLong mutableCounterLong =
+          nsBatchSuccessMoveCount.get(ns);
+      if (mutableCounterLong == null) {
+        synchronized (this) {
+          String metricName =
+              StringUtils.capitalize(ns + "NSBatchSuccessMoveCount");
+          mutableCounterLong = registry.newCounter(
+              Interns.info(metricName, metricName), 0L);
+          nsBatchSuccessMoveCount.putIfAbsent(ns, mutableCounterLong);
+        }
+      }
+      nsBatchSuccessMoveCount.get(ns).incr();
+    }
+  }
+
+  public void incrNSBatchFailMoveCount(String ns) {
+    if (ns != null) {
+      MutableCounterLong mutableCounterLong =
+          nsBatchFailMoveCount.get(ns);
+      if (mutableCounterLong == null) {
+        synchronized (this) {
+          String metricName =
+              StringUtils.capitalize(ns + "NSBatchFailMoveCount");
+          mutableCounterLong = registry.newCounter(
+              Interns.info(metricName, metricName), 0L);
+          nsBatchFailMoveCount.putIfAbsent(ns, mutableCounterLong);
+        }
+      }
+      nsBatchFailMoveCount.get(ns).incr();
     }
   }
 

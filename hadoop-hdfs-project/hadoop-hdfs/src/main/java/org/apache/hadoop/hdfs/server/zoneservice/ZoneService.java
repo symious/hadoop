@@ -21,7 +21,6 @@ import com.google.common.collect.Sets;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.ReconfigurableBase;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
@@ -32,7 +31,7 @@ import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
-import org.apache.hadoop.hdfs.server.zoneservice.web.resources.ResultCode;
+import org.apache.hadoop.hdfs.server.zoneservice.utils.ZoneServiceUtil;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -46,20 +45,15 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.URI;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_USER_GROUP_METRICS_PERCENTILES_INTERVALS;
@@ -90,14 +84,17 @@ public class ZoneService extends ReconfigurableBase  {
 
   // store driver
   protected StoreDriver driver;
+  private Thread batchManager;
+  private final int nsThreadLimit;
+  private final long batchRefreshInterval;
+  private final HashMap<String, Semaphore> nsSemaphore = new HashMap<>();
+  private final HashMap<String, List<String>> inProcessPaths = new HashMap<>();
 
   private static final String ZONESERVICE_HTRACE_PREFIX = "zoneservice.htrace.";
 
   private static final StartupProgress startupProgress = new StartupProgress();
-
   protected final Tracer tracer;
   protected final TracerConfigurationManager tracerConfigurationManager;
-  private final ExecutorService batchThreadPool;
   private boolean replicationRuleGenerateEnabled = false;
   private ReplicationRuleGenerateKafkaTrigger replicationRuleGenerateKafkaTrigger;
 
@@ -108,18 +105,12 @@ public class ZoneService extends ReconfigurableBase  {
     this.tracerConfigurationManager =
         new TracerConfigurationManager(ZONESERVICE_HTRACE_PREFIX, conf);
 
-    int threadPoolSize = conf.getInt(
-        DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_POOL_SIZE,
-        DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_POOL_SIZE_DEFAULT);
-    int threadPoolMaxSize = conf.getInt(
-        DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_POOL_MAX_SIZE,
-        DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_POOL_MAX_SIZE_DEFAULT);
-    int threadPoolTimeOut = conf.getInt(
-        DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_POOL_ALIVE_TIME,
-        DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_POOL_ALIVE_TIME_DEFAULT);
-    batchThreadPool = new ThreadPoolExecutor(threadPoolSize, threadPoolMaxSize,
-        threadPoolTimeOut, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(),
-        Executors.defaultThreadFactory(), new ThreadPoolExecutor.AbortPolicy());
+    nsThreadLimit = conf.getInt(
+        DFSConfigKeys.DFS_ZONESERVICE_BATCH_NS_THREAD_CONSTRAINT_KEY,
+        DFSConfigKeys.DFS_ZONESERVICE_BATCH_NS_THREAD_CONSTRAINT_DEFAULT);
+    batchRefreshInterval = conf.getLong(
+        DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_REFRESH_INTERVAL_KEY,
+        DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_REFRESH_INTERVAL_DEFAULT);
 
     try {
       initialize(getConf());
@@ -217,6 +208,7 @@ public class ZoneService extends ReconfigurableBase  {
    * Stop all ZoneService threads and wait for all to finish.
    */
   public void stop() {
+    batchManager.interrupt();
     stopHttpServer();
     tracer.close();
     stopReplicationRuleGenerateKafkaTrigger();
@@ -258,16 +250,6 @@ public class ZoneService extends ReconfigurableBase  {
           nsRuleMap.get(record.getNs()).put(record.getPath(),
               ReplicationRule.parseFromString(record.getRule()));
         }
-        //Recover batch mode ZoneMover process
-        else {
-          List<Path> paths =
-              Collections.singletonList(new Path(record.getPath()));
-          ReplicationRule replicationRule =
-              ReplicationRule.parseFromString(record.getRule());
-          batchThreadPool.submit(
-              new BatchZMRunnable(paths, replicationRule,
-                  getNamespaceUri(record.getNs(), conf), conf));
-        }
       } catch (IllegalArgumentException e) {
         LOG.error("Record is illegal: " + record);
       }
@@ -277,72 +259,46 @@ public class ZoneService extends ReconfigurableBase  {
       driver.put(signalRecord, true, false);
       LOG.info("Starting monitor thread for {}.", ns);
       Thread monitorThread = new MonitorThread("monitor_" + ns,
-          conf, getNamespaceUri(ns, conf));
+          conf, ZoneServiceUtil.getNamespaceUri(ns, conf));
       monitorThread.start();
     }
+    // Restart batch manager
+    batchManager = new BatchManagerThread();
+    batchManager.start();
   }
 
-  class BatchZMRunnable implements Runnable {
-    private final List<Path> paths;
-    private final ReplicationRule replicationRule;
-    private final URI namenode;
-    private final Configuration conf;
-
-    public BatchZMRunnable(List<Path> paths,
-        ReplicationRule replicationRule, URI namenode,
-        Configuration conf) {
-      this.paths = paths;
-      this.replicationRule = replicationRule;
-      this.namenode = namenode;
-      this.conf = conf;
+  class BatchManagerThread extends Thread {
+    public BatchManagerThread() {
+      super("BatchManager");
     }
 
     @Override
     public void run() {
-      Date startTime = new Date();
-      try {
-        metrics.startBatchThread();
-        ZoneMover.run(conf, namenode, paths, replicationRule);
-        for (Path path : paths) {
-          MigrationRecord migrationRecord = new MigrationRecord(
-              namenode.getAuthority(), path.toUri().getPath(),
-              replicationRule.toString());
-          driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
-          AuditLogger.logRuleProcess(
-              "RecoverBatch", namenode.getAuthority(),
-              path.toUri().getPath(), replicationRule.toString(), startTime,
-              new Date(), ResultCode.SUCCESS.getMsg(), "batch");
-          LOG.info("Remove namespace " + namenode.getAuthority() +
-              "\nPath " + path.toUri().getPath() + "\nRule " + replicationRule);
+      while (true) {
+        try {
+          long start = System.currentTimeMillis();
+          List<MigrationRecord> records = driver.getAll(MigrationRecord.class).getRecords();
+          for (MigrationRecord record : records) {
+            if (record.getMode().equals("monitor")) continue;
+            String ns = record.getNs();
+            if (!nsSemaphore.containsKey(ns)) {
+              nsSemaphore.put(ns, new Semaphore(nsThreadLimit));
+              inProcessPaths.put(ns, Collections.synchronizedList(new ArrayList<String>()));
+            }
+            (new BatchThread(record.getPath(), record.getRule(),
+                ns, getConf(), driver, nsSemaphore.get(ns), inProcessPaths.get(ns))).start();
+            // The same timestamp will cause that the ZoneMover cannot work
+            Thread.sleep(10);
+          }
+          metrics.setCheckRecordCostTime(System.currentTimeMillis() - start);
+          Thread.sleep(batchRefreshInterval);
+        } catch (IOException e) {
+          LOG.error("Batch manager thread error!", e);
+        } catch (InterruptedException e) {
+          break;
         }
-      } catch (IOException e) {
-        AuditLogger.logRuleProcess(
-            "RecoverBatch", namenode.getAuthority(),
-            paths.get(0).toUri().getPath(), replicationRule.toString(),
-            startTime, new Date(), ResultCode.IO_EXCEPTION.getMsg(), "batch");
-        e.printStackTrace();
-      } catch (InterruptedException e) {
-        AuditLogger.logRuleProcess(
-            "RecoverBatch", namenode.getAuthority(),
-            paths.get(0).toUri().getPath(), replicationRule.toString(),
-            startTime, new Date(), ResultCode.INTERRUPTED.getMsg(), "batch");
-        e.printStackTrace();
-      } finally {
-        metrics.stopBatchThread();
       }
     }
-  }
-
-  private URI getNamespaceUri(String namespace, Configuration conf)
-      throws IllegalArgumentException {
-    Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
-    for (URI namenode: namenodes) {
-      if (namenode.getAuthority().equals(namespace)) {
-        return namenode;
-      }
-    }
-    throw new IllegalArgumentException(
-        "Cannot find the NameNode for namespace: " + namespace);
   }
 
   private void initReplicationRuleGenerateKafkaTrigger(Configuration conf) throws IOException {

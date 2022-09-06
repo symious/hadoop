@@ -552,12 +552,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
 
   public static final String  DFS_ZONESERVICE_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY = "dfs.zoneservice.kerberos.internal.spnego.principal";
   public static final String  DFS_ZONESERVICE_KEYTAB_FILE_KEY = "dfs.zoneservice.keytab.file";
-  public static final String  DFS_ZONESERVICE_BATCH_THREAD_POOL_SIZE = "dfs.zoneservice.batch.thread.pool.size";
-  public static final int     DFS_ZONESERVICE_BATCH_THREAD_POOL_SIZE_DEFAULT = 5;
-  public static final String  DFS_ZONESERVICE_BATCH_THREAD_POOL_MAX_SIZE = "dfs.zoneservice.batch.thread.pool.size.max";
-  public static final int     DFS_ZONESERVICE_BATCH_THREAD_POOL_MAX_SIZE_DEFAULT = 5;
-  public static final String  DFS_ZONESERVICE_BATCH_THREAD_POOL_ALIVE_TIME = "dfs.zoneservice.batch.thread.pool.alive.time";
-  public static final int     DFS_ZONESERVICE_BATCH_THREAD_POOL_ALIVE_TIME_DEFAULT = 3600;
+  public static final String  DFS_ZONESERVICE_BATCH_NS_THREAD_CONSTRAINT_KEY = "dfs.zoneservice.batch.ns.thread.constraint";
+  public static final int     DFS_ZONESERVICE_BATCH_NS_THREAD_CONSTRAINT_DEFAULT = 3;
+  public static final String  DFS_ZONESERVICE_BATCH_THREAD_REFRESH_INTERVAL_KEY = "dfs.zoneservice.batch.thread.refresh.interval";
+  public static final long    DFS_ZONESERVICE_BATCH_THREAD_REFRESH_INTERVAL_DEFAULT = 10000L;
 
   public static final String  DFS_ZONESERVICE_THREADS_KEY = "dfs.zoneservice.threads";
   public static final int     DFS_ZONESERVICE_THREADS_DEFAULT = 50;

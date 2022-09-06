@@ -400,6 +400,15 @@ public class ZoneMover {
   private static int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
       URI namenode, List<Path> paths, ReplicationRule rule,
       Map<String, ReplicationRule> pathRuleMap, boolean loadMapFromStore) throws IOException {
+    if (!loadMapFromStore) {
+      try {
+        if (ExitStatus.SUCCESS.getExitCode() != run(conf, namenode, paths, rule, pathRuleMap)) {
+          LOG.error("Move the original data for {} in {} fail.", paths, namenode.getAuthority());
+        }
+      } catch (InterruptedException e) {
+        LOG.error("Batch process is interrupted.", e);
+      }
+    }
     checkDataCenterValues(conf, rule, pathRuleMap);
     if (paths.isEmpty() && !loadMapFromStore) {
       return ExitStatus.SUCCESS.getExitCode();
@@ -451,10 +460,10 @@ public class ZoneMover {
           ExitStatus exitStatus = zs.run(curPath);
           if (exitStatus != ExitStatus.SUCCESS) {
             zoneServiceMetrics.incrFailMoveCount();
-            zoneServiceMetrics.incrNSFailMoveCount(ns);
+            zoneServiceMetrics.incrNSMonitorFailMoveCount(ns);
             LOG.warn("Monitor process file fail: " + curPath);
           } else {
-            zoneServiceMetrics.incrNSSuccessMoveCount(ns);
+            zoneServiceMetrics.incrNSMonitorSuccessMoveCount(ns);
             zoneServiceMetrics.incrSuccessMoveCount();
           }
         } catch (IllegalArgumentException e) {

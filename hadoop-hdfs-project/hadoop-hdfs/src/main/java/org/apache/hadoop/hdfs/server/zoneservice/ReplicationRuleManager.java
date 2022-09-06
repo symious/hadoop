@@ -18,14 +18,12 @@
 package org.apache.hadoop.hdfs.server.zoneservice;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
-import org.apache.hadoop.hdfs.DFSUtil;
-import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
 import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
+import org.apache.hadoop.hdfs.server.zoneservice.utils.ZoneServiceUtil;
 import org.apache.hadoop.hdfs.server.zoneservice.web.resources.ResultCode;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.slf4j.Logger;
@@ -33,16 +31,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.Semaphore;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT;
@@ -55,9 +48,10 @@ public class ReplicationRuleManager {
       ReplicationRuleManager.class);
 
   private final Set<String> validDataCenters;
-  private final Semaphore semaphore;
   private final StoreDriver driver;
   private final static String SECTION_SEPARATOR = ",";
+  private final static String BATCH_MODE = "batch";
+  private final static String MONITOR_MODE = "monitor";
 
   public ReplicationRuleManager(Configuration conf) {
     String datacenters = conf.get(
@@ -65,11 +59,6 @@ public class ReplicationRuleManager {
         DFSConfigKeys.DFS_ZONEMOVER_VALID_DATACENTERS_DEFAULT);
     validDataCenters = new HashSet<>
         (Arrays.asList(datacenters.trim().split(SECTION_SEPARATOR)));
-
-    int maxThread = conf.getInt(
-        DFSConfigKeys.DFS_ZONESERVICE_THREADS_KEY,
-        DFSConfigKeys.DFS_ZONESERVICE_THREADS_DEFAULT);
-    semaphore = new Semaphore(maxThread);
 
     Class<? extends StoreDriver> driverClass = conf.getClass(
         DFS_ZONESERVICE_STORE_DRIVER_CLASS,
@@ -90,7 +79,7 @@ public class ReplicationRuleManager {
   public Map<ReplicationRule, Set<String>> checkPath(String nameSpace,
       String path, String ratio) {
     Configuration conf = new Configuration();
-    URI namenode = getNamespaceUri(nameSpace, conf);
+    URI namenode = ZoneServiceUtil.getNamespaceUri(nameSpace, conf);
     return ZoneChecker.getReplicaRule(conf, namenode, path,
         Float.parseFloat(ratio));
   }
@@ -115,42 +104,18 @@ public class ReplicationRuleManager {
     try {
       MigrationRecord migrationRecord =
           new MigrationRecord(nameSpace, path, replicaRule);
-      //If there is a rule applying on the path, reject the query
-      if (driver.get(new Query<>(migrationRecord), MigrationRecord.class)
-          != null) {
+      if (!driver.put(migrationRecord, false, true)) {
         AuditLogger.logRuleProcess(currentMethod, nameSpace,
             path, replicaRule, startTime, new Date(),
-            ResultCode.REJECT.getMsg(), "batch");
+            ResultCode.REJECT.getMsg(), BATCH_MODE);
         return ResultCode.REJECT;
       }
-
-      //Check if there is any available thread
-      if (semaphore.availablePermits() == 0) {
-        AuditLogger.logRuleProcess(currentMethod, nameSpace,
-            path, replicaRule, startTime, new Date(),
-            ResultCode.THREAD_FULL.getMsg(), "batch");
-        return ResultCode.THREAD_FULL;
-      }
-
-      semaphore.acquire();
-      driver.put(migrationRecord, false, true);
-      ResultCode result = movePath(nameSpace, path, replicaRule);
-      semaphore.release();
-      driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
-      AuditLogger.logRuleProcess(currentMethod, nameSpace, path, replicaRule,
-          startTime, new Date(), result.getMsg(), "batch");
-      return result;
-    } catch (InterruptedException e) {
-      LOG.error("Batch process on {} is interrupted.", path, e);
-      AuditLogger.logRuleProcess(currentMethod, nameSpace,
-          path, replicaRule, startTime, new Date(),
-          ResultCode.INTERRUPTED.getMsg(), "batch");
-      return ResultCode.INTERRUPTED;
+      return ResultCode.IN_PROGRESS;
     } catch (IOException e) {
-      LOG.error("Fail to apply the rule {} on {}.", replicaRule, path, e);
+      LOG.error("Fail to put the rule into ZooKeeper.", e);
       AuditLogger.logRuleProcess(currentMethod, nameSpace,
           path, replicaRule, startTime, new Date(),
-          ResultCode.IO_EXCEPTION.getMsg(), "batch");
+          ResultCode.IO_EXCEPTION.getMsg(), BATCH_MODE);
       return ResultCode.IO_EXCEPTION;
     }
   }
@@ -174,25 +139,23 @@ public class ReplicationRuleManager {
     try {
       String threadName = "monitor_" + nameSpace;
       SignalRecord signalRecord = new SignalRecord(nameSpace, true);
+
+      MigrationRecord migrationRecordBatch = new MigrationRecord(nameSpace, path,
+          replicaRule);
       MigrationRecord migrationRecord = new MigrationRecord(nameSpace, path,
-          replicaRule, "monitor");
+          replicaRule, MONITOR_MODE);
       MigrationRecord existedRecord =
           driver.get(new Query<>(migrationRecord), MigrationRecord.class);
+
+      // Check monitor record
       if (existedRecord != null) {
-        //If there is batch mode running on the path, reject the query
-        if (existedRecord.getMode().equals("batch")) {
-          AuditLogger.logRuleProcess(
-              "updatePathRuleMap", nameSpace,
-              path, replicaRule, startTime, new Date(),
-              ResultCode.REJECT.getMsg(), "monitor");
-          return ResultCode.REJECT;
-        }
         // If it is the same rule, return.
         if (checkRuleEquals(existedRecord.getRule(), replicaRule)) {
           LOG.info("The {} already has the replicationRule {}.", path, replicaRule);
           return ResultCode.CREATE_SUCCESS;
         }
       }
+
       Thread[] ts = new Thread[Thread.activeCount()];
       Thread.enumerate(ts);
       for (Thread tt : ts) {
@@ -201,10 +164,16 @@ public class ReplicationRuleManager {
           if (existedRecord == null) {
             driver.put(migrationRecord, true, false);
             driver.put(signalRecord, true, false);
+            if (!driver.put(migrationRecordBatch, false, true)) {
+              AuditLogger.logRuleProcess(
+                  "updatePathRuleMap", nameSpace,
+                  path, replicaRule, startTime, new Date(),
+                  ResultCode.REJECT.getMsg(), BATCH_MODE);
+            }
             AuditLogger.logRuleProcess(
                 "setPathRuleMap", nameSpace,
                 path, replicaRule, startTime, new Date(),
-                ResultCode.CREATE_SUCCESS.getMsg(), "monitor");
+                ResultCode.CREATE_SUCCESS.getMsg(), MONITOR_MODE);
             return ResultCode.CREATE_SUCCESS;
           }
         }
@@ -214,26 +183,32 @@ public class ReplicationRuleManager {
         AuditLogger.logRuleProcess(
             "refreshPathRuleMap", nameSpace,
             path, replicaRule, startTime, new Date(),
-            ResultCode.METHOD_ERROR.getMsg(), "monitor");
+            ResultCode.METHOD_ERROR.getMsg(), MONITOR_MODE);
         return ResultCode.METHOD_ERROR;
       }
       //If there is no monitor thread for this namespace, it will create a new one
       Thread monitorThread = new MonitorThread(threadName, new Configuration(),
-          getNamespaceUri(nameSpace, new Configuration()));
+          ZoneServiceUtil.getNamespaceUri(nameSpace, new Configuration()));
       driver.put(migrationRecord, true, true);
       driver.put(signalRecord, true, false);
+      if (!driver.put(migrationRecordBatch, false, true)) {
+        AuditLogger.logRuleProcess(
+            "updatePathRuleMap", nameSpace,
+            path, replicaRule, startTime, new Date(),
+            ResultCode.REJECT.getMsg(), BATCH_MODE);
+      }
       monitorThread.start();
       AuditLogger.logRuleProcess(
           "CreatePathRuleMap", nameSpace,
           path, replicaRule, startTime, new Date(),
-          ResultCode.CREATE_SUCCESS.getMsg(), "monitor");
+          ResultCode.CREATE_SUCCESS.getMsg(), MONITOR_MODE);
       return ResultCode.CREATE_SUCCESS;
     } catch (IOException e) {
       LOG.error("Failed {} to createUpdateMap the replicationRule {}.",path, replicaRule, e);
       AuditLogger.logRuleProcess(
           "CreatePathRuleMap", nameSpace,
           path, replicaRule, startTime, new Date(),
-          ResultCode.IO_EXCEPTION.getMsg(), "monitor");
+          ResultCode.IO_EXCEPTION.getMsg(), MONITOR_MODE);
       return ResultCode.IO_EXCEPTION;
     }
   }
@@ -248,14 +223,14 @@ public class ReplicationRuleManager {
     Date startTime = new Date();
     try {
       MigrationRecord migrationRecord = new MigrationRecord(nameSpace, path,
-          "");
+          "", MONITOR_MODE);
       SignalRecord signalRecord = new SignalRecord(nameSpace, true);
       if (driver.get(new Query<>(migrationRecord),
           MigrationRecord.class) == null) {
         AuditLogger.logRuleProcess(
             "DeletePathRuleMap", nameSpace,
             path, "N/A", startTime, new Date(),
-            ResultCode.NO_MIGRATION_RECORD.getMsg(), "monitor");
+            ResultCode.NO_MIGRATION_RECORD.getMsg(), MONITOR_MODE);
         return ResultCode.NO_MIGRATION_RECORD;
       } else {
         driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
@@ -263,7 +238,7 @@ public class ReplicationRuleManager {
         AuditLogger.logRuleProcess(
             "DeletePathRuleMap", nameSpace,
             path, "N/A", startTime, new Date(),
-            ResultCode.SUCCESS.getMsg(), "monitor");
+            ResultCode.SUCCESS.getMsg(), MONITOR_MODE);
         return ResultCode.SUCCESS;
       }
     } catch (IOException e) {
@@ -271,61 +246,9 @@ public class ReplicationRuleManager {
       AuditLogger.logRuleProcess(
           "DeletePathRuleMap", nameSpace,
           path, "N/A", startTime, new Date(),
-          ResultCode.IO_EXCEPTION.getMsg(), "monitor");
+          ResultCode.IO_EXCEPTION.getMsg(), MONITOR_MODE);
       return ResultCode.IO_EXCEPTION;
     }
-  }
-
-  /**
-   * Move the path with ZoneMover
-   * @param nameSpace   URI of the NameNode
-   * @param path        the path to apply the rule
-   * @param replicaRule the replica rule to apply
-   * @return ResultCode
-   */
-  private ResultCode movePath(String nameSpace, String path,
-      String replicaRule) throws InterruptedException, IOException {
-    final Configuration conf = new Configuration();
-    final URI namenode = getNamespaceUri(nameSpace, conf);
-    final ReplicationRule replicationRule =
-        ReplicationRule.parseFromString(replicaRule);
-    final List<Path> paths = new ArrayList<>();
-    paths.add(new org.apache.hadoop.fs.Path(path));
-
-    switch (Objects.requireNonNull(ExitStatus.getExitStatusByCode(
-        ZoneMover.run(conf, namenode, paths, replicationRule)))) {
-      case SUCCESS:
-        return ResultCode.SUCCESS;
-      case IN_PROGRESS:
-        return ResultCode.IN_PROGRESS;
-      case ALREADY_RUNNING:
-        return ResultCode.ALREADY_RUNNING;
-      case NO_MOVE_BLOCK:
-        return ResultCode.NO_MOVE_BLOCK;
-      case NO_MOVE_PROGRESS:
-        return ResultCode.NO_MOVE_PROGRESS;
-      case IO_EXCEPTION:
-        return ResultCode.IO_EXCEPTION;
-      case ILLEGAL_ARGUMENTS:
-        return ResultCode.ILLEGAL_ARGUMENTS;
-      case INTERRUPTED:
-        return ResultCode.INTERRUPTED;
-      case UNFINALIZED_UPGRADE:
-        return ResultCode.UNFINALIZED_UPGRADE;
-    }
-    return ResultCode.UNKNOWNERROR;
-  }
-
-  private URI getNamespaceUri(String namespace, Configuration conf)
-      throws IllegalArgumentException {
-    Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
-    for (URI namenode: namenodes) {
-      if (namenode.getAuthority().equals(namespace)) {
-        return namenode;
-      }
-    }
-    throw new IllegalArgumentException(
-        "Cannot find the NameNode for namespace: " + namespace);
   }
 
   private boolean checkRuleInvalid(Set<String> validDataCenters, String rule) {
