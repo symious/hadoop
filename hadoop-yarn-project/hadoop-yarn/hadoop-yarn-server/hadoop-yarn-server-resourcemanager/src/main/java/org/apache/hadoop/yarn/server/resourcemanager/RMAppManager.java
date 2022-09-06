@@ -26,6 +26,7 @@ import java.util.concurrent.FutureTask;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.NodeId;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.LeafQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -412,17 +413,12 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
       try {
         CapacityScheduler cs = (CapacityScheduler) this.scheduler;
         LeafQueue queue = (LeafQueue) cs.getQueue(queueName);
-
-        // If out of the range of the access multi-label time will skip this part
-        // like 1,2,3,4,5,6,10,20,21,23
-        String currentHour =
-            Calendar.getInstance().get(Calendar.HOUR_OF_DAY) + "";
-
-        if (!queue.getAccessMultiLabelTimes().contains(currentHour)) {
+        Set<String> labels = selectLabelsFromQueue(queue,cs.getConfiguration());
+        if (labels.size()==0) {
           return;
         }
 
-        String nodeLabel = selectLabelFromQueue(queue);
+        String nodeLabel = selectLabelFromQueue(queue, labels);
 
         //Modify the nodeLabelExpression
         if (!StringUtils.isNullOrEmpty(nodeLabel)) {
@@ -437,7 +433,36 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
     }
   }
 
-  private String selectLabelFromQueue(LeafQueue queue) {
+  // select labels which will be used for multi labels
+  private Set<String> selectLabelsFromQueue(LeafQueue queue,
+      CapacitySchedulerConfiguration csConfiguration) {
+    // If out of the range of the access multi-label time will skip this part
+    // like 1,2,3,4,5,6,10,20,21,23
+    String currentHour =
+        Calendar.getInstance().get(Calendar.HOUR_OF_DAY) + "";
+    Set<String> result = new HashSet<>();
+    Set<String> labels = queue.getAccessibleNodeLabels();
+    if (!CollectionUtils.isEmpty(labels)) {
+      for (String labelName : labels) {
+        Set<String> hours =
+            csConfiguration.getMultiLabelAccessHoursPerQueueWithLabel(queue.getQueuePath(),
+                labelName);
+        if (hours.contains(currentHour)) {
+          result.add(labelName);
+        }
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Current Label: " + labelName);
+        }
+      }
+    }
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Current Labels: " + Arrays.toString(result.toArray()) + ", queue:" +
+          queue.getQueuePath());
+    }
+    return result;
+  }
+
+  private String selectLabelFromQueue(LeafQueue queue, Set<String> labels) {
     // Only deal with the leaf queue
     if (CollectionUtils.isNotEmpty(queue.getChildQueues())) {
       return null;
@@ -445,7 +470,7 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
     // Check Min first then Max
     String[] conditions = {"MIN", "MAX"};
     for (String condition : conditions) {
-      QueueUsageModel queueUsageModel = chooseLowUsedLabel(queue, condition);
+      QueueUsageModel queueUsageModel = chooseLowUsedLabel(queue, condition, labels);
       // If usage less than threshold
       // It means queue has enough resource then return
       if (queueUsageModel.usageRatio < (1 - DEFAULT_MULTI_LABEL_RESOURCE_BUFFER_RATIO)) {
@@ -470,11 +495,9 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
     }
   }
 
-  private QueueUsageModel chooseLowUsedLabel(LeafQueue queue, String flag) {
+  private QueueUsageModel chooseLowUsedLabel(LeafQueue queue, String flag, Set<String> labels) {
     String nodeLabel = NO_LABEL;
     float used = 1f;
-    Set<String> labels = new HashSet<>();
-    labels.addAll(queue.getAccessibleNodeLabels());
     labels.add(NO_LABEL);
     // Look for the lowest usage label
     for (String tmpLabel : labels) {

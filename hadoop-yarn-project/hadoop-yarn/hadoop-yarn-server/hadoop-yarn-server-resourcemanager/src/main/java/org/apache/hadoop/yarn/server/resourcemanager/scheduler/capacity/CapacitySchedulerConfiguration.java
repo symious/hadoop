@@ -497,6 +497,28 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     return set;
   }
 
+  /**
+   * Get the queue label access time window
+   * @param queue
+   * @param labelName
+   * @return
+   */
+  public Set<String> getMultiLabelAccessHoursPerQueueWithLabel(String queue, String labelName) {
+    String hours =
+        get(getQueuePrefix(queue) + labelName + DOT + MULTI_LABEL_ACCESS_HOURS,
+            DEFAULT_MULTI_LABEL_ACCESS_HOURS);
+
+    Set<String> set = new HashSet<String>();
+    if (!StringUtils.isNullOrEmpty(hours)) {
+      for (String str : hours.split(",")) {
+        if (!str.trim().isEmpty()) {
+          set.add(str.trim());
+        }
+      }
+    }
+    return set;
+  }
+
   public boolean getOpportunisticEnabled(String queue) {
     return getBoolean(getQueuePrefix(queue) + OPPORTUNISTIC_ENABLED,
             DEFAULT_OPPORTUNISTIC_ENABLED);

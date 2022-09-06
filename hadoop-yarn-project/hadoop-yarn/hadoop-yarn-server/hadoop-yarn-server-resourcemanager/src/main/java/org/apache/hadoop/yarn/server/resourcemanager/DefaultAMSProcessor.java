@@ -19,6 +19,7 @@
 package org.apache.hadoop.yarn.server.resourcemanager;
 
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.LeafQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -87,6 +88,7 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 import java.io.IOException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.HashSet;
@@ -240,7 +242,17 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
       }
       CapacityScheduler cs = (CapacityScheduler) getScheduler();
       LeafQueue queue = (LeafQueue) cs.getQueue(queueName);
-      Set<String> accessMultiLabelTimes = queue.getAccessMultiLabelTimes();
+      // Get MultiLabels Access times
+      CapacitySchedulerConfiguration csConfiguration = cs.getConfiguration();
+      String appNodeLabel = asc.getNodeLabelExpression();
+      Set<String> accessMultiLabelTimes =
+          csConfiguration.getMultiLabelAccessHoursPerQueueWithLabel(queue.getQueuePath(),
+              appNodeLabel);
+
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Current access range:" + Arrays.toString(accessMultiLabelTimes.toArray()) +
+            ", appID:" + app.getApplicationId().toString());
+      }
 
       // submit hour
       Calendar submitTime = Calendar.getInstance();
@@ -249,7 +261,6 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
       // current hour
       String currentHour =
           String.valueOf(Calendar.getInstance().get(Calendar.HOUR_OF_DAY));
-
       // if submitHour is contains on the access times
       // if currentHour is out of the access times range
       if (null != accessMultiLabelTimes &&
