@@ -293,6 +293,7 @@ public class ZoneMover {
       // Set maxNotChangedIterations to 1 as ZoneMover does not need to loop
       nnc = new NameNodeConnector(ZoneMover.class.getSimpleName(),
           namenode, getIdPath(RunMode.BATCH), paths, conf, 1);
+      nnc.getKeyManager().startBlockKeyUpdater();
       if (rule != null) {
         zs = new ZoneMover(nnc, conf, rule, retryCount);
       } else {
@@ -415,26 +416,33 @@ public class ZoneMover {
         StoreDriver.class);
     NameNodeConnector nnc = null;
     ZoneMover zs = null;
+    Thread mapUpdaterThread;
+    StoreDriver driver;
     String ns = namenode.getAuthority();
 
+    LOG.info("Initializing NameNodeConnector");
     try {
       nnc = new NameNodeConnector(ZoneMover.class.getSimpleName(),
           namenode, getIdPath(RunMode.MONITOR), paths, conf, 1);
+      nnc.getKeyManager().startBlockKeyUpdater();
       if (rule != null) {
         zs = new ZoneMover(nnc, conf, rule, new AtomicInteger(0));
       } else {
         zs = new ZoneMover(nnc, conf, pathRuleMap, new AtomicInteger(0));
       }
       zs.init();
-      //monitor if the path rule map is update or not when zk enable
+      // Monitor if the path rule map is update or not when zk enable
       if (loadMapFromStore) {
-        final StoreDriver driver =
+        LOG.info("Initializing MapUpdater");
+        driver =
             ReflectionUtils.newInstance(driverClass, conf);
         driver.init(conf, "ZoneMover_" + namenode.getAuthority());
         MapUpdater mapUpdater =
             zs.new MapUpdater(namenode, driver, zoneMoverTrigger);
-        new Thread(mapUpdater, "Updater" + namenode.getAuthority()).start();
+        mapUpdaterThread = new Thread(mapUpdater, "Updater" + namenode.getAuthority());
+        mapUpdaterThread.start();
       }
+
       while (zoneMoverTrigger.hasNext()) {
         try {
           String curPath = zoneMoverTrigger.getNext();
@@ -1104,9 +1112,9 @@ public class ZoneMover {
             Thread.sleep(checkUpdateInterval * 1000L);
           }
         } catch (IOException e) {
-          e.printStackTrace();
+          LOG.error("There are some errors happen when ZoneMover updates path-rule pairs.", e);
         } catch (InterruptedException e) {
-          LOG.warn("Monitor path rule map process is interruptted!");
+          LOG.warn("Monitor path rule map process is interrupted!");
           break;
         }
       }
