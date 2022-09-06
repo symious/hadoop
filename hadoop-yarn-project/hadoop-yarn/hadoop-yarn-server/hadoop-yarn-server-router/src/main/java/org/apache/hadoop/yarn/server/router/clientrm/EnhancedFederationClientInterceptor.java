@@ -161,8 +161,8 @@ public class EnhancedFederationClientInterceptor
       LOG.debug("timeline queryAppIdByTagUrl: " + queryAppIdByTagUrl);
     }
 
-    ClientResponse queryAppIdByTagResp;
-    ClientResponse queryAppStateResp;
+    ClientResponse queryAppIdByTagResp = null;
+    ClientResponse queryAppStateResp = null;
     String appId = "";
     Set<String> appTags = new HashSet<>();
     Client httpClient = createClient();
@@ -173,6 +173,10 @@ public class EnhancedFederationClientInterceptor
       appId = queryAppIdByTagResp.getEntity(String.class).replaceAll("\"", "");
     } catch (Exception e) {
       LOG.error("timeline queryAppIdByTag failed", e);
+    } finally {
+      if (queryAppIdByTagResp != null) {
+        queryAppIdByTagResp.close();
+      }
     }
 
     if (!appId.isEmpty()) {
@@ -198,6 +202,13 @@ public class EnhancedFederationClientInterceptor
         }
       } catch (Exception e) {
         LOG.error("timeline query appId: " + appId + " states failed", e);
+      } finally {
+        if (queryAppStateResp != null) {
+          queryAppStateResp.close();
+        }
+        if (httpClient != null) {
+          httpClient.destroy();
+        }
       }
     }
 

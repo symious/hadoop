@@ -1597,7 +1597,7 @@ public class ResourceLocalizationService extends CompositeService
                 URI uri = URI.create(queryUrl);
                 LOG.info("queryTimeLineAddress Url: " + queryUrl);
 
-                ClientResponse resp;
+                ClientResponse resp = null;
                 try {
                   resp = getResponse(httpClient, uri);
                   TimelineEntity entity = resp.getEntity(TimelineEntity.class);
@@ -1633,11 +1633,18 @@ public class ResourceLocalizationService extends CompositeService
                 } catch (Exception e) {
                   LOG.error("Delete appLocalDirPath: " + appLocalDirPath +
                       " failed!", e);
+                } finally {
+                  if (resp != null) {
+                    resp.close();
+                  }
                 }
               }
             }
           }
         }
+      }
+      if (httpClient != null) {
+        httpClient.destroy();
       }
       long endTime = System.currentTimeMillis();
       LOG.info("cleanDumpedLocalDirsThread successDeletedAppDirs: " +
