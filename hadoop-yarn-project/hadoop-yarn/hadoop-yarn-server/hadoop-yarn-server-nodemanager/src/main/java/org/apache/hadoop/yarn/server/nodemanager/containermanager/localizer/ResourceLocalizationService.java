@@ -201,6 +201,8 @@ public class ResourceLocalizationService extends CompositeService
   private Context nmContext;
   private DiskValidator diskValidator;
 
+  public static final int HTTP_CLIENT_TIMEOUT = 30000;
+
   /**
    * Map of LocalResourceTrackers keyed by username, for private
    * resources.
@@ -1528,7 +1530,10 @@ public class ResourceLocalizationService extends CompositeService
     public HttpURLConnection getHttpURLConnection(final java.net.URL url)
         throws IOException {
       try {
-        return (HttpURLConnection)url.openConnection();
+        HttpURLConnection httpURLConnection = (HttpURLConnection)url.openConnection();
+        httpURLConnection.setConnectTimeout(HTTP_CLIENT_TIMEOUT);
+        httpURLConnection.setReadTimeout(HTTP_CLIENT_TIMEOUT);
+        return httpURLConnection;
       } catch (UndeclaredThrowableException e) {
         throw new IOException(e.getCause());
       }

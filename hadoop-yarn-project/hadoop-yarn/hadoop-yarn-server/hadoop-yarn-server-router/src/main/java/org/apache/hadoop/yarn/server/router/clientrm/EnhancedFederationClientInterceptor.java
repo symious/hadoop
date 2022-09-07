@@ -96,6 +96,8 @@ public class EnhancedFederationClientInterceptor
   private static final String TIC_TAG_PREFIX = "tic:";
   private static final String LIVY_TAG_PREFIX = "livy:";
 
+  public static final int HTTP_CLIENT_TIMEOUT = 30000;
+
   public EnhancedFederationClientInterceptor() {
     federationFacade = FederationStateStoreFacade.getInstance();
     routerMetrics = RouterMetrics.getMetrics();
@@ -143,7 +145,10 @@ public class EnhancedFederationClientInterceptor
     public HttpURLConnection getHttpURLConnection(final URL url)
         throws IOException {
       try {
-        return (HttpURLConnection)url.openConnection();
+        HttpURLConnection httpURLConnection = (HttpURLConnection)url.openConnection();
+        httpURLConnection.setConnectTimeout(HTTP_CLIENT_TIMEOUT);
+        httpURLConnection.setReadTimeout(HTTP_CLIENT_TIMEOUT);
+        return httpURLConnection;
       } catch (UndeclaredThrowableException e) {
         throw new IOException(e.getCause());
       }
