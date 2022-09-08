@@ -61,7 +61,7 @@ public class DefaultPolicy implements Policy {
         if ((double)max / (double)deserved > 0.8) {
           return null;
         } else {
-          long target = deserved - (deserved - max) / 3;
+          long target = deserved - (deserved - max) / 2;
           long normalized = ResourceCalculator
               .roundUp(Math.max(minAllocationMb, target), minAllocationMb);
           LOG.debug("Before normalized: " + target + " After normalized: " + normalized
@@ -91,7 +91,7 @@ public class DefaultPolicy implements Policy {
         YarnConfiguration.NM_DYNAMIC_ADJUSTMENT_DEFAULT_POLICY_INTERVAL_MS,
         YarnConfiguration.DEFAULT_NM_DYNAMIC_ADJUSTMENT_DEFAULT_POLICY_INTERVAL_MS);
     this.cache = CacheBuilder.newBuilder().expireAfterWrite(minInterval,
-        TimeUnit.SECONDS).build();
+        TimeUnit.MILLISECONDS).build();
     this.minAllocationMb =
         conf.getLong(YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB,
             YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_MB);
