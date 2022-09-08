@@ -112,8 +112,10 @@ public class ContainerMetrics implements MetricsSource {
 
   public SampleStat.MinMax minMax= new SampleStat.MinMax();
 
+  @Metric
   public int latestMemoryMbs;
 
+  @Metric
   public int initMemoryMbs;
 
   static final MetricsInfo RECORD_INFO =

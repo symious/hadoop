@@ -1162,6 +1162,8 @@ public class ContainerImpl implements Container {
       ContainerTokenIdentifier originalToken =
           container.containerTokenIdentifier;
       super.transition(container, updateEvent);
+      container.metrics.changeContainer(originalToken.getResource(),
+          updateEvent.getUpdatedToken().getResource());
       container.dispatcher.getEventHandler().handle(
           new UpdateContainerSchedulerEvent(container,
               originalToken, updateEvent));
