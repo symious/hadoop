@@ -94,6 +94,7 @@ import javax.management.openmbean.SimpleType;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_IP_PROXY_USERS;
 import static org.apache.hadoop.hdfs.server.federation.fairness.RouterRpcFairnessConstants.CONCURRENT_NS;
 
 /**
@@ -151,6 +152,8 @@ public class RouterRpcClient {
   private volatile RouterRpcFairnessPolicyController routerRpcFairnessPolicyController;
   private Map<String, AtomicLong> rejectedPermitsPerNs = new ConcurrentHashMap<>();
   private Map<String, AtomicLong> acceptedPermitsPerNs = new ConcurrentHashMap<>();
+
+  private final boolean enableProxyUser;
 
   /**
    * Create a router RPC client to manage remote procedure calls to NNs.
@@ -220,6 +223,8 @@ public class RouterRpcClient {
     this.addProxyHostname=
         conf.getBoolean(RBFConfigKeys.DFS_ROUTER_PROXY_HOSTNAME_ENABLE,
             RBFConfigKeys.DFS_ROUTER_PROXY_HOSTNAME_ENABLED_DEFAULT);
+    String[] ipProxyUsers = conf.getStrings(DFS_NAMENODE_IP_PROXY_USERS);
+    this.enableProxyUser = ipProxyUsers != null && ipProxyUsers.length > 0;
   }
 
   /**
@@ -386,8 +391,14 @@ public class RouterRpcClient {
       // for each individual request.
 
       // TODO Add tokens from the federated UGI
-      connection = this.connectionManager.getConnection(ugi, rpcAddress, proto,
-          nsId);
+      UserGroupInformation connUGI = ugi;
+      if (this.enableProxyUser) {
+        UserGroupInformation routerUser = UserGroupInformation.getLoginUser();
+        connUGI = UserGroupInformation.createProxyUser(
+            ugi.getUserName(), routerUser);
+      }
+      connection = this.connectionManager.getConnection(
+          connUGI, rpcAddress, proto, nsId);
       LOG.debug("User {} NN {} is using connection {}",
           ugi.getUserName(), rpcAddress, connection);
     } catch (Exception ex) {

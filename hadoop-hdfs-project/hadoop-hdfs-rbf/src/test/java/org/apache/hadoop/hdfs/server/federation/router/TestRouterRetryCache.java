@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.federation.router;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -46,13 +47,19 @@ public class TestRouterRetryCache {
 
   @Before
   public  void setup() throws Exception {
-    Configuration namenodeConf = new Configuration();
-    namenodeConf.set(DFS_NAMENODE_IP_PROXY_USERS, "fake_joe");
+    UserGroupInformation routerUser = UserGroupInformation.getLoginUser();
+    Configuration conf = new Configuration();
+    String adminUser = routerUser.getUserName();
+    conf.set("hadoop.proxyuser." + adminUser + ".hosts", "*");
+    conf.set("hadoop.proxyuser." + adminUser + ".groups", "*");
+    conf.set("hadoop.proxyuser.fake_joe.hosts", "*");
+    conf.set("hadoop.proxyuser.fake_joe.groups", "*");
+    conf.set(DFS_NAMENODE_IP_PROXY_USERS, routerUser.getShortUserName());
     cluster = new MiniRouterDFSCluster(true, 1);
-    cluster.addNamenodeOverrides(namenodeConf);
+    cluster.addNamenodeOverrides(conf);
 
     // Start NNs and DNs and wait until ready
-    cluster.startCluster();
+    cluster.startCluster(conf);
 
     // Start routers with only an RPC service
     cluster.startRouters();
@@ -83,7 +90,28 @@ public class TestRouterRetryCache {
   }
 
   @Test
-  public void testRetryCache() throws Exception {
+  public void testRetryCacheWithOneLevelProxyUser() throws Exception {
+    internalTestRetryCache(false);
+  }
+
+  @Test
+  public void testRetryCacheWithTwoLevelProxyUser() throws Exception {
+    internalTestRetryCache(true);
+  }
+
+  /**
+   * Test RetryCache through RBF with proxyUser and non-ProxyUser respectively.
+   *
+   * 1. Start cluster with current user.
+   * 2. Create one test directory by the admin user.
+   * 3. Create one Router FileSystem with one mocked user, one proxyUser or non-ProxyUser.
+   * 4. Try to create one test directory by the router fileSystem.
+   * 5. Try to rename the new test directory to one test destination directory
+   * 6. Then failover the active to the standby
+   * 7. Try to rename the source directory to the destination directory again with the same callId
+   * 8. Try to
+   */
+  private void internalTestRetryCache(boolean twoLevelProxyUGI) throws Exception {
     RetryInvocationHandler.SET_CALL_ID_FOR_TEST.set(false);
     final FileSystem routerFS = cluster.getRandomRouter().getFileSystem();
     Path testDir = new Path("/target-ns0/testdir");
@@ -94,6 +122,9 @@ public class TestRouterRetryCache {
     UserGroupInformation joe =
         UserGroupInformation.createUserForTesting("fake_joe",
             new String[]{"fake_group"});
+    if (twoLevelProxyUGI) {
+      joe = UserGroupInformation.createProxyUser("fake_proxy_joe", joe);
+    }
     FileSystem joeFS = joe.doAs(new PrivilegedExceptionAction<FileSystem>() {
       @Override
       public FileSystem run() throws Exception {
@@ -124,6 +155,15 @@ public class TestRouterRetryCache {
 
     Client.setCallIdAndRetryCount(callId, 0, null);
     assertTrue(joeFS.rename(renameSrc, renameDst));
+
+    FileStatus fileStatus = joeFS.getFileStatus(renameDst);
+    if (twoLevelProxyUGI) {
+      assertEquals("fake_proxy_joe", fileStatus.getOwner());
+    } else {
+      assertEquals("fake_joe", fileStatus.getOwner());
+    }
+
+    joeFS.delete(renameDst, true);
   }
 
   @Test
