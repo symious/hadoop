@@ -101,6 +101,16 @@ public class QueueMetrics implements MetricsSource {
   @Metric("Reserved CPU in virtual cores") MutableGaugeInt reservedVCores;
   @Metric("# of reserved containers") MutableGaugeInt reservedContainers;
 
+  @Metric("Effective Memory") MutableGaugeLong effectiveMB;
+  @Metric("Max Effective Memory") MutableGaugeLong maxEffectiveMB;
+  @Metric("Effective virtual cores") MutableGaugeInt effectiveVCores;
+  @Metric("Max Effective virtual cores") MutableGaugeInt maxEffectiveVCores;
+
+  @Metric("Configure Memory") MutableGaugeLong configureMB;
+  @Metric("Max Configure Memory") MutableGaugeLong maxConfigureMB;
+  @Metric("Configure virtual cores") MutableGaugeInt configureVCores;
+  @Metric("Max Configure virtual cores") MutableGaugeInt maxConfigureVCores;
+
   @Metric("Aggregate # of choose queue number")
   MutableCounterLong aggregateQueueChooseCount;
 
@@ -1255,4 +1265,54 @@ public class QueueMetrics implements MetricsSource {
   public Queue getParentQueue() {
     return parentQueue;
   }
+
+  public long getEffectiveMB() {
+    return this.effectiveMB.value();
+  }
+
+  public long getMaxEffectiveMB() {
+    return this.maxEffectiveMB.value();
+  }
+
+  public int getEffectiveVCores() {
+    return this.effectiveVCores.value();
+  }
+
+  public int getMaxEffectiveVCores() {
+    return this.maxEffectiveVCores.value();
+  }
+
+  public long getConfigureMB() {
+    return this.configureMB.value();
+  }
+
+  public long getMaxConfigureMB() {
+    return this.maxConfigureMB.value();
+  }
+
+  public int getConfigureVCores() {
+    return this.configureVCores.value();
+  }
+
+  public int getMaxConfigureVCores() {
+    return this.maxConfigureVCores.value();
+  }
+
+  public void updateConfigureMetric(long configureMB, long maxConfigureMB, int configureVCores,
+      int maxConfigureVCores) {
+    this.configureMB.set(configureMB);
+    this.maxConfigureMB.set(maxConfigureMB);
+    this.configureVCores.set(configureVCores);
+    this.maxConfigureVCores.set(maxConfigureVCores);
+  }
+
+  public void updateEffectiveMetric(long conf, long maxEffectiveMB, int effectiveVCores,
+      int maxEffectiveVCores) {
+    this.effectiveMB.set(effectiveMB);
+    this.maxEffectiveMB.set(maxEffectiveMB);
+    this.effectiveVCores.set(effectiveVCores);
+    this.maxEffectiveVCores.set(maxEffectiveVCores);
+  }
+
+
 }
