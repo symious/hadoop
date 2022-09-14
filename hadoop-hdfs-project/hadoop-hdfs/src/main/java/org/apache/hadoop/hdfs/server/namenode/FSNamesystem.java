@@ -2740,10 +2740,10 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     LocatedBlock[] onRetryBlock = new LocatedBlock[1];
     FSDirWriteFileOp.ValidateAddBlockResult r;
     FSPermissionChecker pc = getPermissionChecker();
-    checkOperation(OperationCategory.READ);
+    checkOperation(OperationCategory.WRITE);
     readLock(operationName);
     try {
-      checkOperation(OperationCategory.READ);
+      checkOperation(OperationCategory.WRITE);
       r = FSDirWriteFileOp.validateAddBlock(this, pc, src, fileId, clientName,
                                             previous, onRetryBlock);
     } finally {
@@ -2788,11 +2788,11 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     final long preferredblocksize;
     final byte storagePolicyID;
     final List<DatanodeStorageInfo> chosen;
-    checkOperation(OperationCategory.READ);
+    checkOperation(OperationCategory.WRITE);
     FSPermissionChecker pc = getPermissionChecker();
     readLock(operationName);
     try {
-      checkOperation(OperationCategory.READ);
+      checkOperation(OperationCategory.WRITE);
       //check safe mode
       checkNameNodeSafeMode("Cannot add datanode; src=" + src + ", blk=" + blk);
       final INodesInPath iip = dir.resolvePath(pc, src, fileId);
