@@ -1624,18 +1624,6 @@ public class CapacityScheduler extends
       int offswitchCount = 0;
       int assignedContainers = 0;
 
-      //If node is not good, will skip allocate
-      RMNode rmNode = node.getRMNode();
-      if (null != rmNode) {
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("CHECKING: NODE INFO: " + node.getNodeID().getHost() +
-              ", Is good target?:" + rmNode.isGoodTarget());
-        }
-        if (!rmNode.isGoodTarget()) {
-          return;
-        }
-      }
-
       CandidateNodeSet<FiCaSchedulerNode> candidates = getCandidateNodeSet(
           node);
 
@@ -1687,6 +1675,23 @@ public class CapacityScheduler extends
       boolean withNodeHeartbeat) {
     LOG.debug("Trying to schedule on node: {}, available: {}",
         node.getNodeName(), node.getUnallocatedResource());
+
+    //If node is not good, will skip allocate
+    RMNode rmNode = node.getRMNode();
+    if (null != rmNode) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("CHECKING: NODE INFO: " + node.getNodeID().getHost() +
+            ", Is good target?:" + rmNode.isGoodTarget());
+      }
+      if (!rmNode.isGoodTarget()) {
+        ActivitiesLogger.QUEUE.recordQueueActivity(activitiesManager, node,
+            "", getRootQueue().getQueuePath(), ActivityState.REJECTED,
+            ActivityDiagnosticConstant.NODE_IS_SLOW_NODE);
+        ActivitiesLogger.NODE.finishSkippedNodeAllocation(activitiesManager,
+            node);
+        return null;
+      }
+    }
 
     // Backward compatible way to make sure previous behavior which allocation
     // driven by node heartbeat works.
