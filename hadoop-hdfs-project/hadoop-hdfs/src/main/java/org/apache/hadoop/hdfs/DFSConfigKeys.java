@@ -1672,4 +1672,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final long DFS_LEASE_HARDLIMIT_DEFAULT =
       HdfsClientConfigKeys.DFS_LEASE_HARDLIMIT_DEFAULT;
   public static final String DFS_TRASH_NAMESERVICES_KEY = "dfs.trash.nameservices";
+  public static final String
+      DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY =
+      "dfs.namenode.data-center-block-placement-policy.fallback-data-center";
+  public static final String
+      DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_DEFAULT =
+      null;
 }

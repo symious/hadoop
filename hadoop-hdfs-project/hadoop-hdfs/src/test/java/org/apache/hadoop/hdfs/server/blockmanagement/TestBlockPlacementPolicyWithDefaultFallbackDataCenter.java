@@ -1,0 +1,240 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.hadoop.hdfs.server.blockmanagement;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.fs.CreateFlag;
+import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.fs.permission.PermissionStatus;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
+import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
+import org.apache.hadoop.net.StaticMapping;
+import org.apache.hadoop.util.Time;
+import org.junit.Before;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+public class TestBlockPlacementPolicyWithDefaultFallbackDataCenter
+    extends TestBlockPlacementPolicyWithDataCenter {
+
+  private final String DEFAULT_DC = "datacenter0";
+
+  @Before
+  public void setup() throws IOException {
+    StaticMapping.resetMap();
+    Configuration conf = new HdfsConfiguration();
+    final String[] racks =
+        { "/datacenter0/rack0", "/datacenter0/rack0", "/datacenter0/rack1",
+            "/datacenter0/rack1", "/datacenter1/rack0", "/datacenter1/rack1",
+            "/datacenter0/rack0", "/datacenter1/rack0", "/datacenter1/rack0",
+            "/datacenter2/rack0", "/datacenter2/rack0", "/datacenter2/rack0",
+            "/datacenter3/rack0", "/datacenter4/rack0", "/datacenter5/rack0",
+            "/datacenter5/rack0" };
+    final String[] hosts =
+        { "host0", "host1", "host2", "host3", "host4", "host5", "host6",
+            "host7", "host8", "host9", "host10", "host11", "host12", "host13",
+            "host14", "host15" };
+
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE);
+    conf.setInt(DFSConfigKeys.DFS_BYTES_PER_CHECKSUM_KEY,
+        DEFAULT_BLOCK_SIZE / 2);
+    conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+        BlockPlacementPolicyWithDefaultFallbackDataCenter.class,
+        BlockPlacementPolicy.class);
+    conf.setBoolean(DFSConfigKeys.DFS_USE_DFS_NETWORK_TOPOLOGY_KEY, true);
+    conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY,
+        DFSNetworkTopologyWithDataCenter.class, DFSNetworkTopology.class);
+    conf.set(
+        DFSConfigKeys.DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY,
+        DEFAULT_DC);
+    conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY, true);
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_MIN_KEY,
+        REPLICATION_FACTOR);
+    cluster = new MiniDFSCluster.Builder(conf).numDataNodes(16).racks(racks)
+        .hosts(hosts).build();
+    cluster.waitActive();
+    nameNodeRpc = cluster.getNameNodeRpc();
+    namesystem = cluster.getNamesystem();
+    perm = new PermissionStatus("TestBlockPlacementPolicyWithDataCenter", null,
+        FsPermission.getDefault());
+  }
+
+  @Test
+  @Override
+  public void testDatacenterOffPlacement() {
+    String clientMachine = "client.foo.com";
+    String clientRack = "/datacenter9/rack0";
+    StaticMapping.addNodeToRack(clientMachine, clientRack);
+    for (int i = 0; i < times; i++) {
+      LOG.info("Start round " + i + " ...");
+      try {
+        DatanodeInfo[] locations = getLocations(clientMachine);
+        verifyDNinDC(DEFAULT_DC, locations[0]);
+        verifyDNinDC(DEFAULT_DC, locations[1]);
+        verifyDNinDC(DEFAULT_DC, locations[2]);
+      } catch (IOException e) {
+        e.printStackTrace();
+        fail("No exception should be thrown");
+      }
+    }
+  }
+
+  @Test
+  public void testNotEnoughDNsInDefaultDC() {
+    // Set default fallback DC to datacenter3, which has only 1 DN.
+    BlockPlacementPolicyWithDefaultFallbackDataCenter policy =
+        (BlockPlacementPolicyWithDefaultFallbackDataCenter) namesystem.getBlockManager()
+            .getBlockPlacementPolicy();
+    policy.setDefaultDC("datacenter3");
+
+    // Client from dc9 tries to add block. Fall back to dc3, only 1 replica found.
+    verifyAddBlock("datacenter9", 1, true);
+    // Client from dc4 tries to add block. No fall back because 1 replica found on dc4.
+    verifyAddBlock("datacenter4", 1, true);
+    // Client from dc5 tries to add block. No fall back because 2 replica found on dc4.
+    verifyAddBlock("datacenter5", 2, true);
+  }
+
+  @Test
+  @Override
+  public void testChooseTarget() {
+    BlockPlacementPolicyWithDataCenter policy =
+        (BlockPlacementPolicyWithDataCenter) namesystem.getBlockManager()
+            .getBlockPlacementPolicy();
+    BlockStoragePolicy storagePolicy =
+        BlockStoragePolicySuite.createDefaultSuite().getDefaultPolicy();
+
+    // Sort datanodes by rack, and add the DatanodeStorageInfo to map.
+    Set<DatanodeDescriptor> datanodes =
+        namesystem.getBlockManager().getDatanodeManager().getDatanodes();
+    Map<String, List<DatanodeStorageInfo>> dcMap =
+        getDcMapFromDatanodes(datanodes);
+
+    // replicate to the datacenter without any replicas first
+    ReplicationRule rule =
+        ReplicationRule.parseFromString("/datacenter0:2,/datacenter1:2");
+    List<DatanodeStorageInfo> existNodes = new ArrayList<>();
+    existNodes.add(dcMap.get("/datacenter0/rack0").get(0));
+    DatanodeStorageInfo[] results =
+        policy.chooseTarget(null, 3, rule, null, existNodes, false, null,
+            DEFAULT_BLOCK_SIZE, storagePolicy, null);
+    assertEquals(2, results.length);
+    for (DatanodeStorageInfo info : results) {
+      assertEquals("/datacenter1",
+          NetworkTopologyUtil.getDataCenter(info.getDatanodeDescriptor()));
+    }
+
+    // only replicate to one datacenter one time
+    existNodes.clear();
+    existNodes.add(dcMap.get("/datacenter0/rack0").get(0));
+    existNodes.add(dcMap.get("/datacenter1/rack0").get(0));
+    results = policy.chooseTarget(null, 2, rule, null, existNodes, false, null,
+        DEFAULT_BLOCK_SIZE, storagePolicy, null);
+    assertEquals(1, results.length);
+    String dc =
+        NetworkTopologyUtil.getDataCenter(results[0].getDatanodeDescriptor());
+    assertTrue(dc.equals("/datacenter0") || dc.equals("/datacenter1"));
+
+    // allocated should not beyond numOfReplicas
+    rule = ReplicationRule.parseFromString("/datacenter0:3");
+    existNodes.clear();
+    existNodes.add(dcMap.get("/datacenter0/rack0").get(0));
+    results = policy.chooseTarget(null, 1, rule, null, existNodes, false, null,
+        DEFAULT_BLOCK_SIZE, storagePolicy, null);
+    assertEquals(1, results.length);
+    dc = NetworkTopologyUtil.getDataCenter(results[0].getDatanodeDescriptor());
+    assertEquals("/datacenter0", dc);
+
+    // replica=0 case
+    rule = ReplicationRule.parseFromString("/datacenter0:0");
+    existNodes.clear();
+    existNodes.add(dcMap.get("/datacenter1/rack0").get(0));
+    results = policy.chooseTarget(null, 1, rule, null, existNodes, false, null,
+        DEFAULT_BLOCK_SIZE, storagePolicy, null);
+    assertEquals(0, results.length);
+
+    // datacenter does not exist, fallback to default
+    rule = ReplicationRule.parseFromString("/datacenter9:2");
+    results = policy.chooseTarget(null, 1, rule, null, existNodes, false, null,
+        DEFAULT_BLOCK_SIZE, storagePolicy, null);
+    assertEquals(1, results.length);
+  }
+
+  private void verifyDNinDC(String datacenter, DatanodeInfo datanodeInfo) {
+    assertEquals("/" + datacenter,
+        NetworkTopologyUtil.getDataCenter(datanodeInfo));
+  }
+
+  private void verifyAddBlock(String clientDC, int expectedReplicas,
+      boolean failed) {
+    final String clientMachine = "client.foo.com";
+    String clientRack = "/" + clientDC + "/rack0";
+    StaticMapping.addNodeToRack(clientMachine, clientRack);
+    final String src = "/test" + Time.now();
+
+    // Try creating file on a non-existent DC
+    // Falling back to datacenter3 fails because there are not enough DNs for
+    // replication factor.
+    try {
+      HdfsFileStatus fileStatus =
+          namesystem.startFile(src, perm, clientMachine, clientMachine,
+              EnumSet.of(CreateFlag.CREATE), true, REPLICATION_FACTOR,
+              DEFAULT_BLOCK_SIZE, null, false);
+      LocatedBlock locatedBlock =
+          nameNodeRpc.addBlock(src, clientMachine, null, null,
+              fileStatus.getFileId(), null, null);
+      if (failed) {
+        fail("Adding block should fail.");
+      } else {
+        assertEquals(REPLICATION_FACTOR, locatedBlock.getLocations().length);
+        nameNodeRpc.abandonBlock(locatedBlock.getBlock(),
+            fileStatus.getFileId(), src, clientMachine);
+      }
+    } catch (IOException e) {
+      if (failed) {
+        String errMsg =
+            "File " + src + " could only be replicated to " + expectedReplicas
+                + " nodes instead of minReplication (=" + REPLICATION_FACTOR
+                + ")";
+        assertTrue(e.getMessage().contains(errMsg));
+      } else {
+        fail("Adding block should not fail.");
+      }
+    }
+  }
+}
