@@ -159,7 +159,10 @@ public abstract class ZKFailoverController {
     return localTarget;
   }
 
-  HAServiceState getServiceState() { return serviceState; }
+  @VisibleForTesting
+  public HAServiceState getServiceState() {
+    return serviceState;
+  }
 
   public int run(final String[] args) throws Exception {
     if (!localTarget.isAutoFailoverEnabled()) {
@@ -807,7 +810,9 @@ public abstract class ZKFailoverController {
     
         switch (lastHealthState) {
         case SERVICE_HEALTHY:
-          elector.joinElection(targetToData(localTarget));
+          if(serviceState != HAServiceState.OBSERVER) {
+            elector.joinElection(targetToData(localTarget));
+          }
           if (quitElectionOnBadState) {
             quitElectionOnBadState = false;
           }
@@ -917,7 +922,7 @@ public abstract class ZKFailoverController {
   }
   
   @VisibleForTesting
-  ActiveStandbyElector getElectorForTests() {
+  public ActiveStandbyElector getElectorForTests() {
     return elector;
   }
   

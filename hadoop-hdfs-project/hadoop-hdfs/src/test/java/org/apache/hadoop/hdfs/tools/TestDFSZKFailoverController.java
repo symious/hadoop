@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.tools;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_BIND_HOST_KEY;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayInputStream;
@@ -299,6 +300,36 @@ public class TestDFSZKFailoverController extends ClientBaseWithFixes {
         }
       }
     }, 50, 15000);
+  }
+
+  @Test(timeout=30000)
+  public void testElectionOnObserver() throws Exception{
+    InputStream inOriginial = System.in;
+    try {
+      DFSHAAdmin tool = new DFSHAAdmin();
+      tool.setConf(conf);
+
+      // Transition nn2 to Observer
+      System.setIn(new ByteArrayInputStream("yes\n".getBytes()));
+      int result = tool.run(
+          new String[]{"-transitionToObserver", "-forcemanual", "nn2"});
+      assertEquals("State transition returned: " + result, 0, result);
+      waitForHAState(1, HAServiceState.OBSERVER);
+      GenericTestUtils.waitFor(new Supplier<Boolean>() {
+        @Override
+        public Boolean get() {
+          return thr2.zkfc.getServiceState() == HAServiceState.OBSERVER;
+        };
+      }, 50, 15000);
+
+      // Call recheckElectability
+      thr2.zkfc.getLocalTarget().getZKFCProxy(conf, 15000).cedeActive(-1);
+
+      // This namenode is in observer state, it shouldn't join election
+      assertFalse(thr2.zkfc.getElectorForTests().getWantToBeInElection());
+    } finally {
+      System.setIn(inOriginial);
+    }
   }
 
   /**
