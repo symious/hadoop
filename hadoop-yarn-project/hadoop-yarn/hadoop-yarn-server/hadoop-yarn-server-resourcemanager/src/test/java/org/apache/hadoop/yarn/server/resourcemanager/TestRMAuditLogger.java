@@ -149,7 +149,7 @@ public class TestRMAuditLogger {
     } else {
       sLog = RMAuditLogger.createSuccessLog(USER, OPERATION, TARGET, appId,
           attemptId, containerId, resource, callerContext, tmpIp, queueName,
-          partition, null, null, null);
+          partition, null, null, null, null);
     }
     StringBuilder expLog = new StringBuilder();
     expLog.append("USER=test\t");
@@ -210,7 +210,7 @@ public class TestRMAuditLogger {
    */
   private void testSuccessLogNulls(boolean checkIP) {
     String sLog = RMAuditLogger.createSuccessLog(null, null, null, null, 
-        null, null, null);
+        null, null, null, null);
     StringBuilder expLog = new StringBuilder();
     expLog.append("USER=null\t");
     if (checkIP) {
@@ -303,7 +303,7 @@ public class TestRMAuditLogger {
     String fLog = args == null ?
       RMAuditLogger.createFailureLog(USER, OPERATION, PERM, TARGET, DESC,
           appId, attemptId, containerId, resource, callerContext,
-          queueName, partition, null, null) :
+          queueName, partition, null, null, null) :
         RMAuditLogger.createFailureLog(USER, OPERATION, PERM, TARGET, DESC,
             args);
     StringBuilder expLog = new StringBuilder();

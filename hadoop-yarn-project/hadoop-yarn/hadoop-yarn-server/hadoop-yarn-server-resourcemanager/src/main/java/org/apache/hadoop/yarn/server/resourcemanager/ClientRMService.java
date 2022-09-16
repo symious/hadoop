@@ -698,7 +698,8 @@ public class ClientRMService extends AbstractService implements
       // call RMAppManager to submit application directly
       rmAppManager.submitApplication(submissionContext,
           System.currentTimeMillis(), user);
-
+      String priority = (submissionContext.getPriority() != null) ?
+          String.valueOf(submissionContext.getPriority().getPriority()) : null;
       LOG.info("Application with id " + applicationId.getId() + 
           " submitted by user " + user);
       RMAuditLogger.logSuccess(user, AuditConstants.SUBMIT_APP_REQUEST,
@@ -706,16 +707,20 @@ public class ClientRMService extends AbstractService implements
           submissionContext.getQueue(),
           submissionContext.getNodeLabelExpression(),
           submissionContext.getApplicationTags(),
-          submissionContext.getApplicationName());
+          submissionContext.getApplicationName(),
+          priority);
     } catch (YarnException e) {
       LOG.info("Exception in submitting " + applicationId, e);
+      String priority = (submissionContext.getPriority() != null) ?
+          String.valueOf(submissionContext.getPriority().getPriority()) : null;
       RMAuditLogger.logFailure(user, AuditConstants.SUBMIT_APP_REQUEST,
           e.getMessage(), "ClientRMService",
           "Exception in submitting application", applicationId, callerContext,
           submissionContext.getQueue(),
           submissionContext.getNodeLabelExpression(),
           submissionContext.getApplicationTags(),
-          submissionContext.getApplicationName());
+          submissionContext.getApplicationName(),
+          priority);
       throw e;
     }
 
