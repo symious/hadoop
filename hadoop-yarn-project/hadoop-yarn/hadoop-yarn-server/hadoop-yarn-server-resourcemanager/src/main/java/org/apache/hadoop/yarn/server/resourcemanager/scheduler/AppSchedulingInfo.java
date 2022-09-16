@@ -33,7 +33,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.LeafQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -752,34 +751,12 @@ public class AppSchedulingInfo {
         containerAllocated.getNodeId(), user,
         containerAllocated.getContainer().getResource(),
         type);
-    if (node != null) {
+    if(node != null) {
       queue.getMetrics().allocateResources(node.getPartition(), user, 1,
           containerAllocated.getContainer().getResource(), false);
       queue.getMetrics().decrPendingResources(
           containerAllocated.getNodeLabelExpression(), user, 1,
           containerAllocated.getContainer().getResource());
-      if (queue instanceof LeafQueue) {
-        LeafQueue leafQueue = (LeafQueue) queue;
-        Resource configuredMinResource =
-            leafQueue.getQueueResourceQuotas().getConfiguredMinResource(node.getPartition());
-        Resource configuredMaxResource =
-            leafQueue.getQueueResourceQuotas().getConfiguredMaxResource(node.getPartition());
-        Resource effectiveResource = leafQueue.getEffectiveCapacity(node.getPartition());
-        Resource maxEffectiveResource = leafQueue.getEffectiveMaxCapacity(node.getPartition());
-        if (null != effectiveResource && null != maxEffectiveResource) {
-          queue.getMetrics().updateEffectiveMetric(effectiveResource.getMemorySize(),
-              maxEffectiveResource.getMemorySize(), effectiveResource.getVirtualCores(),
-              maxEffectiveResource.getVirtualCores());
-        }
-        if (null != configuredMinResource && null != configuredMaxResource) {
-          queue.getMetrics().updateConfigureMetric(configuredMinResource.getMemorySize(),
-              configuredMaxResource.getMemorySize(), configuredMinResource.getVirtualCores(),
-              configuredMaxResource.getVirtualCores());
-        }
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("Update Label Queue Metrics: partition-" + node.getPartition() + ".");
-        }
-      }
     }
     queue.getMetrics().incrNodeTypeAggregations(user, type);
   }
