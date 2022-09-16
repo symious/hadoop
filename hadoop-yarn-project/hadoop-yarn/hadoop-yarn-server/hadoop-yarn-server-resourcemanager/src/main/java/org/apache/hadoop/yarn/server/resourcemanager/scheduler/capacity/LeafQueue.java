@@ -24,6 +24,7 @@ import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.time.DateUtils;
 import org.apache.hadoop.yarn.api.records.ApplicationResourceUsageReport;
@@ -1956,6 +1957,10 @@ public class LeafQueue extends AbstractCSQueue {
           labelManager.getResourceByLabel(null, clusterResource),
           RMNodeLabelsManager.NO_LABEL, this);
 
+      if (!CollectionUtils.isEmpty(accessibleLabels)) {
+        updatePartitionQueueMetrics();
+      }
+
       // queue metrics are updated, more resource may be available
       // activate the pending applications if possible
       activateApplications();
@@ -1973,6 +1978,35 @@ public class LeafQueue extends AbstractCSQueue {
       }
     } finally {
       writeLock.unlock();
+    }
+  }
+
+  private void updatePartitionQueueMetrics() {
+    Iterator<String> it = accessibleLabels.iterator();
+    while (it.hasNext()) {
+      String tmpLabel = it.next();
+      Resource configuredMinResource =
+          getQueueResourceQuotas().getConfiguredMinResource(tmpLabel);
+      Resource configuredMaxResource =
+          getQueueResourceQuotas().getConfiguredMaxResource(tmpLabel);
+      Resource effectiveResource = getEffectiveCapacity(tmpLabel);
+      Resource maxEffectiveResource = getEffectiveMaxCapacity(tmpLabel);
+      QueueMetrics pMetrics = getMetrics().getPartitionQueueMetrics(tmpLabel);
+      if (null != pMetrics) {
+        if (null != effectiveResource && null != maxEffectiveResource) {
+          pMetrics.updateEffectiveMetric(effectiveResource.getMemorySize(),
+              maxEffectiveResource.getMemorySize(), effectiveResource.getVirtualCores(),
+              maxEffectiveResource.getVirtualCores());
+        }
+        if (null != configuredMinResource && null != configuredMaxResource) {
+          pMetrics.updateConfigureMetric(configuredMinResource.getMemorySize(),
+              configuredMaxResource.getMemorySize(), configuredMinResource.getVirtualCores(),
+              configuredMaxResource.getVirtualCores());
+        }
+      }
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Update Label Queue Metrics: partition-" + tmpLabel + ".");
+      }
     }
   }
 
