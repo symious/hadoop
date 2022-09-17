@@ -383,13 +383,13 @@ public class ContainersMonitorImpl extends AbstractService implements
       } catch (InterruptedException e) {
         LOG.info("ContainersMonitorImpl monitoring disk usage interrupted");
       }
-      if (this.oomListenerThread != null) {
-        this.oomListenerThread.stopListening();
-        try {
-          this.oomListenerThread.join();
-        } finally {
-          this.oomListenerThread = null;
-        }
+    }
+    if (this.oomListenerThread != null) {
+      this.oomListenerThread.stopListening();
+      try {
+        this.oomListenerThread.join();
+      } finally {
+        this.oomListenerThread = null;
       }
     }
     if (logMonitorEnabled) {
@@ -799,9 +799,6 @@ public class ContainersMonitorImpl extends AbstractService implements
                             ProcessTreeInfo ptInfo,
                             long currentVmemUsage,
                             long currentPmemUsage) {
-      if (elasticMemoryEnforcement && dynamicResourceEnabled) {
-        return;
-      }
       if (strictMemoryEnforcement && !elasticMemoryEnforcement) {
         // When cgroup-based strict memory enforcement is used alone without
         // elastic memory control, the oom-kill would take care of it.
@@ -860,7 +857,7 @@ public class ContainersMonitorImpl extends AbstractService implements
         long totalThreadNum = pTree.getThreadNum();
         if (totalThreadNum > threadNumLimit) {
           msg += String.format(
-              "Container [pid=%s,containerID=%s] is running %dB beyond the '%S' thread number limit.",
+              "Container [pid=%s,containerID=%s] is running %d beyond the '%d' thread number limit.",
               pId, containerId, totalThreadNum, threadNumLimit);
           isThreadNumOverLimit = true;
           containerExitStatus = ContainerExitStatus.KILLED_EXCEEDED_THREAD_NUMBER;
