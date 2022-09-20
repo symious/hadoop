@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Random;
+import java.util.concurrent.Callable;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -64,6 +65,7 @@ import org.apache.hadoop.metrics2.util.SampleStat;
 import org.apache.hadoop.net.DNSToSwitchMapping;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.net.StaticMapping;
+import org.apache.hadoop.test.LambdaTestUtils;
 import org.apache.hadoop.util.Shell;
 import org.junit.Assert;
 import org.junit.Test;
@@ -479,15 +481,18 @@ public class TestDatanodeManager {
    * the excludes list will exclude it from data node reports.
    */
   @Test
-  public void testRemoveIncludedNode() throws IOException {
+  public void testRemoveIncludedNode() throws Exception {
     FSNamesystem fsn = Mockito.mock(FSNamesystem.class);
 
     // Set the write lock so that the DatanodeManager can start
     Mockito.when(fsn.hasWriteLock()).thenReturn(true);
 
-    DatanodeManager dm = mockDatanodeManager(fsn, new Configuration());
-    HostFileManager hm = new HostFileManager();
-    HostSet noNodes = new HostSet();
+    Configuration conf = new Configuration();
+    conf.setInt(DFSConfigKeys.DFS_HOSTS_MISS_NODES_CONSTRAINT_KEY, 1);
+    DatanodeManager dm = mockDatanodeManager(fsn, conf);
+    final HostFileManager hm = new HostFileManager();
+    hm.setConf(conf);
+    final HostSet noNodes = new HostSet();
     HostSet oneNode = new HostSet();
     HostSet twoNodes = new HostSet();
     DatanodeRegistration dr1 = new DatanodeRegistration(
@@ -557,6 +562,16 @@ public class TestDatanodeManager {
         "127.0.0.1:12345", bothAgain.get(0).getInfoAddr());
     Assert.assertEquals("Unexpected host or host in unexpected position",
         "127.0.0.1:23456", bothAgain.get(1).getInfoAddr());
+
+    // Check the situation when the removing included nodes are more than the constraint
+    hm.refresh(twoNodes, noNodes);
+    LambdaTestUtils.intercept(IOException.class, new Callable<Object>() {
+      @Override
+      public Object call() throws Exception {
+        hm.refresh(noNodes, noNodes);
+        return null;
+      }
+    });
   }
 
   @Test

@@ -529,6 +529,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_HOSTS_MAINTENANCE = "dfs.hosts.maintenance";
   public static final String  DFS_HOSTS_MAINTENANCE_ENABLED_KEY = "dfs.hosts.maintenance.enabled";
   public static final boolean DFS_HOSTS_MAINTENANCE_ENABLED_DEFAULT = false;
+  public static final String  DFS_HOSTS_MISS_NODES_CONSTRAINT_KEY = "dfs.hosts.miss.nodes.constraint";
+  public static final int     DFS_HOSTS_MISS_NODES_CONSTRAINT_DEFAULT = 5;
 
   public static final String  DFS_NAMENODE_AUDIT_LOGGERS_KEY = "dfs.namenode.audit.loggers";
   public static final String  DFS_NAMENODE_DEFAULT_AUDIT_LOGGER_NAME = "default";

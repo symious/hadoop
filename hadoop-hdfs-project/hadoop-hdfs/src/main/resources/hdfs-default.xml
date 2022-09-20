@@ -971,7 +971,14 @@
   not permitted to connect to the namenode.  The full pathname of the
   file must be specified.  If the value is empty, no hosts are
   excluded.</description>
-</property> 
+</property>
+
+<property>
+  <name>dfs.hosts.miss.nodes.constraint</name>
+  <value>5</value>
+  <description>Constraint for missing nodes in dfs.hosts file
+  compared with the previous one</description>
+</property>
 
 <property>
   <name>dfs.namenode.max.objects</name>

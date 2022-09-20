@@ -166,10 +166,34 @@ public class HostFileManager extends HostConfigManager {
    * @param newExcludes the new excludes list
    */
   @VisibleForTesting
-  void refresh(HostSet newIncludes, HostSet newExcludes) {
+  void refresh(HostSet newIncludes, HostSet newExcludes) throws IOException {
+    checkConstraint(newIncludes);
     synchronized (this) {
       includes = newIncludes;
       excludes = newExcludes;
+    }
+  }
+
+  /**
+   * Check if new dfs hosts file misses more nodes than constraint
+   * @param newIncludes the new list of DNs
+   * throw Exception when the number of missing nodes is over the constraint
+   */
+  private void checkConstraint(HostSet newIncludes) throws IOException {
+    int constraint = conf.getInt(DFSConfigKeys.DFS_HOSTS_MISS_NODES_CONSTRAINT_KEY,
+        DFSConfigKeys.DFS_HOSTS_MISS_NODES_CONSTRAINT_DEFAULT);
+    int misNodes = 0;
+    for (InetSocketAddress host : includes) {
+      if (!newIncludes.match(host)) {
+        misNodes++;
+      }
+    }
+    if (misNodes > constraint) {
+      throw new IOException("The number of missing nodes is " + misNodes + " over the constraint "
+          + constraint);
+    }
+    if (misNodes > 0) {
+      LOG.warn("Include file misses " + misNodes + " nodes compared with the previous one.");
     }
   }
 }

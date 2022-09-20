@@ -1318,6 +1318,12 @@ public class DatanodeManager {
    */
   public void refreshNodes(final Configuration conf) throws IOException {
     refreshHostsReader(conf);
+    // Refresh DN topology info before get write lock
+    List<String> refreshIpList = new ArrayList<>();
+    for (InetSocketAddress addr : hostConfigManager.getIncludes()) {
+      refreshIpList.add(addr.getAddress().getHostAddress());
+    }
+    dnsToSwitchMapping.resolve(refreshIpList);
     namesystem.writeLock();
     try {
       refreshDatanodes();
@@ -1401,8 +1407,8 @@ public class DatanodeManager {
     // Update the file names and refresh internal includes and excludes list.
     if (conf == null) {
       conf = new HdfsConfiguration();
-      this.hostConfigManager.setConf(conf);
     }
+    this.hostConfigManager.setConf(conf);
     this.hostConfigManager.refresh();
   }
   
@@ -1443,7 +1449,7 @@ public class DatanodeManager {
       node.setUpgradeDomain(hostConfigManager.getUpgradeDomain(node));
     }
   }
-
+  
   /** @return the number of live datanodes. */
   public int getNumLiveDataNodes() {
     int numLive = 0;

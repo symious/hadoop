@@ -264,9 +264,33 @@ public class CombinedHostFileManager extends HostConfigManager {
    * @param hostProperties the new properties list
    */
   @VisibleForTesting
-  private void refresh(final HostProperties hostProperties) {
+  private void refresh(final HostProperties hostProperties) throws IOException {
+    checkConstraint(hostProperties);
     synchronized (this) {
       this.hostProperties = hostProperties;
+    }
+  }
+
+  /**
+   * Check if new dfs hosts file misses more nodes than constraint
+   * @param hostProperties new host properties
+   * throw Exception when the number of missing nodes is over the constraint
+   */
+  private void checkConstraint(HostProperties hostProperties) throws IOException {
+    int constraint = conf.getInt(DFSConfigKeys.DFS_HOSTS_MISS_NODES_CONSTRAINT_KEY,
+        DFSConfigKeys.DFS_HOSTS_MISS_NODES_CONSTRAINT_DEFAULT);
+    int misNodes = 0;
+    for (InetSocketAddress host : this.hostProperties.getIncludes()) {
+      if (!hostProperties.isIncluded(host)) {
+        misNodes++;
+      }
+    }
+    if (misNodes > constraint) {
+      throw new IOException("The number of missing nodes is " + misNodes + " over the constraint "
+          + constraint);
+    }
+    if (misNodes > 0) {
+      LOG.warn("Include file misses " + misNodes + " nodes compared with the previous one.");
     }
   }
 }
