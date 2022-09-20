@@ -22,6 +22,7 @@ import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTest
 import org.apache.hadoop.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableSet;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.Utilization2RandomQueueOrderingPolicy;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy.CompositeWeightOrderingPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -196,6 +197,8 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   public static final String FIFO_APP_ORDERING_POLICY = "fifo";
 
   public static final String FAIR_APP_ORDERING_POLICY = "fair";
+
+  public static final String COMPOSITE_WEIGHT_APP_ORDERING_POLICY = "weight";
 
   public static final String FIFO_WITH_PARTITIONS_APP_ORDERING_POLICY
       = "fifo-with-partitions";
@@ -734,6 +737,86 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     return userLimit;
   }
 
+  /**
+   * APP_HIGH_FLAG_PRIORITY, default 60
+   */
+  private static final String APP_HIGH_FLAG_PRIORITY =
+      PREFIX + "apps.high.flag.priority";
+
+  public static final double DEFAULT_APP_HIGH_FLAG_PRIORITY = 60;
+
+  public double getAppHighFlagPriority() {
+    double appHighFlagPriority =
+        getDouble(APP_HIGH_FLAG_PRIORITY, DEFAULT_APP_HIGH_FLAG_PRIORITY);
+    return (appHighFlagPriority > 0) ? appHighFlagPriority :
+        DEFAULT_APP_HIGH_FLAG_PRIORITY;
+  }
+
+  /**
+   * APP_PENDING_FLAG_MEMORY, default 100TB
+   */
+  private static final String APP_PENDING_FLAG_MEMORY =
+      PREFIX + "apps.pending.flag.memory";
+
+  public static final double DEFAULT_APP_PENDING_FLAG_MEMORY = 100 * 1024 * 1024;
+
+  public double getAppPendingFlagMemory() {
+    double appPendingFlagMemory =
+        getDouble(APP_PENDING_FLAG_MEMORY, DEFAULT_APP_PENDING_FLAG_MEMORY);
+    return (appPendingFlagMemory > 0) ? appPendingFlagMemory :
+        DEFAULT_APP_PENDING_FLAG_MEMORY;
+  }
+
+  /**
+   * APP_PENDING_FLAG_TIME, default 120 minutes
+   */
+  private static final String APP_PENDING_FLAG_TIME =
+      PREFIX + "apps.pending.flag.time";
+
+  public static final double DEFAULT_APP_PENDING_FLAG_TIME = 120 * 60 * 1000;
+
+  public double getAppPendingFlagTime() {
+    double appPendingFlagTime =
+        getDouble(APP_PENDING_FLAG_TIME, DEFAULT_APP_PENDING_FLAG_TIME);
+    return (appPendingFlagTime > 0) ? appPendingFlagTime :
+        DEFAULT_APP_PENDING_FLAG_TIME;
+  }
+
+  /**
+   * priorityWeightFactor, default 0.6
+   */
+  private static final String APP_PRIORITY_WEIGHT_FACTOR =
+      PREFIX + "apps.priority.weight.factor";
+
+  public static final double DEFAULT_APP_PRIORITY_WEIGHT_FACTOR = 0.6;
+
+  public double getAppPriorityWeightFactor() {
+    double appPriorityWeightFactor = getDouble(APP_PRIORITY_WEIGHT_FACTOR,
+        DEFAULT_APP_PRIORITY_WEIGHT_FACTOR);
+    return (appPriorityWeightFactor > 0 && appPriorityWeightFactor < 1) ?
+        appPriorityWeightFactor :
+        DEFAULT_APP_PRIORITY_WEIGHT_FACTOR;
+  }
+
+  /**
+   * pendingMemoryWeightFactor, default 0.2
+   */
+  private static final String APP_PENDING_MEMORY_WEIGHT_FACTOR =
+      PREFIX + "apps.pending.memory.weight.factor";
+
+  public static final double DEFAULT_APP_PENDING_MEMORY_WEIGHT_FACTOR = 0.2;
+
+  public double getAppPendingMemoryWeightFactor() {
+    double appPendingMemoryWeightFactor =
+        getDouble(APP_PENDING_MEMORY_WEIGHT_FACTOR,
+            DEFAULT_APP_PENDING_MEMORY_WEIGHT_FACTOR);
+    return
+        (appPendingMemoryWeightFactor > 0 && appPendingMemoryWeightFactor < 1) ?
+            appPendingMemoryWeightFactor :
+            DEFAULT_APP_PENDING_MEMORY_WEIGHT_FACTOR;
+  }
+
+  public static final double DEFAULT_APP_PENDING_TIME_WEIGHT_FACTOR = 0.2;
 
   /**
    * Apps order cache time, default 0, without cache
@@ -766,6 +849,9 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     if (policyType.trim().equals(FAIR_APP_ORDERING_POLICY)) {
        policyType = FairOrderingPolicy.class.getName();
     }
+    if (policyType.trim().equals(COMPOSITE_WEIGHT_APP_ORDERING_POLICY)) {
+      policyType = CompositeWeightOrderingPolicy.class.getName();
+    }
     if (policyType.trim().equals(FIFO_WITH_PARTITIONS_APP_ORDERING_POLICY)) {
       policyType = FifoOrderingPolicyWithExclusivePartitions.class.getName();
     }
@@ -774,14 +860,25 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     }
 
     try {
-      long cacheTime = getAppOrderCacheTime();
-      LOG.info("getAppOrderCacheTime: " + cacheTime);
       orderingPolicy =
           (OrderingPolicy<S>) Class.forName(policyType).newInstance();
     } catch (Exception e) {
       String message = "Unable to construct ordering policy for: " + policyType + ", " + e.getMessage();
       throw new RuntimeException(message, e);
     }
+
+    double highFlagPriority = getAppHighFlagPriority();
+    double pendingFlagMemory = getAppPendingFlagMemory();
+    double pendingFlagTime = getAppPendingFlagTime();
+    double priorityWeightFactor = getAppPriorityWeightFactor();
+    double pendingMemoryWeightFactor = getAppPendingMemoryWeightFactor();
+    long cacheTime = getAppOrderCacheTime();
+    LOG.info(
+        "highFlagPriority: " + highFlagPriority + " ,pendingFlagMemory: " +
+            pendingFlagMemory + " ,pendingFlagTime: " + pendingFlagTime +
+            " ,priorityWeightFactor: " + priorityWeightFactor +
+            " ,pendingMemoryWeightFactor: " + pendingMemoryWeightFactor +
+            " ,getAppOrderCacheTime: " + cacheTime);
 
     Map<String, String> config = new HashMap<String, String>();
     String confPrefix = getQueuePrefix(queue) + ORDERING_POLICY + ".";
@@ -794,7 +891,23 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
       config.put("queueName", queue);
 
       //add cache time
-      config.put("appsOrderCacheTime", String.valueOf(getAppOrderCacheTime()));
+      config.put("appsOrderCacheTime", String.valueOf(cacheTime));
+
+      //add highFlagPriority
+      config.put("highFlagPriority", String.valueOf(highFlagPriority));
+
+      //add pendingFlagMemory
+      config.put("pendingFlagMemory", String.valueOf(pendingFlagMemory));
+
+      //add pendingFlagTime
+      config.put("pendingFlagTime", String.valueOf(pendingFlagTime));
+
+      //add priorityWeightFactor
+      config.put("priorityWeightFactor", String.valueOf(priorityWeightFactor));
+
+      //add pendingMemoryWeightFactor
+      config.put("pendingMemoryWeightFactor",
+          String.valueOf(pendingMemoryWeightFactor));
     }
     orderingPolicy.configure(config);
     return orderingPolicy;
