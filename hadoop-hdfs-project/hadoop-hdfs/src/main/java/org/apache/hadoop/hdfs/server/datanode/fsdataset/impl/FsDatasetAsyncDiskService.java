@@ -356,7 +356,7 @@ class FsDatasetAsyncDiskService {
     }
 
     private boolean removeReplicaFromMem() {
-      try (AutoCloseableLock lock = fsdatasetImpl.datasetLock.acquire()) {
+      try (AutoCloseableLock lock = fsdatasetImpl.datasetWriteLock.acquire()) {
         final ReplicaInfo info = fsdatasetImpl.volumeMap
             .get(block.getBlockPoolId(), block.getLocalBlock());
         if (info == null) {
