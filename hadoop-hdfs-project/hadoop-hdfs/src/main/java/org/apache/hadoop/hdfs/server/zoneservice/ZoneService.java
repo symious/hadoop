@@ -290,7 +290,7 @@ public class ZoneService extends ReconfigurableBase  {
             // The same timestamp will cause that the ZoneMover cannot work
             Thread.sleep(10);
           }
-          metrics.setCheckRecordCostTime(System.currentTimeMillis() - start);
+          metrics.addCheckRecordCostTime(System.currentTimeMillis() - start);
           Thread.sleep(batchRefreshInterval);
         } catch (IOException e) {
           LOG.error("Batch manager thread error!", e);
