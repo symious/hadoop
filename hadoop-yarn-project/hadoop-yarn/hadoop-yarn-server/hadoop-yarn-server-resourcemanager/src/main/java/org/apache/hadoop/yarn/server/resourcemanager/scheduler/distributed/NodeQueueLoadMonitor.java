@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.distributed;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.slf4j.Logger;
@@ -396,8 +397,11 @@ public class NodeQueueLoadMonitor implements ClusterMonitor {
   }
 
   private void removeFromNodeIdsByRack(RMNode removedNode) {
-    nodeIdsByRack.computeIfPresent(removedNode.getRackName(),
-        (k, v) -> v).remove(removedNode.getNodeID());
+    Set<NodeId> nodeIds = nodeIdsByRack.computeIfPresent(removedNode.getRackName(),
+        (k, v) -> v);
+    if (!CollectionUtils.isEmpty(nodeIds)) {
+      nodeIds.remove(removedNode.getNodeID());
+    }
   }
 
   private void addIntoNodeIdsByRack(RMNode addedNode) {
