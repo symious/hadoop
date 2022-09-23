@@ -231,64 +231,45 @@ public class DirectoryScanner implements Runnable {
    */
   static class ScanInfo implements Comparable<ScanInfo> {
     private final long blockId;
-    
+
     /**
-     * The block file path, relative to the volume's base directory.
-     * If there was no block file found, this may be null. If 'vol'
-     * is null, then this is the full path of the block file.
+     * The full path to the folder containing the block / meta files.
      */
-    private final String blockSuffix;
-    
+    private final File basePath;
+
     /**
-     * The suffix of the meta file path relative to the block file.
-     * If blockSuffix is null, then this will be the entire path relative
-     * to the volume base directory, or an absolute path if vol is also
-     * null.
+     * The block file name, with no path
      */
-    private final String metaSuffix;
+    private final String blockFile;
+
+    /**
+     * Holds the meta file name, with no path, only if blockFile is null.
+     * If blockFile is not null, the meta file will be named identically to
+     * the blockFile, but with a suffix like "_1234.meta". If the blockFile
+     * is present, we store only the meta file suffix.
+     */
+    private final String metaFile;
 
     private final FsVolumeSpi volume;
 
     /**
-     * Get the file's length in async block scan
+     * Get the file's length in async block scan.
      */
     private final long blockFileLength;
-
-    private final static Pattern CONDENSED_PATH_REGEX =
-        Pattern.compile("(?<!^)(\\\\|/){2,}");
-    
-    private final static String QUOTED_FILE_SEPARATOR = 
-        Matcher.quoteReplacement(File.separator);
-    
-    /**
-     * Get the most condensed version of the path.
-     *
-     * For example, the condensed version of /foo//bar is /foo/bar
-     * Unlike {@link File#getCanonicalPath()}, this will never perform I/O
-     * on the filesystem.
-     *
-     * @param path the path to condense
-     * @return the condensed path
-     */
-    private static String getCondensedPath(String path) {
-      return CONDENSED_PATH_REGEX.matcher(path).
-          replaceAll(QUOTED_FILE_SEPARATOR);
-    }
 
     /**
      * Get a path suffix.
      *
-     * @param f            The file to get the suffix for.
+     * @param f            The string to get the suffix for.
      * @param prefix       The prefix we're stripping off.
      *
-     * @return             A suffix such that prefix + suffix = path to f
+     * @return             A suffix such that prefix + suffix = f
      */
-    private static String getSuffix(File f, String prefix) {
-      String fullPath = getCondensedPath(f.getAbsolutePath());
-      if (fullPath.startsWith(prefix)) {
-        return fullPath.substring(prefix.length());
+    private static String getSuffix(String f, String prefix) {
+      if (f.startsWith(prefix)) {
+        return f.substring(prefix.length());
       }
-      throw new RuntimeException(prefix + " is not a prefix of " + fullPath);
+      throw new RuntimeException(prefix + " is not a prefix of " + f);
     }
 
     /**
@@ -296,25 +277,27 @@ public class DirectoryScanner implements Runnable {
      * the block data and meta-data files.
      *
      * @param blockId the block ID
-     * @param blockFile the path to the block data file
-     * @param metaFile the path to the block meta-data file
+     * @param basePath The full path to the directory the block is stored in
+     * @param blockFile The block filename, with no path
+     * @param metaFile The meta filename, with no path. If blockFile is not null
+     *                 then the metaFile and blockFile should have the same
+     *                 prefix, with the meta file having a suffix like
+     *                 "_1234.meta". To save memory, if the blockFile is present
+     *                 we store only the meta file suffix in the object
      * @param vol the volume that contains the block
      */
-    ScanInfo(long blockId, File blockFile, File metaFile, FsVolumeSpi vol) {
+    ScanInfo(long blockId, File basePath, String blockFile,
+        String metaFile, FsVolumeSpi vol) {
       this.blockId = blockId;
-      String condensedVolPath = vol == null ? null :
-        getCondensedPath(vol.getBasePath());
-      this.blockSuffix = blockFile == null ? null :
-        getSuffix(blockFile, condensedVolPath);
-      this.blockFileLength = (blockFile != null) ? blockFile.length() : 0; 
-      if (metaFile == null) {
-        this.metaSuffix = null;
-      } else if (blockFile == null) {
-        this.metaSuffix = getSuffix(metaFile, condensedVolPath);
+      this.basePath = basePath;
+      this.blockFile = blockFile;
+      if (blockFile != null && metaFile != null) {
+        this.metaFile = getSuffix(metaFile, blockFile);
       } else {
-        this.metaSuffix = getSuffix(metaFile,
-            condensedVolPath + blockSuffix);
+        this.metaFile = metaFile;
       }
+      this.blockFileLength = (blockFile != null) ?
+          new File(basePath, blockFile).length() : 0;
       this.volume = vol;
     }
 
@@ -324,8 +307,8 @@ public class DirectoryScanner implements Runnable {
      * @return the block data file
      */
     File getBlockFile() {
-      return (blockSuffix == null) ? null :
-        new File(volume.getBasePath(), blockSuffix);
+      return (blockFile == null) ? null :
+          new File(basePath.getAbsolutePath(), blockFile);
     }
 
     /**
@@ -344,13 +327,10 @@ public class DirectoryScanner implements Runnable {
      * @return the block meta data file
      */
     File getMetaFile() {
-      if (metaSuffix == null) {
+      if (metaFile == null) {
         return null;
-      } else if (blockSuffix == null) {
-        return new File(volume.getBasePath(), metaSuffix);
-      } else {
-        return new File(volume.getBasePath(), blockSuffix + metaSuffix);
       }
+      return new File(basePath.getAbsolutePath(), fullMetaFile());
     }
 
     /**
@@ -399,9 +379,19 @@ public class DirectoryScanner implements Runnable {
     }
 
     public long getGenStamp() {
-      return metaSuffix != null ? Block.getGenerationStamp(
-          getMetaFile().getName()) : 
-            HdfsConstants.GRANDFATHER_GENERATION_STAMP;
+      return metaFile != null ? Block.getGenerationStamp(fullMetaFile())
+          : HdfsConstants.GRANDFATHER_GENERATION_STAMP;
+    }
+
+    private String fullMetaFile() {
+      if (metaFile == null) {
+        return null;
+      }
+      if (blockFile == null) {
+        return metaFile;
+      } else {
+        return blockFile + metaFile;
+      }
     }
   }
 
@@ -723,7 +713,7 @@ public class DirectoryScanner implements Runnable {
                              FsVolumeSpi vol) {
     statsRecord.missingBlockFile++;
     statsRecord.missingMetaFile++;
-    diffRecord.add(new ScanInfo(blockId, null, null, vol));
+    diffRecord.add(new ScanInfo(blockId, null, null, null, vol));
   }
 
   /**
@@ -909,7 +899,7 @@ public class DirectoryScanner implements Runnable {
             long blockId = Block.getBlockId(file.getName());
             verifyFileLocation(file, bpFinalizedDir,
                 blockId);
-            report.add(new ScanInfo(blockId, null, file, vol));
+            report.add(new ScanInfo(blockId, dir, null, file.getName(), vol));
           }
           continue;
         }
@@ -932,7 +922,8 @@ public class DirectoryScanner implements Runnable {
           }
         }
         verifyFileLocation(blockFile, bpFinalizedDir, blockId);
-        report.add(new ScanInfo(blockId, blockFile, metaFile, vol));
+        report.add(new ScanInfo(blockId, dir, blockFile.getName(),
+            metaFile == null ? null : metaFile.getName(), vol));
       }
       return report;
     }
