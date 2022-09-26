@@ -26,6 +26,7 @@ import java.util.concurrent.FutureTask;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.NodeId;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueMetrics;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.LeafQueue;
 import org.slf4j.Logger;
@@ -514,6 +515,17 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
   }
 
   private float calculateUsedRatioOfLabel(String label, LeafQueue queue, String flag) {
+    // If the queue has pending resource here, return 1f means full
+    QueueMetrics queueMetrics = queue.getMetrics().getPartitionQueueMetrics(label);
+    if (queueMetrics.getPendingMB() > 0 || queueMetrics.getPendingVirtualCores() > 0) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("The queue " + queue.getQueuePath() + " is full, and resource on label " + label +
+            " is: Memory-" + queueMetrics.getPendingMB() + ", VCores-" +
+            queueMetrics.getPendingVirtualCores());
+      }
+      return 1f;
+    }
+
     // If Effective is Zero then return 1f
     if (queue.getEffectiveCapacity(label).getMemorySize() == 0 ||
         queue.getEffectiveCapacity(label).getVirtualCores() == 0 ||
