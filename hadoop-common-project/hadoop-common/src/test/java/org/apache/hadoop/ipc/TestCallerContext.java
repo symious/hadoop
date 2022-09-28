@@ -21,6 +21,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Arrays;
+
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SEPARATOR_KEY;
 
 public class TestCallerContext {
@@ -80,5 +82,50 @@ public class TestCallerContext {
     conf.set(HADOOP_CALLER_CONTEXT_SEPARATOR_KEY, "\t");
     CallerContext.Builder builder = new CallerContext.Builder(null, conf);
     builder.build();
+  }
+
+
+  @Test
+  public void testSetSyncFlag() {
+    // Fist, old context is null.
+    CallerContext.setSyncFlagForRBF(null);
+    Assert.assertNotNull(CallerContext.getCurrent());
+    Assert.assertEquals("needSyncObserverRead", CallerContext.getCurrent().getContext());
+    Assert.assertNull(CallerContext.getCurrent().getSignature());
+
+    // Second, old context is not null but invalid.
+    CallerContext invalidContext = new CallerContext.Builder(null).build();
+    CallerContext.setSyncFlagForRBF(invalidContext);
+    Assert.assertNotNull(CallerContext.getCurrent());
+    Assert.assertEquals("needSyncObserverRead", CallerContext.getCurrent().getContext());
+    Assert.assertNull(CallerContext.getCurrent().getSignature());
+
+    // Third, old context is valid but does not contain the sync flag.
+    CallerContext validWithoutFlagContext = new CallerContext.Builder("hello word").build();
+    CallerContext.setSyncFlagForRBF(validWithoutFlagContext);
+    Assert.assertNotNull(CallerContext.getCurrent());
+    Assert.assertTrue(CallerContext.getCurrent().getContext().contains("needSyncObserverRead"));
+    Assert.assertNull(CallerContext.getCurrent().getSignature());
+
+    // Fourth, old context is valid and contains the sync flag.
+    CallerContext validWithFlagContext = new CallerContext
+        .Builder("hello word_needSyncObserverRead").build();
+    CallerContext.setSyncFlagForRBF(validWithFlagContext);
+    Assert.assertNotNull(CallerContext.getCurrent());
+    Assert.assertTrue(CallerContext.getCurrent().getContext().contains("needSyncObserverRead"));
+    Assert.assertEquals(1, CallerContext.getCurrent().getContext()
+        .split("needSyncObserverRead").length);
+    Assert.assertNull(CallerContext.getCurrent().getSignature());
+
+    // Five, old context is valid with one signature but without sync flag.
+    byte[] signature = "L".getBytes(CallerContext.SIGNATURE_ENCODING);
+    CallerContext validWithSignatureContext = new CallerContext
+        .Builder("hello word").setSignature(signature).build();
+    CallerContext.setSyncFlagForRBF(validWithSignatureContext);
+    Assert.assertNotNull(CallerContext.getCurrent());
+    Assert.assertTrue(CallerContext.getCurrent().getContext().contains("needSyncObserverRead"));
+    Assert.assertNotNull(CallerContext.getCurrent().getSignature());
+    Assert.assertEquals(Arrays.toString(signature),
+        Arrays.toString(CallerContext.getCurrent().getSignature()));
   }
 }
