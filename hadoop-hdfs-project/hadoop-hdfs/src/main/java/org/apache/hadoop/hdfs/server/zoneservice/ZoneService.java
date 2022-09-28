@@ -281,12 +281,19 @@ public class ZoneService extends ReconfigurableBase  {
           for (MigrationRecord record : records) {
             if (record.getMode().equals("monitor")) continue;
             String ns = record.getNs();
+            String path = record.getPath();
             if (!nsSemaphore.containsKey(ns)) {
               nsSemaphore.put(ns, new Semaphore(nsThreadLimit));
               inProcessPaths.put(ns, Collections.synchronizedList(new ArrayList<String>()));
             }
-            (new BatchThread(record.getPath(), record.getRule(),
-                ns, getConf(), driver, nsSemaphore.get(ns), inProcessPaths.get(ns))).start();
+
+            if (nsSemaphore.get(ns).availablePermits() > 0
+                && !inProcessPaths.get(ns).contains(path)) {
+              nsSemaphore.get(ns).acquire();
+              inProcessPaths.get(ns).add(path);
+              (new BatchThread(path, record.getRule(),
+                  ns, getConf(), driver, nsSemaphore.get(ns), inProcessPaths.get(ns))).start();
+            }
             // The same timestamp will cause that the ZoneMover cannot work
             Thread.sleep(10);
           }

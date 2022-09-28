@@ -50,6 +50,7 @@ public class BatchThread extends Thread {
 
   public BatchThread(String path, String replicationRule, String ns,
       Configuration conf, StoreDriver driver, Semaphore semaphore, List<String> inProcessPaths) {
+    super("batch_" + ns + "_" + path);
     this.path = path;
     this.replicationRule = replicationRule;
     this.nameSpace = ns;
@@ -63,9 +64,9 @@ public class BatchThread extends Thread {
   @Override
   public void run() {
     Date startTime = new Date();
+    // Check move process exception
     try {
-      semaphore.acquire();
-      inProcessPaths.add(path);
+      LOG.info("Batch move process for {} has been started.", this.path);
       metrics.startBatchThread();
       ResultCode resultCode = movePath(conf, nameSpace, path, replicationRule);
 
@@ -80,6 +81,19 @@ public class BatchThread extends Thread {
         metrics.incrNSBatchFailMoveCount(nameSpace);
         metrics.incrFailMoveCount();
       }
+
+      // Catch ZK remove record exception and record zk error log
+      try {
+        LOG.info("Remove batch record for {} in {}.", path, nameSpace);
+        MigrationRecord migrationRecord = new MigrationRecord(
+            nameSpace, path, replicationRule);
+        driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
+      } catch (IOException e) {
+        AuditLogger.logRuleProcess(
+            "Batch", nameSpace, path, replicationRule,
+            startTime, new Date(), ResultCode.IO_EXCEPTION.getMsg(), "batch");
+        LOG.error("Remove zk record for {} fail.", path, e);
+      }
     } catch (IOException e) {
       AuditLogger.logRuleProcess(
           "Batch", nameSpace, path, replicationRule,
@@ -90,22 +104,16 @@ public class BatchThread extends Thread {
           "Batch", nameSpace, path, replicationRule,
           startTime, new Date(), ResultCode.INTERRUPTED.getMsg(), "batch");
       LOG.warn("Batch process for {} is interrupted.", path, e);
+    } catch (Throwable e) {
+      AuditLogger.logRuleProcess(
+          "Batch", nameSpace, path, replicationRule,
+          startTime, new Date(), ResultCode.UNKNOWNERROR.getMsg(), "batch");
+      LOG.error("Batch process for {} is stopped by unknown error.", path, e);
     } finally {
+      LOG.info("Batch move process for {} has been done.", this.path);
       metrics.stopBatchThread();
       inProcessPaths.remove(path);
       semaphore.release();
-    }
-
-    try {
-      LOG.info("Remove batch record for {} in {}." , path, nameSpace);
-      MigrationRecord migrationRecord = new MigrationRecord(
-          nameSpace, path, replicationRule);
-      driver.remove(new Query<>(migrationRecord), MigrationRecord.class);
-    } catch (IOException e) {
-      AuditLogger.logRuleProcess(
-          "Batch", nameSpace, path, replicationRule,
-          startTime, new Date(), ResultCode.IO_EXCEPTION.getMsg(), "batch");
-      LOG.warn("Remove zk record for {} fail.", path, e);
     }
   }
 
