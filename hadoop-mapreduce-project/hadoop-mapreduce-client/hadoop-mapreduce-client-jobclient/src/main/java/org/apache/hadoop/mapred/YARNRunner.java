@@ -45,6 +45,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.UnsupportedFileSystemException;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.ipc.ProtocolSignature;
 import org.apache.hadoop.mapreduce.Cluster.JobTrackerStatus;
 import org.apache.hadoop.mapreduce.ClusterMetrics;
@@ -324,8 +325,13 @@ public class YARNRunner implements ClientProtocol {
     
     addHistoryToken(ts);
 
+    CallerContext oldContext = CallerContext.getCurrent();
+    // Try to insert the sync flag into the current caller context.
+    CallerContext.setSyncFlagForRBF(oldContext);
     ApplicationSubmissionContext appContext =
       createApplicationSubmissionContext(conf, jobSubmitDir, ts);
+    // Reset the caller context.
+    CallerContext.setCurrent(oldContext);
 
     // Submit to ResourceManager
     try {

@@ -242,4 +242,27 @@ public final class CallerContext {
   public static void setCurrent(CallerContext callerContext) {
     CurrentCallerContextHolder.CALLER_CONTEXT.set(callerContext);
   }
+
+  /**
+   * Try to add one syncFlag needSyncObserverRead into the context.
+   * @param callerContext the current caller context.
+   */
+  public static void setSyncFlagForRBF(CallerContext callerContext) {
+    // The callerContext is null, or it's invalid, or the context not contains the flag.
+    if (callerContext == null || !callerContext.isContextValid() ||
+        !callerContext.getContext().contains("needSyncObserverRead")) {
+
+      String newContext = "syncFlag:needSyncObserverRead";
+      byte[] signature = null;
+      if (callerContext != null) {
+        signature = callerContext.getSignature();
+        if (callerContext.isContextValid()) {
+          newContext = callerContext.getContext() + HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT
+              + "syncFlag:needSyncObserverRead";
+        }
+      }
+      CallerContext newCallerContext = new Builder(newContext).setSignature(signature).build();
+      CallerContext.setCurrent(newCallerContext);
+    }
+  }
 }
