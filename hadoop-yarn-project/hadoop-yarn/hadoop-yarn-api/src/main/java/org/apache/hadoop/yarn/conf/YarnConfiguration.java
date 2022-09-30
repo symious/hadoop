@@ -4294,6 +4294,19 @@ public class YarnConfiguration extends Configuration {
       ROUTER_PREFIX + "query.timeline.enabled";
   public static final boolean DEFAULT_ROUTER_QUERY_TIMELINE_ENABLED = false;
 
+  //unit ms, 2s
+  public static final String ROUTER_QUERY_GET_APPLICATIONS_MAX_COST_TIME =
+      ROUTER_PREFIX + "query.get.applications.max.cost.time";
+  public static final long DEFAULT_ROUTER_QUERY_GET_APPLICATIONS_MAX_COST_TIME =
+      2000;
+
+  //unit ms, 5min
+  public static final String ROUTER_QUERY_GET_APPLICATIONS_RECORD_EXPIRE_TIME =
+      ROUTER_PREFIX + "query.get.applications.record.expire.time";
+  public static final long
+      DEFAULT_ROUTER_QUERY_GET_APPLICATIONS_RECORD_EXPIRE_TIME =
+      1000 * 60 * 5;
+
   /**
    * Specifications on how (many times) to contact Router for apps. We need to
    * do this because Router might return partial application list because some

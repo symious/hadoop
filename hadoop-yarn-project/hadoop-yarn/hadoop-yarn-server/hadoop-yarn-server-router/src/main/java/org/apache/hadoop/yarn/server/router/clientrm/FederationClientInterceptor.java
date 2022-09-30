@@ -135,6 +135,7 @@ import org.apache.hadoop.yarn.server.router.RouterServerUtil;
 import org.apache.hadoop.yarn.server.router.fairness.AbstractRouterRpcFairnessPolicyController;
 import org.apache.hadoop.yarn.server.router.fairness.RouterRpcFairnessPolicyController;
 import org.apache.hadoop.yarn.server.router.utils.FederationUtil;
+import org.apache.hadoop.yarn.server.router.utils.RecordCostTime;
 import org.apache.hadoop.yarn.server.router.utils.RouterRpcRequestCache;
 import org.apache.hadoop.yarn.util.Clock;
 import org.apache.hadoop.yarn.util.MonotonicClock;
@@ -192,6 +193,8 @@ public class FederationClientInterceptor
   protected Cache<Object, Object> cache;
   protected RouterRpcRequestCache routerRpcRequestCache;
 
+  protected volatile RecordCostTime recentSlowQueryRecord;
+
   @Override
   public void init(String userName) {
     super.init(userName);
@@ -240,6 +243,8 @@ public class FederationClientInterceptor
 
     routerRpcRequestCache = RouterRpcRequestCache.getInstance();
     this.cache = routerRpcRequestCache.getCache();
+
+    this.recentSlowQueryRecord = FederationUtil.getRecentSlowQueryRecord();
   }
 
   /**

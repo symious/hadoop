@@ -40,6 +40,8 @@ public final class FederationUtil {
 
   private static RouterRpcFairnessPolicyController routerRpcFairnessPolicyController;
 
+  private static volatile RecordCostTime recentSlowQueryRecord;
+
   private FederationUtil() {
     // Utility Class
   }
@@ -105,6 +107,18 @@ public final class FederationUtil {
       LOG.error("Could not instantiate: {}", clazz.getSimpleName(), e);
       return null;
     }
+  }
+
+  public static RecordCostTime getRecentSlowQueryRecord() {
+    if (recentSlowQueryRecord == null) {
+      synchronized (FederationUtil.class) {
+        if (recentSlowQueryRecord == null) {
+          recentSlowQueryRecord = new RecordCostTime(0, 0);
+          LOG.info("Init recentSlowQueryRecord : " + recentSlowQueryRecord);
+        }
+      }
+    }
+    return recentSlowQueryRecord;
   }
 
 }

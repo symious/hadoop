@@ -58,6 +58,7 @@ import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade
 import org.apache.hadoop.yarn.server.metrics.ApplicationMetricsConstants;
 import org.apache.hadoop.yarn.server.router.RouterMetrics;
 import org.apache.hadoop.yarn.server.router.RouterServerUtil;
+import org.apache.hadoop.yarn.server.router.utils.RecordCostTime;
 import org.apache.hadoop.yarn.util.Clock;
 import org.apache.hadoop.yarn.util.MonotonicClock;
 import org.apache.hadoop.yarn.util.Records;
@@ -103,9 +104,41 @@ public class EnhancedFederationClientInterceptor
     routerMetrics = RouterMetrics.getMetrics();
   }
 
+  public long getApplicationsMaxCostTime() {
+    return getConf()
+        .getLong(YarnConfiguration.ROUTER_QUERY_GET_APPLICATIONS_MAX_COST_TIME,
+            YarnConfiguration.DEFAULT_ROUTER_QUERY_GET_APPLICATIONS_MAX_COST_TIME);
+  }
+
+  public long getApplicationsRecordExpireTime() {
+    return getConf().getLong(
+        YarnConfiguration.ROUTER_QUERY_GET_APPLICATIONS_RECORD_EXPIRE_TIME,
+        YarnConfiguration.DEFAULT_ROUTER_QUERY_GET_APPLICATIONS_RECORD_EXPIRE_TIME);
+  }
+
   public boolean enableQueryTimeLine(){
     return getConf().getBoolean(YarnConfiguration.ROUTER_QUERY_TIMELINE_ENABLED,
         YarnConfiguration.DEFAULT_ROUTER_QUERY_TIMELINE_ENABLED);
+  }
+
+  //If exist query time exceeds 2 seconds recent 5 minutes,
+  // the timeline is unhealthy
+  public boolean isTimeLineHealthy(){
+    long maxCostTime = getApplicationsMaxCostTime();
+    long expireTime = getApplicationsRecordExpireTime();
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("getApplicationsMaxCostTime: " + maxCostTime +
+          " ,getApplicationsRecordExpireTime: " + expireTime);
+    }
+    if ((this.recentSlowQueryRecord.getCostTime() > maxCostTime) &&
+        (System.currentTimeMillis() -
+            this.recentSlowQueryRecord.getRecordTime()) <= expireTime) {
+      LOG.warn("Timeline not healthy, because found recentSlowQueryRecord: " +
+          this.recentSlowQueryRecord);
+      return false;
+    } else {
+      return true;
+    }
   }
 
   public String getQueryTimeLineAddress(){
@@ -263,7 +296,7 @@ public class EnhancedFederationClientInterceptor
     long startTime1 = clock.getTime();
     for (String tag : queryTags) {
       if (enableQueryTimeLine() && (tag.startsWith(TIC_TAG_PREFIX) ||
-          tag.startsWith(LIVY_TAG_PREFIX))) {
+          tag.startsWith(LIVY_TAG_PREFIX)) && isTimeLineHealthy()) {
         ApplicationReport appReport = queryAppsByTagFromTimeLine(tag);
         if (appReport != null && appReport.getApplicationId() != null &&
             !appReport.getApplicationId().toString().isEmpty() &&
@@ -274,16 +307,23 @@ public class EnhancedFederationClientInterceptor
         } else {
           queryFromYarnTags.add(tag);
         }
+        long stopTime1 = clock.getTime();
+        long queryByTimeLineCostTime = stopTime1 - startTime1;
+        if (queryByTimeLineCostTime > getApplicationsMaxCostTime()) {
+          this.recentSlowQueryRecord =
+              new RecordCostTime(System.currentTimeMillis(),
+                  queryByTimeLineCostTime);
+          LOG.warn("recentSlowQueryRecord: " + this.recentSlowQueryRecord);
+        }
+        if (queryFromTimeLineTags.size() > 0) {
+          LOG.info("requestId: " + requestId + " ,getApplications, tags: " +
+              queryFromTimeLineTags + " ,from TimeLineService cost time: " +
+              queryByTimeLineCostTime + "ms, clientIP: " +
+              Server.getRemoteAddress());
+        }
       } else {
         queryFromYarnTags.add(tag);
       }
-    }
-    long stopTime1 = clock.getTime();
-    if (queryFromTimeLineTags.size() > 0) {
-      LOG.info("requestId: " + requestId + " ,getApplications, tags: " +
-          queryFromTimeLineTags + " ,from TimeLineService cost time: " +
-          (stopTime1 - startTime1) + "ms, clientIP: " +
-          Server.getRemoteAddress());
     }
 
     //query apps from yarn
