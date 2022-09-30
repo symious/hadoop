@@ -118,6 +118,7 @@ case $COMMAND in
     elif [ "$COMMAND" = "trashservice" ] ; then
       CLASS=org.apache.hadoop.TrashManagementService
       CLASSPATH=${CLASSPATH}:${TOOL_PATH}
+      HADOOP_OPTS="${HADOOP_OPTS} ${HADOOP_TRASH_SERVICE_OPTS}"
     elif [ "$COMMAND" = "daemonlog" ] ; then
       CLASS=org.apache.hadoop.log.LogLevel
     elif [ "$COMMAND" = "archive" ] ; then
