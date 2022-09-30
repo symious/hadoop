@@ -143,6 +143,9 @@ public class TestRouterAdminCLI {
 
   @Test
   public void testAddMountTable() throws Exception {
+    // Re-set system out for testing.
+    System.setErr(new PrintStream(err));
+
     String nsId = "ns0";
     String src = "/test-addmounttable";
     String dest = "/addmounttable";
@@ -164,23 +167,29 @@ public class TestRouterAdminCLI {
     assertEquals(dest, destinations.get(0).getDest());
     assertFalse(mountTable.isReadOnly());
 
-    // test mount table update behavior
-    dest = dest + "-new";
-    argv = new String[] {"-add", src, nsId, dest, "-readonly"};
+    // Test mount table update behavior.
+    err.reset();
+    String newDest = dest + "-new";
+    argv = new String[] {"-add", src, nsId, newDest, "-readonly"};
     assertEquals(0, ToolRunner.run(admin, argv));
+    assertTrue(err.toString().contains("Cannot add destination to an " +
+        "existing mount point. Please use -update cmd."));
     stateStore.loadCache(MountTableStoreImpl.class, true);
 
     getResponse = client.getMountTableManager()
         .getMountTableEntries(getRequest);
     mountTable = getResponse.getEntries().get(0);
-    assertEquals(2, mountTable.getDestinations().size());
-    assertEquals(nsId, mountTable.getDestinations().get(1).getNameserviceId());
-    assertEquals(dest, mountTable.getDestinations().get(1).getDest());
-    assertTrue(mountTable.isReadOnly());
+    assertEquals(1, mountTable.getDestinations().size());
+    assertEquals(nsId, mountTable.getDestinations().get(0).getNameserviceId());
+    assertEquals(dest, mountTable.getDestinations().get(0).getDest());
+    assertFalse(mountTable.isReadOnly());
   }
 
   @Test
   public void testAddMountTableNotNormalized() throws Exception {
+    // Re-set system out for testing.
+    System.setErr(new PrintStream(err));
+
     String nsId = "ns0";
     String src = "/test-addmounttable-notnormalized";
     String srcWithSlash = src + "/";
@@ -203,19 +212,21 @@ public class TestRouterAdminCLI {
     assertEquals(dest, destinations.get(0).getDest());
     assertFalse(mountTable.isReadOnly());
 
-    // test mount table update behavior
-    dest = dest + "-new";
-    argv = new String[] {"-add", srcWithSlash, nsId, dest, "-readonly"};
+    // Test mount table update behavior.
+    String newDest = dest + "-new";
+    argv = new String[] {"-add", srcWithSlash, nsId, newDest, "-readonly"};
     assertEquals(0, ToolRunner.run(admin, argv));
+    assertTrue(err.toString().contains("Cannot add destination to an " +
+        "existing mount point. Please use -update cmd."));
     stateStore.loadCache(MountTableStoreImpl.class, true);
 
     getResponse = client.getMountTableManager()
         .getMountTableEntries(getRequest);
     mountTable = getResponse.getEntries().get(0);
-    assertEquals(2, mountTable.getDestinations().size());
-    assertEquals(nsId, mountTable.getDestinations().get(1).getNameserviceId());
-    assertEquals(dest, mountTable.getDestinations().get(1).getDest());
-    assertTrue(mountTable.isReadOnly());
+    assertEquals(1, mountTable.getDestinations().size());
+    assertEquals(nsId, mountTable.getDestinations().get(0).getNameserviceId());
+    assertEquals(dest, mountTable.getDestinations().get(0).getDest());
+    assertFalse(mountTable.isReadOnly());
   }
 
   @Test
@@ -385,7 +396,7 @@ public class TestRouterAdminCLI {
     UserGroupInformation.setLoginUser(remoteUser);
 
     // verify read permission by executing other commands
-    verifyExecutionResult("/testpath2-1", true, -1, -1);
+    verifyExecutionResult("/testpath2-1", true, 0, 0);
 
     // add new mount table with only write permission
     argv = new String[] {"-add", "/testpath2-2", "ns0", "/testdir2-2",
@@ -411,14 +422,14 @@ public class TestRouterAdminCLI {
    *          target mount table
    * @param canRead
    *          whether can list mount tables under specified mount
-   * @param addCommandCode
-   *          expected return code of add command executed for specified mount
+   * @param updateCommandCode
+   *          expected return code of update command executed for specified mount
    * @param rmCommandCode
    *          expected return code of rm command executed for specified mount
    * @throws Exception
    */
   private void verifyExecutionResult(String mount, boolean canRead,
-      int addCommandCode, int rmCommandCode) throws Exception {
+      int updateCommandCode, int rmCommandCode) throws Exception {
     String[] argv = null;
     stateStore.loadCache(MountTableStoreImpl.class, true);
 
@@ -428,9 +439,9 @@ public class TestRouterAdminCLI {
     assertEquals(0, ToolRunner.run(admin, argv));
     assertEquals(canRead, out.toString().contains(mount));
 
-    // execute add/update command
-    argv = new String[] {"-add", mount, "ns0", mount + "newdir"};
-    assertEquals(addCommandCode, ToolRunner.run(admin, argv));
+    // execute update command
+    argv = new String[] {"-update", mount, "ns0", mount + "newdir"};
+    assertEquals(updateCommandCode, ToolRunner.run(admin, argv));
 
     stateStore.loadCache(MountTableStoreImpl.class, true);
     // execute remove command
@@ -651,12 +662,12 @@ public class TestRouterAdminCLI {
   }
 
   @Test
-  public void testUpdateDestinationForExistingMountTable() throws
+  public void testUpdateNameserviceDestinationForExistingMountTable() throws
   Exception {
     // Add a mount table firstly
     String nsId = "ns0";
-    String src = "/test-updateDestinationForExistingMountTable";
-    String dest = "/UpdateDestinationForExistingMountTable";
+    String src = "/test-updateNameserviceDestinationForExistingMountTable";
+    String dest = "/UpdateNameserviceDestinationForExistingMountTable";
     String[] argv = new String[] {"-add", src, nsId, dest};
     assertEquals(0, ToolRunner.run(admin, argv));
 

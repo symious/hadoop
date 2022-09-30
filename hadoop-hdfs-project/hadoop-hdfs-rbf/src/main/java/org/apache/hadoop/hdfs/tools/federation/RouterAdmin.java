@@ -344,7 +344,7 @@ public class RouterAdmin extends Configured implements Tool {
   }
 
   /**
-   * Add a mount table entry or update if it exists.
+   * Add a mount table entry.
    *
    * @param mount Mount point.
    * @param nss Namespaces where this is mounted to.
@@ -359,7 +359,7 @@ public class RouterAdmin extends Configured implements Tool {
       boolean readonly, DestinationOrder order, ACLEntity aclInfo)
       throws IOException {
     mount = normalizeFileSystemPath(mount);
-    // Get the existing entry
+    // Get the existing entry.
     MountTableManager mountTable = client.getMountTableManager();
     GetMountTableEntriesRequest getRequest =
         GetMountTableEntriesRequest.newInstance(mount);
@@ -373,79 +373,46 @@ public class RouterAdmin extends Configured implements Tool {
       }
     }
 
-    if (existingEntry == null) {
-      // Create and add the entry if it doesn't exist
-      Map<String, String> destMap = new LinkedHashMap<>();
-      for (String ns : nss) {
-        destMap.put(ns, dest);
-      }
-      MountTable newEntry = MountTable.newInstance(mount, destMap);
-      if (readonly) {
-        newEntry.setReadOnly(true);
-      }
-      if (order != null) {
-        newEntry.setDestOrder(order);
-      }
-
-      // Set ACL info for mount table entry
-      if (aclInfo.getOwner() != null) {
-        newEntry.setOwnerName(aclInfo.getOwner());
-      }
-
-      if (aclInfo.getGroup() != null) {
-        newEntry.setGroupName(aclInfo.getGroup());
-      }
-
-      if (aclInfo.getMode() != null) {
-        newEntry.setMode(aclInfo.getMode());
-      }
-
-      AddMountTableEntryRequest request =
-          AddMountTableEntryRequest.newInstance(newEntry);
-      AddMountTableEntryResponse addResponse =
-          mountTable.addMountTableEntry(request);
-      boolean added = addResponse.getStatus();
-      if (!added) {
-        System.err.println("Cannot add mount point " + mount);
-      }
-      return added;
-    } else {
-      // Update the existing entry if it exists
-      for (String nsId : nss) {
-        if (!existingEntry.addDestination(nsId, dest)) {
-          System.err.println("Cannot add destination at " + nsId + " " + dest);
-        }
-      }
-      if (readonly) {
-        existingEntry.setReadOnly(true);
-      }
-      if (order != null) {
-        existingEntry.setDestOrder(order);
-      }
-
-      // Update ACL info of mount table entry
-      if (aclInfo.getOwner() != null) {
-        existingEntry.setOwnerName(aclInfo.getOwner());
-      }
-
-      if (aclInfo.getGroup() != null) {
-        existingEntry.setGroupName(aclInfo.getGroup());
-      }
-
-      if (aclInfo.getMode() != null) {
-        existingEntry.setMode(aclInfo.getMode());
-      }
-
-      UpdateMountTableEntryRequest updateRequest =
-          UpdateMountTableEntryRequest.newInstance(existingEntry);
-      UpdateMountTableEntryResponse updateResponse =
-          mountTable.updateMountTableEntry(updateRequest);
-      boolean updated = updateResponse.getStatus();
-      if (!updated) {
-        System.err.println("Cannot update mount point " + mount);
-      }
-      return updated;
+    // Fail if it already exists.
+    if (existingEntry != null) {
+      System.err.println("Cannot add destination to an existing mount point. "
+          + "Please use -update cmd.");
+      return false;
     }
+
+    // Create and add the entry if it doesn't exist.
+    Map<String, String> destMap = new LinkedHashMap<>();
+    for (String ns : nss) {
+      destMap.put(ns, dest);
+    }
+    MountTable newEntry = MountTable.newInstance(mount, destMap);
+
+    newEntry.setReadOnly(readonly);
+
+    newEntry.setDestOrder(order);
+
+    // Set ACL info for mount table entry.
+    if (aclInfo.getOwner() != null) {
+      newEntry.setOwnerName(aclInfo.getOwner());
+    }
+
+    if (aclInfo.getGroup() != null) {
+      newEntry.setGroupName(aclInfo.getGroup());
+    }
+
+    if (aclInfo.getMode() != null) {
+      newEntry.setMode(aclInfo.getMode());
+    }
+
+    AddMountTableEntryRequest request =
+        AddMountTableEntryRequest.newInstance(newEntry);
+    AddMountTableEntryResponse addResponse =
+        mountTable.addMountTableEntry(request);
+    boolean added = addResponse.getStatus();
+    if (!added) {
+      System.err.println("Cannot add mount point " + mount);
+    }
+    return added;
   }
 
   /**
