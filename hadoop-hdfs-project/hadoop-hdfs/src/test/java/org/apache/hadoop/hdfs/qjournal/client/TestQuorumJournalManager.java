@@ -28,6 +28,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.Matchers.eq;
 
 import java.io.Closeable;
 import java.io.File;
@@ -39,8 +40,12 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.SettableFuture;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -49,6 +54,7 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.qjournal.MiniJournalCluster;
 import org.apache.hadoop.hdfs.qjournal.QJMTestUtil;
 import org.apache.hadoop.hdfs.qjournal.protocol.QJournalProtocolProtos.SegmentStateProto;
+import org.apache.hadoop.hdfs.qjournal.protocol.QJournalProtocolProtos.GetJournaledEditsResponseProto;
 import org.apache.hadoop.hdfs.qjournal.server.JournalFaultInjector;
 import org.apache.hadoop.hdfs.qjournal.server.JournalNode;
 import org.apache.hadoop.hdfs.server.namenode.EditLogInputStream;
@@ -58,6 +64,7 @@ import org.apache.hadoop.hdfs.server.namenode.FileJournalManager.EditLogFile;
 import org.apache.hadoop.hdfs.server.namenode.NNStorage;
 import org.apache.hadoop.hdfs.server.namenode.NameNodeLayoutVersion;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
+import org.apache.hadoop.hdfs.server.protocol.RemoteEditLogManifest;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.ipc.ProtobufRpcEngine;
 import org.apache.hadoop.test.GenericTestUtils;
@@ -68,6 +75,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
 import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 import org.mockito.stubbing.Stubber;
 
 import com.google.common.collect.Lists;
@@ -464,7 +473,7 @@ public class TestQuorumJournalManager {
   private void failLoggerAtTxn(AsyncLogger spy, long txid) {
     TestQuorumJournalManagerUnit.futureThrows(new IOException("mock failure"))
       .when(spy).sendEdits(Mockito.anyLong(),
-        Mockito.eq(txid), Mockito.eq(1), Mockito.<byte[]>any());
+        eq(txid), eq(1), Mockito.<byte[]>any());
   }
   
   /**
@@ -481,10 +490,10 @@ public class TestQuorumJournalManager {
     
     // Logger 0: miss finalize(1-3) and start(4)
     futureThrows(new IOException("injected")).when(spies.get(0))
-      .finalizeLogSegment(Mockito.eq(1L), Mockito.eq(3L));
+      .finalizeLogSegment(eq(1L), eq(3L));
     futureThrows(new IOException("injected")).when(spies.get(0))
-        .startLogSegment(Mockito.eq(4L),
-            Mockito.eq(NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION));
+        .startLogSegment(eq(4L),
+            eq(NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION));
     
     // Logger 1: fail at txn id 4
     failLoggerAtTxn(spies.get(1), 4L);
@@ -543,8 +552,8 @@ public class TestQuorumJournalManager {
     // Allow no logger to finalize
     for (AsyncLogger spy : spies) {
       TestQuorumJournalManagerUnit.futureThrows(new IOException("injected"))
-        .when(spy).finalizeLogSegment(Mockito.eq(1L),
-            Mockito.eq(4L));
+        .when(spy).finalizeLogSegment(eq(1L),
+            eq(4L));
     }
     try {
       qjm.recoverUnfinalizedSegments();
@@ -834,7 +843,7 @@ public class TestQuorumJournalManager {
     // any new paxos data.
     qjm = createSpyingQJM();
     spies = qjm.getLoggerSetForTests().getLoggersForTests();    
-    injectIOE().when(spies.get(0)).prepareRecovery(Mockito.eq(1L));
+    injectIOE().when(spies.get(0)).prepareRecovery(eq(1L));
 
     Mockito.doThrow(new IOException("Injected")).when(faultInjector)
       .beforePersistPaxosData();
@@ -1107,6 +1116,75 @@ public class TestQuorumJournalManager {
     }
   }
 
+  /**
+   * Test selecting EditLogInputStream after some journalNode jitter.
+   * Suppose there are 3 journalNodes, JN0 ~ JN2.
+   *  1. JN0 has some abnormal cases when Active Namenode is syncing 10 Edits with first txid 11.
+   *  2. NameNode just ignore the abnormal JN0 and continue to sync Edits to Journal 1 and 2.
+   *  3. JN0 backed to health.
+   *  4. NameNode continue sync 10 Edits with first txid 21.
+   *  5. At this point, there are no Edits 11 ~ 30 in the cache of JN0.
+   *  6. Observer NameNode try to select EditLogInputStream through
+   *     getJournaledEdits with since txId 21.
+   *  7. JN2 has some abnormal cases and caused a slow response.
+   */
+  @Test
+  public void testSelectViaRPCAfterJNJitter() throws Exception {
+    EditLogOutputStream stm = qjm.startLogSegment(
+        1, NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION);
+    SettableFuture<Void> slowLog = SettableFuture.create();
+    Mockito.doReturn(slowLog).when(spies.get(0))
+        .sendEdits(eq(1L), eq(11L), eq(10), Mockito.<byte[]>any());
+    // Successfully write these edits to JN0 ~ JN2
+    writeTxns(stm, 1, 10);
+    // Failed write these edits to JN0, but successfully write them to JN1 ~ JN2
+    writeTxns(stm, 11, 10);
+    // Successfully write these edits to JN1 ~ JN2
+    writeTxns(stm, 21, 20);
+
+    final Semaphore semaphore = new Semaphore(0);
+    spyGetJournaledEdits(0, 21, new Runnable() {
+      @Override
+      public void run() {
+        semaphore.release(1);
+      }
+    });
+    spyGetJournaledEdits(1, 21, new Runnable() {
+      @Override
+      public void run() {
+        semaphore.release(1);
+      }
+    });
+    spyGetJournaledEdits(2, 21, new Runnable() {
+      @Override
+      public void run() {
+        semaphore.acquireUninterruptibly(2);
+      }
+    });
+
+    List<EditLogInputStream> streams = new ArrayList<>();
+    qjm.selectInputStreams(streams, 21, true, true);
+
+    assertEquals(1, streams.size());
+    assertEquals(21, streams.get(0).getFirstTxId());
+    assertEquals(40, streams.get(0).getLastTxId());
+  }
+
+  private void spyGetJournaledEdits(int jnSpyIdx, long fromTxId, final Runnable preHook) {
+    Mockito.doAnswer(new Answer<ListenableFuture<GetJournaledEditsResponseProto>>() {
+      @Override
+      public ListenableFuture<GetJournaledEditsResponseProto> answer(
+          InvocationOnMock invocation) throws Throwable {
+        preHook.run();
+        @SuppressWarnings("unchecked")
+        ListenableFuture<GetJournaledEditsResponseProto> result =
+            (ListenableFuture<GetJournaledEditsResponseProto>) invocation.callRealMethod();
+        return result;
+      }
+    }).when(spies.get(jnSpyIdx)).getJournaledEdits(fromTxId,
+        QuorumJournalManager.QJM_RPC_MAX_TXNS_DEFAULT);
+  }
+
   @Test
   public void testSelectViaRpcAfterJNRestart() throws Exception {
     EditLogOutputStream stm =
@@ -1186,5 +1264,59 @@ public class TestQuorumJournalManager {
       fail("Did not find a quorum of finalized logs starting at " +
           segmentTxId);
     }
+  }
+
+  @Test
+  public void testSelectLatestEditsWithoutStreaming() throws Exception {
+    EditLogOutputStream stm = qjm.startLogSegment(
+        1, NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION);
+    // Successfully write these edits to JN0 ~ JN2
+    writeTxns(stm, 1, 10);
+
+    final AtomicInteger atomicInteger = new AtomicInteger(0);
+    spyGetEditLogManifest(0, 11, true, new Runnable() {
+      @Override
+      public void run() {
+        atomicInteger.incrementAndGet();
+      }
+    });
+    spyGetEditLogManifest(1, 11, true, new Runnable() {
+      @Override
+      public void run() {
+        atomicInteger.incrementAndGet();
+      }
+    });
+    spyGetEditLogManifest(2, 11, true, new Runnable() {
+      @Override
+      public void run() {
+        atomicInteger.incrementAndGet();
+      }
+    });
+
+    List<EditLogInputStream> streams = new ArrayList<>();
+    qjm.selectInputStreams(streams, 1, true, true);
+    assertEquals(1, streams.size());
+    assertEquals(1, streams.get(0).getFirstTxId());
+    assertEquals(10, streams.get(0).getLastTxId());
+
+    streams.clear();
+    qjm.selectInputStreams(streams, 11, true, true);
+    assertEquals(0, streams.size());
+    assertEquals(0, atomicInteger.get());
+  }
+
+  private void spyGetEditLogManifest(int jnSpyIdx, long fromTxId,
+      boolean inProgressOk, final Runnable preHook) {
+    Mockito.doAnswer(new Answer<ListenableFuture<RemoteEditLogManifest>>() {
+      @Override
+      public ListenableFuture<RemoteEditLogManifest> answer(
+          InvocationOnMock invocation) throws Throwable {
+        preHook.run();
+        @SuppressWarnings("unchecked")
+        ListenableFuture<RemoteEditLogManifest> result =
+            (ListenableFuture<RemoteEditLogManifest>) invocation.callRealMethod();
+        return result;
+      }
+    }).when(spies.get(jnSpyIdx)).getEditLogManifest(fromTxId, inProgressOk);
   }
 }

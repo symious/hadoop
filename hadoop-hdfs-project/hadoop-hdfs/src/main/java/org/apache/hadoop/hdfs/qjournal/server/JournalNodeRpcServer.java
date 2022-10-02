@@ -96,6 +96,9 @@ public class JournalNodeRpcServer implements QJournalProtocol {
         .setVerbose(false)
         .build();
 
+    this.server.addTerseExceptions(NewerTxnIdException.class);
+    this.server.addTerseExceptions(JournaledEditsCache.CacheMissException.class);
+
     // set service-level authorization security policy
     if (confCopy.getBoolean(
       CommonConfigurationKeys.HADOOP_SECURITY_AUTHORIZATION, false)) {
