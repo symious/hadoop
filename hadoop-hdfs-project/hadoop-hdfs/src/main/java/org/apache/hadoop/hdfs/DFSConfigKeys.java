@@ -1341,6 +1341,11 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
 
   public static final boolean DFS_DATANODE_LOCKMANAGER_TRACE_DEFAULT = false;
 
+  public static final String DFS_DATANODE_LOCK_METRICS_THRESHOLD_MS_KEY =
+      "dfs.datanode.lock.metrics.threshold-ms";
+
+  public static final long DFS_DATANODE_LOCK_METRICS_THRESHOLD_MS_DEFAULT = 100;
+
   // dfs.client.retry confs are moved to HdfsClientConfigKeys.Retry
   @Deprecated
   public static final String  DFS_CLIENT_RETRY_POLICY_ENABLED_KEY

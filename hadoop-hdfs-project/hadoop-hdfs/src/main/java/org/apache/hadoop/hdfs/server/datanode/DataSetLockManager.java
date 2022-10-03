@@ -18,16 +18,25 @@
 
 package org.apache.hadoop.hdfs.server.datanode;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.common.AutoCloseDataSetLock;
 import org.apache.hadoop.hdfs.server.common.DataNodeLockManager;
+import org.apache.hadoop.metrics2.annotation.Metric;
+import org.apache.hadoop.metrics2.annotation.Metrics;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.metrics2.lib.MetricsRegistry;
+import org.apache.hadoop.metrics2.lib.MutableCounterLong;
+import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.util.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Stack;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
@@ -38,9 +47,39 @@ public class DataSetLockManager implements DataNodeLockManager<AutoCloseDataSetL
       LoggerFactory.getLogger(DataSetLockManager.class);
   private final HashMap<String, TrackLog> threadCountMap = new HashMap<>();
   private final LockMap lockMap = new LockMap();
+  private long lockLogThresholdNs = 0;
   private boolean isFair = true;
   private final boolean openLockTrace;
   private Exception lastException;
+  private final Timer timer = new Timer();
+
+  private static DataSetLockMetrics metrics;
+
+  @Metrics(about = "Dataset lock metrics", context = "datasetlock")
+  static class DataSetLockMetrics {
+    final MetricsRegistry registry = new MetricsRegistry("DatasetLockMetrics");
+
+    @Metric("Rate of dataset lock (nanoseconds)")
+    MutableRate lockNs;
+
+    @Metric("Rate of long held lock")
+    MutableCounterLong longHeldLocks;
+
+    static DataSetLockMetrics create() {
+      return DefaultMetricsSystem.instance().register(new DataSetLockMetrics());
+    }
+  }
+
+  @VisibleForTesting
+  static void resetMetrics() {
+    DefaultMetricsSystem.instance().unregisterSource("DataSetLockMetrics");
+  }
+
+  @VisibleForTesting
+  static DataSetLockMetrics getDataSetLockMetrics() {
+    return metrics;
+  }
+
 
   /**
    * Class for maintain lockMap and is thread safe.
@@ -152,6 +191,12 @@ public class DataSetLockManager implements DataNodeLockManager<AutoCloseDataSetL
     this.openLockTrace = conf.getBoolean(
         DFSConfigKeys.DFS_DATANODE_LOCKMANAGER_TRACE,
         DFSConfigKeys.DFS_DATANODE_LOCKMANAGER_TRACE_DEFAULT);
+    long lockLogThresholdMs = conf.getTimeDuration(
+        DFSConfigKeys.DFS_DATANODE_LOCK_METRICS_THRESHOLD_MS_KEY,
+        DFSConfigKeys.DFS_DATANODE_LOCK_METRICS_THRESHOLD_MS_DEFAULT,
+        TimeUnit.MILLISECONDS);
+    this.lockLogThresholdNs = 1000000 * lockLogThresholdMs;
+    metrics = DataSetLockMetrics.create();
   }
 
   public DataSetLockManager() {
@@ -202,7 +247,7 @@ public class DataSetLockManager implements DataNodeLockManager<AutoCloseDataSetL
       lockMap.addLock(lockName, new ReentrantReadWriteLock(isFair));
       lock = lockMap.getReadLock(lockName);
     }
-    lock.lock();
+    lockWithMetrics(lock);
     if (openLockTrace) {
       putThreadName(getThreadName());
     }
@@ -221,11 +266,22 @@ public class DataSetLockManager implements DataNodeLockManager<AutoCloseDataSetL
       lockMap.addLock(lockName, new ReentrantReadWriteLock(isFair));
       lock = lockMap.getWriteLock(lockName);
     }
-    lock.lock();
+    lockWithMetrics(lock);
     if (openLockTrace) {
       putThreadName(getThreadName());
     }
     return lock;
+  }
+
+  private void lockWithMetrics(AutoCloseDataSetLock lock) {
+    long startNanos = timer.monotonicNowNanos();
+    lock.lock();
+    long nowNs = timer.monotonicNowNanos();
+    long waitDurationNs = nowNs - startNanos;
+    metrics.lockNs.add(waitDurationNs);
+    if (waitDurationNs > lockLogThresholdNs) {
+      metrics.longHeldLocks.incr();
+    }
   }
 
   @Override

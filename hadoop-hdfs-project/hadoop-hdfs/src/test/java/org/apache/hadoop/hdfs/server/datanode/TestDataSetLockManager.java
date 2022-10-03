@@ -17,6 +17,10 @@
  */
 package org.apache.hadoop.hdfs.server.datanode;
 
+import java.util.concurrent.TimeUnit;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.common.AutoCloseDataSetLock;
 import org.apache.hadoop.hdfs.server.common.DataNodeLockManager.LockLevel;
 import org.junit.Before;
@@ -30,7 +34,13 @@ public class TestDataSetLockManager {
 
   @Before
   public void init() {
-    manager = new DataSetLockManager();
+    Configuration conf = new Configuration();
+    conf.setTimeDuration(
+        DFSConfigKeys.DFS_DATANODE_LOCK_METRICS_THRESHOLD_MS_KEY, 100,
+        TimeUnit.MILLISECONDS);
+    conf.setBoolean(DFSConfigKeys.DFS_DATANODE_LOCKMANAGER_TRACE, true);
+    DataSetLockManager.resetMetrics();
+    manager = new DataSetLockManager(conf);
   }
 
   @Test(timeout = 5000)
@@ -91,5 +101,80 @@ public class TestDataSetLockManager {
     manager.lockLeakCheck();
     Exception lastException = manager.getLastException();
     assertEquals(lastException.getMessage(), "lock Leak");
+  }
+
+  @Test(timeout = 10000)
+  public void testMetrics() throws InterruptedException {
+    Thread t1, t2;
+    int longHolds = 0;
+
+    // Hold 2 short read locks that don't block each other
+    t1 = holdLock(true, 1, LockLevel.BLOCK_POOl, "test");
+    t2 = holdLock(true, 1, LockLevel.BLOCK_POOl, "test");
+    // No long lock hold should have been recorded
+    t1.join();
+    t2.join();
+    assertEquals(longHolds,
+        DataSetLockManager.getDataSetLockMetrics().longHeldLocks.value());
+
+    // Hold a short read lock then a short write lock
+    t1 = holdLock(true, 1, LockLevel.BLOCK_POOl, "test");
+    t2 = holdLock(false, 1, LockLevel.BLOCK_POOl, "test");
+    // No long lock hold should have been recorded
+    t1.join();
+    t2.join();
+    assertEquals(longHolds,
+        DataSetLockManager.getDataSetLockMetrics().longHeldLocks.value());
+
+    // Hold a long read lock that does not block a short read lock
+    t1 = holdLock(true, 500, LockLevel.BLOCK_POOl, "test");
+    t2 = holdLock(true, 1, LockLevel.BLOCK_POOl, "test");
+    // No long lock hold should have been recorded
+    t1.join();
+    t2.join();
+    assertEquals(longHolds,
+        DataSetLockManager.getDataSetLockMetrics().longHeldLocks.value());
+
+    // Hold a long read lock that blocks a short write lock
+    t1 = holdLock(true, 500, LockLevel.BLOCK_POOl, "test");
+    t2 = holdLock(false, 1, LockLevel.BLOCK_POOl, "test");
+    // One long lock hold should have been recorded
+    t1.join();
+    t2.join();
+    assertEquals(++longHolds,
+        DataSetLockManager.getDataSetLockMetrics().longHeldLocks.value());
+
+    // Hold a long write lock that blocks a short write lock
+    t1 = holdLock(false, 500, LockLevel.BLOCK_POOl, "test");
+    t2 = holdLock(false, 1, LockLevel.BLOCK_POOl, "test");
+    // One long lock hold should have been recorded
+    t1.join();
+    t2.join();
+    assertEquals(++longHolds,
+        DataSetLockManager.getDataSetLockMetrics().longHeldLocks.value());
+  }
+
+  private Thread holdLock(final boolean isReadLock, final long duration,
+      final LockLevel ll, final String... args) {
+    Thread t = new Thread(new Runnable() {
+      @Override
+      public void run() {
+        if (isReadLock) {
+          try (AutoCloseDataSetLock lock = manager.readLock(ll, args)) {
+            Thread.sleep(duration);
+          } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+          }
+        } else {
+          try (AutoCloseDataSetLock lock = manager.writeLock(ll, args)) {
+            Thread.sleep(duration);
+          } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+          }
+        }
+      }
+    });
+    t.start();
+    return t;
   }
 }
