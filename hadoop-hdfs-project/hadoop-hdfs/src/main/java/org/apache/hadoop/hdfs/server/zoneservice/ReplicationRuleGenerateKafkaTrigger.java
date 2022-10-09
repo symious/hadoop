@@ -8,6 +8,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.server.zoneservice.web.resources.ResultCode;
+import static org.apache.hadoop.util.Time.now;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -165,7 +166,7 @@ public class ReplicationRuleGenerateKafkaTrigger {
     @Override
     public void run() {
       try {
-        long start = System.currentTimeMillis();
+        long start = now();
         JSONObject jsonObject = new JSONObject(record);
         String clientDC = jsonObject.getString("clientDC");
         String dnDC = jsonObject.getString("dnDC");
@@ -185,10 +186,10 @@ public class ReplicationRuleGenerateKafkaTrigger {
           ResultCode resultCode =
               replicationRuleManager.createUpdateMap(ns, path, replicationRule, true);
           LOG.info("{} {} add replication rule: {} {} and cost {} ms.", ns, path, replicationRule,
-              resultCode.getMsg(), System.currentTimeMillis() - start);
+              resultCode.getMsg(), now() - start);
         } else {
           LOG.warn("Can not add replication rule: {} and cost {} ms.", record,
-              System.currentTimeMillis() - start);
+              now() - start);
         }
       } catch (Exception e) {
         LOG.error("Failed to add replication rule: {}", record, e);
