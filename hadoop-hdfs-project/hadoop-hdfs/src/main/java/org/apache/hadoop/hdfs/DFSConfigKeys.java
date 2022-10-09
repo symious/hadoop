@@ -577,6 +577,14 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_PASSWORD =
       "dfs.zone.generate.replicationrule.kafka.password";
 
+  public static final String DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_POLL_TIMEOUT_MS =
+      "dfs.zone.generate.replicationrule.kafka-poll.timeout";
+  public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_POLL_TIMEOUT_DEFAULT = 100;
+
+  public static final String DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_REQUEST_TIMEOUT_MS =
+      "dfs.zone.generate.replicationrule.kafka-request.timeout";
+  public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_REQUEST_TIMEOUT_DEFAULT = 30000;
+
   public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY =
       "dfs.zone.generate.replicationrule.enabled";
   public static final boolean DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY_DEFAULT =

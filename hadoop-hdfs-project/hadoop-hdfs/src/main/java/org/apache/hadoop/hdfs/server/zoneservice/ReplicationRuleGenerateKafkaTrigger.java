@@ -38,6 +38,7 @@ public class ReplicationRuleGenerateKafkaTrigger {
   private String ruleGenerateKey;
   private long pathSizeLimit;
   private long minCrossReadSize;
+  private int pollTimeOut;
   // "," is the separator of pattern "/dc1:replica1,/dc2:replica2"
   private final static String SECTION_SEPARATOR = ",";
   private final static String FIELD_SEPARATOR = ":";
@@ -56,6 +57,9 @@ public class ReplicationRuleGenerateKafkaTrigger {
         conf.getTrimmed(DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_TOPIC);
     final String groupId =
         conf.getTrimmed(DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_GROUP_ID);
+    final int requestTimeOut =
+        conf.getInt(DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_REQUEST_TIMEOUT_MS,
+            DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_REQUEST_TIMEOUT_DEFAULT);
 
     Properties properties = new Properties();
     properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
@@ -66,6 +70,7 @@ public class ReplicationRuleGenerateKafkaTrigger {
         StringDeserializer.class.getName());
     properties.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
     properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
+    properties.put(ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG, requestTimeOut);
 
     properties.setProperty("security.protocol", "SASL_PLAINTEXT");
     properties.setProperty("sasl.mechanism", "PLAIN");
@@ -108,13 +113,9 @@ public class ReplicationRuleGenerateKafkaTrigger {
   private void runReplicationRuleGenerate() {
     try {
       while (true) {
-        ConsumerRecords<String, String> records = consumer.poll(100);
+        ConsumerRecords<String, String> records = consumer.poll(pollTimeOut);
         for (ConsumerRecord<String, String> record : records) {
-          try {
-            processRecord(record.value());
-          } catch (Exception e) {
-            LOG.error("Failed to add replication rule: {}", record.value(), e);
-          }
+          processRecord(record.value());
         }
       }
     } catch (Exception e) {
@@ -124,26 +125,8 @@ public class ReplicationRuleGenerateKafkaTrigger {
     }
   }
 
-  private void processRecord (String record) throws Exception {
-    JSONObject jsonObject = new JSONObject(record);
-    String clientDC = jsonObject.getString("clientDC");
-    String dnDC = jsonObject.getString("dnDC");
-    String ns = jsonObject.getString("ns");
-    String path = jsonObject.getString("path");
-    long crossReadSize = jsonObject.getLong("size");
-    ContentSummary contentSummary = fs.getContentSummary(new Path(path));
-    long pathSize = contentSummary.getLength();
-    String[] rules = ruleGenerateKey.split(FIELD_SEPARATOR);
-    if (rules.length == 2 && pathSize <= pathSizeLimit &&
-        crossReadSize >= minCrossReadSize) {
-      String replicationRule = new StringBuilder().
-          append(clientDC).append(FIELD_SEPARATOR).append(rules[0]).
-          append(SECTION_SEPARATOR).
-          append(dnDC).append(FIELD_SEPARATOR).append(rules[1]).toString();
-      executor.execute(new AddRule(ns, path, replicationRule));
-    } else {
-      LOG.warn("Can not add replication rule: {}", record);
-    }
+  private void processRecord (String record) {
+    executor.execute(new AddRule(record));
   }
 
   private void setReplicationRuleParam(Configuration conf) {
@@ -159,6 +142,10 @@ public class ReplicationRuleGenerateKafkaTrigger {
     minCrossReadSize = conf.getLong(
         DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_MIN_CROSS_RAEAD_SIZE_KEY,
         DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_MIN_CROSS_RAEAD_SIZE_DEFAULT);
+
+    pollTimeOut = conf.getInt(
+        DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_POLL_TIMEOUT_MS,
+        DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_POLL_TIMEOUT_DEFAULT);
   }
 
   private class Monitor implements Runnable {
@@ -169,23 +156,43 @@ public class ReplicationRuleGenerateKafkaTrigger {
   }
 
   private class AddRule implements Runnable {
-    private String ns;
-    private String path;
-    private String replicationRule;
+    private String record;
 
-    public AddRule(String ns, String path, String replicaRule) {
-      this.ns = ns;
-      this.path = path;
-      this.replicationRule = replicaRule;
+    public AddRule(String record) {
+      this.record = record;
     }
 
     @Override
     public void run() {
-      LOG.info("{} {} add replication rule: {} start.", ns, path, replicationRule);
-      ResultCode resultCode =
-          replicationRuleManager.createUpdateMap(ns, path, replicationRule, true);
-      LOG.info("{} {} add replication rule: {} {}.", ns, path, replicationRule,
-          resultCode.getMsg());
+      try {
+        long start = System.currentTimeMillis();
+        JSONObject jsonObject = new JSONObject(record);
+        String clientDC = jsonObject.getString("clientDC");
+        String dnDC = jsonObject.getString("dnDC");
+        String ns = jsonObject.getString("ns");
+        String path = jsonObject.getString("path");
+        long crossReadSize = jsonObject.getLong("size");
+        ContentSummary contentSummary = fs.getContentSummary(new Path(path));
+        long pathSize = contentSummary.getLength();
+        String[] rules = ruleGenerateKey.split(FIELD_SEPARATOR);
+        if (rules.length == 2 && pathSize <= pathSizeLimit &&
+            crossReadSize >= minCrossReadSize) {
+          String replicationRule = new StringBuilder().
+              append(clientDC).append(FIELD_SEPARATOR).append(rules[0]).
+              append(SECTION_SEPARATOR).
+              append(dnDC).append(FIELD_SEPARATOR).append(rules[1]).toString();
+          LOG.info("{} {} add replication rule: {} start.", ns, path, replicationRule);
+          ResultCode resultCode =
+              replicationRuleManager.createUpdateMap(ns, path, replicationRule, true);
+          LOG.info("{} {} add replication rule: {} {} and cost {} ms.", ns, path, replicationRule,
+              resultCode.getMsg(), System.currentTimeMillis() - start);
+        } else {
+          LOG.warn("Can not add replication rule: {} and cost {} ms.", record,
+              System.currentTimeMillis() - start);
+        }
+      } catch (Exception e) {
+        LOG.error("Failed to add replication rule: {}", record, e);
+      }
     }
   }
 }
