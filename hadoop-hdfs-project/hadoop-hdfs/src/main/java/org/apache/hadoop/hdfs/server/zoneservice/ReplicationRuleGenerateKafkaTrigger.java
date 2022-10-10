@@ -126,7 +126,7 @@ public class ReplicationRuleGenerateKafkaTrigger {
     }
   }
 
-  private void processRecord (String record) {
+  private void processRecord(String record) {
     executor.execute(new AddRule(record));
   }
 
