@@ -104,6 +104,25 @@ public class IntraQueueCandidatesSelector extends PreemptionCandidatesSelector {
     }
   }
 
+  /*
+   * Assign app ordering
+   * fair: Order first by amount used from least to most
+   * fifo: Order first by priority from high to low
+   * weight: Order first by weight from big to small
+   */
+  static class TAAssignOrderingComparator
+      implements Comparator<TempAppPerPartition> {
+
+    @Override
+    public int compare(TempAppPerPartition ta1, TempAppPerPartition ta2) {
+      AbstractComparatorOrderingPolicy<FiCaSchedulerApp> acop =
+          (AbstractComparatorOrderingPolicy<FiCaSchedulerApp>)
+              ta1.getFiCaSchedulerApp().getCSLeafQueue().getOrderingPolicy();
+      return acop.getComparator()
+          .compare(ta1.getFiCaSchedulerApp(), ta2.getFiCaSchedulerApp());
+    }
+  }
+
   IntraQueuePreemptionComputePlugin fifoPreemptionComputePlugin = null;
   final CapacitySchedulerPreemptionContext context;
 

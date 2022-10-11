@@ -31,12 +31,14 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.UsersManager.User;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy.CompositeWeightOrderingPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.server.resourcemanager.monitor.capacity.IntraQueueCandidatesSelector.TAFairOrderingComparator;
 import org.apache.hadoop.yarn.server.resourcemanager.monitor.capacity.IntraQueueCandidatesSelector.TAPriorityComparator;
+import org.apache.hadoop.yarn.server.resourcemanager.monitor.capacity.IntraQueueCandidatesSelector.TAAssignOrderingComparator;
 import org.apache.hadoop.yarn.server.resourcemanager.monitor.capacity.ProportionalCapacityPreemptionPolicy.IntraQueuePreemptionOrderPolicy;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceUsage;
@@ -277,6 +279,11 @@ public class FifoIntraQueuePreemptionPlugin
             == IntraQueuePreemptionOrderPolicy.USERLIMIT_FIRST)) {
       reverseComp = Collections.reverseOrder(
           new TAFairOrderingComparator(this.rc, clusterResource));
+    } else if (queueOrderingPolicy instanceof CompositeWeightOrderingPolicy
+        && (IntraQueuePreemptionOrderPolicy
+        .valueOf(tq.leafQueue.getIntraQueuePreemptionOrderPolicy())
+        == IntraQueuePreemptionOrderPolicy.PRIORITY_FIRST)) {
+      reverseComp = Collections.reverseOrder(new TAAssignOrderingComparator());
     } else {
       reverseComp = Collections.reverseOrder(new TAPriorityComparator());
     }
@@ -379,8 +386,13 @@ public class FifoIntraQueuePreemptionPlugin
         .valueOf(tq.leafQueue.getIntraQueuePreemptionOrderPolicy())
             == IntraQueuePreemptionOrderPolicy.USERLIMIT_FIRST)) {
       taComparator = new TAFairOrderingComparator(this.rc, clusterResource);
+    } else if (orderingPolicy instanceof CompositeWeightOrderingPolicy
+        && (IntraQueuePreemptionOrderPolicy
+        .valueOf(tq.leafQueue.getIntraQueuePreemptionOrderPolicy())
+        == IntraQueuePreemptionOrderPolicy.PRIORITY_FIRST)) {
+      taComparator = new TAAssignOrderingComparator();
     } else {
-       taComparator = new TAPriorityComparator();
+      taComparator = new TAPriorityComparator();
     }
     PriorityQueue<TempAppPerPartition> orderedByPriority = new PriorityQueue<>(
         100, taComparator);

@@ -164,7 +164,7 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
 
         double r1_pending_resources_weight =
             r1.getSchedulingResourceUsage()
-                .getCachedDemand(CommonNodeLabelsManager.ANY)
+                .getCachedPending(CommonNodeLabelsManager.ANY)
                 .getMemorySize() / pendingFlagMemory;
         r1_pending_resources_weight =
             (r1_pending_resources_weight < 1) ? r1_pending_resources_weight : 1;
@@ -173,7 +173,7 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
 
         double r2_pending_resources_weight =
             r2.getSchedulingResourceUsage()
-                .getCachedDemand(CommonNodeLabelsManager.ANY)
+                .getCachedPending(CommonNodeLabelsManager.ANY)
                 .getMemorySize() / pendingFlagMemory;
         r2_pending_resources_weight =
             (r2_pending_resources_weight < 1) ? r2_pending_resources_weight : 1;
@@ -203,6 +203,18 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
             r2_priority_weight + r2_pending_resources_weight +
                 r2_pending_time_weight;
 
+        LOG.debug("appId: " + r1.getId() + " ,r1_priority_weight: "
+            + r1_priority_weight + " ,r1_pending_resources_weight: "
+            + r1_pending_resources_weight
+            + " ,r1_pending_time_weight: " + r1_pending_time_weight +
+            " ,r1_composite_weight: " + r1_composite_weight);
+
+        LOG.debug("appId: " + r2.getId() + " ,r2_priority_weight: "
+            + r2_priority_weight + " ,r2_pending_resources_weight: "
+            + r2_pending_resources_weight
+            + " ,r2_pending_time_weight: " + r2_pending_time_weight +
+            " ,r2_composite_weight: " + r2_composite_weight);
+
         return Double.compare(r2_composite_weight, r1_composite_weight);
       } else {
         return Integer.compare(r2_priority, r1_priority);
@@ -216,6 +228,7 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
   public CompositeWeightOrderingPolicy() {
     List<Comparator<SchedulableEntity>> comparators =
       new ArrayList<Comparator<SchedulableEntity>>();
+    comparators.add(new InitUsedResourcesComparator());
     comparators.add(new WeightComparator());
     comparators.add(new StartTimeComparator());
     weightComparator = new CompoundComparator(
