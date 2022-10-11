@@ -396,19 +396,22 @@ public class TestRouterAdminCLI {
     UserGroupInformation.setLoginUser(remoteUser);
 
     // verify read permission by executing other commands
-    verifyExecutionResult("/testpath2-1", true, 0, 0);
+    verifyExecutionResult("/testpath2-1", true, -1,
+        -1);
 
     // add new mount table with only write permission
     argv = new String[] {"-add", "/testpath2-2", "ns0", "/testdir2-2",
         "-owner", TEST_USER, "-group", TEST_USER, "-mode", "0255"};
     assertEquals(0, ToolRunner.run(admin, argv));
-    verifyExecutionResult("/testpath2-2", false, 0, 0);
+    verifyExecutionResult("/testpath2-2", false, -1,
+        0);
 
     // set mount table entry with read and write permission
     argv = new String[] {"-add", "/testpath2-3", "ns0", "/testdir2-3",
         "-owner", TEST_USER, "-group", TEST_USER, "-mode", "0755"};
     assertEquals(0, ToolRunner.run(admin, argv));
-    verifyExecutionResult("/testpath2-3", true, 0, 0);
+    verifyExecutionResult("/testpath2-3", true, 0,
+        0);
 
     // set back login user
     remoteUser = UserGroupInformation.createRemoteUser(superUser);
@@ -642,28 +645,21 @@ public class TestRouterAdminCLI {
 
   @Test
   public void testUpdateNonExistingMountTable() throws Exception {
-    System.setOut(new PrintStream(out));
+    System.setErr(new PrintStream(err));
     String nsId = "ns0";
     String src = "/test-updateNonExistingMounttable";
     String dest = "/updateNonExistingMounttable";
     String[] argv = new String[] {"-update", src, nsId, dest};
-    assertEquals(0, ToolRunner.run(admin, argv));
-
-    stateStore.loadCache(MountTableStoreImpl.class, true);
-    GetMountTableEntriesRequest getRequest =
-        GetMountTableEntriesRequest.newInstance(src);
-    GetMountTableEntriesResponse getResponse =
-        client.getMountTableManager().getMountTableEntries(getRequest);
-    // Ensure the destination updated successfully
-    MountTable mountTable = getResponse.getEntries().get(0);
-    assertEquals(src, mountTable.getSourcePath());
-    assertEquals(nsId, mountTable.getDestinations().get(0).getNameserviceId());
-    assertEquals(dest, mountTable.getDestinations().get(0).getDest());
+    // Update shall fail if the mount entry doesn't exist.
+    assertEquals(-1, ToolRunner.run(admin, argv));
+    assertTrue(err.toString(), err.toString()
+        .contains("update: /test-updateNonExistingMounttable doesn't exist."));
+    err.reset();
   }
 
   @Test
   public void testUpdateNameserviceDestinationForExistingMountTable() throws
-  Exception {
+      Exception {
     // Add a mount table firstly
     String nsId = "ns0";
     String src = "/test-updateNameserviceDestinationForExistingMountTable";
@@ -739,6 +735,96 @@ public class TestRouterAdminCLI {
   }
 
   @Test
+  public void testUpdateChangeAttributes() throws Exception {
+    // Add a mount table firstly
+    String nsId = "ns0";
+    String src = "/mount";
+    String dest = "/dest";
+    String[] argv = new String[] {"-add", src, nsId, dest, "-readonly",
+        "-order", "HASH_ALL"};
+    assertEquals(0, ToolRunner.run(admin, argv));
+
+    stateStore.loadCache(MountTableStoreImpl.class, true);
+    GetMountTableEntriesRequest getRequest =
+        GetMountTableEntriesRequest.newInstance(src);
+    GetMountTableEntriesResponse getResponse =
+        client.getMountTableManager().getMountTableEntries(getRequest);
+    // Ensure mount table added successfully
+    MountTable mountTable = getResponse.getEntries().get(0);
+    assertEquals(src, mountTable.getSourcePath());
+
+    // Update the destination
+    String newNsId = "ns0";
+    String newDest = "/newDestination";
+    argv = new String[] {"-update", src, newNsId, newDest};
+    assertEquals(0, ToolRunner.run(admin, argv));
+
+    stateStore.loadCache(MountTableStoreImpl.class, true);
+    getResponse =
+        client.getMountTableManager().getMountTableEntries(getRequest);
+    // Ensure the destination updated successfully and other attributes are preserved.
+    mountTable = getResponse.getEntries().get(0);
+    assertEquals(src, mountTable.getSourcePath());
+    assertEquals(newNsId,
+        mountTable.getDestinations().get(0).getNameserviceId());
+    assertEquals(newDest, mountTable.getDestinations().get(0).getDest());
+    assertTrue(mountTable.isReadOnly());
+    assertEquals("HASH_ALL", mountTable.getDestOrder().toString());
+
+    // Update the attribute.
+    argv = new String[] {"-update", src, "-readonly", "false"};
+    assertEquals(0, ToolRunner.run(admin, argv));
+
+    stateStore.loadCache(MountTableStoreImpl.class, true);
+    getResponse =
+        client.getMountTableManager().getMountTableEntries(getRequest);
+
+    // Ensure the attribute updated successfully and destination and other
+    // attributes are preserved.
+    mountTable = getResponse.getEntries().get(0);
+    assertEquals(src, mountTable.getSourcePath());
+    assertEquals(newNsId,
+        mountTable.getDestinations().get(0).getNameserviceId());
+    assertEquals(newDest, mountTable.getDestinations().get(0).getDest());
+    assertFalse(mountTable.isReadOnly());
+    assertEquals("HASH_ALL", mountTable.getDestOrder().toString());
+  }
+
+  @Test
+  public void testUpdateErrorCase() throws Exception {
+    // Add a mount table firstly
+    String nsId = "ns0";
+    String src = "/mount";
+    String dest = "/dest";
+    String[] argv = new String[] {"-add", src, nsId, dest, "-readonly",
+        "-order", "HASH_ALL"};
+    assertEquals(0, ToolRunner.run(admin, argv));
+    stateStore.loadCache(MountTableStoreImpl.class, true);
+
+    // Check update for non-existent mount entry.
+    argv = new String[] {"-update", "/noMount", "-readonly", "false"};
+    System.setErr(new PrintStream(err));
+    assertEquals(-1, ToolRunner.run(admin, argv));
+    assertTrue(err.toString(),
+        err.toString().contains("update: /noMount doesn't exist."));
+    err.reset();
+
+    // Check update if non true/false value is passed for readonly.
+    argv = new String[] {"-update", src, "-readonly", "check"};
+    assertEquals(-1, ToolRunner.run(admin, argv));
+    assertTrue(err.toString(), err.toString().contains("update: "
+        + "Invalid argument: check. Please specify either true or false."));
+    err.reset();
+
+    // Check update with invalid order.
+    argv = new String[] {"-update", src, "ns1", "/tmp", "-order", "Invalid"};
+    assertEquals(-1, ToolRunner.run(admin, argv));
+    assertTrue(err.toString(), err.toString().contains(
+        "update: Unable to parse arguments: Cannot parse order: Invalid"));
+    err.reset();
+  }
+
+  @Test
   public void testUpdateReadonlyUserGroupPermissionMountable()
       throws Exception {
     // Add a mount table
@@ -763,7 +849,7 @@ public class TestRouterAdminCLI {
     // Update the readonly, owner, group and permission
     String testOwner = "test_owner";
     String testGroup = "test_group";
-    argv = new String[] {"-update", src, nsId, dest, "-readonly",
+    argv = new String[] {"-update", src, nsId, dest, "-readonly", "true",
         "-owner", testOwner, "-group", testGroup, "-mode", "0455"};
     assertEquals(0, ToolRunner.run(admin, argv));
 

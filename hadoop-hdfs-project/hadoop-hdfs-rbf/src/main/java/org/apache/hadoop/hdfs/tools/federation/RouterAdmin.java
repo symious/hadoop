@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -114,8 +115,8 @@ public class RouterAdmin extends Configured implements Tool {
         + "\t[-add <source> <nameservice1, nameservice2, ...> <destination> "
         + "[-readonly] [-order HASH|LOCAL|RANDOM|HASH_ALL] "
         + "-owner <owner> -group <group> -mode <mode>]\n"
-        + "\t[-update <source> <nameservice1, nameservice2, ...> <destination> "
-        + "[-readonly] [-order HASH|LOCAL|RANDOM|HASH_ALL] "
+        + "\t[-update <source> [<nameservice1, nameservice2, ...> <destination>] "
+        + "[-readonly true|false] [-order HASH|LOCAL|RANDOM|HASH_ALL] "
         + "-owner <owner> -group <group> -mode <mode>]\n"
         + "\t[-rm <source>]\n"
         + "\t[-ls <path>]\n"
@@ -222,6 +223,7 @@ public class RouterAdmin extends Configured implements Tool {
       } else if ("-update".equals(cmd)) {
         if (updateMount(argv, i)) {
           System.out.println("Successfully updated mount point " + argv[i]);
+          System.out.println("WARN: Changing order/destinations may lead to inconsistencies");
         }
       } else if ("-rm".equals(cmd)) {
         if (removeMount(argv[i])) {
@@ -284,6 +286,9 @@ public class RouterAdmin extends Configured implements Tool {
         e.printStackTrace();
         debugException = ex;
       }
+    } catch (IOException ioe) {
+      exitCode = -1;
+      System.err.println(cmd.substring(1) + ": " + ioe.getLocalizedMessage());
     } catch (Exception e) {
       exitCode = -1;
       debugException = e;
@@ -361,17 +366,7 @@ public class RouterAdmin extends Configured implements Tool {
     mount = normalizeFileSystemPath(mount);
     // Get the existing entry.
     MountTableManager mountTable = client.getMountTableManager();
-    GetMountTableEntriesRequest getRequest =
-        GetMountTableEntriesRequest.newInstance(mount);
-    GetMountTableEntriesResponse getResponse =
-        mountTable.getMountTableEntries(getRequest);
-    List<MountTable> results = getResponse.getEntries();
-    MountTable existingEntry = null;
-    for (MountTable result : results) {
-      if (mount.equals(result.getSourcePath())) {
-        existingEntry = result;
-      }
-    }
+    MountTable existingEntry = getMountEntry(mount, mountTable);
 
     // Fail if it already exists.
     if (existingEntry != null) {
@@ -422,92 +417,79 @@ public class RouterAdmin extends Configured implements Tool {
    * @param i Index in the parameters.
    */
   public boolean updateMount(String[] parameters, int i) throws IOException {
-    // Mandatory parameters
     String mount = parameters[i++];
-    String[] nss = parameters[i++].split(",");
-    String dest = parameters[i++];
-
-    // Optional parameters
-    boolean readOnly = false;
-    String owner = null;
-    String group = null;
-    FsPermission mode = null;
-    DestinationOrder order = null;
-    while (i < parameters.length) {
-      if (parameters[i].equals("-readonly")) {
-        readOnly = true;
-      } else if (parameters[i].equals("-order")) {
-        i++;
-        try {
-          order = DestinationOrder.valueOf(parameters[i]);
-        } catch(Exception e) {
-          System.err.println("Cannot parse order: " + parameters[i]);
-        }
-      } else if (parameters[i].equals("-owner")) {
-        i++;
-        owner = parameters[i];
-      } else if (parameters[i].equals("-group")) {
-        i++;
-        group = parameters[i];
-      } else if (parameters[i].equals("-mode")) {
-        i++;
-        short modeValue = Short.parseShort(parameters[i], 8);
-        mode = new FsPermission(modeValue);
-      }
-
-      i++;
-    }
-
-    return updateMount(mount, nss, dest, readOnly, order,
-        new ACLEntity(owner, group, mode));
-  }
-
-  /**
-   * Update a mount table entry.
-   *
-   * @param mount Mount point.
-   * @param nss Nameservices where this is mounted to.
-   * @param dest Destination path.
-   * @param readonly If the mount point is read only.
-   * @param order Order of the destination locations.
-   * @param aclInfo the ACL info for mount point.
-   * @return If the mount point was updated.
-   * @throws IOException Error updating the mount point.
-   */
-  public boolean updateMount(String mount, String[] nss, String dest,
-      boolean readonly, DestinationOrder order, ACLEntity aclInfo)
-      throws IOException {
     mount = normalizeFileSystemPath(mount);
     MountTableManager mountTable = client.getMountTableManager();
-
-    // Create a new entry
-    Map<String, String> destMap = new LinkedHashMap<>();
-    for (String ns : nss) {
-      destMap.put(ns, dest);
+    MountTable existingEntry = getMountEntry(mount, mountTable);
+    if (existingEntry == null) {
+      throw new IOException(mount + " doesn't exist.");
     }
-    MountTable newEntry = MountTable.newInstance(mount, destMap);
+    // Check if the destination needs to be updated.
 
-    newEntry.setReadOnly(readonly);
-
-    if (order != null) {
-      newEntry.setDestOrder(order);
+    if (!parameters[i].startsWith("-")) {
+      String[] nss = parameters[i++].split(",");
+      String dest = parameters[i++];
+      Map<String, String> destMap = new LinkedHashMap<>();
+      for (String ns : nss) {
+        destMap.put(ns, dest);
+      }
+      final List<RemoteLocation> locations = new LinkedList<>();
+      for (Map.Entry<String, String> entry : destMap.entrySet()) {
+        String nsId = entry.getKey();
+        String path = normalizeFileSystemPath(entry.getValue());
+        RemoteLocation location = new RemoteLocation(nsId, path, mount);
+        locations.add(location);
+      }
+      existingEntry.setDestinations(locations);
     }
 
-    // Update ACL info of mount table entry
-    if (aclInfo.getOwner() != null) {
-      newEntry.setOwnerName(aclInfo.getOwner());
-    }
-
-    if (aclInfo.getGroup() != null) {
-      newEntry.setGroupName(aclInfo.getGroup());
-    }
-
-    if (aclInfo.getMode() != null) {
-      newEntry.setMode(aclInfo.getMode());
+    try {
+      while (i < parameters.length) {
+        switch (parameters[i]) {
+          case "-readonly":
+            i++;
+            existingEntry.setReadOnly(getBooleanValue(parameters[i]));
+            break;
+          case "-order":
+            i++;
+            try {
+              existingEntry.setDestOrder(DestinationOrder.valueOf(parameters[i]));
+              break;
+            } catch (Exception e) {
+              throw new Exception("Cannot parse order: " + parameters[i]);
+            }
+          case "-owner":
+            i++;
+            existingEntry.setOwnerName(parameters[i]);
+            break;
+          case "-group":
+            i++;
+            existingEntry.setGroupName(parameters[i]);
+            break;
+          case "-mode":
+            i++;
+            short modeValue = Short.parseShort(parameters[i], 8);
+            existingEntry.setMode(new FsPermission(modeValue));
+            break;
+          default:
+            printUsage();
+            return false;
+        }
+        i++;
+      }
+    } catch (IllegalArgumentException iae) {
+      throw iae;
+    } catch (Exception e) {
+      String msg = "Unable to parse arguments: " + e.getMessage();
+      if (e instanceof ArrayIndexOutOfBoundsException) {
+        msg = "Unable to parse arguments: no value provided for "
+            + parameters[i - 1];
+      }
+      throw new IOException(msg);
     }
 
     UpdateMountTableEntryRequest updateRequest =
-        UpdateMountTableEntryRequest.newInstance(newEntry);
+        UpdateMountTableEntryRequest.newInstance(existingEntry);
     UpdateMountTableEntryResponse updateResponse =
         mountTable.updateMountTableEntry(updateRequest);
     boolean updated = updateResponse.getStatus();
@@ -515,6 +497,45 @@ public class RouterAdmin extends Configured implements Tool {
       System.err.println("Cannot update mount point " + mount);
     }
     return updated;
+  }
+
+  /**
+   * Parse string to boolean.
+   * @param value the string to be parsed.
+   * @return parsed boolean value.
+   * @throws Exception if other than true|false is provided.
+   */
+  private boolean getBooleanValue(String value) throws Exception {
+    if (value.equalsIgnoreCase("true")) {
+      return true;
+    } else if (value.equalsIgnoreCase("false")) {
+      return false;
+    }
+    throw new IllegalArgumentException("Invalid argument: " + value
+        + ". Please specify either true or false.");
+  }
+
+  /**
+   * Gets the mount table entry.
+   * @param mount name of the mount entry.
+   * @param mountTable the mount table.
+   * @return corresponding mount entry.
+   * @throws IOException in case of failure to retrieve mount entry.
+   */
+  private MountTable getMountEntry(String mount, MountTableManager mountTable)
+      throws IOException {
+    GetMountTableEntriesRequest getRequest =
+        GetMountTableEntriesRequest.newInstance(mount);
+    GetMountTableEntriesResponse getResponse =
+        mountTable.getMountTableEntries(getRequest);
+    List<MountTable> results = getResponse.getEntries();
+    MountTable existingEntry = null;
+    for (MountTable result : results) {
+      if (mount.equals(result.getSourcePath())) {
+        existingEntry = result;
+      }
+    }
+    return existingEntry;
   }
 
   /**
