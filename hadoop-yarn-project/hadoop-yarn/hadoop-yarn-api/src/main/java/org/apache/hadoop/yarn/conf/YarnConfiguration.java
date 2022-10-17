@@ -4859,6 +4859,11 @@ public class YarnConfiguration extends Configuration {
       DEFAULT_TIMELINE_SERVICE_READER_WEBAPP_HTTPS_ADDRESS =
       DEFAULT_TIMELINE_SERVICE_WEBAPP_HTTPS_ADDRESS;
 
+  public static final String TIMELINE_SERVICE_READER_HTTP_MAX_THREADS =
+      TIMELINE_SERVICE_READER_PREFIX + "http.max.threads";
+  public static final int DEFAULT_TIMELINE_SERVICE_READER_HTTP_MAX_THREADS =
+      1024;
+
   @Private
   public static final String
       TIMELINE_SERVICE_READER_STORAGE_MONITOR_INTERVAL_MS =

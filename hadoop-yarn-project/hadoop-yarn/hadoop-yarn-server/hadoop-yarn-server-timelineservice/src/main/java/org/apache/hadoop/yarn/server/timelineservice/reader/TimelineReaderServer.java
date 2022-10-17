@@ -190,6 +190,10 @@ public class TimelineReaderServer extends CompositeService {
     }
     String bindAddress = WebAppUtils
         .getWebAppBindURL(conf, hostProperty, webAppURLWithoutScheme);
+    // set http.max.threads
+    conf.setInt(HttpServer2.HTTP_MAX_THREADS_KEY,
+        conf.getInt(YarnConfiguration.TIMELINE_SERVICE_READER_HTTP_MAX_THREADS,
+            YarnConfiguration.DEFAULT_TIMELINE_SERVICE_READER_HTTP_MAX_THREADS));
 
     LOG.info("Instantiating TimelineReaderWebApp at " + bindAddress);
     try {
