@@ -366,7 +366,6 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
     // constructor.
     RMAppImpl application = createAndPopulateNewRMApp(
         submissionContext, submitTime, user, false, -1, null);
-
     // Modify the nodeLabelExpression
     assignNodeLabel(submissionContext, application.getQueue());
 
@@ -403,6 +402,7 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
     boolean multiLabelAccess = this.conf
         .getBoolean(YarnConfiguration.MULTI_LABEL_ACCESS_ENABLED,
             YarnConfiguration.DEFAULT_MULTI_LABEL_ACCESS_ENABLED);
+    int appPriority = submissionContext.getPriority().getPriority();
 
     // Check if Enabled and Only support CS now
     // Chech the expression is null? if no will not process
@@ -414,6 +414,13 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
       try {
         CapacityScheduler cs = (CapacityScheduler) this.scheduler;
         LeafQueue queue = (LeafQueue) cs.getQueue(queueName);
+        if (appPriority >= queue.getAccessMultiLabelPriority()) {
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Skip multi-label due to high priority, job priority:" + appPriority +
+                ", queue limit priority:" + queue.getAccessMultiLabelPriority());
+          }
+          return;
+        }
         Set<String> labels = selectLabelsFromQueue(queue,cs.getConfiguration());
         if (labels.size()==0) {
           return;

@@ -96,6 +96,12 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   private static final String DEFAULT_MULTI_LABEL_ACCESS_HOURS = "-1";
 
   @Private
+  public static final String MULTI_LABEL_ACCESS_PRIORITY =
+      "multi-label-access-priority";
+
+  private static final int DEFAULT_MULTI_LABEL_ACCESS_PRIORITY = 80;
+
+  @Private
   public static final String OPPORTUNISTIC_ENABLED =
       "opportunistic-enabled";
 
@@ -498,6 +504,12 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
       }
     }
     return set;
+  }
+
+  // Config the multi-label access priority for queue
+  public int getMultiLabelAccessPriorityPerQueue(String queue) {
+    return getInt(getQueuePrefix(queue) + MULTI_LABEL_ACCESS_PRIORITY,
+        DEFAULT_MULTI_LABEL_ACCESS_PRIORITY);
   }
 
   /**
