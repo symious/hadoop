@@ -79,6 +79,7 @@ public class UsersManager implements AbstractUsersManager {
 
   private volatile int userLimit;
   private volatile float userLimitFactor;
+  private volatile boolean userLimitFactorEnable;
 
   private WriteLock writeLock;
   private ReadLock readLock;
@@ -346,6 +347,22 @@ public class UsersManager implements AbstractUsersManager {
    */
   public void setUserLimitFactor(float userLimitFactor) {
     this.userLimitFactor = userLimitFactor;
+  }
+
+  /**
+   * Get configured user-limit factor enable.
+   * @return user-limit factor enable
+   */
+  public boolean getUserLimitFactorEnable() {
+    return userLimitFactorEnable;
+  }
+
+  /**
+   * Set configured user-limit factor switch.
+   * @param userLimitFactorEnable User Limit factor switch.
+   */
+  public void setUserLimitFactorEnable(boolean userLimitFactorEnable) {
+    this.userLimitFactorEnable = userLimitFactorEnable;
   }
 
   @VisibleForTesting
@@ -789,9 +806,13 @@ public class UsersManager implements AbstractUsersManager {
     // we will not cap user-limit as well as used resource when doing
     // IGNORE_PARTITION_EXCLUSIVITY allocation.
     Resource maxUserLimit = Resources.none();
-    if (schedulingMode == SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY) {
+    if (schedulingMode == SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY &&
+        userLimitFactorEnable) {
       maxUserLimit = Resources.multiplyAndRoundDown(queueCapacity,
           getUserLimitFactor());
+    } else if (schedulingMode == SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY &&
+        !userLimitFactorEnable) {
+      maxUserLimit = lQueue.getEffectiveMaxCapacity(nodePartition);
     } else if (schedulingMode == SchedulingMode.IGNORE_PARTITION_EXCLUSIVITY) {
       maxUserLimit = partitionResource;
     }

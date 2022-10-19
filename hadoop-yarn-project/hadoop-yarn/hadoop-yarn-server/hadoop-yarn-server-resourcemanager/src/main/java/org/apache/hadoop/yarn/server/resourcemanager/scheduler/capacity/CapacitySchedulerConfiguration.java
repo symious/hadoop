@@ -137,7 +137,10 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   
   @Private
   public static final String USER_LIMIT = "minimum-user-limit-percent";
-  
+
+  @Private
+  public static final String USER_LIMIT_FACTOR_ENABLE = "user-limit-factor-enable";
+
   @Private
   public static final String USER_LIMIT_FACTOR = "user-limit-factor";
 
@@ -236,6 +239,9 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   
   @Private
   public static final int DEFAULT_USER_LIMIT = 100;
+
+  @Private
+  public static final boolean DEFAULT_USER_LIMIT_FACTOR_ENABLE = true;
   
   @Private
   public static final float DEFAULT_USER_LIMIT_FACTOR = 1.0f;
@@ -940,6 +946,29 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   @VisibleForTesting
   public void setDefaultUserLimit(int defaultUserLimit) {
     setInt(PREFIX + USER_LIMIT, defaultUserLimit);
+  }
+
+  /**
+   * Maximum application for a queue to be used when application per queue is
+   * not defined.To be consistent with previous version the default value is set
+   * as UNDEFINED.
+   */
+  @Private
+  public static final String QUEUE_GLOBAL_USER_LIMIT_FACTOR_ENABLE =
+      PREFIX + "global-queue-user-limit-factor-enable";
+
+  public boolean getGlobalUserLimitFactorEnable() {
+    boolean globalUserLimitFactorEnabled =
+        getBoolean(QUEUE_GLOBAL_USER_LIMIT_FACTOR_ENABLE,
+            DEFAULT_USER_LIMIT_FACTOR_ENABLE);
+    return globalUserLimitFactorEnabled;
+  }
+
+  public boolean getUserLimitFactorEnabled(String queue) {
+    boolean queueUserLimitFactorEnabled = getBoolean(
+        getQueuePrefix(queue) + USER_LIMIT_FACTOR_ENABLE,
+        getGlobalUserLimitFactorEnable());
+    return queueUserLimitFactorEnabled;
   }
 
   public float getUserLimitFactor(String queue) {

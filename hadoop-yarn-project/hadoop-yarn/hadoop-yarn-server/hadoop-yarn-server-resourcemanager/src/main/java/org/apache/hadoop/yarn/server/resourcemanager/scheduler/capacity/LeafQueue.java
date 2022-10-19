@@ -124,6 +124,8 @@ public class LeafQueue extends AbstractCSQueue {
   
   private final UsersManager usersManager;
 
+  private boolean userLimitFactorEnabled;
+
   // cache last cluster resource to compute actual capacity
   private Resource lastClusterResource = Resources.none();
 
@@ -209,6 +211,9 @@ public class LeafQueue extends AbstractCSQueue {
       setOrderingPolicy(
           conf.<FiCaSchedulerApp>getAppOrderingPolicy(getQueuePath()));
 
+      userLimitFactorEnabled = conf.getUserLimitFactorEnabled(getQueuePath());
+      usersManager.setUserLimitFactorEnable(userLimitFactorEnabled);
+
       usersManager.setUserLimit(conf.getUserLimit(getQueuePath()));
       usersManager.setUserLimitFactor(conf.getUserLimitFactor(getQueuePath()));
 
@@ -225,10 +230,13 @@ public class LeafQueue extends AbstractCSQueue {
               (int) (maxSystemApps * queueCapacities.getAbsoluteCapacity());
         }
       }
-      maxApplicationsPerUser = Math.min(maxApplications,
-          (int) (maxApplications * (usersManager.getUserLimit() / 100.0f)
-              * usersManager.getUserLimitFactor()));
-
+      if (userLimitFactorEnabled) {
+        maxApplicationsPerUser = Math.min(maxApplications,
+            (int) (maxApplications * (usersManager.getUserLimit() / 100.0f)
+                * usersManager.getUserLimitFactor()));
+      } else {
+        maxApplicationsPerUser = maxApplications;
+      }
       maxAMResourcePerQueuePercent =
           conf.getMaximumApplicationMasterResourcePerQueuePercent(
               getQueuePath());
@@ -307,6 +315,7 @@ public class LeafQueue extends AbstractCSQueue {
               getEffectiveCapacity(CommonNodeLabelsManager.NO_LABEL) + "\n"
               + " , effectiveMaxResource=" +
               getEffectiveMaxCapacity(CommonNodeLabelsManager.NO_LABEL)
+              + "\n" + "userLimitFactorEnabled = " + userLimitFactorEnabled
               + "\n" + "userLimit = " + usersManager.getUserLimit()
               + " [= configuredUserLimit ]" + "\n" + "userLimitFactor = "
               + usersManager.getUserLimitFactor()
@@ -735,26 +744,51 @@ public class LeafQueue extends AbstractCSQueue {
 
       Resource queuePartitionResource = getEffectiveCapacity(nodePartition);
 
-      Resource userAMLimit = Resources.multiplyAndNormalizeUp(
-          resourceCalculator, queuePartitionResource,
-          queueCapacities.getMaxAMResourcePercentage(nodePartition)
-              * effectiveUserLimit * usersManager.getUserLimitFactor(),
-          minimumAllocation);
-      userAMLimit =
-          Resources.min(resourceCalculator, lastClusterResource,
-              userAMLimit,
-              Resources.clone(getAMResourceLimitPerPartition(nodePartition)));
+      Resource userAMLimit, preWeighteduserAMLimit;
+      if (userLimitFactorEnabled) {
+        userAMLimit = Resources.multiplyAndNormalizeUp(
+            resourceCalculator, queuePartitionResource,
+            queueCapacities.getMaxAMResourcePercentage(nodePartition)
+                * effectiveUserLimit * usersManager.getUserLimitFactor(),
+            minimumAllocation);
+        userAMLimit =
+            Resources.min(resourceCalculator, lastClusterResource,
+                userAMLimit,
+                Resources.clone(getAMResourceLimitPerPartition(nodePartition)));
 
-      Resource preWeighteduserAMLimit = Resources.multiplyAndNormalizeUp(
-          resourceCalculator, queuePartitionResource,
-          queueCapacities.getMaxAMResourcePercentage(nodePartition)
-              * preWeightedUserLimit * usersManager.getUserLimitFactor(),
-          minimumAllocation);
-      preWeighteduserAMLimit =
-          Resources.min(resourceCalculator, lastClusterResource,
-              preWeighteduserAMLimit,
-              Resources.clone(getAMResourceLimitPerPartition(nodePartition)));
-      queueUsage.setUserAMLimit(nodePartition, preWeighteduserAMLimit);
+        preWeighteduserAMLimit = Resources.multiplyAndNormalizeUp(
+            resourceCalculator, queuePartitionResource,
+            queueCapacities.getMaxAMResourcePercentage(nodePartition)
+                * preWeightedUserLimit * usersManager.getUserLimitFactor(),
+            minimumAllocation);
+
+        preWeighteduserAMLimit =
+            Resources.min(resourceCalculator, lastClusterResource,
+                preWeighteduserAMLimit,
+                Resources.clone(getAMResourceLimitPerPartition(nodePartition)));
+        queueUsage.setUserAMLimit(nodePartition, preWeighteduserAMLimit);
+      } else {
+        userAMLimit = Resources.multiplyAndNormalizeUp(
+            resourceCalculator,
+            Resources.clone(getAMResourceLimitPerPartition(nodePartition)),
+            effectiveUserLimit, minimumAllocation);
+
+        userAMLimit =
+            Resources.min(resourceCalculator, lastClusterResource,
+                userAMLimit,
+                Resources.clone(getAMResourceLimitPerPartition(nodePartition)));
+
+        preWeighteduserAMLimit = Resources.multiplyAndNormalizeUp(
+            resourceCalculator,
+            Resources.clone(getAMResourceLimitPerPartition(nodePartition)),
+            preWeightedUserLimit, minimumAllocation);
+
+        preWeighteduserAMLimit =
+            Resources.min(resourceCalculator, lastClusterResource,
+                preWeighteduserAMLimit,
+                Resources.clone(getAMResourceLimitPerPartition(nodePartition)));
+        queueUsage.setUserAMLimit(nodePartition, preWeighteduserAMLimit);
+      }
 
       LOG.debug("Effective user AM limit for \"{}\":{}. Effective weighted"
           + " user AM limit: {}. User weight: {}", userName,
@@ -770,49 +804,60 @@ public class LeafQueue extends AbstractCSQueue {
       String nodePartition) {
     writeLock.lock();
     try {
-      /*
-       * For non-labeled partition, get the max value from resources currently
-       * available to the queue and the absolute resources guaranteed for the
-       * partition in the queue. For labeled partition, consider only the absolute
-       * resources guaranteed. Multiply this value (based on labeled/
-       * non-labeled), * with per-partition am-resource-percent to get the max am
-       * resource limit for this queue and partition.
-       */
+
+      Resource amResouceLimit;
       Resource queuePartitionResource = getEffectiveCapacity(nodePartition);
-
-      Resource queueCurrentLimit = Resources.none();
-      // For non-labeled partition, we need to consider the current queue
-      // usage limit.
-      if (nodePartition.equals(RMNodeLabelsManager.NO_LABEL)) {
-        synchronized (queueResourceLimitsInfo){
-          queueCurrentLimit = queueResourceLimitsInfo.getQueueCurrentLimit();
-        }
-      }
-
+      Resource queuePartitionMaxResource =
+          getEffectiveMaxCapacity(nodePartition);
       float amResourcePercent = queueCapacities.getMaxAMResourcePercentage(
           nodePartition);
 
-      // Current usable resource for this queue and partition is the max of
-      // queueCurrentLimit and queuePartitionResource.
-      // If any of the resources available to this queue are less than queue's
-      // guarantee, use the guarantee as the queuePartitionUsableResource
-      // because nothing less than the queue's guarantee should be used when
-      // calculating the AM limit.
-      Resource queuePartitionUsableResource = (Resources.fitsIn(
-          resourceCalculator, queuePartitionResource, queueCurrentLimit)) ?
-              queueCurrentLimit : queuePartitionResource;
+      if (userLimitFactorEnabled) {
+        /*
+         * For non-labeled partition, get the max value from resources currently
+         * available to the queue and the absolute resources guaranteed for the
+         * partition in the queue. For labeled partition, consider only the absolute
+         * resources guaranteed. Multiply this value (based on labeled/
+         * non-labeled), * with per-partition am-resource-percent to get the max am
+         * resource limit for this queue and partition.
+         */
 
-      Resource amResouceLimit = Resources.multiplyAndNormalizeUp(
-          resourceCalculator, queuePartitionUsableResource, amResourcePercent,
-          minimumAllocation);
+        Resource queueCurrentLimit = Resources.none();
+        // For non-labeled partition, we need to consider the current queue
+        // usage limit.
+        if (nodePartition.equals(RMNodeLabelsManager.NO_LABEL)) {
+          synchronized (queueResourceLimitsInfo) {
+            queueCurrentLimit = queueResourceLimitsInfo.getQueueCurrentLimit();
+          }
+        }
+
+        // Current usable resource for this queue and partition is the max of
+        // queueCurrentLimit and queuePartitionResource.
+        // If any of the resources available to this queue are less than queue's
+        // guarantee, use the guarantee as the queuePartitionUsableResource
+        // because nothing less than the queue's guarantee should be used when
+        // calculating the AM limit.
+        Resource queuePartitionUsableResource = (Resources.fitsIn(
+            resourceCalculator, queuePartitionResource, queueCurrentLimit)) ?
+            queueCurrentLimit : queuePartitionResource;
+
+        amResouceLimit = Resources.multiplyAndNormalizeUp(
+            resourceCalculator, queuePartitionUsableResource, amResourcePercent,
+            minimumAllocation);
+      } else {
+        amResouceLimit = Resources.multiplyAndNormalizeUp(
+            resourceCalculator, queuePartitionMaxResource, amResourcePercent,
+            minimumAllocation);
+
+        amResouceLimit = Resources.min(resourceCalculator, lastClusterResource,
+            amResouceLimit, queuePartitionMaxResource);
+      }
 
       metrics.setAMResouceLimit(nodePartition, amResouceLimit);
       queueUsage.setAMLimit(nodePartition, amResouceLimit);
       LOG.debug("Queue: {}, node label : {}, queue partition resource : {},"
-          + " queue current limit : {}, queue partition usable resource : {},"
           + " amResourceLimit : {}", getQueuePath(), nodePartition,
-          queuePartitionResource, queueCurrentLimit,
-          queuePartitionUsableResource, amResouceLimit);
+          queuePartitionResource, amResouceLimit);
       return amResouceLimit;
     } finally {
       writeLock.unlock();
