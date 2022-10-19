@@ -2385,10 +2385,18 @@ public class LeafQueue extends AbstractCSQueue {
   }
 
   private void updateQueuePreemptionMetrics(RMContainer rmc) {
+    long fastPreemptionMetricTime =
+        csContext.getConfiguration().getContainerFastPreemptionMetricTime();
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("fastPreemptionMetricTime: " + fastPreemptionMetricTime);
+    }
     final long usedMillis = rmc.getFinishTime() - rmc.getCreationTime();
     final long usedSeconds = usedMillis / DateUtils.MILLIS_PER_SECOND;
     Resource containerResource = rmc.getAllocatedResource();
     metrics.preemptContainer();
+    if (usedMillis <= fastPreemptionMetricTime) {
+      metrics.fastPreemptContainer();
+    }
     long mbSeconds = (containerResource.getMemorySize() * usedMillis)
         / DateUtils.MILLIS_PER_SECOND;
     long vcSeconds = (containerResource.getVirtualCores() * usedMillis)

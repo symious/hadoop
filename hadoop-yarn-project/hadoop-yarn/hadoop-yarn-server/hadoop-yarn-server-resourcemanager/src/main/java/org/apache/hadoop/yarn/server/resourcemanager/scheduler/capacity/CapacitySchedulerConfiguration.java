@@ -1902,6 +1902,27 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
       300 * 1000;
 
   /**
+   * For preemption metric, count those containers which are fast preempted
+   * in a short time.
+   */
+  public static final String METRIC_FAST_PREEMPTION_INTERVAL_MULTIPLIER =
+      PREEMPTION_CONFIG_PREFIX +
+          "metric-fast-preemption-interval-multiplier";
+  public static final int
+      DEFAULT_METRIC_FAST_PREEMPTION_INTERVAL_MULTIPLIER = 2;
+
+  public long getContainerFastPreemptionMetricTime() {
+    long preemptInterval =
+        getLong(CapacitySchedulerConfiguration.PREEMPTION_MONITORING_INTERVAL,
+            CapacitySchedulerConfiguration.DEFAULT_PREEMPTION_MONITORING_INTERVAL);
+
+    int multiplier = getInt(METRIC_FAST_PREEMPTION_INTERVAL_MULTIPLIER,
+        DEFAULT_METRIC_FAST_PREEMPTION_INTERVAL_MULTIPLIER);
+
+    return preemptInterval * multiplier;
+  }
+
+  /**
    * Maximum application for a queue to be used when application per queue is
    * not defined.To be consistent with previous version the default value is set
    * as UNDEFINED.
