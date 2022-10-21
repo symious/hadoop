@@ -20,11 +20,11 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>3.3.sdi-045-SNAPSHOT</version>
+    <version>3.3.sdi-045</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <artifactId>hadoop-archives</artifactId>
-  <version>3.3.sdi-045-SNAPSHOT</version>
+  <version>3.3.sdi-045</version>
   <description>Apache Hadoop Archives</description>
   <name>Apache Hadoop Archives</name>
   <packaging>jar</packaging>
