@@ -193,7 +193,7 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
               NODE_DO_NOT_MATCH_PARTITION_OR_PLACEMENT_CONSTRAINTS
               + ActivitiesManager.getDiagnostics(dcOpt),
           ActivityLevel.NODE);
-      return ContainerAllocation.PRIORITY_SKIPPED;
+      return ContainerAllocation.NODE_SKIPPED;
     }
 
     if (!application.getCSLeafQueue().getReservationContinueLooking()) {
