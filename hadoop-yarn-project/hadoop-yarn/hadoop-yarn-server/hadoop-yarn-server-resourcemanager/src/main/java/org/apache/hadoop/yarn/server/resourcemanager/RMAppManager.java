@@ -414,14 +414,7 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
       try {
         CapacityScheduler cs = (CapacityScheduler) this.scheduler;
         LeafQueue queue = (LeafQueue) cs.getQueue(queueName);
-        if (appPriority >= queue.getAccessMultiLabelPriority()) {
-          if (LOG.isDebugEnabled()) {
-            LOG.debug("Skip multi-label due to high priority, job priority:" + appPriority +
-                ", queue limit priority:" + queue.getAccessMultiLabelPriority());
-          }
-          return;
-        }
-        Set<String> labels = selectLabelsFromQueue(queue,cs.getConfiguration());
+        Set<String> labels = selectLabelsFromQueue(queue,cs.getConfiguration(), appPriority);
         if (labels.size()==0) {
           return;
         }
@@ -443,7 +436,7 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
 
   // select labels which will be used for multi labels
   private Set<String> selectLabelsFromQueue(LeafQueue queue,
-      CapacitySchedulerConfiguration csConfiguration) {
+      CapacitySchedulerConfiguration csConfiguration, int appPriority) {
     // If out of the range of the access multi-label time will skip this part
     // like 1,2,3,4,5,6,10,20,21,23
     String currentHour =
@@ -452,6 +445,14 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
     Set<String> labels = queue.getAccessibleNodeLabels();
     if (!CollectionUtils.isEmpty(labels)) {
       for (String labelName : labels) {
+        int labelPriority = csConfiguration.getMultiLabelAccessPriorityPerLabel(labelName);
+        if (appPriority >= labelPriority) {
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Skip multi-label due to high priority, job priority:" + appPriority +
+                ", label limit priority:" + labelPriority);
+          }
+          continue;
+        }
         Set<String> hours =
             csConfiguration.getMultiLabelAccessHoursPerQueueWithLabel(queue.getQueuePath(),
                 labelName);

@@ -512,6 +512,12 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
         DEFAULT_MULTI_LABEL_ACCESS_PRIORITY);
   }
 
+  // Config the multi-label access priority for label
+  public int getMultiLabelAccessPriorityPerLabel(String label) {
+    return getInt(PREFIX + label + DOT + MULTI_LABEL_ACCESS_PRIORITY,
+        DEFAULT_MULTI_LABEL_ACCESS_PRIORITY);
+  }
+
   /**
    * Get the queue label access time window
    * @param queue
