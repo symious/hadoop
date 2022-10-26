@@ -21,6 +21,7 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resourc
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.yarn.server.api.ContainerType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -314,9 +315,13 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
                 container.getLaunchContext().getEnvironment()
                     .get(STRICT_CORE_NUMBER);
 
+            // Check if the container is AM
+            boolean isAM = id.getContainerType().equals(ContainerType.APPLICATION_MASTER);
+
             // Set the strictCoreNumber according to the app level
             strictCoreNumber = getStrictCoreNumberByContainerLevel(container.getContainerLevel(),
-                container.getResource().getVirtualCores());
+                container.getResource().getVirtualCores(), isAM);
+
             // If user set this param and less than the allowed value then use it
             if (!StringUtils.isNullOrEmpty(strictCoreString)) {
               int strictCoreNumberFromUser = Integer.valueOf(strictCoreString);
@@ -347,24 +352,28 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
     return null;
   }
 
-  private int getStrictCoreNumberByContainerLevel(String containerLevel, int virtualCores) {
+  private int getStrictCoreNumberByContainerLevel(String containerLevel, int virtualCores, boolean isAM) {
     if (!StringUtils.isNullOrEmpty(containerLevel)) {
       float factor = 1;
-      switch (containerLevel) {
-        case "CRITICAL":
-          factor = this.criticalLimitFactor;
-          break;
-        case "HIGH":
-          factor = this.highLimitFactor;
-          break;
-        case "MEDIUM":
-          factor = this.mediumLimitFactor;
-          break;
-        case "LOW":
-          factor = this.lowLimitFactor;
-          break;
-        default:
-          break;
+      if (!isAM) {
+        switch (containerLevel) {
+          case "CRITICAL":
+            factor = this.criticalLimitFactor;
+            break;
+          case "HIGH":
+            factor = this.highLimitFactor;
+            break;
+          case "MEDIUM":
+            factor = this.mediumLimitFactor;
+            break;
+          case "LOW":
+            factor = this.lowLimitFactor;
+            break;
+          default:
+            break;
+        }
+      } else {
+        factor = this.criticalLimitFactor;
       }
       return Math.round(virtualCores * factor);
     }
