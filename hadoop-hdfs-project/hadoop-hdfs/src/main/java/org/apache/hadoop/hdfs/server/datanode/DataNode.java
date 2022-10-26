@@ -3929,7 +3929,7 @@ public class DataNode extends ReconfigurableBase
 
   @Override // ClientDatanodeProtocol
   public void refreshThrottlerConfig() throws IOException {
-    refreshThrottlerConfig(getConf());
+    refreshThrottlerConfig(new Configuration());
   }
 
   @VisibleForTesting
