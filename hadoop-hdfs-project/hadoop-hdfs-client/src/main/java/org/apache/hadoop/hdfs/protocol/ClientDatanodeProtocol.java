@@ -204,4 +204,9 @@ public interface ClientDatanodeProtocol {
    */
   void copyBlock(ExtendedBlock src, ExtendedBlock dst, DatanodeInfo dstDn)
       throws IOException;
+
+  /**
+   * Refresh (update bandwidth/start/shutdown) DN's throttlers
+   */
+  void refreshThrottlerConfig() throws IOException;
 }

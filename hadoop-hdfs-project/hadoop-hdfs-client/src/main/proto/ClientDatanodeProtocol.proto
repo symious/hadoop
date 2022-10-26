@@ -202,6 +202,12 @@ message CopyBlockRequestProto {
 message CopyBlockResponseProto {
 }
 
+message RefreshThrottlerConfigRequestProto {
+}
+
+message RefreshThrottlerConfigResponseProto {
+}
+
 /**
  * Protocol used from client to the Datanode.
  * See the request and response for details of rpc call.
@@ -279,4 +285,7 @@ service ClientDatanodeProtocolService {
 
   rpc copyBlock(CopyBlockRequestProto)
       returns(CopyBlockResponseProto);
+
+  rpc refreshThrottlerConfig(RefreshThrottlerConfigRequestProto)
+      returns(RefreshThrottlerConfigResponseProto);
 }

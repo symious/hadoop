@@ -453,6 +453,7 @@ public class DFSAdmin extends FsShell {
     "\t[-printTopology]\n" +
       "\t[-refreshNamenodes datanode_host:ipc_port]\n" +
       "\t[-refreshDatanodeTopology datanode_host:ipc_port]]\n" +
+      "\t[-refreshDatanodeThrottlerConfig datanode_host:ipc_port]]\n" +
       "\t[-getVolumeReport datanode_host:ipc_port]\n" +
     "\t[-deleteBlockPool datanode_host:ipc_port blockpoolId [force]]\n"+
     "\t[-setBalancerBandwidth <bandwidth in bytes per second>]\n" +
@@ -1204,6 +1205,10 @@ public class DFSAdmin extends FsShell {
 
     String refreshDatanodeTopology = "-refreshDatanodeTopology: Refresh " +
             "topology cache in the datanode.";
+
+    String refreshDatanodeThrottlerConfig = "-refreshDatanodeThrottlerConfig: "
+        + "Refresh DN throttler config. Will create/remove throttlers if "
+        + "necessary.\n";
     
     String getVolumeReport = "-getVolumeReport: Takes a datanodehost:ipc_port"+
             " as argument,For the given datanode,get the volume report.\n" +
@@ -1324,6 +1329,8 @@ public class DFSAdmin extends FsShell {
       System.out.println(refreshNamenodes);
     } else if ("refreshDatanodeTopology".equals(cmd)) {
       System.out.println(refreshDatanodeTopology);
+    } else if ("refreshDatanodeThrottlerConfig".equals(cmd)) {
+      System.out.println(refreshDatanodeThrottlerConfig);
     } else if ("getVolumeReport".equals(cmd)) {
       System.out.println(getVolumeReport);
     } else if ("deleteBlockPool".equals(cmd)) {
@@ -1374,6 +1381,7 @@ public class DFSAdmin extends FsShell {
       System.out.println(printTopology);
       System.out.println(refreshNamenodes);
       System.out.println(refreshDatanodeTopology);
+      System.out.println(refreshDatanodeThrottlerConfig);
       System.out.println(deleteBlockPool);
       System.out.println(setBalancerBandwidth);
       System.out.println(getBalancerBandwidth);
@@ -2135,6 +2143,9 @@ public class DFSAdmin extends FsShell {
     } else if ("-refreshDatanodeTopology".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
           + " [-refreshDatanodeTopology datanode-host:ipc_port]" );
+    } else if ("-refreshDatanodeThrottlerConfig".equals(cmd)) {
+      System.err.println("Usage: hdfs dfsadmin"
+          + " [-refreshDatanodeThrottlerConfig datanode-host:ipc_port]" );
     } else if ("-getVolumeReport".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
           + " [-getVolumeReport datanode-host:ipc_port]");
@@ -2291,6 +2302,11 @@ public class DFSAdmin extends FsShell {
         printUsage(cmd);
         return exitCode;
       }
+    } else if ("-refreshDatanodeThrottlerConfig".equals(cmd)) {
+      if (argv.length != 2) {
+        printUsage(cmd);
+        return exitCode;
+      }
     } else if ("-getVolumeReport".equals(cmd)) {
       if (argv.length != 2) {
         printUsage(cmd);
@@ -2409,6 +2425,8 @@ public class DFSAdmin extends FsShell {
         exitCode = printTopology();
       } else if ("-refreshNamenodes".equals(cmd)) {
         exitCode = refreshNamenodes(argv, i);
+      } else if ("-refreshDatanodeThrottlerConfig".equals(cmd)) {
+        exitCode = refreshDatanodeThrottlerConfig(argv, i);
       } else if ("-refreshDatanodeTopology".equals(cmd)) {
         exitCode = refreshDatanodeTopology(argv, i);
       } else if ("-getVolumeReport".equals(cmd)) {
@@ -2593,6 +2611,14 @@ public class DFSAdmin extends FsShell {
     } catch (IOException ioe) {
       throw new IOException("Datanode unreachable. " + ioe, ioe);
     }
+    return 0;
+  }
+
+  private int refreshDatanodeThrottlerConfig(String[] argv, int i) throws IOException {
+    String datanode = argv[i];
+    ClientDatanodeProtocol refreshProtocol = getDataNodeProxy(datanode);
+    refreshProtocol.refreshThrottlerConfig();
+
     return 0;
   }
 

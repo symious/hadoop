@@ -59,6 +59,7 @@ import org.apache.hadoop.hdfs.protocol.proto.ReconfigurationProtocolProtos.ListR
 import org.apache.hadoop.hdfs.protocol.proto.ReconfigurationProtocolProtos.ListReconfigurablePropertiesResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.RefreshNamenodesRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.RefreshDatanodeTopologyRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.RefreshThrottlerConfigRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ReconfigurationProtocolProtos.GetReconfigurationStatusRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.ShutdownDatanodeRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ReconfigurationProtocolProtos.StartReconfigurationRequestProto;
@@ -120,6 +121,10 @@ public class ClientDatanodeProtocolTranslatorPB implements
       GetBalancerBandwidthRequestProto.newBuilder().build();
   private final static EvictWritersRequestProto VOID_EVICT_WRITERS =
       EvictWritersRequestProto.newBuilder().build();
+
+  private final static RefreshThrottlerConfigRequestProto
+      VOID_REFRESH_THROTTLER =
+      RefreshThrottlerConfigRequestProto.newBuilder().build();
 
   public ClientDatanodeProtocolTranslatorPB(DatanodeID datanodeid,
       Configuration conf, int socketTimeout, boolean connectToDnViaHostname,
@@ -422,6 +427,15 @@ public class ClientDatanodeProtocolTranslatorPB implements
         .build();
     try {
       rpcProxy.copyBlock(NULL_CONTROLLER, request);
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+  }
+
+  @Override
+  public void refreshThrottlerConfig() throws IOException{
+    try {
+      rpcProxy.refreshThrottlerConfig(NULL_CONTROLLER, VOID_REFRESH_THROTTLER);
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
     }
