@@ -284,6 +284,7 @@ public class MembershipNamenodeResolver
         report.getClusterId(), report.getBlockPoolId(), report.getRpcAddress(),
         report.getServiceAddress(), report.getLifelineAddress(),
         report.getWebAddress(), report.getState(), report.getSafemode());
+    record.setMsyncAddress(report.getMsyncAddress());
 
     if (report.statsValid()) {
       MembershipStats stats = MembershipStats.newInstance();
