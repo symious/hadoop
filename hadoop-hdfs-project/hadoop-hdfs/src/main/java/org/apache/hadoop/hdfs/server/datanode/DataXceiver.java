@@ -619,7 +619,7 @@ class DataXceiver extends Receiver implements Runnable {
       writeSuccessWithChecksumInfo(blockSender, new DataOutputStream(getOutputStream()));
 
       long beginRead = Time.monotonicNow();
-      read = blockSender.sendBlock(out, baseStream, null); // send data
+      read = blockSender.sendBlock(out, baseStream, dataXceiverServer.getReadThrottler()); // send data
       long duration = Time.monotonicNow() - beginRead;
       if (blockSender.didSendEntireByteRange()) {
         // If we sent the entire range, then we should expect the client

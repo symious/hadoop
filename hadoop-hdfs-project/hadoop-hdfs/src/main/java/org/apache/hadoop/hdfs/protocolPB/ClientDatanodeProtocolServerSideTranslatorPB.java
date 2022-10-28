@@ -50,6 +50,8 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.Refres
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.RefreshNamenodesResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.RefreshDatanodeTopologyRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.RefreshDatanodeTopologyResponseProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.RefreshThrottlerConfigRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.RefreshThrottlerConfigResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.ShutdownDatanodeRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.ShutdownDatanodeResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ReconfigurationProtocolProtos.StartReconfigurationRequestProto;
@@ -94,6 +96,10 @@ public class ClientDatanodeProtocolServerSideTranslatorPB implements
       EvictWritersResponseProto.newBuilder().build();
   private final static CopyBlockResponseProto COPY_BLOCK_RESP =
       CopyBlockResponseProto.newBuilder().build();
+
+  private final static RefreshThrottlerConfigResponseProto
+      REFRESH_THROTTLER_CONFIG_RESP =
+      RefreshThrottlerConfigResponseProto.newBuilder().build();
   
   private final ClientDatanodeProtocol impl;
 
@@ -388,5 +394,17 @@ public class ClientDatanodeProtocolServerSideTranslatorPB implements
       throw new ServiceException(e);
     }
     return COPY_BLOCK_RESP;
+  }
+
+  @Override
+  public RefreshThrottlerConfigResponseProto refreshThrottlerConfig(
+      RpcController controller, RefreshThrottlerConfigRequestProto request)
+      throws ServiceException {
+    try {
+      impl.refreshThrottlerConfig();
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
+    return REFRESH_THROTTLER_CONFIG_RESP;
   }
 }

@@ -175,11 +175,13 @@ class DataXceiverServer implements Runnable {
     }
   }
 
-  final BlockBalanceThrottler balanceThrottler;
+  BlockBalanceThrottler balanceThrottler;
 
-  private final DataTransferThrottler transferThrottler;
+  private DataTransferThrottler transferThrottler;
 
-  private final DataTransferThrottler writeThrottler;
+  private DataTransferThrottler writeThrottler;
+
+  private DataTransferThrottler readThrottler;
 
   /**
    * Stores an estimate for block size to check if the disk partition has enough
@@ -203,6 +205,10 @@ class DataXceiverServer implements Runnable {
     this.estimateBlockSize = conf.getLongBytes(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,
         DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT);
 
+    refreshThrottlerConfig(conf);
+  }
+
+  public synchronized void refreshThrottlerConfig(Configuration conf) {
     //set up parameter for cluster balancing
     this.balanceThrottler = new BlockBalanceThrottler(
         conf.getLongBytes(DFSConfigKeys.DFS_DATANODE_BALANCE_BANDWIDTHPERSEC_KEY,
@@ -226,6 +232,15 @@ class DataXceiverServer implements Runnable {
       this.writeThrottler = new DataTransferThrottler(bandwidthPerSec);
     } else {
       this.writeThrottler = null;
+    }
+
+    bandwidthPerSec = conf.getLongBytes(
+        DFSConfigKeys.DFS_DATANODE_DATA_READ_BANDWIDTHPERSEC_KEY,
+        DFSConfigKeys.DFS_DATANODE_DATA_READ_BANDWIDTHPERSEC_DEFAULT);
+    if (bandwidthPerSec > 0) {
+      this.readThrottler = new DataTransferThrottler(bandwidthPerSec);
+    } else {
+      this.readThrottler = null;
     }
   }
 
@@ -482,6 +497,10 @@ class DataXceiverServer implements Runnable {
 
   public DataTransferThrottler getWriteThrottler() {
     return writeThrottler;
+  }
+
+  public DataTransferThrottler getReadThrottler() {
+    return readThrottler;
   }
 
   /**

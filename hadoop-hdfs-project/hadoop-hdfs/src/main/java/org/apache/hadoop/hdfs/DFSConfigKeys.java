@@ -126,6 +126,11 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.datanode.data.write.bandwidthPerSec";
   // A value of zero indicates no limit
   public static final long DFS_DATANODE_DATA_WRITE_BANDWIDTHPERSEC_DEFAULT = 0;
+
+  public static final String DFS_DATANODE_DATA_READ_BANDWIDTHPERSEC_KEY =
+      "dfs.datanode.data.read.bandwidthPerSec";
+  // A value of zero indicates no limit
+  public static final long DFS_DATANODE_DATA_READ_BANDWIDTHPERSEC_DEFAULT = 0;
   @Deprecated
   public static final String  DFS_DATANODE_READAHEAD_BYTES_KEY =
       HdfsClientConfigKeys.DFS_DATANODE_READAHEAD_BYTES_KEY;

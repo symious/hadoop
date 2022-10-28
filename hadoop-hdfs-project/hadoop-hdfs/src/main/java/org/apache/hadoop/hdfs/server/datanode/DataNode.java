@@ -4285,4 +4285,16 @@ public class DataNode extends ReconfigurableBase
   boolean isSlownode() {
     return blockPoolManager.isSlownode();
   }
+
+  @Override // ClientDatanodeProtocol
+  public void refreshThrottlerConfig() throws IOException {
+    refreshThrottlerConfig(new Configuration());
+  }
+
+  @com.google.common.annotations.VisibleForTesting
+  public void refreshThrottlerConfig(Configuration conf) throws IOException {
+    if (xserver != null) {
+      xserver.refreshThrottlerConfig(conf);
+    }
+  }
 }

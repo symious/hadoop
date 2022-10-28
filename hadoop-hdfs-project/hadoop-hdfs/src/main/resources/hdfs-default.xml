@@ -4592,6 +4592,15 @@
     </description>
   </property>
 
+  <property>
+    <name>dfs.datanode.data.read.bandwidthPerSec</name>
+    <value>0</value>
+    <description>
+      Specifies the maximum amount of bandwidth that a DN's readBlock operation
+      can utilize.
+    </description>
+  </property>
+
 <property>
   <name>dfs.datanode.fsdataset.factory</name>
   <value></value>
