@@ -19,9 +19,13 @@
 package org.apache.hadoop.hdfs.server.namenode;
 
 import java.net.InetAddress;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.impl.Log4JLogger;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
@@ -29,6 +33,9 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenSecretManager;
 import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.log4j.Appender;
+import org.apache.log4j.AsyncAppender;
+import org.apache.log4j.Logger;
 
 /**
  * This class provides an interface for Namenode and Router to Audit events
@@ -89,5 +96,26 @@ public abstract class DefaultAuditLogger extends HdfsAuditLogger {
       InetAddress addr, String cmd, String src, String dst, FileStatus status,
       CallerContext callerContext, UserGroupInformation ugi,
       DelegationTokenSecretManager dtSecretManager);
+
+  protected void enableAsyncAuditLog(Log auditLog, org.slf4j.Logger LOG) {
+    if (!(auditLog instanceof Log4JLogger)) {
+      LOG.warn("Log4j is required to enable async auditlog");
+      return;
+    }
+    Logger logger = ((Log4JLogger)auditLog).getLogger();
+    @SuppressWarnings("unchecked")
+    List<Appender> appenders = Collections.list(logger.getAllAppenders());
+    // failsafe against trying to async it more than once
+    if (!appenders.isEmpty() && !(appenders.get(0) instanceof AsyncAppender)) {
+      AsyncAppender asyncAppender = new AsyncAppender();
+      // change logger to have an async appender containing all the
+      // previously configured appenders
+      for (Appender appender : appenders) {
+        logger.removeAppender(appender);
+        asyncAppender.addAppender(appender);
+      }
+      logger.addAppender(asyncAppender);
+    }
+  }
 
 }

@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.hadoop.hdfs.OperationName;
 import org.apache.hadoop.hdfs.protocol.AddErasureCodingPolicyResponse;
 import org.apache.hadoop.hdfs.protocol.ECBlockGroupStats;
 import org.apache.hadoop.hdfs.protocol.ECTopologyVerifierResult;
@@ -63,9 +64,18 @@ public class ErasureCoding {
 
     RemoteMethod method = new RemoteMethod("getErasureCodingPolicies");
     Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
-    Map<FederationNamespaceInfo, ErasureCodingPolicyInfo[]> ret =
-        rpcClient.invokeConcurrent(
-            nss, method, true, false, ErasureCodingPolicyInfo[].class);
+    Map<FederationNamespaceInfo, ErasureCodingPolicyInfo[]> ret;
+    try {
+      ret = rpcClient.invokeConcurrent(nss, method, true, false, ErasureCodingPolicyInfo[].class);
+    } catch (IOException e) {
+      this.rpcServer.getClientProtocolModule().
+          logAuditEvent(false, OperationName.GET_ERASURE_CODING_POLICIES,
+              this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT);
+      throw e;
+    }
+    this.rpcServer.getClientProtocolModule().
+        logAuditEvent(true, OperationName.GET_ERASURE_CODING_POLICIES,
+            this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT);
     return merge(ret, ErasureCodingPolicyInfo.class);
   }
 
@@ -75,9 +85,15 @@ public class ErasureCoding {
     RemoteMethod method = new RemoteMethod("getErasureCodingCodecs");
     Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
     @SuppressWarnings("rawtypes")
-    Map<FederationNamespaceInfo, Map> retCodecs =
-        rpcClient.invokeConcurrent(
-            nss, method, true, false, Map.class);
+    Map<FederationNamespaceInfo, Map> retCodecs;
+    try {
+      retCodecs = rpcClient.invokeConcurrent(nss, method, true, false, Map.class);
+    } catch (IOException e) {
+      this.rpcServer.getClientProtocolModule().
+          logAuditEvent(false, OperationName.GET_ERASURE_CODING_CODECS,
+              this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT);
+      throw e;
+    }
 
     Map<String, String> ret = new HashMap<>();
     Object obj = retCodecs;
@@ -88,7 +104,9 @@ public class ErasureCoding {
     for (Map<String, String> codecs : allCodecs) {
       ret.putAll(codecs);
     }
-
+    this.rpcServer.getClientProtocolModule().
+        logAuditEvent(true, OperationName.GET_ERASURE_CODING_CODECS,
+            this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT);
     return ret;
   }
 
@@ -99,10 +117,18 @@ public class ErasureCoding {
     RemoteMethod method = new RemoteMethod("addErasureCodingPolicies",
         new Class<?>[] {ErasureCodingPolicy[].class}, new Object[] {policies});
     Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
-    Map<FederationNamespaceInfo, AddErasureCodingPolicyResponse[]> ret =
-        rpcClient.invokeConcurrent(
-            nss, method, true, false, AddErasureCodingPolicyResponse[].class);
-
+    Map<FederationNamespaceInfo, AddErasureCodingPolicyResponse[]> ret;
+    try {
+      ret = rpcClient.invokeConcurrent(nss, method, true, false, AddErasureCodingPolicyResponse[].class);
+    } catch (IOException e) {
+      this.rpcServer.getClientProtocolModule().
+          logAuditEvent(false, OperationName.ADD_ERASURE_CODING_POLICIES,
+              this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT);
+      throw e;
+    }
+    this.rpcServer.getClientProtocolModule().
+        logAuditEvent(true, OperationName.ADD_ERASURE_CODING_POLICIES,
+            this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT);
     return merge(ret, AddErasureCodingPolicyResponse.class);
   }
 
@@ -113,7 +139,17 @@ public class ErasureCoding {
     RemoteMethod method = new RemoteMethod("removeErasureCodingPolicy",
         new Class<?>[] {String.class}, ecPolicyName);
     Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
-    rpcClient.invokeConcurrent(nss, method, true, false);
+    try {
+      rpcClient.invokeConcurrent(nss, method, true, false);
+    } catch (IOException e) {
+      this.rpcServer.getClientProtocolModule().
+          logAuditEvent(false, OperationName.REMOVE_ERASURE_CODING_POLICY,
+              this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT);
+      throw e;
+    }
+    this.rpcServer.getClientProtocolModule().
+        logAuditEvent(true, OperationName.REMOVE_ERASURE_CODING_POLICY,
+            this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT);
   }
 
   public void disableErasureCodingPolicy(String ecPolicyName)
@@ -123,7 +159,17 @@ public class ErasureCoding {
     RemoteMethod method = new RemoteMethod("disableErasureCodingPolicy",
         new Class<?>[] {String.class}, ecPolicyName);
     Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
-    rpcClient.invokeConcurrent(nss, method, true, false);
+    try {
+      rpcClient.invokeConcurrent(nss, method, true, false);
+    } catch (IOException e) {
+      this.rpcServer.getClientProtocolModule().
+          logAuditEvent(false, OperationName.DISABLE_ERASURE_CODING_POLICY,
+              this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT);
+      throw e;
+    }
+    this.rpcServer.getClientProtocolModule().
+        logAuditEvent(true, OperationName.DISABLE_ERASURE_CODING_POLICY,
+            this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT);
   }
 
   public void enableErasureCodingPolicy(String ecPolicyName)
@@ -133,7 +179,17 @@ public class ErasureCoding {
     RemoteMethod method = new RemoteMethod("enableErasureCodingPolicy",
         new Class<?>[] {String.class}, ecPolicyName);
     Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
-    rpcClient.invokeConcurrent(nss, method, true, false);
+    try {
+      rpcClient.invokeConcurrent(nss, method, true, false);
+    } catch (IOException e) {
+      this.rpcServer.getClientProtocolModule().
+          logAuditEvent(false, OperationName.ENABLE_ERASURE_CODING_POLICY,
+              this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT);
+      throw e;
+    }
+    this.rpcServer.getClientProtocolModule().
+        logAuditEvent(true, OperationName.ENABLE_ERASURE_CODING_POLICY,
+            this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT);
   }
 
   public ErasureCodingPolicy getErasureCodingPolicy(String src)
@@ -144,8 +200,19 @@ public class ErasureCoding {
         rpcServer.getLocationsForPath(src, false, false);
     RemoteMethod remoteMethod = new RemoteMethod("getErasureCodingPolicy",
         new Class<?>[] {String.class}, new RemoteParam());
-    ErasureCodingPolicy ret = rpcClient.invokeSequential(
-        locations, remoteMethod, null, null);
+    ErasureCodingPolicy ret;
+    try {
+      ret = rpcClient.invokeSequential(
+          locations, remoteMethod, null, null);
+    } catch (IOException e) {
+      this.rpcServer.getClientProtocolModule().
+          logAuditEvent(false, OperationName.GET_ERASURE_CODING_POLICY,
+              this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT, src);
+      throw e;
+    }
+    this.rpcServer.getClientProtocolModule().
+        logAuditEvent(true, OperationName.GET_ERASURE_CODING_POLICY,
+            this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT, src);
     return ret;
   }
 
@@ -158,11 +225,21 @@ public class ErasureCoding {
     RemoteMethod remoteMethod = new RemoteMethod("setErasureCodingPolicy",
         new Class<?>[] {String.class, String.class},
         new RemoteParam(), ecPolicyName);
-    if (rpcServer.isInvokeConcurrent(src)) {
-      rpcClient.invokeConcurrent(locations, remoteMethod);
-    } else {
-      rpcClient.invokeSequential(locations, remoteMethod);
+    String invokeType = this.rpcServer.getClientProtocolModule().INVOKE_TYPE_SEQUENTIAL;
+    try {
+      if (rpcServer.isInvokeConcurrent(src)) {
+        invokeType = this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT;
+        rpcClient.invokeConcurrent(locations, remoteMethod);
+      } else {
+        rpcClient.invokeSequential(locations, remoteMethod);
+      }
+    } catch (IOException e) {
+      this.rpcServer.getClientProtocolModule().
+          logAuditEvent(false, OperationName.SET_ERASURE_CODING_POLICY, invokeType, src);
+      throw e;
     }
+    this.rpcServer.getClientProtocolModule().
+        logAuditEvent(true, OperationName.SET_ERASURE_CODING_POLICY, invokeType, src);
   }
 
   public void unsetErasureCodingPolicy(String src) throws IOException {
@@ -172,11 +249,21 @@ public class ErasureCoding {
         rpcServer.getLocationsForPath(src, false, false);
     RemoteMethod remoteMethod = new RemoteMethod("unsetErasureCodingPolicy",
         new Class<?>[] {String.class}, new RemoteParam());
-    if (rpcServer.isInvokeConcurrent(src)) {
-      rpcClient.invokeConcurrent(locations, remoteMethod);
-    } else {
-      rpcClient.invokeSequential(locations, remoteMethod);
+    String invokeType = this.rpcServer.getClientProtocolModule().INVOKE_TYPE_SEQUENTIAL;
+    try {
+      if (rpcServer.isInvokeConcurrent(src)) {
+        invokeType = this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT;
+        rpcClient.invokeConcurrent(locations, remoteMethod);
+      } else {
+        rpcClient.invokeSequential(locations, remoteMethod);
+      }
+    } catch (IOException e) {
+      this.rpcServer.getClientProtocolModule().
+          logAuditEvent(false, OperationName.UNSET_ERASURE_CODING_POLICY, invokeType, src);
+      throw e;
     }
+    this.rpcServer.getClientProtocolModule().
+        logAuditEvent(true, OperationName.UNSET_ERASURE_CODING_POLICY, invokeType, src);
   }
 
   public ECTopologyVerifierResult getECTopologyResultForPolicies(

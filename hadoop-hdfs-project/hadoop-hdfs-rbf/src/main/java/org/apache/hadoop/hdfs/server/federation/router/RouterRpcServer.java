@@ -26,6 +26,7 @@ import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_READER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_READER_QUEUE_SIZE_DEFAULT;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_READER_QUEUE_SIZE_KEY;
+import static org.apache.hadoop.hdfs.server.namenode.top.metrics.TopMetrics.TOPMETRICS_METRICS_SOURCE_NAME;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -34,6 +35,7 @@ import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -42,6 +44,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.crypto.CryptoProtocolVersion;
 import org.apache.hadoop.fs.BatchedRemoteIterator.BatchedEntries;
@@ -119,11 +122,15 @@ import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
 import org.apache.hadoop.hdfs.server.federation.store.StateStoreUnavailableException;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
 import org.apache.hadoop.hdfs.server.federation.router.security.RouterSecurityManager;
+import org.apache.hadoop.hdfs.server.namenode.AuditLogger;
 import org.apache.hadoop.hdfs.server.namenode.CheckpointSignature;
 import org.apache.hadoop.hdfs.server.namenode.LeaseExpiredException;
 import org.apache.hadoop.hdfs.server.namenode.NameNode.OperationCategory;
 import org.apache.hadoop.hdfs.server.namenode.NotReplicatedYetException;
 import org.apache.hadoop.hdfs.server.namenode.SafeModeException;
+import org.apache.hadoop.hdfs.server.namenode.top.TopAuditLogger;
+import org.apache.hadoop.hdfs.server.namenode.top.TopConf;
+import org.apache.hadoop.hdfs.server.namenode.top.metrics.TopMetrics;
 import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeCommand;
@@ -139,6 +146,7 @@ import org.apache.hadoop.ipc.RPC.Server;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.RetriableException;
 import org.apache.hadoop.ipc.StandbyException;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.net.NodeBase;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.RefreshUserMappingsProtocol;
@@ -170,7 +178,7 @@ import org.apache.hadoop.thirdparty.protobuf.BlockingService;
 public class RouterRpcServer extends AbstractService implements ClientProtocol,
     NamenodeProtocol, RefreshUserMappingsProtocol, GetUserMappingsProtocol {
 
-  private static final Logger LOG =
+  public static final Logger LOG =
       LoggerFactory.getLogger(RouterRpcServer.class);
 
 
@@ -218,6 +226,8 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
   /** Super user credentials that a thread may use. */
   private static final ThreadLocal<UserGroupInformation> CUR_USER =
       new ThreadLocal<>();
+
+  private final List<AuditLogger> auditLoggers;
 
   /**
    * Construct a router RPC server.
@@ -351,6 +361,8 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
     } else {
       this.rpcMonitor = null;
     }
+
+    this.auditLoggers = initAuditLoggers(this.conf);
 
     // Create the client
     this.rpcClient = new RouterRpcClient(this.conf, this.router,
@@ -1682,6 +1694,59 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
    */
   public FederationRPCMetrics getRPCMetrics() {
     return this.rpcMonitor.getRPCMetrics();
+  }
+
+  public List<AuditLogger> getAuditLogger() {
+    return this.auditLoggers;
+  }
+
+  private List<AuditLogger> initAuditLoggers(Configuration conf) {
+    boolean enableAudit = conf.getBoolean(RBFConfigKeys.DFS_ROUTER_ENABLE_AUDIT_LOG_KEY,
+        RBFConfigKeys.DFS_ROUTER_ENABLE_AUDIT_LOG_DEFAULT);
+    if (!enableAudit) {
+      return new ArrayList<>();
+    }
+
+    // Initialize the custom access loggers if configured.
+    Collection<String> alClasses = conf.getTrimmedStringCollection(
+        RBFConfigKeys.DFS_ROUTER_AUDIT_LOGGERS_KEY);
+    List<AuditLogger> auditLoggers = Lists.newArrayList();
+    if (alClasses != null && !alClasses.isEmpty()) {
+      for (String className : alClasses) {
+        try {
+          AuditLogger logger;
+          if (RBFConfigKeys.DFS_ROUTER_DEFAULT_AUDIT_LOGGER_NAME.equals(className)) {
+            logger = new RouterRpcServerAuditLogger();
+          } else {
+            logger = (AuditLogger) Class.forName(className).newInstance();
+          }
+          logger.initialize(conf);
+          auditLoggers.add(logger);
+        } catch (RuntimeException re) {
+          throw re;
+        } catch (Exception e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
+
+    // Make sure there is at least one logger installed.
+    if (auditLoggers.isEmpty()) {
+      auditLoggers.add(new RouterRpcServerAuditLogger());
+    }
+
+    // Add audit logger to calculate top users
+    TopConf topConf = new TopConf(conf);
+    if (topConf.isEnabled) {
+      TopMetrics topMetrics = new TopMetrics(conf, topConf.nntopReportingPeriodsMs);
+      if (DefaultMetricsSystem.instance().getSource(TOPMETRICS_METRICS_SOURCE_NAME) == null) {
+        DefaultMetricsSystem.instance().register(TOPMETRICS_METRICS_SOURCE_NAME,
+            "Top N operations by user", topMetrics);
+      }
+      auditLoggers.add(new TopAuditLogger(topMetrics));
+    }
+
+    return Collections.unmodifiableList(auditLoggers);
   }
 
   /**
