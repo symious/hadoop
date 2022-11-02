@@ -131,6 +131,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MSYNC_RPC_BIND_HOST_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_LEASE_HARDLIMIT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_LEASE_HARDLIMIT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_DELETION_INCREMENT_DEFAULT;
@@ -304,6 +306,8 @@ public class NameNode extends ReconfigurableBase implements
   public static final String[] NAMENODE_SPECIFIC_KEYS = {
     DFS_NAMENODE_RPC_ADDRESS_KEY,
     DFS_NAMENODE_RPC_BIND_HOST_KEY,
+    DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY,
+    DFS_NAMENODE_MSYNC_RPC_BIND_HOST_KEY,
     DFS_NAMENODE_NAME_DIR_KEY,
     DFS_NAMENODE_EDITS_DIR_KEY,
     DFS_NAMENODE_SHARED_EDITS_DIR_KEY,
@@ -600,6 +604,21 @@ public class NameNode extends ReconfigurableBase implements
   }
 
   /**
+   * Given a configuration get the address of the msync RPC server.
+   * If the msync RPC is not configured returns null.
+   *
+   * @param conf configuration
+   * @return address or null
+   */
+  InetSocketAddress getMsyncRpcServerAddress(Configuration conf) {
+    String addr = getTrimmedOrNull(conf, DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY);
+    if (addr == null) {
+      return null;
+    }
+    return NetUtils.createSocketAddr(addr);
+  }
+
+  /**
    * Given a configuration get the address of the service rpc server
    * If the service rpc is not configured returns null
    */
@@ -620,6 +639,17 @@ public class NameNode extends ReconfigurableBase implements
    */
   String getLifelineRpcServerBindHost(Configuration conf) {
     return getTrimmedOrNull(conf, DFS_NAMENODE_LIFELINE_RPC_BIND_HOST_KEY);
+  }
+
+  /**
+   * Given a configuration get the bind host of the msync RPC server.
+   * If the bind host is not configured returns null.
+   *
+   * @param conf configuration
+   * @return bind host or null
+   */
+  String getMsyncRpcServerBindHost(Configuration conf) {
+    return getTrimmedOrNull(conf, DFS_NAMENODE_MSYNC_RPC_BIND_HOST_KEY);
   }
 
   /** Given a configuration get the bind host of the service rpc server
@@ -662,6 +692,19 @@ public class NameNode extends ReconfigurableBase implements
     LOG.info("Setting lifeline RPC address {}", lifelineRPCAddress);
     conf.set(DFS_NAMENODE_LIFELINE_RPC_ADDRESS_KEY,
         NetUtils.getHostPortString(lifelineRPCAddress));
+  }
+
+  /**
+   * Modifies the configuration to contain the msync RPC address setting.
+   *
+   * @param conf configuration to modify
+   * @param msyncRPCAddress msync RPC address
+   */
+  void setRpcMsyncServerAddress(Configuration conf,
+                                InetSocketAddress msyncRPCAddress) {
+    LOG.info("Setting msync RPC address {}", msyncRPCAddress);
+    conf.set(DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY,
+        NetUtils.getHostPortString(msyncRPCAddress));
   }
 
   /**
@@ -1167,6 +1210,12 @@ public class NameNode extends ReconfigurableBase implements
    */
   public InetSocketAddress getNameNodeAddress() {
     return rpcServer.getRpcAddress();
+  }
+
+  @VisibleForTesting
+  public InetSocketAddress getNameNodeMSyncAddress() {
+    final InetSocketAddress serviceAddr = rpcServer.getMsyncRPCAddress();
+    return serviceAddr == null ? getNameNodeAddress() : serviceAddr;
   }
 
   /**

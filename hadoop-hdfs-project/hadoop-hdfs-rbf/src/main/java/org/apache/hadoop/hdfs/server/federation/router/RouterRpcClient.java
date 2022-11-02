@@ -59,6 +59,7 @@ import java.util.regex.Pattern;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.NameNodeProxiesClient.ProxyAndInfo;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
+import org.apache.hadoop.hdfs.protocol.ClientMsyncProtocol;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.SnapshotException;
@@ -129,7 +130,9 @@ public class RouterRpcClient {
 
   private long autoMsyncPeriodMs;
 
-  private Map<String, AtomicLong> lastMsyncTimes;
+  private final boolean isNewMsyncServerEnabled;
+
+  private final Map<String, AtomicLong> lastMsyncTimes;
 
   private final boolean addProxyHostname;
 
@@ -201,7 +204,17 @@ public class RouterRpcClient {
           RBFConfigKeys.DFS_ROUTER_OBSERVER_AUTO_MSYNC_PERIOD,
           RBFConfigKeys.DFS_ROUTER_OBSERVER_AUTO_MSYNC_PERIOD_DEFAULT);
       this.lastMsyncTimes = new HashMap<>();
+    } else {
+      this.lastMsyncTimes = null;
     }
+    this.isNewMsyncServerEnabled = conf.getBoolean(
+        RBFConfigKeys.DSF_ROUTER_OBSERVER_ENABLE_NEW_MSYNC_SERVER_KEY,
+        RBFConfigKeys.DSF_ROUTER_OBSERVER_ENABLE_NEW_MSYNC_SERVER_DEFAULT);
+  }
+
+  @VisibleForTesting
+  public ConnectionManager getConnectionManager() {
+    return this.connectionManager;
   }
 
   /**
@@ -448,17 +461,21 @@ public class RouterRpcClient {
       }
       ConnectionContext connection = null;
       String nsId = namenode.getNameserviceId();
-      String rpcAddress = namenode.getRpcAddress();
+      String address = null;
       try {
-        connection = this.getConnection(ugi, nsId, rpcAddress, protocol);
+        if (protocol == ClientMsyncProtocol.class) {
+          address = namenode.getMsyncAddress();
+        } else {
+          address = namenode.getRpcAddress();
+        }
+        connection = this.getConnection(ugi, nsId, address, protocol);
         ProxyAndInfo<?> client = connection.getClient();
         final Object proxy = client.getProxy();
 
         ret = invoke(nsId, 0, method, proxy, params);
-        if (failover) {
+        if (failover && protocol == ClientProtocol.class) {
           // Success on alternate server, update
-          InetSocketAddress address = client.getAddress();
-          namenodeResolver.updateActiveNamenode(nsId, address);
+          namenodeResolver.updateActiveNamenode(nsId, client.getAddress());
         }
         if (this.rpcMonitor != null) {
           this.rpcMonitor.proxyOpComplete(true);
@@ -504,7 +521,7 @@ public class RouterRpcClient {
           if (this.rpcMonitor != null) {
             this.rpcMonitor.proxyOpFailureCommunicate();
           }
-          LOG.error("Get connection for {} {} error: {}", nsId, rpcAddress,
+          LOG.error("Get connection for {} {} error: {}", nsId, address,
               ioe.getMessage());
           // Throw StandbyException so that client can retry
           StandbyException se = new StandbyException(ioe.getMessage());
@@ -515,7 +532,7 @@ public class RouterRpcClient {
             this.rpcMonitor.proxyOpNoNamenodes();
           }
           LOG.error("Cannot get available namenode for {} {} error: {}",
-              nsId, rpcAddress, ioe.getMessage());
+              nsId, address, ioe.getMessage());
           // Throw RetriableException so that client can retry
           throw new RetriableException(ioe);
         } else {
@@ -525,6 +542,8 @@ public class RouterRpcClient {
             this.rpcMonitor.proxyOpFailureCommunicate();
             this.rpcMonitor.proxyOpComplete(false);
           }
+          LOG.debug("Failed invokeMethod for {} with proto {} and method {}.",
+              nsId, protocol, method.getName(), ioe);
           throw ioe;
         }
       } finally {
@@ -1430,29 +1449,61 @@ public class RouterRpcClient {
   private void msync(String ns, UserGroupInformation ugi, Method m)
       throws IOException {
     if (observerReadEnabled && isRead(m)) {
-      final List<? extends FederationNamenodeContext> namenodes =
-          getNamenodesForNameservice(ns, false);
+      boolean needMSync = (autoMsyncPeriodMs == 0)
+          || !lastMsyncTimes.containsKey(ns)
+          || (Time.monotonicNow() - lastMsyncTimes.get(ns).get() > autoMsyncPeriodMs)
+          || needSyncForwardThisRequest();
+      if (needMSync) {
+        long beginTime = Time.monotonicNow();
+        internalMsync(ugi, ns);
+        long syncedTime = Time.monotonicNow();
+        if (rpcMonitor != null) {
+          rpcMonitor.getRPCMetrics().addProxyMsync(syncedTime - beginTime);
+        }
+        if (lastMsyncTimes.get(ns) == null) {
+          synchronized (lastMsyncTimes) {
+            if (lastMsyncTimes.get(ns) == null) {
+              lastMsyncTimes.put(ns, new AtomicLong(syncedTime));
+            }
+          }
+        }
+        lastMsyncTimes.get(ns).set(syncedTime);
+      }
+    }
+  }
+
+  @VisibleForTesting
+  public boolean internalMsyncWithNewServer(final UserGroupInformation ugi,
+      final List<? extends FederationNamenodeContext> namenodes) {
+    try {
+      Method mSyncMethod = ClientMsyncProtocol.class.getDeclaredMethod("msync");
+      invokeMethod(ugi, namenodes, ClientMsyncProtocol.class, mSyncMethod);
+      return true;
+    } catch (Throwable e) {
+      LOG.warn("Msync with new Server failed, and will fallback to the old server.", e);
+    }
+    return false;
+  }
+
+  /**
+   * Try to msync with the new msync rpc server. If failed, it will fall back to the old rpc server.
+   */
+  @VisibleForTesting
+  public void internalMsync(UserGroupInformation ugi, String ns) throws IOException {
+    final List<? extends FederationNamenodeContext> namenodes =
+        getNamenodesForNameservice(ns, false);
+    boolean msynced = false;
+    if (isNewMsyncServerEnabled) {
+      msynced = internalMsyncWithNewServer(ugi, namenodes);
+    }
+    if (!msynced) {
       Method mSyncMethod;
       try {
         mSyncMethod = ClientProtocol.class.getDeclaredMethod("msync");
       } catch (NoSuchMethodException | SecurityException e) {
         throw new IOException("Failed to create msync method instance", e);
       }
-      if (!lastMsyncTimes.containsKey(ns)) {
-        // initialize
-        synchronized (lastMsyncTimes) {
-          if (!lastMsyncTimes.containsKey(ns)) {
-            invokeMethod(ugi, namenodes, ClientProtocol.class, mSyncMethod);
-            lastMsyncTimes.put(ns, new AtomicLong(Time.monotonicNow()));
-          }
-        }
-      } else if (autoMsyncPeriodMs == 0) {
-        invokeMethod(ugi, namenodes, ClientProtocol.class, mSyncMethod);
-      } else if (Time.monotonicNow() - lastMsyncTimes.get(ns).get() > autoMsyncPeriodMs
-          || needSyncForwardThisRequest()) {
-        invokeMethod(ugi, namenodes, ClientProtocol.class, mSyncMethod);
-        lastMsyncTimes.get(ns).set(Time.monotonicNow());
-      }
+      invokeMethod(ugi, namenodes, ClientProtocol.class, mSyncMethod);
     }
   }
 
@@ -1465,7 +1516,8 @@ public class RouterRpcClient {
    * @return A prioritized list of NNs to use for communication.
    * @throws IOException If a NN cannot be located for the nameservice ID.
    */
-  private List<? extends FederationNamenodeContext> getNamenodesForNameservice(
+  @VisibleForTesting
+  public List<? extends FederationNamenodeContext> getNamenodesForNameservice(
       final String nsId, final boolean observerRead) throws IOException {
 
     final List<? extends FederationNamenodeContext> namenodes =

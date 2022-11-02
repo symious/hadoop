@@ -181,6 +181,10 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
       + "observer.auto-msync-period";
   public static final long DFS_ROUTER_OBSERVER_AUTO_MSYNC_PERIOD_DEFAULT = -1;
 
+  public static final String DSF_ROUTER_OBSERVER_ENABLE_NEW_MSYNC_SERVER_KEY =
+      FEDERATION_ROUTER_PREFIX + "observer.enable.new.msync.server";
+  public static final boolean DSF_ROUTER_OBSERVER_ENABLE_NEW_MSYNC_SERVER_DEFAULT = false;
+
   public static final String FEDERATION_STORE_SERIALIZER_CLASS =
       FEDERATION_STORE_PREFIX + "serializer";
   public static final Class<StateStoreSerializerPBImpl>

@@ -76,6 +76,9 @@ public class FederationRPCMetrics implements FederationRPCMBean {
   @Metric("Failed requests due to safe mode")
   private MutableCounterLong routerFailureSafemode;
 
+  @Metric("Time for the router to msync")
+  private MutableRate proxyMsync;
+
   public FederationRPCMetrics(Configuration conf, RouterRpcServer rpcServer) {
     this.rpcServer = rpcServer;
 
@@ -101,6 +104,10 @@ public class FederationRPCMetrics implements FederationRPCMBean {
 
   public void incrProxyOpFailureStandby() {
     proxyOpFailureStandby.incr();
+  }
+
+  public void addProxyMsync(long timeDuration) {
+    this.proxyMsync.add(timeDuration);
   }
 
   @Override

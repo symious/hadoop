@@ -69,6 +69,7 @@ message NamenodeMembershipRecordProto {
 
   optional NamenodeMembershipStatsRecordProto stats = 15;
   optional string webScheme = 16;
+  optional string msyncAddress= 100;
 }
 
 message FederationNamespaceInfoProto {

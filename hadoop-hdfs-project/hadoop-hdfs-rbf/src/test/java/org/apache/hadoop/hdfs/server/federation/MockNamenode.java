@@ -588,7 +588,7 @@ public class MockNamenode {
         String scheme = "http";
         NamenodeStatusReport report = new NamenodeStatusReport(
             nsId, null, rpcAddress, rpcAddress,
-            rpcAddress, scheme, httpAddress);
+            rpcAddress, rpcAddress, scheme, httpAddress);
         if (unavailableSubclusters.contains(nsId)) {
           LOG.info("Register {} as UNAVAILABLE", nsId);
           report.setRegistrationValid(false);

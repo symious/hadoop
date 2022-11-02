@@ -386,7 +386,7 @@ public class DFSUtilClient {
   }
 
   /** Concatenate list of suffix strings '.' separated */
-  static String concatSuffixes(String... suffixes) {
+  public static String concatSuffixes(String... suffixes) {
     if (suffixes == null) {
       return null;
     }

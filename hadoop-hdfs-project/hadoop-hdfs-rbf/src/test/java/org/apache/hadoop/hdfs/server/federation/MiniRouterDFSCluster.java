@@ -89,6 +89,8 @@ import org.apache.hadoop.hdfs.server.federation.resolver.FileSubclusterResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.NamenodeStatusReport;
 import org.apache.hadoop.hdfs.server.federation.router.Router;
 import org.apache.hadoop.hdfs.server.federation.router.RouterClient;
+import org.apache.hadoop.hdfs.server.federation.router.RouterRpcClient;
+import org.apache.hadoop.hdfs.server.federation.router.RouterRpcServer;
 import org.apache.hadoop.hdfs.server.namenode.FSImage;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider;
@@ -271,6 +273,10 @@ public class MiniRouterDFSCluster {
     public Configuration getConf() {
       return conf;
     }
+
+    public RouterRpcClient getRouterRpcClient() {
+      return router.getRpcServer().getRPCClient();
+    }
   }
 
   /**
@@ -285,6 +291,7 @@ public class MiniRouterDFSCluster {
     private int rpcPort;
     private int servicePort;
     private int lifelinePort;
+    private int msyncPort;
     private int httpPort;
     private int httpsPort;
     private URI fileSystemUri;
@@ -322,6 +329,7 @@ public class MiniRouterDFSCluster {
       this.rpcPort = nn.getNameNodeAddress().getPort();
       this.servicePort = nn.getServiceRpcAddress().getPort();
       this.lifelinePort = nn.getServiceRpcAddress().getPort();
+      this.msyncPort = nn.getNameNodeMSyncAddress().getPort();
       if (nn.getHttpAddress() != null) {
         this.httpPort = nn.getHttpAddress().getPort();
       }
@@ -356,6 +364,10 @@ public class MiniRouterDFSCluster {
         return getHttpsAddress();
       }
       return getHttpAddress();
+    }
+
+    public String getMsyncAddress() {
+      return namenode.getNameNodeMSyncAddress().getHostName() + ":" + msyncPort;
     }
 
     public String getHttpAddress() {
@@ -898,7 +910,8 @@ public class MiniRouterDFSCluster {
         NamenodeStatusReport report = new NamenodeStatusReport(
             nn.nameserviceId, nn.namenodeId,
             nn.getRpcAddress(), nn.getServiceAddress(),
-            nn.getLifelineAddress(), "http", nn.getWebAddress());
+            nn.getLifelineAddress(), nn.getMsyncAddress(),
+            "http", nn.getWebAddress());
         FSImage fsImage = nn.namenode.getNamesystem().getFSImage();
         NamespaceInfo nsInfo = fsImage.getStorage().getNamespaceInfo();
         report.setNamespaceInfo(nsInfo);

@@ -130,6 +130,16 @@ public class MembershipStatePBImpl extends MembershipState implements PBRecord {
   }
 
   @Override
+  public void setMsyncAddress(String msyncAddress) {
+    Builder builder = this.translator.getBuilder();
+    if (msyncAddress == null) {
+      builder.clearMsyncAddress();
+    } else {
+      builder.setMsyncAddress(msyncAddress);
+    }
+  }
+
+  @Override
   public void setIsSafeMode(boolean isSafeMode) {
     Builder builder = this.translator.getBuilder();
     builder.setIsSafeMode(isSafeMode);
@@ -263,6 +273,16 @@ public class MembershipStatePBImpl extends MembershipState implements PBRecord {
       return null;
     }
     return this.translator.getProtoOrBuilder().getLifelineAddress();
+  }
+
+  @Override
+  public String getMsyncAddress() {
+    NamenodeMembershipRecordProtoOrBuilder proto =
+        this.translator.getProtoOrBuilder();
+    if (!proto.hasMsyncAddress()) {
+      return null;
+    }
+    return this.translator.getProtoOrBuilder().getMsyncAddress();
   }
 
   @Override

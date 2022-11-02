@@ -39,8 +39,11 @@ import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.NameNodeProxiesClient.ProxyAndInfo;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
+import org.apache.hadoop.hdfs.protocol.ClientMsyncProtocol;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.hdfs.protocolPB.ClientNamenodeMsyncProtocolPB;
+import org.apache.hadoop.hdfs.protocolPB.ClientNamenodeMsyncProtocolTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.ClientNamenodeProtocolPB;
 import org.apache.hadoop.hdfs.protocolPB.ClientNamenodeProtocolTranslatorPB;
 import org.apache.hadoop.hdfs.protocolPB.NamenodeProtocolPB;
@@ -118,6 +121,9 @@ public class ConnectionPool {
     PROTO_MAP.put(ClientProtocol.class,
         new ProtoImpl(ClientNamenodeProtocolPB.class,
             ClientNamenodeProtocolTranslatorPB.class));
+    PROTO_MAP.put(ClientMsyncProtocol.class,
+        new ProtoImpl(ClientNamenodeMsyncProtocolPB.class,
+            ClientNamenodeMsyncProtocolTranslatorPB.class));
     PROTO_MAP.put(NamenodeProtocol.class, new ProtoImpl(
         NamenodeProtocolPB.class, NamenodeProtocolTranslatorPB.class));
     PROTO_MAP.put(RefreshUserMappingsProtocol.class,

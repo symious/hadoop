@@ -292,6 +292,7 @@ public class MembershipNamenodeResolver
         report.getServiceAddress(), report.getLifelineAddress(),
         report.getWebScheme(), report.getWebAddress(), report.getState(),
         report.getSafemode());
+    record.setMsyncAddress(record.getMsyncAddress());
 
     if (report.statsValid()) {
       MembershipStats stats = MembershipStats.newInstance();

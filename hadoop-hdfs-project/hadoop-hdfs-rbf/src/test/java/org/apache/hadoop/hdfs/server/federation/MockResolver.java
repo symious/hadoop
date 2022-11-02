@@ -190,16 +190,18 @@ public class MockResolver
     private String rpcAddress;
     private String serviceAddress;
     private String lifelineAddress;
+    private String msyncAddress;
 
     private FederationNamenodeServiceState state;
     private long dateModified;
 
     MockNamenodeContext(
-        String rpc, String service, String lifeline, String scheme, String web,
+        String rpc, String service, String lifeline, String msyncAddress, String scheme, String web,
         String ns, String nn, FederationNamenodeServiceState state) {
       this.rpcAddress = rpc;
       this.serviceAddress = service;
       this.lifelineAddress = lifeline;
+      this.msyncAddress = msyncAddress;
       this.webScheme = scheme;
       this.webAddress = web;
       this.namenodeId = nn;
@@ -226,6 +228,11 @@ public class MockResolver
     @Override
     public String getLifelineAddress() {
       return lifelineAddress;
+    }
+
+    @Override
+    public String getMsyncAddress() {
+      return msyncAddress;
     }
 
     @Override
@@ -273,9 +280,9 @@ public class MockResolver
 
     MockNamenodeContext context = new MockNamenodeContext(
         report.getRpcAddress(), report.getServiceAddress(),
-        report.getLifelineAddress(), report.getWebScheme(),
-        report.getWebAddress(), report.getNameserviceId(),
-        report.getNamenodeId(), report.getState());
+        report.getLifelineAddress(), report.getMsyncAddress(),
+        report.getWebScheme(), report.getWebAddress(),
+        report.getNameserviceId(), report.getNamenodeId(), report.getState());
 
     String nsId = report.getNameserviceId();
     String bpId = report.getBlockPoolId();
