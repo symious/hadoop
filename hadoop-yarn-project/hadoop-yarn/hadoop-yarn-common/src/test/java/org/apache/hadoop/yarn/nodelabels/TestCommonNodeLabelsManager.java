@@ -18,8 +18,6 @@
 
 package org.apache.hadoop.yarn.nodelabels;
 
-import static org.junit.Assert.assertTrue;
-
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
@@ -421,9 +419,10 @@ public class TestCommonNodeLabelsManager extends NodeLabelTestBase {
     assertLabelsToNodesEquals(
         labelsToNodes,
         ImmutableMap.of(
-        "p1", toSet(toNodeId("n1"))));
-    assertLabelsToNodesEquals(
-        labelsToNodes, transposeNodeToLabels(mgr.getNodeLabels()));
+            "p1", toSet(toNodeId("n1")),
+            "p2", new HashSet<>(),
+            "p3", new HashSet<>()
+        ));
 
     // Replace labels on n1:1 to P2
     mgr.replaceLabelsOnNode(ImmutableMap.of(toNodeId("n1:1"), toSet("p2"),
@@ -432,10 +431,10 @@ public class TestCommonNodeLabelsManager extends NodeLabelTestBase {
     assertLabelsToNodesEquals(
         labelsToNodes,
         ImmutableMap.of(
-        "p1", toSet(toNodeId("n1")),
-        "p2", toSet(toNodeId("n1:1"),toNodeId("n1:2"))));
-    assertLabelsToNodesEquals(
-        labelsToNodes, transposeNodeToLabels(mgr.getNodeLabels()));
+            "p1", toSet(toNodeId("n1")),
+            "p2", toSet(toNodeId("n1:1"), toNodeId("n1:2")),
+            "p3", new HashSet<>()
+        ));
 
     // Replace labels on n1 to P1, both n1:1/n1 will be P1 now
     mgr.replaceLabelsOnNode(ImmutableMap.of(toNodeId("n1"), toSet("p1")));
@@ -443,9 +442,10 @@ public class TestCommonNodeLabelsManager extends NodeLabelTestBase {
     assertLabelsToNodesEquals(
         labelsToNodes,
         ImmutableMap.of(
-        "p1", toSet(toNodeId("n1"),toNodeId("n1:1"),toNodeId("n1:2"))));
-    assertLabelsToNodesEquals(
-        labelsToNodes, transposeNodeToLabels(mgr.getNodeLabels()));
+            "p1", toSet(toNodeId("n1"), toNodeId("n1:1"), toNodeId("n1:2")),
+            "p2", new HashSet<>(),
+            "p3", new HashSet<>()
+        ));
 
     // Set labels on n1:1 to P2 again to verify if add/remove works
     mgr.replaceLabelsOnNode(ImmutableMap.of(toNodeId("n1:1"), toSet("p2")));
@@ -467,10 +467,10 @@ public class TestCommonNodeLabelsManager extends NodeLabelTestBase {
     assertLabelsToNodesEquals(
         labelsToNodes,
         ImmutableMap.of(
-        "p1", toSet(toNodeId("n1"),toNodeId("n1:2")),
-        "p2", toSet(toNodeId("n1:1"))));
-    assertLabelsToNodesEquals(
-        labelsToNodes, transposeNodeToLabels(mgr.getNodeLabels()));
+            "p1", toSet(toNodeId("n1"), toNodeId("n1:2")),
+            "p2", toSet(toNodeId("n1:1")),
+            "p3", new HashSet<>()
+        ));
   }
 
   @Test(timeout = 5000)
@@ -488,12 +488,15 @@ public class TestCommonNodeLabelsManager extends NodeLabelTestBase {
 
     // Replace labels on n1:1 to P3
     mgr.replaceLabelsOnNode(ImmutableMap.of(toNodeId("n1"), toSet("p3")));
-    assertTrue(mgr.getLabelsToNodes(setlabels).isEmpty());
+    assertLabelsToNodesEquals(mgr.getLabelsToNodes(setlabels), ImmutableMap.of("p1", new HashSet<>()));
+
     setlabels = new HashSet<String>(Arrays.asList(new String[]{"p2", "p3"}));
     assertLabelsToNodesEquals(
         mgr.getLabelsToNodes(setlabels),
         ImmutableMap.of(
-        "p3", toSet(toNodeId("n1"), toNodeId("n1:1"),toNodeId("n1:2"))));
+            "p2", new HashSet<>(),
+            "p3", toSet(toNodeId("n1"), toNodeId("n1:1"), toNodeId("n1:2"))
+        ));
 
     mgr.addLabelsToNode(ImmutableMap.of(toNodeId("n2"), toSet("p2")));
     assertLabelsToNodesEquals(
@@ -508,14 +511,19 @@ public class TestCommonNodeLabelsManager extends NodeLabelTestBase {
     assertLabelsToNodesEquals(
         mgr.getLabelsToNodes(setlabels),
         ImmutableMap.of(
-        "p2", toSet(toNodeId("n2"))));
+            "p1", new HashSet<>(),
+            "p2", toSet(toNodeId("n2")),
+            "p3", new HashSet<>()
+        ));
 
     mgr.addLabelsToNode(ImmutableMap.of(toNodeId("n3"), toSet("p1")));
     assertLabelsToNodesEquals(
         mgr.getLabelsToNodes(setlabels),
         ImmutableMap.of(
-        "p1", toSet(toNodeId("n3")),
-        "p2", toSet(toNodeId("n2"))));
+            "p1", toSet(toNodeId("n3")),
+            "p2", toSet(toNodeId("n2")),
+            "p3", new HashSet<>()
+        ));
 
     mgr.replaceLabelsOnNode(ImmutableMap.of(toNodeId("n2:2"), toSet("p3")));
     assertLabelsToNodesEquals(
@@ -601,8 +609,12 @@ public class TestCommonNodeLabelsManager extends NodeLabelTestBase {
         NodeLabel.newInstance("p2", true), NodeLabel.newInstance("p3", true)));
     mgr.addLabelsToNode(ImmutableMap.of(toNodeId("n1"), toSet("p1")));
     Map<NodeLabel, Set<NodeId>> labelsToNodes = mgr.getLabelsInfoToNodes();
-    assertLabelsInfoToNodesEquals(labelsToNodes, ImmutableMap.of(
-        NodeLabel.newInstance("p1", false), toSet(toNodeId("n1"))));
+    assertLabelsInfoToNodesEquals(labelsToNodes,
+        ImmutableMap.of(
+            NodeLabel.newInstance("p1", false), toSet(toNodeId("n1")),
+            NodeLabel.newInstance("p2", true), new HashSet<>(),
+            NodeLabel.newInstance("p3", true), new HashSet<>()
+    ));
   }
 
   @Test(timeout = 5000)
@@ -621,6 +633,7 @@ public class TestCommonNodeLabelsManager extends NodeLabelTestBase {
   public void testRemoveNodeLabelsInfo() throws IOException {
     mgr.addToCluserNodeLabels(Arrays.asList(NodeLabel.newInstance("p1", true)));
     mgr.addToCluserNodeLabels(Arrays.asList(NodeLabel.newInstance("p2", true)));
+
     mgr.addLabelsToNode(ImmutableMap.of(toNodeId("n1:1"), toSet("p1")));
     mgr.replaceLabelsOnNode(ImmutableMap.of(toNodeId("n1"), toSet("p2")));
 
@@ -628,10 +641,12 @@ public class TestCommonNodeLabelsManager extends NodeLabelTestBase {
     assertLabelsToNodesEquals(
         labelsToNodes,
         ImmutableMap.of(
-        "p2", toSet(toNodeId("n1:1"), toNodeId("n1:0"))));
+            "p1", new HashSet<>(),
+            "p2", toSet(toNodeId("n1:0"), toNodeId("n1:1"))
+        ));
 
     mgr.replaceLabelsOnNode(ImmutableMap.of(toNodeId("n1"), new HashSet()));
     Map<String, Set<NodeId>> labelsToNodes2 = mgr.getLabelsToNodes();
-    Assert.assertEquals(labelsToNodes2.get("p2"), null);
+    Assert.assertEquals(labelsToNodes2.get("p2"), new HashSet<>());
   }
 }

@@ -960,12 +960,10 @@ public class CommonNodeLabelsManager extends AbstractService {
       RMNodeLabel nodeLabelInfo = labelCollections.get(label);
       if (nodeLabelInfo != null) {
         Set<NodeId> nodeIds = nodeLabelInfo.getAssociatedNodeIds();
-        if (!nodeIds.isEmpty()) {
-          if (type.isAssignableFrom(String.class)) {
-            labelsToNodes.put(type.cast(label), nodeIds);
-          } else {
-            labelsToNodes.put(type.cast(nodeLabelInfo.getNodeLabel()), nodeIds);
-          }
+        if (type.isAssignableFrom(String.class)) {
+          labelsToNodes.put(type.cast(label), nodeIds);
+        } else {
+          labelsToNodes.put(type.cast(nodeLabelInfo.getNodeLabel()), nodeIds);
         }
       } else {
         LOG.warn("getLabelsToNodes : Label [" + label + "] cannot be found");

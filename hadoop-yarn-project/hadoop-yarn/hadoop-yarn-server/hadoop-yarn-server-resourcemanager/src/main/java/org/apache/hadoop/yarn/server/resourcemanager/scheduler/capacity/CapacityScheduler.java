@@ -2133,13 +2133,71 @@ public class CapacityScheduler extends
         FiCaSchedulerNode node = nodeTracker.getNode(id);
 
         if (node != null) {
-          // Update old partition to list.
-          updateLabels.add(node.getPartition());
+          String oldLabel = node.getPartition();
+          Set<String> newLabels = new HashSet<>();
+          for (String label : labels) {
+            if (StringUtils.isNotBlank(label)) {
+              newLabels.add(label);
+              updateLabels.add(label);
+            }
+          }
+
+          if (StringUtils.isNotBlank(oldLabel)) {
+            updateLabels.add(oldLabel);
+          }
+
+          // eg: ('node1', '') -> ('node1', 'partition_x')
+          // delete node from old default label: ''
+          if(oldLabel.isEmpty() && !newLabels.isEmpty()) {
+            long startTime = System.nanoTime();
+            List<FiCaSchedulerNode> nodesOldDefaultPartition =
+                nodeTracker.getNodesPerPartition(RMNodeLabelsManager.NO_LABEL);
+            Set<NodeId> nodesNewDefaultPartition = new HashSet<>();
+            for (FiCaSchedulerNode sn : nodesOldDefaultPartition) {
+              if (sn.getNodeID() != node.getNodeID()) {
+                nodesNewDefaultPartition.add(sn.getNodeID());
+              }
+            }
+            nodeTracker.updateNodesPerPartition(RMNodeLabelsManager.NO_LABEL,
+                nodesNewDefaultPartition);
+            long endTime = System.nanoTime();
+            LOG.info("Delete node: " + node.getNodeID() + " from default label"
+                + ", cost time: " + (endTime - startTime) / 1000 + " us!");
+          }
+
+          // eg: ('node1', 'partition_y') -> ('node1', '')
+          // add node to new default label: ''
+          if (!oldLabel.isEmpty() && newLabels.isEmpty()) {
+            long startTime = System.nanoTime();
+            List<FiCaSchedulerNode> nodesOldDefaultPartition =
+                nodeTracker.getNodesPerPartition(RMNodeLabelsManager.NO_LABEL);
+            Set<NodeId> nodesNewDefaultPartition = new HashSet<>();
+            for (FiCaSchedulerNode sn : nodesOldDefaultPartition) {
+              nodesNewDefaultPartition.add(sn.getNodeID());
+            }
+            nodesNewDefaultPartition.add(node.getNodeID());
+            nodeTracker.updateNodesPerPartition(RMNodeLabelsManager.NO_LABEL,
+                nodesNewDefaultPartition);
+            long endTime = System.nanoTime();
+            LOG.info(
+                "Add node: " + node.getNodeID() + " to default label, " +
+                    "cost time: " + (endTime - startTime) / 1000 + " us!");
+          }
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("updateNodeId: " + id + " ,oldLabel: " + oldLabel +
+                " ,newLabels: " + newLabels);
+          }
+          updateLabelsOnNode(id, labels);
         }
-        updateLabelsOnNode(id, labels);
-        updateLabels.addAll(labels);
       }
-      refreshLabelToNodeCache(updateLabels);
+
+      if (updateLabels.size() > 0) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("update for non-default labels: " + updateLabels);
+        }
+        refreshLabelToNodeCache(updateLabels);
+      }
+
       if (!labelUpdateEvent.isFromAddNode()) {
         Resource clusterResource = getClusterResource();
         getRootQueue().updateClusterResource(clusterResource,
