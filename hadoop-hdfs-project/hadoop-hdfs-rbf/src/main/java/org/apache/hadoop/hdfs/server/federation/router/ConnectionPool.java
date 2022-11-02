@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.net.SocketFactory;
 
+import org.apache.hadoop.ipc.AlignmentContext;
 import org.apache.hadoop.ipc.FederationConnectionId;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -108,6 +109,9 @@ public class ConnectionPool {
   /** The last time a connection was active. */
   private volatile long lastActiveTime = 0;
 
+  /** The alignmentContent for this namespace. **/
+  private final AlignmentContext alignmentContext;
+
   /** Map for the protocols and their protobuf implementations. */
   private final static Map<Class<?>, ProtoImpl> PROTO_MAP = new HashMap<>();
   static {
@@ -137,7 +141,8 @@ public class ConnectionPool {
 
   protected ConnectionPool(Configuration config, String address,
       UserGroupInformation user, int minPoolSize, int maxPoolSize,
-      float minActiveRatio, Class<?> proto) throws IOException {
+      float minActiveRatio, Class<?> proto, AlignmentContext alignmentContext)
+      throws IOException {
 
     this.conf = config;
 
@@ -152,6 +157,8 @@ public class ConnectionPool {
     this.minSize = minPoolSize;
     this.maxSize = maxPoolSize;
     this.minActiveRatio = minActiveRatio;
+
+    this.alignmentContext = alignmentContext;
 
     // Add minimum connections to the pool
     for (int i=0; i<this.minSize; i++) {
@@ -365,7 +372,7 @@ public class ConnectionPool {
   public ConnectionContext newConnection() throws IOException {
     return newConnection(
         this.conf, this.namenodeAddress, this.ugi, this.protocol,
-        getNextIndex());
+        getNextIndex(), alignmentContext);
   }
 
   /**
@@ -379,13 +386,14 @@ public class ConnectionPool {
    * @param nnAddress Address of server supporting the ClientProtocol.
    * @param ugi User context.
    * @param proto Interface of the protocol.
+   * @param alignmentContext The alignmentContext for the namespace.
    * @return proto for the target ClientProtocol that contains the user's
    *         security context.
    * @throws IOException If it cannot be created.
    */
   protected static <T> ConnectionContext newConnection(Configuration conf,
-      String nnAddress, UserGroupInformation ugi, Class<T> proto, int index)
-      throws IOException {
+      String nnAddress, UserGroupInformation ugi, Class<T> proto, int index,
+      AlignmentContext alignmentContext) throws IOException {
     if (!PROTO_MAP.containsKey(proto)) {
       String msg = "Unsupported protocol for connection to NameNode: "
           + ((proto != null) ? proto.getName() : "null");
@@ -416,10 +424,10 @@ public class ConnectionPool {
           socket, ClientNamenodeProtocolPB.class, ugi, RPC.getRpcTimeout(conf),
           defaultPolicy, conf, index);
       proxy = RPC.getProtocolProxy(classes.protoPb, version, connectionId,
-          conf, factory).getProxy();
+          conf, factory, alignmentContext).getProxy();
     } else {
       proxy = RPC.getProtocolProxy(classes.protoPb, version, socket, ugi,
-          conf, factory, RPC.getRpcTimeout(conf), defaultPolicy, null)
+          conf, factory, RPC.getRpcTimeout(conf), defaultPolicy, null, alignmentContext)
           .getProxy();
     }
     T client = newProtoClient(proto, classes, proxy);

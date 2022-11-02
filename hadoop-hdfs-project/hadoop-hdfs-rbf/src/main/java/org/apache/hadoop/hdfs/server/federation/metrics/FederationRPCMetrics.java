@@ -60,6 +60,10 @@ public class FederationRPCMetrics implements FederationRPCMBean {
   private MutableCounterLong proxyOpNotImplemented;
   @Metric("Number of operation retries")
   private MutableCounterLong proxyOpRetries;
+  @Metric("Number of operations to hit an active NN")
+  private MutableCounterLong proxyOpActiveCommunicate;
+  @Metric("Number of operations to hit an observer NN")
+  private MutableCounterLong proxyOpObserverCommunicate;
   @Metric("Number of operations to hit no namenodes available")
   private MutableCounterLong proxyOpNoNamenodes;
 
@@ -111,6 +115,24 @@ public class FederationRPCMetrics implements FederationRPCMBean {
   @Override
   public long getProxyOpFailureCommunicate() {
     return proxyOpFailureCommunicate.value();
+  }
+
+  public void incrProxyOpActiveCommunicate() {
+    proxyOpActiveCommunicate.incr();
+  }
+
+  @Override
+  public long getProxyOpActiveCommunicate() {
+    return proxyOpActiveCommunicate.value();
+  }
+
+  public void incrProxyOpObserverCommunicate() {
+    proxyOpObserverCommunicate.incr();
+  }
+
+  @Override
+  public long getProxyOpObserverCommunicate() {
+    return proxyOpObserverCommunicate.value();
   }
 
   public void incrProxyOpFailureClientOverloaded() {

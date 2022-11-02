@@ -32,6 +32,8 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import org.apache.hadoop.hdfs.ClientGSIContext;
+import org.apache.hadoop.ipc.AlignmentContext;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -73,6 +75,8 @@ public class ConnectionManager {
 
   /** Queue for creating new connections. */
   private final BlockingQueue<ConnectionPool> creatorQueue;
+  /** AlignmentContext for the downstream namespace. **/
+  private Map<String, AlignmentContext> alignmentContexts;
   /** Max size of queue for creating new connections. */
   private final int creatorQueueMaxSize;
 
@@ -123,6 +127,11 @@ public class ConnectionManager {
     this.connectionCleanupPeriodMs = this.conf.getLong(
         RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_CLEAN_MS,
         RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_CLEAN_MS_DEFAULT);
+    if (this.conf.getBoolean(RBFConfigKeys.DFS_ROUTER_OBSERVER_READ_ENABLE,
+        RBFConfigKeys.DFS_ROUTER_OBSERVER_READ_ENABLE_DEFAULT)) {
+      // Initialize observer context.
+      alignmentContexts = new HashMap<>();
+    }
     LOG.info("Cleaning connections every {} seconds",
         TimeUnit.MILLISECONDS.toSeconds(this.connectionCleanupPeriodMs));
   }
@@ -176,7 +185,7 @@ public class ConnectionManager {
    * @throws IOException If the connection cannot be obtained.
    */
   public ConnectionContext getConnection(UserGroupInformation ugi,
-      String nnAddress, Class<?> protocol) throws IOException {
+      String nnAddress, Class<?> protocol, String nsId) throws IOException {
 
     // Check if the manager is shutdown
     if (!this.running) {
@@ -203,9 +212,17 @@ public class ConnectionManager {
       try {
         pool = this.pools.get(connectionId);
         if (pool == null) {
+          if (alignmentContexts != null && !alignmentContexts.containsKey(nsId)) {
+            synchronized (alignmentContexts) {
+              if (!alignmentContexts.containsKey(nsId)) {
+                alignmentContexts.put(nsId, new ClientGSIContext());
+              }
+            }
+          }
           pool = new ConnectionPool(
               this.conf, nnAddress, ugi, this.minSize, this.maxSize,
-              this.minActiveRatio, protocol);
+              this.minActiveRatio, protocol,
+              alignmentContexts != null ? alignmentContexts.get(nsId) : null);
           this.pools.put(connectionId, pool);
         }
       } finally {

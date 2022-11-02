@@ -179,7 +179,7 @@ public final class FederationTestUtils {
       public Boolean get() {
         try {
           List<? extends FederationNamenodeContext> namenodes =
-              resolver.getNamenodesForNameserviceId(nsId);
+              resolver.getNamenodesForNameserviceId(nsId, false);
           if (namenodes != null) {
             for (FederationNamenodeContext namenode : namenodes) {
               // Check if this is the Namenode we are checking
@@ -208,22 +208,54 @@ public final class FederationTestUtils {
   public static void waitNamenodeRegistered(
       final ActiveNamenodeResolver resolver, final String nsId,
       final FederationNamenodeServiceState state) throws Exception {
+    waitNamenodeRegistered(resolver, nsId, state, false);
+  }
 
+  /**
+   * Wait for a namenode to be registered with a particular state.
+   * @param resolver Active namenode resolver.
+   * @param nsId Nameservice identifier.
+   * @param state State to check for.
+   * @param observerRead if true give first priority to OBSERVER
+   * @throws Exception Failed to verify State Store registration of namenode
+   *                   nsId for state.
+   */
+  public static void waitNamenodeRegistered(
+      final ActiveNamenodeResolver resolver, final String nsId,
+      final FederationNamenodeServiceState state, final Boolean observerRead)
+      throws Exception {
+    waitNamenodeRegistered(resolver, nsId, state, observerRead, 1);
+  }
+  /**
+   * Wait for a namenode to be registered with a particular state.
+   * @param resolver Active namenode resolver.
+   * @param nsId Nameservice identifier.
+   * @param state State to check for.
+   * @param observerRead if true give first priority to OBSERVER
+   * @throws Exception Failed to verify State Store registration of namenode
+   *                   nsId for state.
+   */
+  public static void waitNamenodeRegistered(
+      final ActiveNamenodeResolver resolver, final String nsId,
+      final FederationNamenodeServiceState state, final Boolean observerRead,
+      final int targetCount)
+      throws Exception {
     GenericTestUtils.waitFor(new Supplier<Boolean>() {
       @Override
       public Boolean get() {
+        int count = 0;
         try {
           List<? extends FederationNamenodeContext> nns =
-              resolver.getNamenodesForNameserviceId(nsId);
+              resolver.getNamenodesForNameserviceId(nsId, observerRead);
           for (FederationNamenodeContext nn : nns) {
             if (nn.getState().equals(state)) {
-              return true;
+              count++;
             }
           }
         } catch (IOException e) {
           // Ignore
         }
-        return false;
+        return count == targetCount;
       }
     }, 1000, 20 * 1000);
   }
@@ -398,7 +430,7 @@ public final class FederationTestUtils {
         throw new IOException("Simulate connectionManager throw IOException");
       }
     }).when(spyConnectionManager).getConnection(
-        any(UserGroupInformation.class), any(String.class), any(Class.class));
+        any(UserGroupInformation.class), any(String.class), any(Class.class), any(String.class));
 
     Whitebox.setInternalState(rpcClient, "connectionManager",
         spyConnectionManager);

@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +43,9 @@ import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
 import org.apache.hadoop.hdfs.server.federation.router.Router;
 import org.apache.hadoop.hdfs.server.federation.store.StateStoreService;
 import org.apache.hadoop.util.Time;
+
+import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.OBSERVER;
+import static org.apache.hadoop.hdfs.server.federation.resolver.MembershipNamenodeResolver.shuffleObserversInList;
 
 /**
  * In-memory cache/mock of a namenode and file resolver. Stores the most
@@ -136,14 +140,33 @@ public class MockResolver
 
   @Override
   public synchronized List<? extends FederationNamenodeContext>
-      getNamenodesForNameserviceId(String nameserviceId) {
+      getNamenodesForNameserviceId(String nameserviceId, boolean observerRead) {
     // Return a copy of the list because it is updated periodically
     List<? extends FederationNamenodeContext> namenodes =
         this.resolver.get(nameserviceId);
     if (namenodes == null) {
       namenodes = new ArrayList<>();
     }
-    return Collections.unmodifiableList(new ArrayList<>(namenodes));
+    if (!observerRead) {
+      List<MockNamenodeContext> nnWithoutObserver = new ArrayList<>();
+      for (FederationNamenodeContext membership : namenodes) {
+        if (membership.getState() != OBSERVER) {
+          nnWithoutObserver.add((MockNamenodeContext) membership);
+        }
+      }
+      namenodes = nnWithoutObserver;
+    } else {
+      List<MockNamenodeContext> nnWithObserver = new ArrayList<>();
+      for (FederationNamenodeContext membership : namenodes) {
+        if (membership.getState() == OBSERVER) {
+          nnWithObserver.add((MockNamenodeContext) membership);
+        }
+      }
+      namenodes = nnWithObserver;
+    }
+    List<FederationNamenodeContext> priorityList = new ArrayList<>(namenodes);
+    priorityList.sort(new NamenodePriorityComparator());
+    return shuffleObserversInList(priorityList, observerRead);
   }
 
   @Override
@@ -257,6 +280,10 @@ public class MockResolver
     String nsId = report.getNameserviceId();
     String bpId = report.getBlockPoolId();
     String cId = report.getClusterId();
+
+    System.out.println("2222222 NSId=" + nsId + ", bpId=" + bpId + ", cId=" + cId + ", nnId=" + context.getNamenodeId() + ", state=" + context.getState()
+
+        + ", context=" + context);
 
     @SuppressWarnings("unchecked")
     List<MockNamenodeContext> existingItems =

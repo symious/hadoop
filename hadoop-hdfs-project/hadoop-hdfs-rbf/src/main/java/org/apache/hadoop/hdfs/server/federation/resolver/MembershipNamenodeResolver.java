@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.federation.resolver;
 
 import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.ACTIVE;
 import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.EXPIRED;
+import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.OBSERVER;
 import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.UNAVAILABLE;
 
 import java.io.IOException;
@@ -175,11 +176,12 @@ public class MembershipNamenodeResolver
 
   @Override
   public List<? extends FederationNamenodeContext> getNamenodesForNameserviceId(
-      final String nsId) throws IOException {
+      final String nsId, final boolean observerRead) throws IOException {
 
-    List<? extends FederationNamenodeContext> ret = cacheNS.get(nsId);
+    String cacheKey = nsId + (observerRead ? ".obs" : "");
+    List<? extends FederationNamenodeContext> ret = cacheNS.get(cacheKey);
     if (ret != null) {
-      return ret;
+      return shuffleObserversInList(ret, observerRead);
     }
 
     // Not cached, generate the value
@@ -189,7 +191,7 @@ public class MembershipNamenodeResolver
       partial.setNameserviceId(nsId);
       GetNamenodeRegistrationsRequest request =
           GetNamenodeRegistrationsRequest.newInstance(partial);
-      result = getRecentRegistrationForQuery(request, true, false);
+      result = getRecentRegistrationForQuery(request, true, false, observerRead);
     } catch (StateStoreUnavailableException e) {
       LOG.error("Cannot get active NN for {}, State Store unavailable", nsId);
       return null;
@@ -218,8 +220,29 @@ public class MembershipNamenodeResolver
 
     // Cache the response
     ret = Collections.unmodifiableList(result);
-    cacheNS.put(nsId, result);
+    cacheNS.put(cacheKey, result);
     return ret;
+  }
+
+  public static <T extends FederationNamenodeContext>
+  List<T> shuffleObserversInList(List<T> srcList, boolean observerRead) {
+    List<T> resList = new ArrayList<>();
+    List<T> otherList = new ArrayList<>();
+    if (observerRead) {
+      for (T t : srcList) {
+        if (t.getState() == OBSERVER) {
+          resList.add(t);
+        } else {
+          otherList.add(t);
+        }
+      }
+      if (resList.size() > 1) {
+        Collections.shuffle(resList);
+      }
+      resList.addAll(otherList);
+      return resList;
+    }
+    return srcList;
   }
 
   @Override
@@ -235,7 +258,7 @@ public class MembershipNamenodeResolver
             GetNamenodeRegistrationsRequest.newInstance(partial);
 
         final List<MembershipState> result =
-            getRecentRegistrationForQuery(request, true, false);
+            getRecentRegistrationForQuery(request, true, false, false);
         if (result == null || result.isEmpty()) {
           LOG.error("Cannot locate eligible NNs for {}", bpId);
         } else {
@@ -345,13 +368,14 @@ public class MembershipNamenodeResolver
    * @param request The select query for NN registrations.
    * @param addUnavailable include UNAVAILABLE registrations.
    * @param addExpired include EXPIRED registrations.
+   * @param observerRead if true give first priority to OBSERVER
    * @return List of memberships or null if no registrations that
    *         both match the query AND the selected states.
    * @throws IOException
    */
   private List<MembershipState> getRecentRegistrationForQuery(
       GetNamenodeRegistrationsRequest request, boolean addUnavailable,
-      boolean addExpired) throws IOException {
+      boolean addExpired, boolean observerRead) throws IOException {
 
     // Retrieve a list of all registrations that match this query.
     // This may include all NN records for a namespace/blockpool, including
@@ -361,24 +385,34 @@ public class MembershipNamenodeResolver
         membershipStore.getNamenodeRegistrations(request);
 
     List<MembershipState> memberships = response.getNamenodeMemberships();
-    if (!addExpired || !addUnavailable) {
-      Iterator<MembershipState> iterator = memberships.iterator();
-      while (iterator.hasNext()) {
-        MembershipState membership = iterator.next();
-        if (membership.getState() == EXPIRED && !addExpired) {
-          iterator.remove();
-        } else if (membership.getState() == UNAVAILABLE && !addUnavailable) {
-          iterator.remove();
-        }
+    List<MembershipState> observerMemberships = new ArrayList<>();
+    Iterator<MembershipState> iterator = memberships.iterator();
+    while (iterator.hasNext()) {
+      MembershipState membership = iterator.next();
+      if (membership.getState() == EXPIRED && !addExpired) {
+        iterator.remove();
+      } else if (membership.getState() == UNAVAILABLE && !addUnavailable) {
+        iterator.remove();
+      } else if (membership.getState() == OBSERVER && observerRead) {
+        iterator.remove();
+        observerMemberships.add(membership);
       }
     }
 
-    List<MembershipState> priorityList = new ArrayList<>();
-    priorityList.addAll(memberships);
-    Collections.sort(priorityList, new NamenodePriorityComparator());
+    memberships.sort(new NamenodePriorityComparator());
+    if (observerRead) {
+      List<MembershipState> ret = new ArrayList<>(
+          memberships.size() + observerMemberships.size());
+      if (observerMemberships.size() > 1) {
+        Collections.shuffle(observerMemberships);
+      }
+      ret.addAll(observerMemberships);
+      ret.addAll(memberships);
+      memberships = ret;
+    }
 
-    LOG.debug("Selected most recent NN {} for query", priorityList);
-    return priorityList;
+    LOG.debug("Selected most recent NN {} for query", memberships);
+    return memberships;
   }
 
   @Override

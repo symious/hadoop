@@ -652,12 +652,12 @@ public class RPC {
    */
   public static <T> ProtocolProxy<T> getProtocolProxy(Class<T> protocol,
       long clientVersion, ConnectionId connId, Configuration conf,
-      SocketFactory factory) throws IOException {
+      SocketFactory factory, AlignmentContext context) throws IOException {
     if (UserGroupInformation.isSecurityEnabled()) {
       SaslRpcServer.init(conf);
     }
     return getProtocolEngine(protocol, conf).getProxy(protocol, clientVersion,
-        connId, conf, factory, null);
+        connId, conf, factory, context);
   }
 
   /**
