@@ -784,6 +784,10 @@ public class Router extends CompositeService implements
     return this.safemodeService;
   }
 
+  public void updateConf(String key, String value) {
+    conf.set(key, value);
+  }
+
   /**
    * Get router admin server.
    *

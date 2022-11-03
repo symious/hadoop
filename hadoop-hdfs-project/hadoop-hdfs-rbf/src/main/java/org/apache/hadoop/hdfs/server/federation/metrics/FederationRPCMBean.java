@@ -20,6 +20,8 @@ package org.apache.hadoop.hdfs.server.federation.metrics;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 
+import javax.management.openmbean.CompositeData;
+
 /**
  * JMX interface for the RPC server.
  * TODO use the default RPC MBean.
@@ -114,8 +116,56 @@ public interface FederationRPCMBean {
   String getRpcClientConnections();
 
   /**
+   * JSON representation of the available handler per Ns.
+   * @return JSON string representation.
+   */
+  String getAvailableHandlerOnPerNs();
+
+  /**
+   * Get the number of operations rejected due to lack of permits.
+   * @return Number of operations rejected due to lack of permits.
+   */
+  long getProxyOpPermitRejected();
+
+  /**
+   * Get the number of operations rejected due to lack of permits of each namespace.
+   * @return Number of operations rejected due to lack of permits of each namespace.
+   */
+  String getProxyOpPermitRejectedPerNs();
+
+  /**
+   * JSON representation of max handler count per ns.
+   * @return JSON string representation.
+   */
+  String getPermitCapacityPerNs();
+
+  /**
+   * Get the number of operations accepted of each namespace.
+   * @return Number of operations accepted of each namespace.
+   */
+  String getProxyOpPermitAcceptedPerNs();
+
+  /**
    * Get the JSON representation of the async caller thread pool.
    * @return JSON string representation of the async caller thread pool.
    */
   String getAsyncCallerPool();
+
+  /**
+   * Get the number of operations rejected due to lack of permits of each namespace as a CompositeData object.
+   * @return Number of operations rejected due to lack of permits of each namespace as a CompositeData object.
+   */
+  CompositeData getProxyOpPermitRejectedPerNsJSON();
+
+  /**
+   * Get the number of operations accepted of each namespace as a CompositeData object.
+   * @return Number of operations accepted of each namespace as a CompositeData object.
+   */
+  CompositeData getProxyOpPermitAcceptedPerNsJSON();
+
+  /**
+   * Get the max number of permits per namespace as a CompositeData object.
+   * @return Max number of permits per namespace as a CompositeData object.
+   */
+  CompositeData getPermitCapacityPerNsJSON();
 }

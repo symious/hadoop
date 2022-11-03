@@ -277,6 +277,10 @@ public class MiniRouterDFSCluster {
     public RouterRpcClient getRouterRpcClient() {
       return router.getRpcServer().getRPCClient();
     }
+
+    public RouterRpcServer getRouterRpcServer() {
+      return router.getRpcServer();
+    }
   }
 
   /**

@@ -30,6 +30,8 @@ import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 
+import javax.management.openmbean.CompositeData;
+
 /**
  * Implementation of the RPC metrics collector.
  */
@@ -75,6 +77,9 @@ public class FederationRPCMetrics implements FederationRPCMBean {
   private MutableCounterLong routerFailureLocked;
   @Metric("Failed requests due to safe mode")
   private MutableCounterLong routerFailureSafemode;
+
+  @Metric("Number of operations to hit permit limits")
+  private MutableCounterLong proxyOpPermitRejected;
 
   @Metric("Time for the router to msync")
   private MutableRate proxyMsync;
@@ -250,6 +255,11 @@ public class FederationRPCMetrics implements FederationRPCMBean {
   }
 
   @Override
+  public String getPermitCapacityPerNs() {
+    return rpcServer.getRPCClient().getRouterRpcFairnessPolicyController().getPermitCapacityPerNs();
+  }
+
+  @Override
   public int getRpcClientNumConnectionPools() {
     return rpcServer.getRPCClient().getNumConnectionPools();
   }
@@ -260,8 +270,20 @@ public class FederationRPCMetrics implements FederationRPCMBean {
   }
 
   @Override
+  public String getAvailableHandlerOnPerNs() {
+    return rpcServer.getRPCClient().
+        getRouterRpcFairnessPolicyController().getAvailableHandlerOnPerNs();
+  }
+
+  @Override
   public String getAsyncCallerPool() {
     return rpcServer.getRPCClient().getAsyncCallerPoolJson();
+  }
+
+  @Override
+  public CompositeData getPermitCapacityPerNsJSON() {
+    return rpcServer.getRPCClient().getRouterRpcFairnessPolicyController()
+        .getPermitCapacityPerNsAsJson();
   }
 
   /**
@@ -302,5 +324,34 @@ public class FederationRPCMetrics implements FederationRPCMBean {
   @Override
   public long getProcessingOps() {
     return processingOp.value();
+  }
+
+  public void incrProxyOpPermitRejected() {
+    proxyOpPermitRejected.incr();
+  }
+
+  @Override
+  public long getProxyOpPermitRejected() {
+    return proxyOpPermitRejected.value();
+  }
+
+  @Override
+  public String getProxyOpPermitRejectedPerNs() {
+    return rpcServer.getRPCClient().getRejectedPermitsPerNsJSON();
+  }
+
+  @Override
+  public String getProxyOpPermitAcceptedPerNs() {
+    return rpcServer.getRPCClient().getAcceptedPermitsPerNsJSON();
+  }
+
+  @Override
+  public CompositeData getProxyOpPermitRejectedPerNsJSON() {
+    return rpcServer.getRPCClient().getRejectedPermitsPerNs();
+  }
+
+  @Override
+  public CompositeData getProxyOpPermitAcceptedPerNsJSON() {
+    return rpcServer.getRPCClient().getAcceptedPermitsPerNs();
   }
 }
