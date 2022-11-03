@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.ipc;
 
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+import org.apache.hadoop.io.retry.RetryUtils;
 import org.apache.hadoop.thirdparty.protobuf.ServiceException;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.conf.Configuration;
@@ -410,6 +412,53 @@ public class TestRPC extends TestRpcBase {
       assertEquals(hostname, proxyHostname);
     } finally {
       stop(server, proxy);
+    }
+  }
+
+  @Test
+  public void testConnectionWithSocketFactory() throws IOException, ServiceException {
+    TestRpcService firstProxy = null;
+    TestRpcService secondProxy = null;
+
+    Configuration newConf = new Configuration(conf);
+    newConf.set(CommonConfigurationKeysPublic.
+        HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY, "");
+
+    RetryPolicy retryPolicy = RetryUtils.getDefaultRetryPolicy(
+        newConf, "Test.No.Such.Key",
+        true,
+        "Test.No.Such.Key", "10000,6",
+        null);
+
+    // create a server with two handlers
+    Server server = setupTestServer(newConf, 2);
+    try {
+      // create the first client
+      firstProxy = getClient(addr, newConf);
+      // create the second client
+      secondProxy = getClient(addr, newConf);
+
+      firstProxy.ping(null, newEmptyRequest());
+      secondProxy.ping(null, newEmptyRequest());
+
+      Client client = ProtobufRpcEngine2.getClient(newConf);
+      assertEquals(1, client.getConnectionIds().size());
+
+      stop(null, firstProxy, secondProxy);
+      ProtobufRpcEngine2.clearClientCache();
+
+      // create the first client with index 1
+      firstProxy = getMultipleClientWithIndex(addr, newConf, retryPolicy, 1);
+      // create the second client with index 2
+      secondProxy = getMultipleClientWithIndex(addr, newConf, retryPolicy, 2);
+      firstProxy.ping(null, newEmptyRequest());
+      secondProxy.ping(null, newEmptyRequest());
+
+      Client client2 = ProtobufRpcEngine2.getClient(newConf);
+      assertEquals(2, client2.getConnectionIds().size());
+    } finally {
+      System.out.println("Down slow rpc testing");
+      stop(server, firstProxy, secondProxy);
     }
   }
 

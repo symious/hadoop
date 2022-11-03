@@ -127,6 +127,9 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
       FEDERATION_ROUTER_PREFIX + "connection.multiple";
   public static final boolean DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE_DEFAULT =
       false;
+  public static final String DFS_ROUTER_MAX_CONCURRENCY_PER_CONNECTION_KEY =
+      FEDERATION_ROUTER_PREFIX + "max.concurrency.per.connection";
+  public static final int DFS_ROUTER_MAX_CONCURRENCY_PER_CONNECTION_DEFAULT = 20;
 
   // HDFS Router RPC client
   public static final String DFS_ROUTER_CLIENT_THREADS_SIZE =

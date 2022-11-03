@@ -36,6 +36,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assert.assertNotNull;
@@ -129,6 +130,44 @@ public class TestConnectionManager {
       connManager.cleanup(pool3);
     }
     checkPoolConnections(TEST_USER3, 4, 2);
+  }
+
+  @Test
+  public void testGetConnectionWithConcurrency() throws Exception {
+    Map<ConnectionPoolId, ConnectionPool> poolMap = connManager.getPools();
+    Configuration copyConf = new Configuration(conf);
+    copyConf.setInt(RBFConfigKeys.DFS_ROUTER_MAX_CONCURRENCY_PER_CONNECTION_KEY, 20);
+
+    ConnectionPool pool = new ConnectionPool(
+        copyConf, TEST_NN_ADDRESS, TEST_USER1, 1, 10, 0.5f,
+        ClientProtocol.class, null);
+    poolMap.put(
+        new ConnectionPoolId(TEST_USER1, TEST_NN_ADDRESS, ClientProtocol.class),
+        pool);
+    assertEquals(1, pool.getNumConnections());
+    // one connection can process the maximum number of requests concurrently.
+    for (int i = 0; i < 20; i++) {
+      ConnectionContext cc = pool.getConnection();
+      assertTrue(cc.isUsable());
+      cc.getClient();
+    }
+    assertEquals(1, pool.getNumConnections());
+
+    // Ask for more and this returns an unusable connection
+    ConnectionContext cc1 = pool.getConnection();
+    assertTrue(cc1.isActive());
+    assertFalse(cc1.isUsable());
+
+    // add a new connection into pool
+    pool.addConnection(pool.newConnection());
+    // will return the new connection
+    ConnectionContext cc2 = pool.getConnection();
+    assertTrue(cc2.isUsable());
+    cc2.getClient();
+
+    assertEquals(2, pool.getNumConnections());
+
+    checkPoolConnections(TEST_USER1, 2, 2);
   }
 
   @Test
@@ -255,6 +294,8 @@ public class TestConnectionManager {
       if (e.getKey().getUgi() == ugi) {
         assertEquals(numOfConns, e.getValue().getNumConnections());
         assertEquals(numOfActiveConns, e.getValue().getNumActiveConnections());
+        // idle + active = total connections
+        assertEquals(numOfConns - numOfActiveConns, e.getValue().getNumIdleConnections());
         connPoolFoundForUser = true;
       }
     }
@@ -265,40 +306,44 @@ public class TestConnectionManager {
 
   @Test
   public void testConfigureConnectionActiveRatio() throws IOException {
-    final int totalConns = 10;
-    int activeConns = 7;
+    // test 1 conn below the threshold and these conns are closed
+    testConnectionCleanup(0.8f, 10, 7, 9);
 
+    // test 2 conn below the threshold and these conns are closed
+    testConnectionCleanup(0.8f, 10, 6, 8);
+  }
+
+  private void testConnectionCleanup(float ratio, int totalConns,
+      int activeConns, int leftConns) throws IOException {
     Configuration tmpConf = new Configuration();
-    // Set dfs.federation.router.connection.min-active-ratio 0.8f
+    // Set dfs.federation.router.connection.min-active-ratio
     tmpConf.setFloat(
-        RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_MIN_ACTIVE_RATIO, 0.8f);
+        RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_MIN_ACTIVE_RATIO, ratio);
     ConnectionManager tmpConnManager = new ConnectionManager(tmpConf);
     tmpConnManager.start();
 
     // Create one new connection pool
     tmpConnManager.getConnection(TEST_USER1, TEST_NN_ADDRESS,
         NamenodeProtocol.class, null);
-
     Map<ConnectionPoolId, ConnectionPool> poolMap = tmpConnManager.getPools();
     ConnectionPoolId connectionPoolId = new ConnectionPoolId(TEST_USER1,
         TEST_NN_ADDRESS, NamenodeProtocol.class);
     ConnectionPool pool = poolMap.get(connectionPoolId);
 
-    // Test min active ratio is 0.8f
-    assertEquals(0.8f, pool.getMinActiveRatio(), 0.001f);
+    // Test min active ratio is as set value
+    assertEquals(ratio, pool.getMinActiveRatio(), 0.001f);
 
     pool.getConnection().getClient();
     // Test there is one active connection in pool
     assertEquals(1, pool.getNumActiveConnections());
 
-    // Add other 6 active/9 total connections to pool
+    // Add other active-1 connections / totalConns-1 connections to pool
     addConnectionsToPool(pool, totalConns - 1, activeConns - 1);
 
-    // There are 7 active connections.
-    // The active number is less than totalConns(10) * minActiveRatio(0.8f).
+    // There are activeConn connections.
     // We can cleanup the pool
     tmpConnManager.cleanup(pool);
-    assertEquals(totalConns - 1, pool.getNumConnections());
+    assertEquals(leftConns, pool.getNumConnections());
 
     tmpConnManager.close();
   }
@@ -309,6 +354,6 @@ public class TestConnectionManager {
         "Unsupported protocol for connection to NameNode: "
             + TestConnectionManager.class.getName(),
         () -> ConnectionPool.newConnection(conf, TEST_NN_ADDRESS, TEST_USER1,
-            TestConnectionManager.class, 0, null));
+            TestConnectionManager.class, false, 0, null));
   }
 }

@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.ipc;
 
+import org.apache.commons.lang3.builder.EqualsBuilder;
+import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -24,8 +26,7 @@ import org.apache.hadoop.security.UserGroupInformation;
 import java.net.InetSocketAddress;
 
 public class FederationConnectionId extends Client.ConnectionId {
-  private static final int PRIME = 16777619;
-  private int connectionIndex;
+  private final int connectionIndex;
 
   public FederationConnectionId(InetSocketAddress address, Class<?> protocol,
       UserGroupInformation ticket, int rpcTimeout,
@@ -36,8 +37,10 @@ public class FederationConnectionId extends Client.ConnectionId {
 
   @Override
   public int hashCode() {
-    int hashCode = super.hashCode();
-    return PRIME * hashCode + connectionIndex;
+    return new HashCodeBuilder()
+        .append(super.hashCode())
+        .append(this.connectionIndex)
+        .toHashCode();
   }
 
   @Override
@@ -47,9 +50,9 @@ public class FederationConnectionId extends Client.ConnectionId {
     }
     if (obj instanceof FederationConnectionId) {
       FederationConnectionId other = (FederationConnectionId)obj;
-      if (this.connectionIndex == other.connectionIndex) {
-        return true;
-      }
+      return new EqualsBuilder()
+          .append(this.connectionIndex, other.connectionIndex)
+          .isEquals();
     }
     return false;
   }

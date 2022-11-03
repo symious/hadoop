@@ -101,6 +101,8 @@ public class ConnectionPool {
   private volatile List<ConnectionContext> connections = new ArrayList<>();
   /** Connection index for round-robin. */
   private final AtomicInteger clientIndex = new AtomicInteger(0);
+  /** Underlying socket index. **/
+  private final AtomicInteger socketIndex = new AtomicInteger(0);
 
   /** Min number of connections per user. */
   private final int minSize;
@@ -111,6 +113,9 @@ public class ConnectionPool {
 
   /** The last time a connection was active. */
   private volatile long lastActiveTime = 0;
+
+  /** Enable using multiple physical socket or not. **/
+  private final boolean enableMultiSocket;
 
   /** The alignmentContent for this namespace. **/
   private final AlignmentContext alignmentContext;
@@ -164,10 +169,14 @@ public class ConnectionPool {
     this.maxSize = maxPoolSize;
     this.minActiveRatio = minActiveRatio;
 
+    this.enableMultiSocket = conf.getBoolean(
+        RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE,
+        RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE_DEFAULT);
+
     this.alignmentContext = alignmentContext;
 
     // Add minimum connections to the pool
-    for (int i=0; i<this.minSize; i++) {
+    for (int i = 0; i < this.minSize; i++) {
       ConnectionContext newConnection = newConnection();
       this.connections.add(newConnection);
     }
@@ -226,24 +235,22 @@ public class ConnectionPool {
    * @return Connection context.
    */
   protected ConnectionContext getConnection() {
-
     this.lastActiveTime = Time.now();
-
-    // Get a connection from the pool following round-robin
-    ConnectionContext conn = null;
     List<ConnectionContext> tmpConnections = this.connections;
-    int size = tmpConnections.size();
-    // Inc and mask off sign bit, lookup index should be non-negative int
-    int threadIndex = this.clientIndex.getAndIncrement() & 0x7FFFFFFF;
-    for (int i=0; i<size; i++) {
-      int index = (threadIndex + i) % size;
-      conn = tmpConnections.get(index);
-      if (conn != null && conn.isUsable()) {
-        return conn;
+    for (ConnectionContext tmpConnection : tmpConnections) {
+      if (tmpConnection != null && tmpConnection.isUsable()) {
+        return tmpConnection;
       }
     }
-
-    // We return a connection even if it's active
+    ConnectionContext conn = null;
+    // We return a connection even if it's busy
+    int size = tmpConnections.size();
+    if (size > 0) {
+      // Get a connection from the pool following round-robin
+      // Inc and mask off sign bit, lookup index should be non-negative int
+      int threadIndex = this.clientIndex.getAndIncrement() & 0x7FFFFFFF;
+      conn = tmpConnections.get(threadIndex % size);
+    }
     return conn;
   }
 
@@ -278,19 +285,22 @@ public class ConnectionPool {
    */
   public synchronized List<ConnectionContext> removeConnections(int num) {
     List<ConnectionContext> removed = new LinkedList<>();
-
-    // Remove and close the last connection
-    List<ConnectionContext> tmpConnections = new ArrayList<>();
-    for (int i=0; i<this.connections.size(); i++) {
-      ConnectionContext conn = this.connections.get(i);
-      if (i < this.minSize || i < this.connections.size() - num) {
-        tmpConnections.add(conn);
-      } else {
-        removed.add(conn);
+    if (this.connections.size() > this.minSize) {
+      int targetCount = Math.min(num, this.connections.size() - this.minSize);
+      // Remove and close targetCount of connections
+      List<ConnectionContext> tmpConnections = new ArrayList<>();
+      for (ConnectionContext conn : this.connections) {
+        // Only pick idle connections to close
+        if (removed.size() < targetCount && conn.isIdle()) {
+          removed.add(conn);
+        } else {
+          tmpConnections.add(conn);
+        }
       }
+      this.connections = tmpConnections;
     }
-    this.connections = tmpConnections;
-
+    LOG.debug("Expected to remove {} connection and actually removed {} connections",
+        num, removed.size());
     return removed;
   }
 
@@ -304,7 +314,7 @@ public class ConnectionPool {
         this.connectionPoolId, timeSinceLastActive);
 
     for (ConnectionContext connection : this.connections) {
-      connection.close();
+      connection.close(true);
     }
     this.connections.clear();
   }
@@ -325,10 +335,41 @@ public class ConnectionPool {
    */
   protected int getNumActiveConnections() {
     int ret = 0;
-
     List<ConnectionContext> tmpConnections = this.connections;
     for (ConnectionContext conn : tmpConnections) {
       if (conn.isActive()) {
+        ret++;
+      }
+    }
+    return ret;
+  }
+
+  /**
+   * Number of usable i.e. no active thread connections.
+   *
+   * @return Number of idle connections
+   */
+  protected int getNumIdleConnections() {
+    int ret = 0;
+    List<ConnectionContext> tmpConnections = this.connections;
+    for (ConnectionContext conn : tmpConnections) {
+      if (conn.isIdle()) {
+        ret++;
+      }
+    }
+    return ret;
+  }
+
+  /**
+   * Number of active connections recently in the pool.
+   *
+   * @return Number of active connections recently.
+   */
+  protected int getNumActiveConnectionsRecently() {
+    int ret = 0;
+    List<ConnectionContext> tmpConnections = this.connections;
+    for (ConnectionContext conn : tmpConnections) {
+      if (conn.isActiveRecently()) {
         ret++;
       }
     }
@@ -357,12 +398,16 @@ public class ConnectionPool {
   public String getJSON() {
     final Map<String, String> info = new LinkedHashMap<>();
     info.put("active", Integer.toString(getNumActiveConnections()));
+    info.put("recent_active", Integer.toString(getNumActiveConnectionsRecently()));
+    info.put("idle", Integer.toString(getNumIdleConnections()));
     info.put("total", Integer.toString(getNumConnections()));
     if (LOG.isDebugEnabled()) {
       List<ConnectionContext> tmpConnections = this.connections;
       for (int i=0; i<tmpConnections.size(); i++) {
         ConnectionContext connection = tmpConnections.get(i);
         info.put(i + " active", Boolean.toString(connection.isActive()));
+        info.put(i + " recent_active", Integer.toString(getNumActiveConnectionsRecently()));
+        info.put(i + " idle", Boolean.toString(connection.isUsable()));
         info.put(i + " closed", Boolean.toString(connection.isClosed()));
       }
     }
@@ -378,7 +423,7 @@ public class ConnectionPool {
   public ConnectionContext newConnection() throws IOException {
     return newConnection(
         this.conf, this.namenodeAddress, this.ugi, this.protocol,
-        getNextIndex(), alignmentContext);
+        this.enableMultiSocket, this.socketIndex.incrementAndGet(), alignmentContext);
   }
 
   /**
@@ -392,13 +437,15 @@ public class ConnectionPool {
    * @param nnAddress Address of server supporting the ClientProtocol.
    * @param ugi User context.
    * @param proto Interface of the protocol.
+   * @param enableMultiSocket Enable multiple socket or not.
    * @param alignmentContext The alignmentContext for the namespace.
    * @return proto for the target ClientProtocol that contains the user's
    *         security context.
    * @throws IOException If it cannot be created.
    */
   protected static <T> ConnectionContext newConnection(Configuration conf,
-      String nnAddress, UserGroupInformation ugi, Class<T> proto, int index,
+      String nnAddress, UserGroupInformation ugi, Class<T> proto,
+      boolean enableMultiSocket, int socketIndex,
       AlignmentContext alignmentContext) throws IOException {
     if (!PROTO_MAP.containsKey(proto)) {
       String msg = "Unsupported protocol for connection to NameNode: "
@@ -423,12 +470,10 @@ public class ConnectionPool {
     InetSocketAddress socket = NetUtils.createSocketAddr(nnAddress);
     final long version = RPC.getProtocolVersion(classes.protoPb);
     Object proxy = null;
-    if (conf.getBoolean(
-        RBFConfigKeys.DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE,
-        DFS_ROUTER_NAMENODE_CONNECTION_MULTIPLE_DEFAULT)) {
+    if (enableMultiSocket) {
       FederationConnectionId connectionId = new FederationConnectionId(
           socket, ClientNamenodeProtocolPB.class, ugi, RPC.getRpcTimeout(conf),
-          defaultPolicy, conf, index);
+          defaultPolicy, conf, socketIndex);
       proxy = RPC.getProtocolProxy(classes.protoPb, version, connectionId,
           conf, factory, alignmentContext).getProxy();
     } else {
@@ -441,16 +486,13 @@ public class ConnectionPool {
 
     ProxyAndInfo<T> clientProxy =
         new ProxyAndInfo<T>(client, dtService, socket);
-    ConnectionContext connection = new ConnectionContext(clientProxy);
-    return connection;
+    return new ConnectionContext(clientProxy, conf);
   }
 
-  private static <T> T newProtoClient(Class<T> proto, ProtoImpl classes,
-      Object proxy) {
+  private static <T> T newProtoClient(Class<T> proto, ProtoImpl classes, Object proxy) {
     try {
-      Constructor<?> constructor =
-          classes.protoClientPb.getConstructor(classes.protoPb);
-      Object o = constructor.newInstance(new Object[] {proxy});
+      Constructor<?> constructor = classes.protoClientPb.getConstructor(classes.protoPb);
+      Object o = constructor.newInstance(proxy);
       if (proto.isAssignableFrom(o.getClass())) {
         @SuppressWarnings("unchecked")
         T client = (T) o;
