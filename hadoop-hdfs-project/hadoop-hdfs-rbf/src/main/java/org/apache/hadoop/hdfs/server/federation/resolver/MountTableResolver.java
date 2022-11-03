@@ -147,6 +147,7 @@ public class MountTableResolver
               TimeUnit.MINUTES);
       this.locationCache = CacheBuilder.newBuilder()
           .expireAfterAccess(mountTableCacheExpireTimeMs, TimeUnit.MINUTES)
+          .initialCapacity(maxCacheSize)
           .maximumSize(maxCacheSize)
           .build();
     } else {
@@ -474,46 +475,12 @@ public class MountTableResolver
     verifyMountTable();
     final String path = RouterAdmin.normalizeFileSystemPath(str);
 
-    Set<String> children = new TreeSet<>();
     readLock.lock();
     try {
       String from = path;
       String to = path + Character.MAX_VALUE;
       SortedMap<String, MountTable> subMap = this.tree.subMap(from, to);
-
-      boolean exists = false;
-      for (String subPath : subMap.keySet()) {
-        String child = subPath;
-
-        // Special case for /
-        if (!path.equals(Path.SEPARATOR)) {
-          // Get the children
-          int ini = path.length();
-          child = subPath.substring(ini);
-        }
-
-        if (child.isEmpty()) {
-          // This is a mount point but without children
-          exists = true;
-        } else if (child.startsWith(Path.SEPARATOR)) {
-          // This is a mount point with children
-          exists = true;
-          child = child.substring(1);
-
-          // We only return immediate children
-          int fin = child.indexOf(Path.SEPARATOR);
-          if (fin > -1) {
-            child = child.substring(0, fin);
-          }
-          if (!child.isEmpty()) {
-            children.add(child);
-          }
-        }
-      }
-      if (!exists) {
-        return null;
-      }
-      return new LinkedList<>(children);
+      return FileSubclusterResolver.getMountPoints(path, subMap.keySet());
     } finally {
       readLock.unlock();
     }
@@ -702,14 +669,19 @@ public class MountTableResolver
     final String PART_FILE_PATTERN = "(.*)/part-\\d+-" + UUID_PATTERN;
     final String SPARK_STAGING_PATTERN = "(.*)/.spark-staging";
     final String SPAKR_STAGING_PATTERN2 = "(.*)/.sparkStaging";
+    final String HIVE_STAGING_PATTERN = "(.*)/.hive-staging";
     final String TEMPORARY_PATTERN = "(.*)/_temporary";
+    final String UUID_PATTERN_FILE = "(.*)/.*" + UUID_PATTERN;
     final String[] TO_IGNORE_PATTERNS = {
-            PART_FILE_PATTERN,
-            SPARK_STAGING_PATTERN,
-            TEMPORARY_PATTERN,
-            SPAKR_STAGING_PATTERN2,
-            "(.+)\\.COPYING$",
-            "(.+)\\._COPYING_.*$"};
+        SPARK_STAGING_PATTERN,
+        SPAKR_STAGING_PATTERN2,
+        HIVE_STAGING_PATTERN,
+        TEMPORARY_PATTERN,
+        "(.+)\\.COPYING$",
+        "(.+)\\._COPYING_.*$",
+        UUID_PATTERN_FILE,
+        PART_FILE_PATTERN
+    };
     /** Pattern for temporary files (or of the individual patterns). */
     final Pattern TO_IGNORE_PATTERN =
             Pattern.compile(StringUtils.join("|", TO_IGNORE_PATTERNS));

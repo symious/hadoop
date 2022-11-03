@@ -22,6 +22,7 @@ import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.FEDE
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_DEFAULT_NAMESERVICE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -703,6 +704,17 @@ public class TestMountTableResolver {
     // Cleanup before exit
     mountTable.removeEntry("/testlocationcache");
     mountTable.removeEntry("/anothertestlocationcache");
+  }
+
+  @Test
+  public void testGetDirPrefix() {
+    String match1 = "/test_manifest/20200723_105434_14034_qrctr_5bbcdb62-d575-4292-923e-b60d73dfb073";
+    String match1Res = MountTableResolver.getDirPrefix(match1);
+    assertNotEquals(match1, match1Res);
+
+    String unmatch1 = "/test_manifest/20200723_105434_14034_qrctr_5bbcdb62-d575-4292-923eX-b60d73dfb073";
+    String unmatch1Res = MountTableResolver.getDirPrefix(unmatch1);
+    assertEquals(unmatch1, unmatch1Res);
   }
 
   /**
