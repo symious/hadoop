@@ -72,7 +72,7 @@ public class TrashPolicyDefault extends TrashPolicy {
       new SimpleDateFormat("yyMMddHHmm");
   private static final int MSECS_PER_MINUTE = 60*1000;
 
-  private static boolean createTrashRootEnable;
+  protected static boolean createTrashRootEnable;
   private long emptierInterval;
   protected long trashConstraint;
 

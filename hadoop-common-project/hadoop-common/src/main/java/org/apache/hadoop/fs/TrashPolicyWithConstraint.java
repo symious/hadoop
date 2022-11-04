@@ -65,6 +65,11 @@ public class TrashPolicyWithConstraint extends TrashPolicyDefault {
 
   private void processPathWithConstraint(FileSystem fs, Path path, Path trashPath, long constraint,
        boolean deleteFlag) throws IOException {
+    if (constraint == 0) {
+      LOG.warn("The constraint is 0. Won't delete any file");
+      return;
+    }
+
     // double check to avoid mis-deletion
     if (deleteFlag && !path.toUri().getPath().startsWith(TRASH_ROOT)) {
       LOG.warn("Trying to directly delete {} which not start with {}. Please double check it.",
@@ -72,9 +77,10 @@ public class TrashPolicyWithConstraint extends TrashPolicyDefault {
       return;
     }
 
-    // If the sub-dirs' files less than constraint, the directory will be moved to trash completely
+    // 1. constraint > 0: File count is less than constraint will delete directly here.
+    // 2. constraint < 0: Dir/File will delete directly no matter how many files it contains
     long fileCount = fileCount(path);
-    if (fileCount <= constraint) {
+    if (fileCount <= constraint || constraint < 0) {
       processPath(path, deleteFlag, trashPath);
       return;
     }
@@ -86,10 +92,13 @@ public class TrashPolicyWithConstraint extends TrashPolicyDefault {
     for (FileStatus stat : stats) {
       if (stat.isFile()) {
         Path fileTrashPath = makeTrashRelativePath(trashCurrent, stat.getPath());
+        if (createTrashRootEnable && !fs.exists(fileTrashPath.getParent())) {
+          fs.mkdirs(fileTrashPath.getParent(), new FsPermission(PERMISSION));
+        }
         processPath(stat.getPath(), deleteFlag, fileTrashPath);
       } else {
         Path subTrashPath = makeTrashRelativePath(trashCurrent, stat.getPath());
-        if (!fs.exists(subTrashPath.getParent())) {
+        if (createTrashRootEnable && !fs.exists(subTrashPath.getParent())) {
           fs.mkdirs(subTrashPath.getParent(), new FsPermission(PERMISSION));
         }
         processPathWithConstraint(fs, stat.getPath(), subTrashPath, constraint,
