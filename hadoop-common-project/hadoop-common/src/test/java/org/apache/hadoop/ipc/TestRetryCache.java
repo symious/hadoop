@@ -50,8 +50,9 @@ public class TestRetryCache {
   static class TestServer {
     AtomicInteger retryCount = new AtomicInteger();
     AtomicInteger operationCount = new AtomicInteger();
-    private RetryCache retryCache = new RetryCache("TestRetryCache", 1,
-        100 * 1000 * 1000 * 1000L);
+    private final RetryCache retryCache = new RetryCache(
+        "TestRetryCache", 1, 100 * 1000 * 1000 * 1000L);
+
 
     /**
      * A server method implemented using {@link RetryCache}.
@@ -67,7 +68,7 @@ public class TestRetryCache {
     int echo(int input, int failureOutput, long methodTime, boolean success)
         throws InterruptedException {
       CacheEntryWithPayload entry = RetryCache.waitForCompletion(retryCache,
-          null);
+          null, Server.getClientId(), Server.getCallId());
       if (entry != null && entry.isSuccess()) {
         System.out.println("retryCount incremented " + retryCount.get());
         retryCount.incrementAndGet();

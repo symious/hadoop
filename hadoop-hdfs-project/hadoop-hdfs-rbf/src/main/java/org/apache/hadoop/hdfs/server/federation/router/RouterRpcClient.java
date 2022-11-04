@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.federation.router;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_CLIENT_CONNECT_MAX_RETRIES_ON_SOCKET_TIMEOUTS_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_CLIENT_CONNECT_TIMEOUT_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_IP_PROXY_USERS;
 import static org.apache.hadoop.hdfs.server.federation.fairness.RouterRpcFairnessConstants.CONCURRENT_NS;
 
 import java.io.EOFException;
@@ -59,6 +60,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.hdfs.NameNodeProxiesClient.ProxyAndInfo;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.protocol.ClientMsyncProtocol;
@@ -83,6 +85,7 @@ import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.net.ConnectTimeoutException;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.eclipse.jetty.util.ajax.JSON;
 import org.slf4j.Logger;
@@ -135,6 +138,8 @@ public class RouterRpcClient {
   private final RetryPolicy retryPolicy;
   /** Optional perf monitor. */
   private final RouterRpcMonitor rpcMonitor;
+  /** Field separator of CallerContext. */
+  private final String contextFieldSeparator;
 
   private final boolean observerReadEnabled;
 
@@ -155,6 +160,8 @@ public class RouterRpcClient {
   private final Map<String, AtomicLong> rejectedPermitsPerNs = new ConcurrentHashMap<>();
   private final Map<String, AtomicLong> acceptedPermitsPerNs = new ConcurrentHashMap<>();
 
+  private final boolean enableProxyUser;
+
   /**
    * Create a router RPC client to manage remote procedure calls to NNs.
    *
@@ -168,6 +175,9 @@ public class RouterRpcClient {
     this.router = router;
 
     this.namenodeResolver = resolver;
+    this.contextFieldSeparator = conf.get(
+        CommonConfigurationKeys.HADOOP_CALLER_CONTEXT_SEPARATOR_KEY,
+        CommonConfigurationKeys.HADOOP_CALLER_CONTEXT_SEPARATOR_DEFAULT);
 
     Configuration clientConf = getClientConfiguration(conf);
     this.connectionManager = new ConnectionManager(clientConf);
@@ -225,6 +235,8 @@ public class RouterRpcClient {
     this.isNewMsyncServerEnabled = conf.getBoolean(
         RBFConfigKeys.DSF_ROUTER_OBSERVER_ENABLE_NEW_MSYNC_SERVER_KEY,
         RBFConfigKeys.DSF_ROUTER_OBSERVER_ENABLE_NEW_MSYNC_SERVER_DEFAULT);
+    String[] ipProxyUsers = conf.getStrings(DFS_NAMENODE_IP_PROXY_USERS);
+    this.enableProxyUser = ipProxyUsers != null && ipProxyUsers.length > 0;
   }
 
   @VisibleForTesting
@@ -419,8 +431,8 @@ public class RouterRpcClient {
    *         NN + current user.
    * @throws IOException If we cannot get a connection to the NameNode.
    */
-  private ConnectionContext getConnection(UserGroupInformation ugi, String nsId,
-      String rpcAddress, Class<?> proto) throws IOException {
+  private ConnectionContext getConnection(UserGroupInformation ugi,
+      String nsId, String rpcAddress, Class<?> proto) throws IOException {
     ConnectionContext connection = null;
     try {
       // Each proxy holds the UGI info for the current user when it is created.
@@ -431,7 +443,7 @@ public class RouterRpcClient {
 
       // TODO Add tokens from the federated UGI
       UserGroupInformation connUGI = ugi;
-      if (UserGroupInformation.isSecurityEnabled()) {
+      if (UserGroupInformation.isSecurityEnabled() || this.enableProxyUser) {
         UserGroupInformation routerUser = UserGroupInformation.getLoginUser();
         connUGI = UserGroupInformation.createProxyUser(
             ugi.getUserName(), routerUser);
@@ -534,6 +546,7 @@ public class RouterRpcClient {
     }
 
     appendProxyHostname();
+    addClientInfoToCallerContext();
     Object ret = null;
     if (rpcMonitor != null) {
       rpcMonitor.proxyOp();
@@ -676,6 +689,42 @@ public class RouterRpcClient {
     if (addProxyHostname) {
       Client.setProxyHostname(Server.getRemoteAddress());
     }
+  }
+
+  /**
+   * For tracking some information about the actual client.
+   * It adds trace info "clientIp:ip", "clientPort:port",
+   * "clientId:id" and "clientCallId:callId"
+   * in the caller context, removing the old values if they were
+   * already present.
+   */
+  private void addClientInfoToCallerContext() {
+    CallerContext ctx = CallerContext.getCurrent();
+    String origContext = ctx == null ? null : ctx.getContext();
+    byte[] origSignature = ctx == null ? null : ctx.getSignature();
+    CallerContext.Builder builder =
+        new CallerContext.Builder("", contextFieldSeparator)
+            .append(CallerContext.CLIENT_IP_STR, Server.getRemoteAddress())
+            .append(CallerContext.CLIENT_PORT_STR,
+                Integer.toString(Server.getRemotePort()))
+            .append(CallerContext.CLIENT_ID_STR,
+                StringUtils.byteToHexString(Server.getClientId()))
+            .append(CallerContext.CLIENT_CALL_ID_STR,
+                Integer.toString(Server.getCallId()))
+            .setSignature(origSignature);
+    // Append the original caller context
+    if (origContext != null) {
+      for (String part : origContext.split(contextFieldSeparator)) {
+        String[] keyValue =
+            part.split(CallerContext.Builder.KEY_VALUE_SEPARATOR, 2);
+        if (keyValue.length == 2) {
+          builder.appendIfAbsent(keyValue[0], keyValue[1]);
+        } else if (keyValue.length == 1) {
+          builder.append(keyValue[0]);
+        }
+      }
+    }
+    CallerContext.setCurrent(builder.build());
   }
 
   /**
@@ -1456,6 +1505,9 @@ public class RouterRpcClient {
 
     List<T> orderedLocations = new ArrayList<>();
     List<Callable<Object>> callables = new ArrayList<>();
+    // transfer originCall & callerContext to worker threads of executor.
+    final Server.Call originCall = Server.getCurCall().get();
+    final CallerContext originContext = CallerContext.getCurrent();
     for (final T location : locations) {
       String nsId = location.getNameserviceId();
       msync(nsId, ugi, m);
@@ -1474,12 +1526,18 @@ public class RouterRpcClient {
             nnLocation = (T)new RemoteLocation(nsId, nnId, location.getDest());
           }
           orderedLocations.add(nnLocation);
-          callables.add(() -> invokeMethod(ugi, nnList, proto, m, paramList));
+          callables.add(() -> {
+                transferThreadLocalContext(originCall, originContext);
+                return invokeMethod(ugi, nnList, proto, m, paramList);
+              });
         }
       } else {
         // Call the objectGetter in order of nameservices in the NS list
         orderedLocations.add(location);
-        callables.add(() ->  invokeMethod(ugi, namenodes, proto, m, paramList));
+        callables.add(() ->  {
+          transferThreadLocalContext(originCall, originContext);
+          return invokeMethod(ugi, namenodes, proto, m, paramList);
+        });
       }
     }
 
@@ -1609,6 +1667,20 @@ public class RouterRpcClient {
       }
       invokeMethod(ugi, namenodes, ClientProtocol.class, mSyncMethod);
     }
+  }
+
+  /**
+   * Transfer origin thread local contexts which is necessary to current
+   * worker thread when invoking method concurrently by executor service.
+   *
+   * @param originCall origin Call required for getting remote client ip.
+   * @param originContext origin CallerContext which should be transferred
+   *                      to server side.
+   */
+  private void transferThreadLocalContext(
+      final Server.Call originCall, final CallerContext originContext) {
+    Server.getCurCall().set(originCall);
+    CallerContext.setCurrent(originContext);
   }
 
   /**

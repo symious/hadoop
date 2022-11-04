@@ -748,6 +748,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONESERVICE_KEYTAB_FILE_KEY = "dfs.zoneservice.keytab.file";
   public static final String  DFS_ZONESERVICE_THREADS_KEY = "dfs.zoneservice.threads";
   public static final int     DFS_ZONESERVICE_THREADS_DEFAULT = 50;
+  public static final String  DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_KEY =
+      "dfs.namenode.audit.log.with.remote.port";
+  public static final boolean DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_DEFAULT =
+      false;
   public static final String  DFS_ZONESERVICE_BATCH_THREAD_POOL_SIZE = "dfs.zoneservice.batch.thread.pool.size";
   public static final int     DFS_ZONESERVICE_BATCH_THREAD_POOL_SIZE_DEFAULT = 5;
   public static final String  DFS_ZONESERVICE_BATCH_THREAD_POOL_MAX_SIZE = "dfs.zoneservice.batch.thread.pool.size.max";
@@ -1049,6 +1053,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.namenode.msync.handler.ratio";
   public static final float   DFS_NAMENODE_MSYNC_HANDLER_RATIO_DEFAULT =
       0.1f;
+  // List of users that can override their client ip
+  public static final String  DFS_NAMENODE_IP_PROXY_USERS = "dfs.namenode.ip-proxy-users";
   public static final String  DFS_HTTP_POLICY_KEY = "dfs.http.policy";
   public static final String  DFS_HTTP_POLICY_DEFAULT =  HttpConfig.Policy.HTTP_ONLY.name();
   public static final String  DFS_DATANODE_HTTPSERVER_FILTER_HANDLERS = "dfs.datanode.httpserver.filter.handlers";

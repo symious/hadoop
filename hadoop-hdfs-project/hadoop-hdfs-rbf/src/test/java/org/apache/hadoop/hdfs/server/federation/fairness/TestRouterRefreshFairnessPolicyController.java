@@ -225,7 +225,8 @@ public class TestRouterRefreshFairnessPolicyController {
     MiniRouterDFSCluster.RouterContext routerContext =
         cluster.getRandomRouter();
     RouterRpcClient client = Mockito.spy(routerContext.getRouterRpcClient());
-    Mockito.doAnswer(invocationOnMock -> null).when(client).invokeMethod(Mockito.any(UserGroupInformation.class),
+    Mockito.doAnswer(invocationOnMock -> null).when(client).invokeMethod(
+        Mockito.any(UserGroupInformation.class),
         Mockito.anyListOf(FederationNamenodeContext.class),
         Mockito.any(Class.class), Mockito.any(Method.class), Mockito.any());
 
