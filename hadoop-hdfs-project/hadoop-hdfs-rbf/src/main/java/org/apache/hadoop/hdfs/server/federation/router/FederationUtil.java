@@ -26,7 +26,9 @@ import java.net.URL;
 import java.net.URLConnection;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
@@ -298,5 +300,39 @@ public final class FederationUtil {
       nameservices.add(nsId);
     }
     return nameservices;
+  }
+
+  /**
+   * Collect all configured namenodes and namespaces they are associated with.
+   * @param conf configuration to fetch the configured namenodes.
+   * @return map of namespace:namenode
+   * @throws IllegalArgumentException
+   */
+  public static Map<String, Set<String>> getAllConfiguredNSNN(Configuration conf)
+      throws IllegalArgumentException {
+    // Get all name services configured
+    Collection<String> namenodes = conf.getTrimmedStringCollection(
+        DFS_ROUTER_MONITOR_NAMENODE);
+
+    Map<String, Set<String>> nsToNnMap = new HashMap<>();
+    for (String namenode : namenodes) {
+      String[] namenodeSplit = namenode.split("\\.");
+      String nsId = null;
+      String nnId = null;
+      if (namenodeSplit.length == 2) {
+        nsId = namenodeSplit[0];
+        nnId = namenodeSplit[1];
+      } else if (namenodeSplit.length == 1) {
+        nsId = namenode;
+      } else {
+        String errorMsg = "Invalid nameservice specified : " + namenode;
+        throw new IllegalArgumentException(errorMsg);
+      }
+      if (!nsToNnMap.containsKey(nsId)) {
+        nsToNnMap.put(nsId, new HashSet<String>());
+      }
+      nsToNnMap.get(nsId).add(nnId);
+    }
+    return nsToNnMap;
   }
 }

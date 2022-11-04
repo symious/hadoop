@@ -21,16 +21,26 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.server.federation.fairness.RefreshFairnessPolicyControllerHandler.HANDLER_IDENTIFIER;
+import static org.apache.hadoop.hdfs.server.federation.router.FederationUtil.getAllConfiguredNSNN;
+import static org.apache.hadoop.hdfs.server.federation.router.handler.RefreshConfiguredNamenodesHandler.REFRESH_CONFIGURED_NAMENODES_HANDLER_IDENTIFIER;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.google.common.collect.Sets;
+import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.hdfs.server.federation.fairness.RefreshFairnessPolicyControllerHandler;
+import org.apache.hadoop.hdfs.server.federation.router.handler.RefreshConfiguredNamenodesHandler;
+import org.apache.hadoop.ipc.proto.RefreshCallQueueProtocolProtos;
+import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolPB;
+import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolServerSideTranslatorPB;
+import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 
 import org.apache.hadoop.conf.Configuration;
@@ -189,6 +199,17 @@ public class RouterAdminServer extends AbstractService
     DFSUtil.addPBProtocol(conf, GenericRefreshProtocolPB.class,
         genericRefreshService, adminServer);
     registerRefreshFairnessPolicyControllerHandler();
+
+    RefreshCallQueueProtocolServerSideTranslatorPB refreshCallQueueXlator =
+        new RefreshCallQueueProtocolServerSideTranslatorPB(this);
+    BlockingService refreshCallQueueService =
+        RefreshCallQueueProtocolProtos.RefreshCallQueueProtocolService.
+            newReflectiveBlockingService(refreshCallQueueXlator);
+
+    DFSUtil.addPBProtocol(conf, RefreshCallQueueProtocolPB.class,
+        refreshCallQueueService, adminServer);
+
+    registerRefreshConfiguredNamenodes();
   }
 
   /**
@@ -600,6 +621,28 @@ public class RouterAdminServer extends AbstractService
         .register(HANDLER_IDENTIFIER, new RefreshFairnessPolicyControllerHandler(router));
   }
 
+  private void registerRefreshConfiguredNamenodes() {
+    RefreshRegistry.defaultRegistry().register(
+        REFRESH_CONFIGURED_NAMENODES_HANDLER_IDENTIFIER,
+        new RefreshConfiguredNamenodesHandler(this));
+  }
+
+  @Override
+  public void refreshCallQueue() {
+    LOG.info("Refreshing call queue.");
+
+    Configuration configuration = new Configuration();
+    router.getRpcServer().getServer().refreshCallQueue(configuration);
+  }
+
+  @Override
+  public void refreshCallQueue(EnumSet<RefreshCallQueueType> types) {
+    LOG.info("Refreshing call queue with RefreshCallQueueType: " + types);
+
+    Configuration conf = new Configuration();
+    router.getRpcServer().getServer().refreshCallQueue(conf, types);
+  }
+
   /**
    * Get a new permission checker used for making mount table access
    * control. This method will be invoked during each RPC call in router
@@ -650,5 +693,145 @@ public class RouterAdminServer extends AbstractService
   public boolean refreshSuperUserGroupsConfiguration() throws IOException {
     ProxyUsers.refreshSuperUserGroupsConfiguration();
     return true;
+  }
+
+  @InterfaceStability.Evolving
+  public String refreshNameservicesAndNamenodes() {
+    return refreshNameservicesAndNamenodes(new Configuration());
+  }
+
+  @InterfaceStability.Evolving
+  @VisibleForTesting
+  public synchronized String refreshNameservicesAndNamenodes(
+      Configuration configuration) {
+    Map<String, Set<String>> oldMap = router.getNsToNnMap();
+    Map<String, Set<String>> newMap = getAllConfiguredNSNN(configuration);
+
+    NameserviceDifferences differences =
+        new NameserviceDifferences(newMap, oldMap);
+
+    for (NameserviceDifference nd : differences.addedNns) {
+      for (String namenode : nd.namenodesDifference) {
+        registerNamenode(configuration, nd.nameservice, namenode);
+      }
+    }
+
+    for (NameserviceDifference nd : differences.removedNns) {
+      for (String namenode : nd.namenodesDifference) {
+        deregisterNamenode(nd.nameservice, namenode);
+      }
+    }
+
+    router.setNsToNnMap(newMap);
+    return differences.toString();
+  }
+
+  private void registerNamenode(Configuration configuration, String nameservice, String namenode) {
+    if (nameservice == null && namenode == null) {
+      return;
+    }
+    NamenodeHeartbeatService heartbeatService =
+        router.createNamenodeHeartbeatService(nameservice, namenode);
+    if (heartbeatService != null && conf.getBoolean(
+        RBFConfigKeys.DFS_ROUTER_HEARTBEAT_ENABLE,
+        RBFConfigKeys.DFS_ROUTER_HEARTBEAT_ENABLE_DEFAULT)) {
+      router.addNamenodeHeartbeatService(heartbeatService);
+      router.addService(heartbeatService);
+      heartbeatService.init(configuration);
+      heartbeatService.start();
+
+      String nnId = nameservice;
+      if (namenode != null) {
+        nnId += "." + namenode;
+      }
+      LOG.info(String.format("Added namenode to router monitor: %s", nnId));
+    }
+  }
+
+  private void deregisterNamenode(String nameservice, String namenode) {
+    if (nameservice == null && namenode == null) {
+      return;
+    }
+
+    for (NamenodeHeartbeatService heartbeatService: router.getNamenodeHearbeatServices()) {
+      if (heartbeatService.getNameserviceId().equals(nameservice) && (
+          (heartbeatService.getNamenodeId() == null && namenode == null)
+              || heartbeatService.getNamenodeId().equals(namenode))) {
+        heartbeatService.stop();
+        router.removeNamenodeHeartbeatService(heartbeatService);
+        router.removeService(heartbeatService);
+        String nnId = nameservice;
+        if (namenode != null) {
+          nnId += "." + namenode;
+        }
+        LOG.info(String.format("Removed namenode to router monitor: %s", nnId));
+        return ;
+      }
+    }
+  }
+
+  /**
+   * Helper container-like class that stores the differences between an old
+   * set of nameservices and a new set.
+   */
+  static class NameserviceDifferences {
+    public final List<NameserviceDifference> removedNns;
+    public final List<NameserviceDifference> addedNns;
+
+    public NameserviceDifferences(Map<String, Set<String>> newNss,
+        Map<String, Set<String>> oldNss) {
+      removedNns = getDifferentNamenodes(oldNss, newNss);
+      addedNns = getDifferentNamenodes(newNss, oldNss);
+    }
+
+    /**
+     * Get namespaces and namenodes only present in new map but not old map
+     * @param newMap new map of namespace:namenode
+     * @param oldMap old map of namespace:namenode
+     */
+    private List<NameserviceDifference> getDifferentNamenodes(
+        Map<String, Set<String>> newMap, Map<String, Set<String>> oldMap) {
+      List<NameserviceDifference> result = new ArrayList<>();
+      for (Map.Entry<String, Set<String>> entry : newMap.entrySet()) {
+        String ns = entry.getKey();
+        Set<String> nns = entry.getValue();
+
+        if (!oldMap.containsKey(ns)) {
+          result.add(new NameserviceDifference(ns, nns));
+          continue;
+        }
+        Set<String> difference = Sets.difference(nns, oldMap.get(ns));
+        if (!difference.isEmpty()) {
+          result.add(new NameserviceDifference(ns, difference));
+        }
+      }
+      return result;
+    }
+
+    @Override
+    public String toString() {
+      return "Added=" + Joiner.on(";").join(addedNns) + "|Removed=" + Joiner.on(
+          ";").join(removedNns);
+    }
+  }
+
+  /**
+   * Helper container-like class that stores the differences between an old
+   * nameservice and a new one
+   */
+  static class NameserviceDifference {
+    public final String nameservice;
+    public final Set<String> namenodesDifference;
+
+    public NameserviceDifference(String nameservice, Set<String> namenodesDifference) {
+      this.nameservice = nameservice;
+      this.namenodesDifference = namenodesDifference;
+    }
+
+    @Override
+    public String toString() {
+      return String.format("%s:%s", nameservice,
+          Joiner.on(",").useForNull("").join(namenodesDifference));
+    }
   }
 }

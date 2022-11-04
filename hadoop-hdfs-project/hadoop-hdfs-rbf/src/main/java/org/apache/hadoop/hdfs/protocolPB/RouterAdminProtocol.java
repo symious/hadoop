@@ -24,6 +24,7 @@ import org.apache.hadoop.hdfs.server.federation.resolver.RouterGenericManager;
 import org.apache.hadoop.hdfs.server.federation.router.NameserviceManager;
 import org.apache.hadoop.hdfs.server.federation.router.RouterStateManager;
 import org.apache.hadoop.ipc.GenericRefreshProtocol;
+import org.apache.hadoop.ipc.RefreshCallQueueProtocol;
 
 /**
  * Protocol used by routeradmin to communicate with statestore.
@@ -32,5 +33,5 @@ import org.apache.hadoop.ipc.GenericRefreshProtocol;
 @InterfaceStability.Stable
 public interface RouterAdminProtocol extends MountTableManager,
     RouterStateManager, NameserviceManager, GenericRefreshProtocol,
-    RouterGenericManager {
+    RouterGenericManager, RefreshCallQueueProtocol {
 }

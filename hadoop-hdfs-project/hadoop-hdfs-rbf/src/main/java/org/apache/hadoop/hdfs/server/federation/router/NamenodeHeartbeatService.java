@@ -176,6 +176,14 @@ public class NamenodeHeartbeatService extends PeriodicService {
     super.serviceInit(configuration);
   }
 
+  public String getNameserviceId() {
+    return this.nameserviceId;
+  }
+
+  public String getNamenodeId() {
+    return this.namenodeId;
+  }
+
   @Override
   public void periodicInvoke() {
     updateState();

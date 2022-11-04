@@ -1900,7 +1900,6 @@ public class DFSAdmin extends FsShell {
 
   public int refreshCallQueue(String[] argv) throws IOException {
     // Check the refresh type
-    String path = null;
     List<RefreshCallQueueType> types = new ArrayList<>();
     if (argv != null) {
       List<String> args = new ArrayList<>(Arrays.asList(argv));

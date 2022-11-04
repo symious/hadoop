@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.federation.router;
 
+import static org.apache.hadoop.hdfs.server.federation.router.FederationUtil.getAllConfiguredNSNN;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_KERBEROS_PRINCIPAL_HOSTNAME_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_KERBEROS_PRINCIPAL_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_KEYTAB_FILE_KEY;
@@ -28,9 +29,11 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -92,6 +95,8 @@ public class Router extends CompositeService implements
   /** Router address/identifier. */
   private String routerId;
 
+  private Map<String, Set<String>> nsToNnMap;
+
   /** RPC interface to the client. */
   private RouterRpcServer rpcServer;
   private InetSocketAddress rpcAddress;
@@ -112,7 +117,7 @@ public class Router extends CompositeService implements
   /** Interface to identify the active NN for a nameservice or blockpool ID. */
   private ActiveNamenodeResolver namenodeResolver;
   /** Updates the namenode status in the namenode resolver. */
-  private Collection<NamenodeHeartbeatService> namenodeHeartbeatServices;
+  final private Collection<NamenodeHeartbeatService> namenodeHeartbeatServices = new ArrayList<>();
 
   /** Router metrics. */
   private RouterMetricsService metrics;
@@ -154,6 +159,7 @@ public class Router extends CompositeService implements
   @Override
   protected void serviceInit(Configuration configuration) throws Exception {
     this.conf = configuration;
+    this.nsToNnMap = getAllConfiguredNSNN(conf);
     updateRouterState(RouterServiceState.INITIALIZING);
 
     // Enable the security for the Router
@@ -216,7 +222,7 @@ public class Router extends CompositeService implements
     if (isNamenodeHeartbeatEnable) {
 
       // Create status updater for each monitored Namenode
-      this.namenodeHeartbeatServices = createNamenodeHeartbeatServices();
+      createNamenodeHeartbeatServices();
       for (NamenodeHeartbeatService heartbeatService :
           this.namenodeHeartbeatServices) {
         addService(heartbeatService);
@@ -507,8 +513,7 @@ public class Router extends CompositeService implements
    *
    * @return List of heartbeat services.
    */
-  protected Collection<NamenodeHeartbeatService>
-      createNamenodeHeartbeatServices() {
+  protected void createNamenodeHeartbeatServices() {
 
     Map<String, NamenodeHeartbeatService> ret = new HashMap<>();
 
@@ -548,7 +553,7 @@ public class Router extends CompositeService implements
       }
     }
 
-    return ret.values();
+    namenodeHeartbeatServices.addAll(ret.values());
   }
 
   /**
@@ -790,6 +795,25 @@ public class Router extends CompositeService implements
   }
 
   /**
+   * Get the list of namenode heartbeat service.
+   */
+  Collection<NamenodeHeartbeatService> getNamenodeHearbeatServices() {
+    return this.namenodeHeartbeatServices;
+  }
+
+  public void addNamenodeHeartbeatService(NamenodeHeartbeatService service) {
+    synchronized (namenodeHeartbeatServices) {
+      namenodeHeartbeatServices.add(service);
+    }
+  }
+
+  public void removeNamenodeHeartbeatService(NamenodeHeartbeatService service) {
+    synchronized (namenodeHeartbeatServices) {
+      namenodeHeartbeatServices.remove(service);
+    }
+  }
+
+  /**
    * Get the Router safe mode service.
    */
   RouterSafemodeService getSafemodeService() {
@@ -806,6 +830,22 @@ public class Router extends CompositeService implements
    * @return Null if admin is not enabled.
    */
   public RouterAdminServer getAdminServer() {
+    return adminServer;
+  }
+
+  /**
+   * Get all namenodes in a map of nameservice:namenode.
+   */
+  public Map<String, Set<String>> getNsToNnMap() {
+    return nsToNnMap;
+  }
+
+  public void setNsToNnMap(Map<String, Set<String>> map) {
+    nsToNnMap = map;
+  }
+
+  @VisibleForTesting
+  public RouterAdminServer getRouterAdminServer() {
     return adminServer;
   }
 
