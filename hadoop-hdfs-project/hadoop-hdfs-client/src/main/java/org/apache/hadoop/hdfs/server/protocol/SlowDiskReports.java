@@ -144,4 +144,34 @@ public final class SlowDiskReports {
       return null;
     }
   }
+
+  public static class DiskOpForJMX {
+    private double metadata = 0;
+    private double read = 0;
+    private double write = 0;
+
+    public DiskOpForJMX(Map<DiskOp, Double> latencyMap) {
+      if (latencyMap.containsKey(DiskOp.METADATA)) {
+        metadata = latencyMap.get(DiskOp.METADATA);
+      }
+      if (latencyMap.containsKey(DiskOp.READ)) {
+        read = latencyMap.get(DiskOp.READ);
+      }
+      if (latencyMap.containsKey(DiskOp.WRITE)) {
+        write = latencyMap.get(DiskOp.WRITE);
+      }
+    }
+
+    public double getMetadata() {
+      return metadata;
+    }
+
+    public double getRead() {
+      return read;
+    }
+
+    public double getWrite() {
+      return write;
+    }
+  }
 }

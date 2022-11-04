@@ -1259,5 +1259,14 @@ public class CommonConfigurationKeysPublic {
       "hadoop.security.groups.in-memory.checksum";
   public static final boolean
       HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_CHECKSUM_DEFAULT = false;
+
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String FAILOVER_SKIP_INFO_LOGGING_THRESHOLD =
+      "ipc.client.failover.logging.threshold";
+  public static final int FAILOVER_SKIP_INFO_LOGGING_THRESHOLD_DEFAULT = 2;
 }
 

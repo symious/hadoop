@@ -147,6 +147,12 @@ class UnreliableImplementation implements UnreliableInterface {
   }
 
   @Override
+  public void failsRouterExceptionsWrappedInRemoteException(String exceptionStr)
+      throws RemoteException {
+    throw new RemoteException(exceptionStr, "dummy failure");
+  }
+
+  @Override
   public String succeedsOnceThenFailsReturningString()
       throws UnreliableException, IOException, StandbyException {
     if (succeedsOnceThenFailsCount++ < 1) {

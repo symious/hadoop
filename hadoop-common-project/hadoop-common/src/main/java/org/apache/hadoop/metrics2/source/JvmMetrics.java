@@ -154,6 +154,7 @@ public class JvmMetrics implements MetricsSource {
     } else {
       getThreadUsageFromGroup(rb);
     }
+    getThreadsCount(rb);
     getEventCounters(rb);
   }
 
@@ -222,6 +223,14 @@ public class JvmMetrics implements MetricsSource {
       }
     }
     return gcInfo;
+  }
+
+  private void getThreadsCount(MetricsRecordBuilder rb) {
+    if (threadMXBean != null) {
+      rb.addGauge(ThreadsCount, threadMXBean.getThreadCount());
+    } else {
+      rb.addGauge(ThreadsCount, Thread.currentThread().getThreadGroup().activeCount());
+    }
   }
 
   private void getThreadUsage(MetricsRecordBuilder rb) {

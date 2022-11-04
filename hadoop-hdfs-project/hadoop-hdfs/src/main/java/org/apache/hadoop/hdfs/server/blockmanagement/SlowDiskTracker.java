@@ -194,8 +194,12 @@ public class SlowDiskTracker {
       this.timestamp = timestamp;
     }
 
-    String getSlowDiskID() {
+    public String getSlowDiskID() {
       return this.slowDiskID;
+    }
+
+    public SlowDiskReports.DiskOpForJMX getLatency() {
+      return new SlowDiskReports.DiskOpForJMX(this.latencyMap);
     }
 
     public double getMaxLatency() {
@@ -272,6 +276,10 @@ public class SlowDiskTracker {
       LOG.debug("Failed to serialize statistics" + e);
       return null;
     }
+  }
+
+  public DiskLatency[] getJsonObject() {
+    return slowDisksReport.toArray(new DiskLatency[0]);
   }
 
   private void cleanUpOldReports(long now) {

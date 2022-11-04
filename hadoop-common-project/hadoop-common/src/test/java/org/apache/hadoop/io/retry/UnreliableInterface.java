@@ -87,6 +87,9 @@ public interface UnreliableInterface {
   void failsWithWrappedAccessControlException()
       throws IOException;
 
+  @Idempotent
+  void failsRouterExceptionsWrappedInRemoteException(String exceptionStr) throws RemoteException;
+
   public String succeedsOnceThenFailsReturningString()
       throws UnreliableException, StandbyException, IOException;
   @Idempotent

@@ -2313,6 +2313,14 @@ public class DatanodeManager {
         slowDiskTracker.getSlowDiskReportAsJsonString() : null;
   }
 
+  public SlowPeerTracker.ReportForJson[] getSlowPeersReportJSON() {
+    return slowPeerTracker != null ? slowPeerTracker.getJsonObject() : null;
+  }
+
+  public SlowDiskTracker.DiskLatency[] getSlowDisksReportJSON() {
+    return slowDiskTracker != null ? slowDiskTracker.getJsonObject() : null;
+  }
+
   /**
    * Generates datanode reports for the given report type.
    *

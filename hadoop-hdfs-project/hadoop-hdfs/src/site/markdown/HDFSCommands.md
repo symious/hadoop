@@ -450,7 +450,7 @@ Usage:
 
 | COMMAND\_OPTION | Description |
 |:---- |:---- |
-| `-add` *source* *nameservices* *destination* | Add a mount table entry or update if it exists. |
+| `-add` *source* *nameservices* *destination* | Add a mount table entry. |
 | `-update` *source* *nameservices* *destination* | Update a mount table entry attribures. |
 | `-rm` *source* | Remove mount point of specified path. |
 | `-ls` `[-d]` *path* | List mount points under specified path. Specify -d parameter to get detailed listing.|

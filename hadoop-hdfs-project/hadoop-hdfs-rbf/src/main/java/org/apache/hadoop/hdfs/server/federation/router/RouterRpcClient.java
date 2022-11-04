@@ -348,6 +348,24 @@ public class RouterRpcClient {
   }
 
   /**
+   * Number of active Async Tasks being handled by Thread Pool
+   *
+   * @return Number of active Async Tasks
+   */
+  public int getAsyncCallActive() {
+    return this.executorService.getActiveCount();
+  }
+
+  /**
+   * Number of queued Async Tasks being handled by Thread Pool
+   *
+   * @return Number of queued Async Tasks
+   */
+  public int getAsyncCallQueue() {
+    return this.executorService.getQueue().size();
+  }
+
+  /**
    * JSON representation of the connection pool.
    *
    * @return String representation of the JSON.
@@ -577,12 +595,15 @@ public class RouterRpcClient {
           namenodeResolver.updateActiveNamenode(nsId, client.getAddress());
         }
         if (this.rpcMonitor != null) {
-          this.rpcMonitor.proxyOpComplete(true);
+          this.rpcMonitor.proxyOpComplete(true, nsId);
           if (namenode.getState() == FederationNamenodeServiceState.OBSERVER) {
             this.rpcMonitor.proxyOpObserverCommunicate();
           } else {
             this.rpcMonitor.proxyOpActiveCommunicate();
           }
+        }
+        if (this.router.getRouterClientMetrics() != null) {
+          this.router.getRouterClientMetrics().incInvokedMethod(method);
         }
         return ret;
       } catch (IOException ioe) {
@@ -594,17 +615,17 @@ public class RouterRpcClient {
         } else if (ioe instanceof StandbyException) {
           // Fail over indicated by retry policy and/or NN
           if (this.rpcMonitor != null) {
-            this.rpcMonitor.proxyOpFailureStandby();
+            this.rpcMonitor.proxyOpFailureStandby(nsId);
           }
           failover = true;
         } else if (isUnavailableException(ioe)) {
           if (this.rpcMonitor != null) {
-            this.rpcMonitor.proxyOpFailureCommunicate();
+            this.rpcMonitor.proxyOpFailureCommunicate(nsId);
           }
           failover = true;
         } else if (ioe instanceof RemoteException) {
           if (this.rpcMonitor != null) {
-            this.rpcMonitor.proxyOpComplete(true);
+            this.rpcMonitor.proxyOpComplete(true, nsId);
             if (namenode.getState() == FederationNamenodeServiceState.OBSERVER){
               this.rpcMonitor.proxyOpObserverCommunicate();
             } else {
@@ -618,7 +639,7 @@ public class RouterRpcClient {
           throw ioe;
         } else if (ioe instanceof ConnectionNullException) {
           if (this.rpcMonitor != null) {
-            this.rpcMonitor.proxyOpFailureCommunicate();
+            this.rpcMonitor.proxyOpFailureCommunicate(nsId);
           }
           LOG.error("Get connection for {} {} error: {}", nsId, address,
               ioe.getMessage());
@@ -628,7 +649,7 @@ public class RouterRpcClient {
           throw se;
         } else if (ioe instanceof NoNamenodesAvailableException) {
           if (this.rpcMonitor != null) {
-            this.rpcMonitor.proxyOpNoNamenodes();
+            this.rpcMonitor.proxyOpNoNamenodes(nsId);
           }
           LOG.error("Cannot get available namenode for {} {} error: {}",
               nsId, address, ioe.getMessage());
@@ -638,8 +659,8 @@ public class RouterRpcClient {
           // Other communication error, this is a failure
           // Communication retries are handled by the retry policy
           if (this.rpcMonitor != null) {
-            this.rpcMonitor.proxyOpFailureCommunicate();
-            this.rpcMonitor.proxyOpComplete(false);
+            this.rpcMonitor.proxyOpFailureCommunicate(nsId);
+            this.rpcMonitor.proxyOpComplete(false, nsId);
           }
           LOG.debug("Failed invokeMethod for {} with proto {} and method {}.",
               nsId, protocol, method.getName(), ioe);
@@ -652,7 +673,7 @@ public class RouterRpcClient {
       }
     }
     if (this.rpcMonitor != null) {
-      this.rpcMonitor.proxyOpComplete(false);
+      this.rpcMonitor.proxyOpComplete(false, null);
     }
 
     // All namenodes were unavailable or in standby
@@ -1543,6 +1564,9 @@ public class RouterRpcClient {
 
     if (rpcMonitor != null) {
       rpcMonitor.proxyOp();
+    }
+    if (this.router.getRouterClientMetrics() != null) {
+      this.router.getRouterClientMetrics().incInvokedConcurrent(m);
     }
 
     RouterRpcFairnessPolicyController controller = getRouterRpcFairnessPolicyController();

@@ -4036,4 +4036,15 @@
       hadoop.security.groups.in-memory.local.path + ".md5"
     </description>
   </property>
+
+  <property>
+    <name>ipc.client.failover.logging.threshold</name>
+    <value>2</value>
+    <description>
+      Number of failovers before logging for RemoteException wrapped classes
+      defined in ipc.client.failover.logging.remote.exceptions changes to DEBUG
+      instead of INFO.
+      Value 0 means always log to INFO.
+    </description>
+  </property>
 </configuration>

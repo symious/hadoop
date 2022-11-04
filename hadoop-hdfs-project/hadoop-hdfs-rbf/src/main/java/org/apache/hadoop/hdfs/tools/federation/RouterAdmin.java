@@ -145,13 +145,15 @@ public class RouterAdmin extends Configured implements Tool {
       return usage.toString();
     }
     if (cmd.equals("-add")) {
-      return "\t[-add <source> <nameservice1, nameservice2, ...> <destination> "
+      return "\t[-add <source> <nameservice1, nameservice2, ...> "
+          + "<one destination or the same number of destinations as nameservices> "
           + "[-readonly] [-faulttolerant] "
           + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE] "
           + "-owner <owner> -group <group> -mode <mode>]";
     } else if (cmd.equals("-update")) {
       return "\t[-update <source>"
-          + " [<nameservice1, nameservice2, ...> <destination>] "
+          + " [<nameservice1, nameservice2, ...> "
+          + "<one destination or the same number of destinations as nameservices>] "
           + "[-readonly true|false] [-faulttolerant true|false] "
           + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE] "
           + "-owner <owner> -group <group> -mode <mode>]";
@@ -479,7 +481,7 @@ public class RouterAdmin extends Configured implements Tool {
     // Mandatory parameters
     String mount = parameters[i++];
     String[] nss = parameters[i++].split(",");
-    String dest = parameters[i++];
+    String[] destinations = parameters[i++].split(",");
 
     // Optional parameters
     boolean readOnly = false;
@@ -518,8 +520,38 @@ public class RouterAdmin extends Configured implements Tool {
       i++;
     }
 
-    return addMount(mount, nss, dest, readOnly, faultTolerant, order,
+    return addMount(mount, nss, destinations, readOnly, faultTolerant, order,
         new ACLEntity(owner, group, mode));
+  }
+
+  /**
+   * Verify the namespaces and destinations and return the map from namespace to destination.
+   * @param nss input namespaces.
+   * @param destinations input destinations.
+   * @return one map from namespace to destination.
+   * @throws IOException throw one IOException if there are some wrong.
+   */
+  private Map<String, String> getDestMap(String[] nss, String[] destinations)
+      throws IOException {
+    // It's ok if there is only one namespace and one destination.
+    // It's ok if there are multiple namespaces and one destination.
+    // It's ok if there are multiple namespaces and the same number of destinations.
+    if (nss.length != destinations.length) {
+      if (nss.length == 1 || destinations.length > 1) {
+        String message = "Invalid namespaces and destinations."
+            + " The number of destinations " + destinations.length
+            + " is not matched with the number of namespaces " + nss.length;
+        System.err.println(message);
+        throw new IOException(message);
+      }
+    }
+
+    Map<String, String> destMap = new LinkedHashMap<>();
+    for (int index = 0; index < nss.length; index++) {
+      int destIndex = destinations.length == 1 ? 0 : index;
+      destMap.put(nss[index], destinations[destIndex]);
+    }
+    return destMap;
   }
 
   /**
@@ -527,14 +559,14 @@ public class RouterAdmin extends Configured implements Tool {
    *
    * @param mount Mount point.
    * @param nss Namespaces where this is mounted to.
-   * @param dest Destination path.
+   * @param destinations Destination path.
    * @param readonly If the mount point is read only.
    * @param order Order of the destination locations.
    * @param aclInfo the ACL info for mount point.
    * @return If the mount point was added.
    * @throws IOException Error adding the mount point.
    */
-  public boolean addMount(String mount, String[] nss, String dest,
+  public boolean addMount(String mount, String[] nss, String[] destinations,
       boolean readonly, boolean faultTolerant, DestinationOrder order,
       ACLEntity aclInfo)
       throws IOException {
@@ -543,90 +575,46 @@ public class RouterAdmin extends Configured implements Tool {
     MountTableManager mountTable = client.getMountTableManager();
     MountTable existingEntry = getMountEntry(mount, mountTable);
 
-    if (existingEntry == null) {
-      // Create and add the entry if it doesn't exist
-      Map<String, String> destMap = new LinkedHashMap<>();
-      for (String ns : nss) {
-        destMap.put(ns, dest);
-      }
-      MountTable newEntry = MountTable.newInstance(mount, destMap);
-      if (readonly) {
-        newEntry.setReadOnly(true);
-      }
-      if (faultTolerant) {
-        newEntry.setFaultTolerant(true);
-      }
-      if (order != null) {
-        newEntry.setDestOrder(order);
-      }
-
-      // Set ACL info for mount table entry
-      if (aclInfo.getOwner() != null) {
-        newEntry.setOwnerName(aclInfo.getOwner());
-      }
-
-      if (aclInfo.getGroup() != null) {
-        newEntry.setGroupName(aclInfo.getGroup());
-      }
-
-      if (aclInfo.getMode() != null) {
-        newEntry.setMode(aclInfo.getMode());
-      }
-
-      newEntry.validate();
-
-      AddMountTableEntryRequest request =
-          AddMountTableEntryRequest.newInstance(newEntry);
-      AddMountTableEntryResponse addResponse =
-          mountTable.addMountTableEntry(request);
-      boolean added = addResponse.getStatus();
-      if (!added) {
-        System.err.println("Cannot add mount point " + mount);
-      }
-      return added;
-    } else {
-      // Update the existing entry if it exists
-      for (String nsId : nss) {
-        if (!existingEntry.addDestination(nsId, dest)) {
-          System.err.println("Cannot add destination at " + nsId + " " + dest);
-          return false;
-        }
-      }
-      if (readonly) {
-        existingEntry.setReadOnly(true);
-      }
-      if (faultTolerant) {
-        existingEntry.setFaultTolerant(true);
-      }
-      if (order != null) {
-        existingEntry.setDestOrder(order);
-      }
-
-      // Update ACL info of mount table entry
-      if (aclInfo.getOwner() != null) {
-        existingEntry.setOwnerName(aclInfo.getOwner());
-      }
-
-      if (aclInfo.getGroup() != null) {
-        existingEntry.setGroupName(aclInfo.getGroup());
-      }
-
-      if (aclInfo.getMode() != null) {
-        existingEntry.setMode(aclInfo.getMode());
-      }
-
-      existingEntry.validate();
-
-      UpdateMountTableEntryRequest updateRequest =
-          UpdateMountTableEntryRequest.newInstance(existingEntry);
-      UpdateMountTableEntryResponse updateResponse =
-          mountTable.updateMountTableEntry(updateRequest);
-      boolean updated = updateResponse.getStatus();
-      if (!updated) {
-        System.err.println("Cannot update mount point " + mount);
-      }
-      return updated;
+    // Fail if it already exists.
+    if (existingEntry != null) {
+      System.err.println("Cannot add destination to an existing mount point. "
+          + "Please use -update cmd.");
+      return false;
+    }// Create and add the entry if it doesn't exist
+    Map<String, String> destMap = getDestMap(nss, destinations);
+    MountTable newEntry = MountTable.newInstance(mount, destMap);
+    if (readonly) {
+      newEntry.setReadOnly(true);
     }
+    if (faultTolerant) {
+      newEntry.setFaultTolerant(true);
+    }
+    if (order != null) {
+      newEntry.setDestOrder(order);
+    }
+
+    // Set ACL info for mount table entry
+    if (aclInfo.getOwner() != null) {
+      newEntry.setOwnerName(aclInfo.getOwner());
+    }
+
+    if (aclInfo.getGroup() != null) {
+      newEntry.setGroupName(aclInfo.getGroup());
+    }
+
+    if (aclInfo.getMode() != null) {
+      newEntry.setMode(aclInfo.getMode());
+    }
+
+    newEntry.validate();
+
+    AddMountTableEntryRequest request = AddMountTableEntryRequest.newInstance(newEntry);
+    AddMountTableEntryResponse addResponse = mountTable.addMountTableEntry(request);
+    boolean added = addResponse.getStatus();
+    if (!added) {
+      System.err.println("Cannot add mount point " + mount);
+    }
+    return added;
   }
 
   /**
@@ -649,11 +637,8 @@ public class RouterAdmin extends Configured implements Tool {
 
     if (!parameters[i].startsWith("-")) {
       String[] nss = parameters[i++].split(",");
-      String dest = parameters[i++];
-      Map<String, String> destMap = new LinkedHashMap<>();
-      for (String ns : nss) {
-        destMap.put(ns, dest);
-      }
+      String[] destinations = parameters[i++].split(",");
+      Map<String, String> destMap = getDestMap(nss, destinations);
       final List<RemoteLocation> locations = new LinkedList<>();
       for (Entry<String, String> entry : destMap.entrySet()) {
         String nsId = entry.getKey();

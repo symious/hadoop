@@ -83,6 +83,8 @@ public class TestJvmMetrics {
         verify(rb).addCounter(eq(info), anyLong());
       } else if (info.name().startsWith("Threads")) {
         verify(rb).addGauge(eq(info), anyInt());
+      } else if (info.name().startsWith("ThreadsCount")) {
+        verify(rb).addGauge(eq(info), anyInt());
       } else if (info.name().startsWith("Log")) {
         verify(rb).addCounter(eq(info), anyLong());
       }

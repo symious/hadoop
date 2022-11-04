@@ -21,6 +21,8 @@ import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdfs.server.blockmanagement.HostConfigManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.HostFileWithMaintenanceManager;
+import org.apache.hadoop.hdfs.server.blockmanagement.SlowDiskTracker;
+import org.apache.hadoop.hdfs.server.blockmanagement.SlowPeerTracker;
 import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
@@ -2166,6 +2168,19 @@ public class NameNode extends ReconfigurableBase implements
   public String getSlowDisksReport() {
     return namesystem.getBlockManager().getDatanodeManager()
         .getSlowDisksReport();
+  }
+
+
+  @Override //NameNodeStatusMXBean
+  public SlowPeerTracker.ReportForJson[] getSlowPeersReportJSON() {
+    return namesystem.getBlockManager().getDatanodeManager()
+        .getSlowPeersReportJSON();
+  }
+
+  @Override //NameNodeStatusMXBean
+  public SlowDiskTracker.DiskLatency[] getSlowDisksReportJSON() {
+    return namesystem.getBlockManager().getDatanodeManager()
+        .getSlowDisksReportJSON();
   }
 
   /**
