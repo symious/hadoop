@@ -17,7 +17,12 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.fsdataset.impl;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.function.Supplier;
+
+import org.apache.hadoop.hdfs.server.datanode.DataSetLockManager;
 import org.apache.hadoop.hdfs.server.datanode.LocalReplica;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 
@@ -69,6 +74,7 @@ import org.apache.hadoop.test.LambdaTestUtils;
 import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.util.FakeTimer;
 import org.apache.hadoop.util.StringUtils;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -133,7 +139,7 @@ public class TestFsDatasetImpl {
   private DataNode datanode;
   private DataStorage storage;
   private FsDatasetImpl dataset;
-  
+  private DataSetLockManager manager = new DataSetLockManager();
   private final static String BLOCKPOOL = "BP-TEST";
 
   private static Storage.StorageDirectory createStorageDirectory(File root,
@@ -191,6 +197,7 @@ public class TestFsDatasetImpl {
     final ShortCircuitRegistry shortCircuitRegistry =
         new ShortCircuitRegistry(conf);
     when(datanode.getShortCircuitRegistry()).thenReturn(shortCircuitRegistry);
+    when(datanode.getDataSetLockManager()).thenReturn(manager);
 
     createStorageDirs(storage, conf, NUM_INIT_VOLUMES);
     dataset = new FsDatasetImpl(datanode, storage, conf);
@@ -202,99 +209,11 @@ public class TestFsDatasetImpl {
     assertEquals(0, dataset.getNumFailedVolumes());
   }
 
-  @Test
-  public void testReadLockEnabledByDefault()
-      throws IOException, InterruptedException {
-    final FsDatasetSpi ds = dataset;
-    AtomicBoolean accessed = new AtomicBoolean(false);
-    CountDownLatch latch = new CountDownLatch(1);
-    CountDownLatch waiterLatch = new CountDownLatch(1);
-
-    Thread holder = new Thread() {
-      public void run() {
-        try (AutoCloseableLock l = ds.acquireDatasetReadLock()) {
-          latch.countDown();
-          sleep(10000);
-        } catch (Exception e) {
-        }
-      }
-    };
-
-    Thread waiter = new Thread() {
-      public void run() {
-        try (AutoCloseableLock l = ds.acquireDatasetReadLock()) {
-          waiterLatch.countDown();
-          accessed.getAndSet(true);
-        } catch (Exception e) {
-        }
-      }
-    };
-
-    holder.start();
-    latch.await();
-    waiter.start();
-    waiterLatch.await();
-    // The holder thread is still holding the lock, but the waiter can still
-    // run as the lock is a shared read lock.
-    assertEquals(true, accessed.get());
-    holder.interrupt();
-    holder.join();
-    waiter.join();
-  }
-
-  @Test(timeout=10000)
-  public void testReadLockCanBeDisabledByConfig()
-      throws IOException, InterruptedException {
-    HdfsConfiguration conf = new HdfsConfiguration();
-    conf.setBoolean(
-        DFSConfigKeys.DFS_DATANODE_LOCK_READ_WRITE_ENABLED_KEY, false);
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
-        .numDataNodes(1).build();
-    try {
-      cluster.waitActive();
-      DataNode dn = cluster.getDataNodes().get(0);
-      final FsDatasetSpi<?> ds = DataNodeTestUtils.getFSDataset(dn);
-
-      CountDownLatch latch = new CountDownLatch(1);
-      CountDownLatch waiterLatch = new CountDownLatch(1);
-      AtomicBoolean accessed = new AtomicBoolean(false);
-
-      Thread holder = new Thread() {
-        public void run() {
-          try (AutoCloseableLock l = ds.acquireDatasetReadLock()) {
-            latch.countDown();
-            sleep(10000);
-          } catch (Exception e) {
-          }
-        }
-      };
-
-      Thread waiter = new Thread() {
-        public void run() {
-          try (AutoCloseableLock l = ds.acquireDatasetReadLock()) {
-            accessed.getAndSet(true);
-            waiterLatch.countDown();
-          } catch (Exception e) {
-          }
-        }
-      };
-
-      holder.start();
-      latch.await();
-      waiter.start();
-      Thread.sleep(200);
-      // Waiting thread should not have been able to update the variable
-      // as the read lock is disabled and hence an exclusive lock.
-      assertEquals(false, accessed.get());
-      holder.interrupt();
-      holder.join();
-      waiterLatch.await();
-      // After the holder thread exits, the variable is updated.
-      assertEquals(true, accessed.get());
-      waiter.join();
-    } finally {
-      cluster.shutdown();
-    }
+  @After
+  public void checkDataSetLockManager() {
+    manager.lockLeakCheck();
+    // make sure no lock Leak.
+    assertNull(manager.getLastException());
   }
 
   @Test
@@ -505,6 +424,44 @@ public class TestFsDatasetImpl {
         + "volumeMap.", 0, totalNumReplicas);
   }
 
+  @Test(timeout = 30000)
+  public void testConcurrentWriteAndDeleteBlock() throws Exception {
+    // Feed FsDataset with block metadata.
+    final int numBlocks = 1000;
+    final int threadCount = 10;
+    // Generate data blocks.
+    ExecutorService pool = Executors.newFixedThreadPool(threadCount);
+    List<Future<?>> futureList = new ArrayList<>();
+    final Random random = new Random();
+    // Random write block and delete half of them.
+    for (int i = 0; i < threadCount; i++) {
+      Thread thread = new Thread(() -> {
+        try {
+          String bpid = BLOCK_POOL_IDS[random.nextInt(BLOCK_POOL_IDS.length)];
+          for (int blockId = 0; blockId < numBlocks; blockId++) {
+            ExtendedBlock eb = new ExtendedBlock(bpid, blockId);
+            try (ReplicaHandler replica = dataset.createRbw(
+                StorageType.DEFAULT, null, eb, false)) {
+              if (blockId % 2 > 0) {
+                dataset.invalidate(bpid, new Block[]{eb.getLocalBlock()});
+              }
+            }
+          }
+          // Just keep final consistency no need to care exception.
+        } catch (Exception ignore) {}
+      });
+      thread.setName("AddBlock" + i);
+      futureList.add(pool.submit(thread));
+    }
+    // Wait for data generation
+    for (Future<?> f : futureList) {
+      f.get();
+    }
+    for (String bpid : dataset.volumeMap.getBlockPoolList()) {
+      assertEquals(numBlocks / 2, dataset.volumeMap.size(bpid));
+    }
+  }
+
   @Test(timeout = 5000)
   public void testRemoveNewlyAddedVolume() throws IOException {
     final int numExistingVolumes = getNumVolumes();
@@ -539,6 +496,7 @@ public class TestFsDatasetImpl {
     FsDatasetImpl spyDataset = spy(dataset);
     FsVolumeImpl mockVolume = mock(FsVolumeImpl.class);
     File badDir = new File(BASE_DIR, "bad");
+    when(mockVolume.getStorageID()).thenReturn("test");
     badDir.mkdirs();
     doReturn(mockVolume).when(spyDataset)
         .createFsVolume(anyString(), any(StorageDirectory.class),
@@ -572,41 +530,6 @@ public class TestFsDatasetImpl {
     FsDatasetTestUtil.assertFileLockReleased(badDir.toString());
   }
 
-  @Test
-  /**
-   * This test is here primarily to catch any case where the datanode replica
-   * map structure is changed to a new structure which is not sorted and hence
-   * reading the blocks from it directly would not be sorted.
-   */
-  public void testSortedFinalizedBlocksAreSorted() throws IOException {
-    this.conf = new HdfsConfiguration();
-    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).build();
-    try {
-      cluster.waitActive();
-      DataNode dn = cluster.getDataNodes().get(0);
-
-      FsDatasetSpi<?> ds = DataNodeTestUtils.getFSDataset(dn);
-      ds.addBlockPool(BLOCKPOOL, conf);
-
-      // Load 1000 blocks with random blockIDs
-      for (int i=0; i<=1000; i++) {
-        ExtendedBlock eb = new ExtendedBlock(
-            BLOCKPOOL, new Random().nextInt(), 1000, 1000 + i);
-        cluster.getFsDatasetTestUtils(0).createFinalizedReplica(eb);
-      }
-      // Get the sorted blocks and validate the arrayList is sorted
-      List<ReplicaInfo> replicaList = ds.getSortedFinalizedBlocks(BLOCKPOOL);
-      for (int i=0; i<replicaList.size() - 1; i++) {
-        if (replicaList.get(i).compareTo(replicaList.get(i+1)) > 0) {
-          // Not sorted so fail the test
-          fail("ArrayList is not sorted, and it should be");
-        }
-      }
-    } finally {
-      cluster.shutdown();
-    }
-  }
-  
   @Test
   public void testDeletingBlocks() throws IOException {
     HdfsConfiguration conf = new HdfsConfiguration();

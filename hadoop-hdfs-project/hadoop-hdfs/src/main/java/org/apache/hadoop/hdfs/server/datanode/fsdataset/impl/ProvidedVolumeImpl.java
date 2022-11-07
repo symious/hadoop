@@ -134,7 +134,7 @@ class ProvidedVolumeImpl extends FsVolumeImpl {
     ProvidedBlockPoolSlice(String bpid, ProvidedVolumeImpl volume,
         Configuration conf) {
       this.providedVolume = volume;
-      bpVolumeMap = new ReplicaMap(new ReentrantReadWriteLock());
+      bpVolumeMap = new ReplicaMap();
       Class<? extends BlockAliasMap> fmt =
           conf.getClass(DFSConfigKeys.DFS_PROVIDED_ALIASMAP_CLASS,
               TextFileRegionAliasMap.class, BlockAliasMap.class);

@@ -187,6 +187,7 @@ import org.apache.hadoop.hdfs.security.token.block.BlockTokenSecretManager;
 import org.apache.hadoop.hdfs.security.token.block.DataEncryptionKey;
 import org.apache.hadoop.hdfs.security.token.block.ExportedBlockKeys;
 import org.apache.hadoop.hdfs.security.token.block.InvalidBlockTokenException;
+import org.apache.hadoop.hdfs.server.common.DataNodeLockManager.LockLevel;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.NodeType;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.ReplicaState;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.StartupOption;
@@ -441,6 +442,7 @@ public class DataNode extends ReconfigurableBase
   private static final int NUM_CORES = Runtime.getRuntime()
       .availableProcessors();
   private static final double CONGESTION_RATIO = 1.5;
+  private final DataSetLockManager dataSetLockManager;
   private DiskBalancer diskBalancer;
 
   private final ExecutorService xferService;
@@ -485,6 +487,7 @@ public class DataNode extends ReconfigurableBase
     this.pipelineSupportSlownode = false;
     this.socketFactory = NetUtils.getDefaultSocketFactory(conf);
     this.dnConf = new DNConf(this);
+    this.dataSetLockManager = new DataSetLockManager(conf);
     initOOBTimeout();
     storageLocationChecker = null;
     volumeChecker = new DatasetVolumeChecker(conf, new Timer());
@@ -506,6 +509,7 @@ public class DataNode extends ReconfigurableBase
     this.tracerConfigurationManager =
         new TracerConfigurationManager(DATANODE_HTRACE_PREFIX, conf);
     this.fileIoProvider = new FileIoProvider(conf, this);
+    this.dataSetLockManager = new DataSetLockManager(conf);
     this.blockScanner = new BlockScanner(this);
     this.lastDiskErrorCheck = 0;
     this.maxNumberOfBlocksToLog = conf.getLong(DFS_MAX_NUM_BLOCKS_TO_LOG_KEY,
@@ -2506,6 +2510,7 @@ public class DataNode extends ReconfigurableBase
       notifyAll();
     }
     tracer.close();
+    dataSetLockManager.lockLeakCheck();
   }
 
   /**
@@ -3367,7 +3372,8 @@ public class DataNode extends ReconfigurableBase
     final BlockConstructionStage stage;
 
     //get replica information
-    try(AutoCloseableLock lock = data.acquireDatasetReadLock()) {
+    try (AutoCloseableLock lock = dataSetLockManager.readLock(
+        LockLevel.BLOCK_POOl, b.getBlockPoolId())) {
       Block storedBlock = data.getStoredBlock(b.getBlockPoolId(),
           b.getBlockId());
       if (null == storedBlock) {
@@ -4272,6 +4278,10 @@ public class DataNode extends ReconfigurableBase
       }
       return true;
     }
+  }
+
+  public DataSetLockManager getDataSetLockManager() {
+    return dataSetLockManager;
   }
 
   boolean isSlownodeByNameserviceId(String nsId) {

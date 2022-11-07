@@ -39,6 +39,7 @@ import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.datatransfer.PacketHeader;
+import org.apache.hadoop.hdfs.server.common.DataNodeLockManager.LockLevel;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.ReplicaState;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeReference;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.LengthInputStream;
@@ -255,7 +256,8 @@ class BlockSender implements java.io.Closeable {
       // the append write.
       ChunkChecksum chunkChecksum = null;
       final long replicaVisibleLength;
-      try(AutoCloseableLock lock = datanode.data.acquireDatasetReadLock()) {
+      try (AutoCloseableLock lock = datanode.getDataSetLockManager().readLock(
+          LockLevel.BLOCK_POOl, block.getBlockPoolId())) {
         replica = getReplica(block, datanode);
         replicaVisibleLength = replica.getVisibleLength();
       }

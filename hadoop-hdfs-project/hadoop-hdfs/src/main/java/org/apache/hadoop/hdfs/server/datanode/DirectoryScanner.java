@@ -488,6 +488,7 @@ public class DirectoryScanner implements Runnable {
       statsRecord.totalBlocks = blockpoolReport.size();
       final List<ReplicaInfo> bl;
       bl = dataset.getSortedFinalizedBlocks(bpid);
+      Collections.sort(bl); // Sort based on blockId
 
       int d = 0; // index for blockpoolReport
       int m = 0; // index for memReprot

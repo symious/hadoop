@@ -1669,6 +1669,16 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.namenode.state.context.enabled";
   public static final boolean DFS_NAMENODE_STATE_CONTEXT_ENABLED_DEFAULT = false;
 
+  public static final String DFS_DATANODE_LOCKMANAGER_TRACE =
+      "dfs.datanode.lockmanager.trace";
+
+  public static final boolean DFS_DATANODE_LOCKMANAGER_TRACE_DEFAULT = false;
+
+  public static final String DFS_DATANODE_LOCK_METRICS_THRESHOLD_MS_KEY =
+      "dfs.datanode.lock.metrics.threshold-ms";
+
+  public static final long DFS_DATANODE_LOCK_METRICS_THRESHOLD_MS_DEFAULT = 100;
+
   /**
    * whether to protect the subdirectories of directories which
    * set on fs.protected.directories.

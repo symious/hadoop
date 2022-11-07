@@ -502,16 +502,11 @@ public class DiskBalancer {
   private Map<String, String> getStorageIDToVolumeBasePathMap()
       throws DiskBalancerException {
     Map<String, String> storageIDToVolBasePathMap = new HashMap<>();
-    FsDatasetSpi.FsVolumeReferences references;
-    try {
-      try(AutoCloseableLock lock = this.dataset.acquireDatasetReadLock()) {
-        references = this.dataset.getFsVolumeReferences();
-        for (int ndx = 0; ndx < references.size(); ndx++) {
-          FsVolumeSpi vol = references.get(ndx);
-          storageIDToVolBasePathMap.put(vol.getStorageID(),
-              vol.getBaseURI().getPath());
-        }
-        references.close();
+    // Get volumes snapshot so no need to acquire dataset lock.
+    try (FsDatasetSpi.FsVolumeReferences references = dataset.getFsVolumeReferences()) {
+      for (int ndx = 0; ndx < references.size(); ndx++) {
+        FsVolumeSpi vol = references.get(ndx);
+        storageIDToVolBasePathMap.put(vol.getStorageID(), vol.getBaseURI().getPath());
       }
     } catch (IOException ex) {
       LOG.error("Disk Balancer - Internal Error.", ex);
