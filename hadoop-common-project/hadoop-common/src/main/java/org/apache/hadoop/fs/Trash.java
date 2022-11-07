@@ -70,8 +70,13 @@ public class Trash extends Configured {
    * @return false if the item is already in the trash or trash is disabled
    * @throws IOException on error
    */
+  public static boolean moveToAppropriateTrash(FileSystem fs, Path p, Configuration conf)
+      throws IOException {
+    return moveToAppropriateTrash(fs, p, conf, -1);
+  }
+
   public static boolean moveToAppropriateTrash(FileSystem fs, Path p,
-      Configuration conf) throws IOException {
+      Configuration conf, long constraint) throws IOException {
     Path fullyResolvedPath = fs.resolvePath(p);
     FileSystem fullyResolvedFs =
         FileSystem.get(fullyResolvedPath.toUri(), conf);
@@ -92,8 +97,21 @@ public class Trash extends Configured {
       LOG.warn("Failed to get server trash configuration", e);
       throw new IOException("Failed to get server trash configuration", e);
     }
+    conf.setLong(CommonConfigurationKeysPublic.FS_TRASH_CONSTRAINT_KEY, constraint);
     Trash trash = new Trash(fullyResolvedFs, conf);
     return trash.moveToTrash(fullyResolvedPath);
+  }
+
+  /**
+   * Delete file or directory from trash with constraint
+   */
+  public static void deleteFromTrash(Configuration conf, FileSystem fs,
+      Path path, boolean deleteDirs, long constraint) throws IOException {
+    Path fullyResolvedPath = fs.resolvePath(path);
+    FileSystem fullyResolvedFs = FileSystem.get(fullyResolvedPath.toUri(), conf);
+    conf.setLong(CommonConfigurationKeysPublic.FS_TRASH_CONSTRAINT_KEY, constraint);
+    Trash trash = new Trash(fullyResolvedFs, conf);
+    trash.getTrashPolicy().deleteFromTrash(path, deleteDirs);
   }
   
   /**
@@ -141,6 +159,10 @@ public class Trash extends Configured {
    */
   public Runnable getEmptier() throws IOException {
     return trashPolicy.getEmptier();
+  }
+
+  public Runnable getEmptier(Configuration conf, long emptierInterval) throws IOException {
+    return trashPolicy.getEmptier(conf, emptierInterval);
   }
 
   public Path getCurrentTrashDir(Path path) throws IOException {

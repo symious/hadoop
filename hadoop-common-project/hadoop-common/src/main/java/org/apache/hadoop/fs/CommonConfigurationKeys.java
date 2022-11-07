@@ -388,6 +388,9 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
 
   public static final String HADOOP_USER_GROUP_METRICS_PERCENTILES_INTERVALS =
     "hadoop.user.group.metrics.percentiles.intervals";
+  /** Enable trash emptier for namenode or not */
+  public static final String HADOOP_TRASH_EMPTIER_ENABLE_KEY = "hadoop.trash.emptier.enable";
+  public static final boolean HADOOP_TRASH_EMPTIER_ENABLE_DEFAULT = true;
 
   public static final String RPC_METRICS_QUANTILE_ENABLE =
       "rpc.metrics.quantile.enable";

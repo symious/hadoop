@@ -142,7 +142,7 @@ public class CommonConfigurationKeysPublic {
   public static final String  FS_TRASH_CHECKPOINT_INTERVAL_KEY =
     "fs.trash.checkpoint.interval";
   /** Default value for FS_TRASH_CHECKPOINT_INTERVAL_KEY */
-  public static final long    FS_TRASH_CHECKPOINT_INTERVAL_DEFAULT = 0;
+  public static final long    FS_TRASH_CHECKPOINT_INTERVAL_DEFAULT = 60;
 
   /**
    * Directories that cannot be removed unless empty, even by an
@@ -217,9 +217,13 @@ public class CommonConfigurationKeysPublic {
    * core-default.xml</a>
    */
   public static final String  FS_TRASH_INTERVAL_KEY = "fs.trash.interval";
+  public static final String  FS_TRASH_CONSTRAINT_KEY = "fs.trash.constraint";
+  public static final long    FS_TRASH_CONSTRAINT_DEFAULT = -1;
   public static final String  FS_TRASH_ROOT = "fs.trash.root";
   /** Default value for FS_TRASH_INTERVAL_KEY */
-  public static final long    FS_TRASH_INTERVAL_DEFAULT = 0;
+  public static final long    FS_TRASH_INTERVAL_DEFAULT = 1440;
+  public static final String  FS_TRASH_CREATE_ROOT_KEY = "fs.trash.create.root.enable";
+  public static final boolean FS_TRASH_CREATE_ROOT_DEFAULT = true;
   /**
    * @see
    * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">

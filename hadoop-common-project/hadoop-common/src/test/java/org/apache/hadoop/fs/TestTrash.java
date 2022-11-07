@@ -1086,6 +1086,10 @@ public class TestTrash {
     }
 
     @Override
+    public void deleteFromTrash(Path path, boolean deleteDirs) throws IOException {
+    }
+
+    @Override
     public void createCheckpoint() throws IOException {
     }
 
@@ -1109,6 +1113,11 @@ public class TestTrash {
 
     @Override
     public Runnable getEmptier() throws IOException {
+      return null;
+    }
+
+    @Override
+    public Runnable getEmptier(Configuration conf, long emptierInterval) throws IOException {
       return null;
     }
   }
@@ -1147,6 +1156,10 @@ public class TestTrash {
     }
 
     @Override
+    public void deleteFromTrash(Path path, boolean deleteDirs) throws IOException {
+    }
+
+    @Override
     public void createCheckpoint() throws IOException {
       AuditableCheckpoints.add();
     }
@@ -1169,6 +1182,11 @@ public class TestTrash {
     @Override
     public Runnable getEmptier() throws IOException {
       return new AuditableEmptier(getConf());
+    }
+
+    @Override
+    public Runnable getEmptier(Configuration conf, long emptierInterval) throws IOException {
+      return new AuditableEmptier(conf);
     }
 
     public int getNumberOfCheckpoints() {

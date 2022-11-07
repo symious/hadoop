@@ -121,6 +121,10 @@ function hdfscmd_case
     diskbalancer)
       HADOOP_CLASSNAME=org.apache.hadoop.hdfs.tools.DiskBalancerCLI
     ;;
+    trashservice)
+      HADOOP_SUBCMD_SUPPORTDAEMONIZATION="true"
+      HADOOP_CLASSNAME='org.apache.hadoop.hdfs.TrashManagementService'
+    ;;
     envvars)
       echo "JAVA_HOME='${JAVA_HOME}'"
       echo "HADOOP_HDFS_HOME='${HADOOP_HDFS_HOME}'"

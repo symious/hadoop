@@ -69,6 +69,11 @@ public abstract class TrashPolicy extends Configured {
    */ 
   public abstract boolean moveToTrash(Path path) throws IOException;
 
+  /**
+   * Delete file or directory from the trash directory with constraint
+   */
+  public abstract void deleteFromTrash(Path path, boolean deleteDirs) throws IOException;
+
   /** 
    * Create a trash checkpoint. 
    */
@@ -113,6 +118,12 @@ public abstract class TrashPolicy extends Configured {
    * users, intended to be run by the superuser.
    */
   public abstract Runnable getEmptier() throws IOException;
+
+  /**
+   * Return a {@link Runnable} that periodically empties the trash of all
+   * users with given configuration and emptierInterval
+   */
+  public abstract Runnable getEmptier(Configuration conf, long emptierInterval) throws IOException;
 
   /**
    * Get an instance of the configured TrashPolicy based on the value

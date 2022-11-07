@@ -57,7 +57,7 @@ class Delete {
   public static class Rm extends FsCommand {
     public static final String NAME = "rm";
     public static final String USAGE = "[-f] [-r|-R] [-skipTrash] " +
-        "[-safely] <src> ...";
+        "[-safely] [-constraint <value>] <src> ...";
     public static final String DESCRIPTION =
         "Delete all files that match the specified file pattern. " +
             "Equivalent to the Unix command \"rm <src>\"\n" +
@@ -70,22 +70,31 @@ class Delete {
             "requires confirmation before deleting large directory with more " +
             "than <hadoop.shell.delete.limit.num.files> files. Delay is " +
             "expected when walking over large directory recursively to count " +
-            "the number of files to be deleted before the confirmation.\n";
+            "the number of files to be deleted before the confirmation.\n" +
+            "-constraint: if the path is directory, " +
+            "option will constrain the deleted file number under the directory. " +
+            "Constraint won't work when the given path is a file.\n ";
 
     private boolean skipTrash = false;
     private boolean deleteDirs = false;
     private boolean ignoreFNF = false;
     private boolean safeDelete = false;
+    private long deleteConstraint = -1L;
 
     @Override
     protected void processOptions(LinkedList<String> args) throws IOException {
       CommandFormat cf = new CommandFormat(
           1, Integer.MAX_VALUE, "f", "r", "R", "skipTrash", "safely");
+      cf.addOptionWithValue("constraint");
       cf.parse(args);
       ignoreFNF = cf.getOpt("f");
       deleteDirs = cf.getOpt("r") || cf.getOpt("R");
       skipTrash = cf.getOpt("skipTrash");
       safeDelete = cf.getOpt("safely");
+      String constraintString = cf.getOptValue("constraint");
+      if (constraintString != null) {
+        deleteConstraint = Integer.parseInt(constraintString);
+      }
     }
 
     @Override
@@ -119,10 +128,15 @@ class Delete {
       if ((!inTrash(item) && moveToTrash(item)) || !canBeSafelyDeleted(item)) {
         return;
       }
-      if (!item.fs.delete(item.path, deleteDirs)) {
-        throw new PathIOException(item.toString());
+
+      if (deleteConstraint > 0) {
+        Trash.deleteFromTrash(getConf(), item.fs, item.path, deleteDirs, deleteConstraint);
+      } else {
+        if (!item.fs.delete(item.path, deleteDirs)) {
+          throw new PathIOException(item.toString());
+        }
+        out.println("Deleted " + item);
       }
-      out.println("Deleted " + item);
     }
 
     private boolean canBeSafelyDeleted(PathData item)
@@ -157,7 +171,7 @@ class Delete {
       }
 
       try {
-        return Trash.moveToAppropriateTrash(item.fs, item.path, getConf());
+        return Trash.moveToAppropriateTrash(item.fs, item.path, getConf(), deleteConstraint);
       } catch(FileNotFoundException fnfe) {
         throw fnfe;
       } catch (IOException ioe) {
