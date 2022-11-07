@@ -971,6 +971,16 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     return queueUserLimitFactorEnabled;
   }
 
+  public boolean getUserLimitFactorEnabledByQueueLabel(String queue,
+      String labelName) {
+    String key =
+        getQueuePrefix(queue) + ACCESSIBLE_NODE_LABELS + DOT + labelName + DOT +
+            USER_LIMIT_FACTOR_ENABLE;
+    boolean queueLabelUserLimitFactorEnabled =
+        getBoolean(key, getUserLimitFactorEnabled(queue));
+    return queueLabelUserLimitFactorEnabled;
+  }
+
   public float getUserLimitFactor(String queue) {
     float defaultUserLimitFactor = getFloat(PREFIX + USER_LIMIT_FACTOR, DEFAULT_USER_LIMIT_FACTOR);
     float userLimitFactor = 

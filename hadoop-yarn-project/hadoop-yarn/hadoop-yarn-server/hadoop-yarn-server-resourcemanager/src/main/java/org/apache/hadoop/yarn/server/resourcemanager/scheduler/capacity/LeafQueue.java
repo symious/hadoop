@@ -745,7 +745,18 @@ public class LeafQueue extends AbstractCSQueue {
       Resource queuePartitionResource = getEffectiveCapacity(nodePartition);
 
       Resource userAMLimit, preWeighteduserAMLimit;
-      if (userLimitFactorEnabled) {
+
+      CapacitySchedulerConfiguration conf = csContext.getConfiguration();
+      boolean userLimitFactorEnabledWithQueueLabel =
+          conf.getUserLimitFactorEnabledByQueueLabel(getQueuePath(), nodePartition);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(
+            "getUserAMResourceLimitPerPartition queueName: " + getQueuePath() +
+                " ,nodePartition: " + nodePartition +
+                " ,userLimitFactorEnabledWithQueueLabel: " +
+                userLimitFactorEnabledWithQueueLabel);
+      }
+      if (userLimitFactorEnabledWithQueueLabel) {
         userAMLimit = Resources.multiplyAndNormalizeUp(
             resourceCalculator, queuePartitionResource,
             queueCapacities.getMaxAMResourcePercentage(nodePartition)
@@ -811,8 +822,16 @@ public class LeafQueue extends AbstractCSQueue {
           getEffectiveMaxCapacity(nodePartition);
       float amResourcePercent = queueCapacities.getMaxAMResourcePercentage(
           nodePartition);
-
-      if (userLimitFactorEnabled) {
+      CapacitySchedulerConfiguration conf = csContext.getConfiguration();
+      boolean userLimitFactorEnabledWithQueueLabel =
+          conf.getUserLimitFactorEnabledByQueueLabel(getQueuePath(), nodePartition);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("calculateAndGetAMResourceLimitPerPartition queueName: " +
+            getQueuePath() + " ,nodePartition: " + nodePartition +
+            " ,userLimitFactorEnabledWithQueueLabel: " +
+            userLimitFactorEnabledWithQueueLabel);
+      }
+      if (userLimitFactorEnabledWithQueueLabel) {
         /*
          * For non-labeled partition, get the max value from resources currently
          * available to the queue and the absolute resources guaranteed for the

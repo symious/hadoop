@@ -806,12 +806,21 @@ public class UsersManager implements AbstractUsersManager {
     // we will not cap user-limit as well as used resource when doing
     // IGNORE_PARTITION_EXCLUSIVITY allocation.
     Resource maxUserLimit = Resources.none();
+    CapacitySchedulerConfiguration conf = scheduler.getConfiguration();
+    boolean userLimitFactorEnabledWithQueueLabel =
+        conf.getUserLimitFactorEnabledByQueueLabel(lQueue.getQueuePath(),
+            nodePartition);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("computeUserLimit queueName: " + lQueue.getQueuePath() +
+          " ,nodePartition: " + nodePartition +
+          " ,userLimitFactorEnabledWithQueueLabel: " +
+          userLimitFactorEnabledWithQueueLabel);
+    }
     if (schedulingMode == SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY &&
-        userLimitFactorEnable) {
+        userLimitFactorEnabledWithQueueLabel) {
       maxUserLimit = Resources.multiplyAndRoundDown(queueCapacity,
           getUserLimitFactor());
-    } else if (schedulingMode == SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY &&
-        !userLimitFactorEnable) {
+    } else if (schedulingMode == SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY) {
       maxUserLimit = lQueue.getEffectiveMaxCapacity(nodePartition);
     } else if (schedulingMode == SchedulingMode.IGNORE_PARTITION_EXCLUSIVITY) {
       maxUserLimit = partitionResource;
