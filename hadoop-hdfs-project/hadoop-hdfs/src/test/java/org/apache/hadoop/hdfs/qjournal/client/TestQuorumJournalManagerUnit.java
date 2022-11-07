@@ -92,6 +92,7 @@ public class TestQuorumJournalManagerUnit {
         mockLogger());
 
     conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY, true);
+    conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_KEY, true);
     qjm = new QuorumJournalManager(conf, new URI("qjournal://host/jid"), FAKE_NSINFO) {
       @Override
       protected List<AsyncLogger> createLoggers(AsyncLogger.Factory factory) {

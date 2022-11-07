@@ -20,10 +20,13 @@ package org.apache.hadoop.hdfs.server.namenode;
 
 import java.io.IOException;
 
+import org.apache.hadoop.hdfs.MiniDFSNNTopology;
 import org.junit.Test;
 import org.junit.Before;
 import org.junit.After;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
@@ -68,14 +71,17 @@ public class TestNameNodeReconfigure {
     Configuration conf = new HdfsConfiguration();
     conf.setInt(DFS_BLOCK_INVALIDATE_LIMIT_KEY,
         customizedBlockInvalidateLimit);
-    cluster = new MiniDFSCluster.Builder(conf).build();
+    cluster = new MiniDFSCluster.Builder(conf)
+        .nnTopology(MiniDFSNNTopology.simpleHATopology())
+        .build();
     cluster.waitActive();
+    cluster.transitionToActive(0);
   }
 
   @Test
   public void testReconfigureCallerContextEnabled()
       throws ReconfigurationException {
-    final NameNode nameNode = cluster.getNameNode();
+    final NameNode nameNode = cluster.getNameNode(0);
     final FSNamesystem nameSystem = nameNode.getNamesystem();
 
     // try invalid values
@@ -116,7 +122,7 @@ public class TestNameNodeReconfigure {
    */
   @Test
   public void testReconfigureIPCBackoff() throws ReconfigurationException {
-    final NameNode nameNode = cluster.getNameNode();
+    final NameNode nameNode = cluster.getNameNode(0);
     NameNodeRpcServer nnrs = (NameNodeRpcServer) nameNode.getRpcServer();
 
     String ipcClientRPCBackoffEnable = NameNode.buildBackoffEnableKey(nnrs
@@ -157,7 +163,7 @@ public class TestNameNodeReconfigure {
    */
   @Test
   public void testReconfigureHearbeatCheck() throws ReconfigurationException {
-    final NameNode nameNode = cluster.getNameNode();
+    final NameNode nameNode = cluster.getNameNode(0);
     final DatanodeManager datanodeManager = nameNode.namesystem
         .getBlockManager().getDatanodeManager();
     // change properties
@@ -272,7 +278,7 @@ public class TestNameNodeReconfigure {
   @Test(timeout = 30000)
   public void testReconfigureStoragePolicySatisfierEnabled()
       throws ReconfigurationException {
-    final NameNode nameNode = cluster.getNameNode();
+    final NameNode nameNode = cluster.getNameNode(0);
 
     verifySPSEnabled(nameNode, DFS_STORAGE_POLICY_SATISFIER_MODE_KEY,
         StoragePolicySatisfierMode.NONE, false);
@@ -312,7 +318,7 @@ public class TestNameNodeReconfigure {
   @Test(timeout = 30000)
   public void testSatisfyStoragePolicyAfterSatisfierDisabled()
       throws ReconfigurationException, IOException {
-    final NameNode nameNode = cluster.getNameNode();
+    final NameNode nameNode = cluster.getNameNode(0);
 
     // disable SPS
     nameNode.reconfigureProperty(DFS_STORAGE_POLICY_SATISFIER_MODE_KEY,
@@ -321,7 +327,7 @@ public class TestNameNodeReconfigure {
         StoragePolicySatisfierMode.NONE, false);
 
     Path filePath = new Path("/testSPS");
-    DistributedFileSystem fileSystem = cluster.getFileSystem();
+    DistributedFileSystem fileSystem = cluster.getFileSystem(0);
     fileSystem.create(filePath);
     fileSystem.setStoragePolicy(filePath, "COLD");
     try {
@@ -352,7 +358,7 @@ public class TestNameNodeReconfigure {
   @Test
   public void testBlockInvalidateLimitAfterReconfigured()
       throws ReconfigurationException {
-    final NameNode nameNode = cluster.getNameNode();
+    final NameNode nameNode = cluster.getNameNode(0);
     final DatanodeManager datanodeManager = nameNode.namesystem
         .getBlockManager().getDatanodeManager();
 
@@ -384,7 +390,7 @@ public class TestNameNodeReconfigure {
   @Test
   public void testEnableParallelLoadAfterReconfigured()
       throws ReconfigurationException {
-    final NameNode nameNode = cluster.getNameNode();
+    final NameNode nameNode = cluster.getNameNode(0);
 
     // By default, enableParallelLoad is false
     assertEquals(false, FSImageFormatProtobuf.getEnableParallelLoad());
@@ -394,6 +400,39 @@ public class TestNameNodeReconfigure {
 
     // After reconfigured, enableParallelLoad is true
     assertEquals(true, FSImageFormatProtobuf.getEnableParallelLoad());
+  }
+
+  @Test
+  public void testReconfigureTailEditsOnlyDurable() throws ReconfigurationException {
+    NameNode nameNode = cluster.getNameNode(0);
+    if (nameNode.getState().equals("active")) {
+      assertTrue(nameNode.getConf().getBoolean(
+          DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
+          DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT));
+      nameNode.reconfigureProperty(DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
+          Boolean.toString(false));
+      assertFalse(nameNode.getConf().getBoolean(
+          DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
+          DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT));
+      nameNode = cluster.getNameNode(1);
+    }
+    assertEquals("standby", nameNode.getState());
+    FSNamesystem fsNamesystem = nameNode.getNamesystem();
+    assertTrue(fsNamesystem.getEditLogTailer().isOnlyDurableTxns());
+
+    nameNode.reconfigureProperty(DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
+        Boolean.toString(false));
+    assertFalse(fsNamesystem.getEditLogTailer().isOnlyDurableTxns());
+    assertFalse(nameNode.getConf().getBoolean(
+        DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
+        DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT));
+
+    nameNode.reconfigureProperty(DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
+        Boolean.toString(true));
+    assertTrue(fsNamesystem.getEditLogTailer().isOnlyDurableTxns());
+    assertTrue(nameNode.getConf().getBoolean(
+        DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
+        DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT));
   }
 
   @After
@@ -406,7 +445,7 @@ public class TestNameNodeReconfigure {
   @Test
   public void testReconfigureQuotaInitThread()
       throws ReconfigurationException {
-    final NameNode nameNode = cluster.getNameNode();
+    final NameNode nameNode = cluster.getNameNode(0);
     final int oldQuotaInit = nameNode.getNamesystem()
         .getFSDirectory().getQuotaInitThreads();
     final int newQuotaInit = oldQuotaInit + 10;

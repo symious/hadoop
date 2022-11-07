@@ -52,6 +52,7 @@ import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
 import org.apache.hadoop.hdfs.server.common.StorageInfo;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.hdfs.server.protocol.RemoteEditLogManifest;
+import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.ipc.ProtobufRpcEngine2;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.security.SecurityUtil;
@@ -568,31 +569,42 @@ public class IPCLoggerChannel implements AsyncLogger {
     });
   }
 
+  /**
+   * Try to collect the number of stacked journal requests in the connection
+   * from namenode to journalnode. And metric it through MutableStat with
+   * metric name StackedJournalRequestsAvgSize and StackedJournalRequestsQps.
+   */
+  private void metricStackedJournalRequests() {
+    int stackedRequests = Client.STACKED_REQUEST_NUMBER.get();
+    metrics.incrStackedJournalRequest(stackedRequests);
+    Client.STACKED_REQUEST_NUMBER.set(0);
+  }
+
   @Override
   public ListenableFuture<GetJournaledEditsResponseProto> getJournaledEdits(
       long fromTxnId, int maxTransactions) {
-    return parallelExecutor.submit(
-        new Callable<GetJournaledEditsResponseProto>() {
-          @Override
-          public GetJournaledEditsResponseProto call() throws IOException {
-            return getProxy().getJournaledEdits(journalId, nameServiceId,
-                fromTxnId, maxTransactions);
-          }
-        });
+    return parallelExecutor.submit(() -> {
+      try {
+        return getProxy().getJournaledEdits(journalId, nameServiceId, fromTxnId, maxTransactions);
+      } finally {
+        metricStackedJournalRequests();
+      }
+    });
   }
 
   @Override
   public ListenableFuture<RemoteEditLogManifest> getEditLogManifest(
       final long fromTxnId, final boolean inProgressOk) {
-    return parallelExecutor.submit(new Callable<RemoteEditLogManifest>() {
-      @Override
-      public RemoteEditLogManifest call() throws IOException {
+    return parallelExecutor.submit(() -> {
+      try {
         GetEditLogManifestResponseProto ret = getProxy().getEditLogManifest(
             journalId, nameServiceId, fromTxnId, inProgressOk);
         // Update the http port, since we need this to build URLs to any of the
         // returned logs.
         constructHttpServerURI(ret);
         return PBHelper.convert(ret.getManifest());
+      } finally {
+        metricStackedJournalRequests();
       }
     });
   }

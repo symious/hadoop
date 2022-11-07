@@ -34,6 +34,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
+import org.apache.hadoop.ha.HAServiceProtocol;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Iterators;
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.slf4j.Logger;
@@ -172,7 +173,15 @@ public class EditLogTailer {
    */
   private final long maxTxnsPerLock;
 
+  private volatile boolean onlyDurableTxns =
+      DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT;
+
   public EditLogTailer(FSNamesystem namesystem, Configuration conf) {
+    this(namesystem, conf, null);
+  }
+
+  public EditLogTailer(FSNamesystem namesystem, Configuration conf,
+      HAServiceProtocol.HAServiceState hass) {
     this.tailerThread = new EditLogTailerThread();
     this.conf = conf;
     this.namesystem = namesystem;
@@ -245,9 +254,23 @@ public class EditLogTailer {
       maxRetries = DFSConfigKeys.DFS_HA_TAILEDITS_ALL_NAMESNODES_RETRY_DEFAULT;
     }
 
-    inProgressOk = conf.getBoolean(
-        DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY,
-        DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_DEFAULT);
+    switch (hass) {
+    case STANDBY:
+      inProgressOk = conf.getBoolean(
+          DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_STANDBY_KEY,
+          DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_STANDBY_DEFAULT);
+      break;
+    case OBSERVER:
+      inProgressOk = conf.getBoolean(
+          DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_KEY,
+          DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_DEFAULT);
+      break;
+    default:
+      inProgressOk = conf.getBoolean(
+          DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY,
+          DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_DEFAULT);
+      break;
+    }
 
     this.maxTxnsPerLock = conf.getLong(
         DFS_HA_TAILEDITS_MAX_TXNS_PER_LOCK_KEY,
@@ -259,6 +282,23 @@ public class EditLogTailer {
 
     LOG.debug("logRollPeriodMs=" + logRollPeriodMs +
         " sleepTime=" + sleepTimeMs);
+    boolean confOnlyDurableTxns = conf.getBoolean(
+        DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
+        DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT);
+    setOnlyDurableTxns(confOnlyDurableTxns);
+  }
+
+  public boolean setOnlyDurableTxns(boolean newValue) {
+    if (this.onlyDurableTxns != newValue) {
+      LOG.info("Will change onlyDurableTxns from {} to {}.", this.onlyDurableTxns, newValue);
+      this.onlyDurableTxns = newValue;
+    }
+    return this.onlyDurableTxns;
+  }
+
+  @VisibleForTesting
+  public boolean isOnlyDurableTxns() {
+    return this.onlyDurableTxns;
   }
 
   public void start() {
@@ -322,34 +362,39 @@ public class EditLogTailer {
   
   @VisibleForTesting
   public long doTailEdits() throws IOException, InterruptedException {
+    return doTailEdits(true);
+  }
+
+  public long doTailEdits(boolean onlyDurableTxns)
+      throws IOException, InterruptedException {
+    FSImage image = namesystem.getFSImage();
+    long startTime = Time.monotonicNow();
+    long lastTxnId = image.getLastAppliedTxId();
+    LOG.debug("lastTxnId: {}.", lastTxnId);
+    Collection<EditLogInputStream> streams;
+    try {
+      streams = editLog.selectInputStreams(lastTxnId + 1, 0,
+          null, inProgressOk, onlyDurableTxns);
+    } catch (IOException ioe) {
+      // This is acceptable. If we try to tail edits in the middle of an edits
+      // log roll, i.e. the last one has been finalized but the new inprogress
+      // edits file hasn't been started yet.
+      LOG.warn("Edits tailer failed to find any streams. Will try again later.", ioe);
+      return 0;
+    } finally {
+      NameNode.getNameNodeMetrics().addEditLogFetchTime(Time.monotonicNow() - startTime);
+    }
     // Write lock needs to be interruptible here because the 
     // transitionToActive RPC takes the write lock before calling
     // tailer.stop() -- so if we're not interruptible, it will
     // deadlock.
     namesystem.writeLockInterruptibly();
     try {
-      FSImage image = namesystem.getFSImage();
-
-      long lastTxnId = image.getLastAppliedTxId();
-      
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("lastTxnId: " + lastTxnId);
-      }
-      Collection<EditLogInputStream> streams;
-      long startTime = Time.monotonicNow();
-      try {
-        streams = editLog.selectInputStreams(lastTxnId + 1, 0,
-            null, inProgressOk, true);
-      } catch (IOException ioe) {
-        // This is acceptable. If we try to tail edits in the middle of an edits
-        // log roll, i.e. the last one has been finalized but the new inprogress
-        // edits file hasn't been started yet.
-        LOG.warn("Edits tailer failed to find any streams. Will try again " +
-            "later.", ioe);
+      long currentLastTxnId = image.getLastAppliedTxId();
+      if (currentLastTxnId != lastTxnId) {
+        LOG.warn("The current LastTxnId({}) is not same with the one({}) used " +
+            "in selecting inputStreams.", currentLastTxnId, lastTxnId);
         return 0;
-      } finally {
-        NameNode.getNameNodeMetrics().addEditLogFetchTime(
-            Time.monotonicNow() - startTime);
       }
       if (LOG.isDebugEnabled()) {
         LOG.debug("edit streams to load from: " + streams.size());
@@ -501,7 +546,7 @@ public class EditLogTailer {
           try {
             NameNode.getNameNodeMetrics().addEditLogTailInterval(
                 startTime - lastLoadTimeMs);
-            editsTailed = doTailEdits();
+            editsTailed = doTailEdits(onlyDurableTxns);
           } finally {
             namesystem.cpUnlock();
             NameNode.getNameNodeMetrics().addEditLogTailTime(

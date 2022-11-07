@@ -3203,6 +3203,7 @@ public abstract class Server {
         throws IOException, InterruptedException {
       try {
         internalQueueCall(call, false);
+        rpcMetrics.incrRequeueCalls();
       } catch (RpcServerException rse) {
         call.doResponse(rse.getCause(), rse.getRpcStatusProto());
       }

@@ -2475,6 +2475,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public void setErasureCodingPolicy(String src, String ecPolicyName)
       throws IOException {
     checkNNStartup();
+    namesystem.checkOperation(OperationCategory.WRITE);
     final CacheEntry cacheEntry = getCacheEntry();
     if (cacheEntry != null && cacheEntry.isSuccess()) {
       return;
@@ -2731,6 +2732,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   @Override // ClientProtocol
   public void unsetErasureCodingPolicy(String src) throws IOException {
     checkNNStartup();
+    namesystem.checkOperation(OperationCategory.WRITE);
     final CacheEntry cacheEntry = getCacheEntry();
     if (cacheEntry != null && cacheEntry.isSuccess()) {
       return;
@@ -2755,6 +2757,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public AddErasureCodingPolicyResponse[] addErasureCodingPolicies(
       ErasureCodingPolicy[] policies) throws IOException {
     checkNNStartup();
+    namesystem.checkOperation(OperationCategory.WRITE);
     namesystem.checkSuperuserPrivilege();
     final CacheEntryWithPayload cacheEntry = getCacheEntryWithPayload(null);
     if (cacheEntry != null && cacheEntry.isSuccess()) {
@@ -2777,6 +2780,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public void removeErasureCodingPolicy(String ecPolicyName)
       throws IOException {
     checkNNStartup();
+    namesystem.checkOperation(OperationCategory.WRITE);
     namesystem.checkSuperuserPrivilege();
     final CacheEntry cacheEntry = getCacheEntry();
     if (cacheEntry != null && cacheEntry.isSuccess()) {
@@ -2795,6 +2799,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public void enableErasureCodingPolicy(String ecPolicyName)
       throws IOException {
     checkNNStartup();
+    namesystem.checkOperation(OperationCategory.WRITE);
     namesystem.checkSuperuserPrivilege();
     final CacheEntry cacheEntry = getCacheEntry();
     if (cacheEntry != null && cacheEntry.isSuccess()) {
@@ -2813,6 +2818,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public void disableErasureCodingPolicy(String ecPolicyName)
       throws IOException {
     checkNNStartup();
+    namesystem.checkOperation(OperationCategory.WRITE);
     namesystem.checkSuperuserPrivilege();
     final CacheEntry cacheEntry = getCacheEntry();
     if (cacheEntry != null && cacheEntry.isSuccess()) {

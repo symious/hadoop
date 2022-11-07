@@ -90,6 +90,12 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   /** Default value for IPC_MAXIMUM_RESPONSE_LENGTH. */
   public static final int IPC_MAXIMUM_RESPONSE_LENGTH_DEFAULT =
       128 * 1024 * 1024;
+  /** Maximum number of stacked calls for one connection. **/
+  public static final String IPC_CONNECTION_MAXIMUM_STACKED_CALL =
+      "ipc.connection.maximum.stacked.call";
+  public static final long IPC_CONNECTION_MAXIMUM_STACKED_CALL_DEFAULT = 0;
+  public static final String IPC_CONNECTION_MAXIMUM_STACKED_CALL_OBSERVER =
+      "ipc.connection.maximum.stacked.call.observer";
 
   /** How many calls per handler are allowed in the queue. */
   public static final String  IPC_SERVER_HANDLER_QUEUE_SIZE_KEY =

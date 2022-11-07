@@ -112,6 +112,8 @@ public class JournalNodeRpcServer implements QJournalProtocol,
     DFSUtil.addPBProtocol(confCopy, InterQJournalProtocolPB.class,
         interQJournalProtocolService, server);
 
+    this.server.addTerseExceptions(NewerTxnIdException.class);
+    this.server.addTerseExceptions(JournaledEditsCache.CacheMissException.class);
 
     // set service-level authorization security policy
     if (confCopy.getBoolean(

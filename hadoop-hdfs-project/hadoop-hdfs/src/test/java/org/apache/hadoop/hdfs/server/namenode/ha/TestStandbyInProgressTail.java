@@ -71,6 +71,7 @@ public class TestStandbyInProgressTail {
     // Set period of tail edits to a large value (20 mins) for test purposes
     conf.setInt(DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY, 20 * 60);
     conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY, true);
+    conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_STANDBY_KEY, true);
     conf.setInt(DFSConfigKeys.DFS_QJOURNAL_SELECT_INPUT_STREAMS_TIMEOUT_KEY,
         500);
     // Set very samll limit of transactions per a journal rpc call
@@ -100,6 +101,7 @@ public class TestStandbyInProgressTail {
     // Set period of tail edits to a large value (20 mins) for test purposes
     conf.setInt(DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY, 20 * 60);
     conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY, false);
+    conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_KEY, false);
     HAUtil.setAllowStandbyReads(conf, true);
     qjmhaCluster = new MiniQJMHACluster.Builder(conf).build();
     cluster = qjmhaCluster.getDfsCluster();
@@ -333,9 +335,8 @@ public class TestStandbyInProgressTail {
     // Test case where some NNs (in this case the active NN) in the cluster
     // do not have in-progress tailing enabled.
     Configuration newConf = cluster.getNameNode(0).getConf();
-    newConf.setBoolean(
-        DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY,
-        false);
+    newConf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY, false);
+    newConf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_KEY, false);
     cluster.restartNameNode(0);
     cluster.transitionToActive(0);
 

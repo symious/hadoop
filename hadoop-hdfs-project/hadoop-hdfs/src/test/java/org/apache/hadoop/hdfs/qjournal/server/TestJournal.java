@@ -81,6 +81,7 @@ public class TestJournal {
     conf = new Configuration();
     // Enable fetching edits via RPC
     conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_KEY, true);
+    conf.setBoolean(DFSConfigKeys.DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_KEY, true);
     journal = new Journal(conf, TEST_LOG_DIR, JID, StartupOption.REGULAR,
       mockErrorReporter);
     journal.format(FAKE_NSINFO, false);

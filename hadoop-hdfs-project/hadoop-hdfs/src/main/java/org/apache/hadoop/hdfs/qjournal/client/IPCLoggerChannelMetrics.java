@@ -29,6 +29,7 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableQuantiles;
 
+import org.apache.hadoop.metrics2.lib.MutableStat;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Maps;
 
 /**
@@ -42,6 +43,7 @@ class IPCLoggerChannelMetrics {
   
   private final MutableQuantiles[] writeEndToEndLatencyQuantiles;
   private final MutableQuantiles[] writeRpcLatencyQuantiles;
+  private final MutableStat stackedJournalRequests;
 
   
   /**
@@ -80,6 +82,8 @@ class IPCLoggerChannelMetrics {
       writeEndToEndLatencyQuantiles = null;
       writeRpcLatencyQuantiles = null;
     }
+    stackedJournalRequests = registry.newStat("stackedJournalRequests",
+        "stackedJournalRequests", "Ops", "Size", false);
   }
   
   private void setChannel(IPCLoggerChannel ch) {
@@ -150,5 +154,9 @@ class IPCLoggerChannelMetrics {
         q.add(micros);
       }
     }
+  }
+
+  public void incrStackedJournalRequest(int stackedNumber) {
+    this.stackedJournalRequests.add(stackedNumber);
   }
 }

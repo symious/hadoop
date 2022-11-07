@@ -101,6 +101,7 @@ import static org.apache.hadoop.hdfs.DFSUtil.isParentEntry;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.text.CaseUtils;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.hdfs.protocol.ECTopologyVerifierResult;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_ENABLED_KEY;
@@ -111,6 +112,7 @@ import static org.apache.hadoop.ha.HAServiceProtocol.HAServiceState.OBSERVER;
 
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicyInfo;
 
+import org.apache.hadoop.hdfs.server.namenode.ha.HAState;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.thirdparty.protobuf.ByteString;
 import org.apache.hadoop.hdfs.protocol.BatchedDirectoryListing;
@@ -1525,8 +1527,28 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * 
    * @throws IOException
    */
-  void startStandbyServices(final Configuration conf, boolean isObserver)
+  void startStandbyServices(final Configuration conf, HAState haState)
       throws IOException {
+    boolean isObserver = haState == NameNode.OBSERVER_STATE;
+    if (isObserver) {
+      long maximumStackedRequest = conf.getLong(
+          CommonConfigurationKeys.IPC_CONNECTION_MAXIMUM_STACKED_CALL_OBSERVER,
+          CommonConfigurationKeys.IPC_CONNECTION_MAXIMUM_STACKED_CALL_DEFAULT);
+      if (maximumStackedRequest >= 0) {
+        conf.setLong(CommonConfigurationKeys.IPC_CONNECTION_MAXIMUM_STACKED_CALL,
+            maximumStackedRequest);
+      }
+    } else {
+      // Get the value from the conf file and try to reset the value in memory.
+      Configuration tmpConf = new Configuration();
+      long maximumStackedRequest = tmpConf.getLong(
+          CommonConfigurationKeys.IPC_CONNECTION_MAXIMUM_STACKED_CALL,
+          CommonConfigurationKeys.IPC_CONNECTION_MAXIMUM_STACKED_CALL_DEFAULT);
+      if (maximumStackedRequest >= 0) {
+        conf.setLong(CommonConfigurationKeys.IPC_CONNECTION_MAXIMUM_STACKED_CALL,
+            maximumStackedRequest);
+      }
+    }
     LOG.info("Starting services required for " +
         (isObserver ? "observer" : "standby") + " state");
     if (!getFSImage().editLog.isOpenForRead()) {
@@ -1537,7 +1559,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
     // Disable quota checks while in standby.
     dir.disableQuotaChecks();
-    editLogTailer = new EditLogTailer(this, conf);
+    editLogTailer = new EditLogTailer(this, conf, haState.getServiceState());
     editLogTailer.start();
     if (!isObserver && standbyShouldCheckpoint) {
       standbyCheckpointer = new StandbyCheckpointer(conf, this);
@@ -2994,12 +3016,12 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
     LocatedBlock[] onRetryBlock = new LocatedBlock[1];
     FSDirWriteFileOp.ValidateAddBlockResult r;
-    checkOperation(OperationCategory.READ);
+    checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(operationName);
     readLock();
     try {
-      checkOperation(OperationCategory.READ);
+      checkOperation(OperationCategory.WRITE);
       r = FSDirWriteFileOp.validateAddBlock(this, pc, src, fileId, clientName,
                                             previous, onRetryBlock);
     } finally {
@@ -3045,12 +3067,12 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     final byte storagePolicyID;
     final List<DatanodeStorageInfo> chosen;
     final BlockType blockType;
-    checkOperation(OperationCategory.READ);
+    checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(null);
     readLock();
     try {
-      checkOperation(OperationCategory.READ);
+      checkOperation(OperationCategory.WRITE);
       //check safe mode
       checkNameNodeSafeMode("Cannot add datanode; src=" + src + ", blk=" + blk);
       final INodesInPath iip = dir.resolvePath(pc, src, fileId);

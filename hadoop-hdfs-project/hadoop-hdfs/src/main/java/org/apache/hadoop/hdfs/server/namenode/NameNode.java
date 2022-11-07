@@ -23,6 +23,7 @@ import org.apache.hadoop.hdfs.server.blockmanagement.HostConfigManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.HostFileWithMaintenanceManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.SlowDiskTracker;
 import org.apache.hadoop.hdfs.server.blockmanagement.SlowPeerTracker;
+import org.apache.hadoop.hdfs.server.namenode.ha.EditLogTailer;
 import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
@@ -132,6 +133,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERV
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_NN_NOT_BECOME_ACTIVE_IN_SAFEMODE;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_NN_NOT_BECOME_ACTIVE_IN_SAFEMODE_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_DEFAULT;
@@ -375,7 +377,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES,
           DFS_LEASE_HARDLIMIT_KEY,
           DFS_NAMENODE_QUOTA_INIT_THREADS_KEY,
-          DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY));
+          DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY,
+          DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2242,8 +2245,7 @@ public class NameNode extends ReconfigurableBase implements
     @Override
     public void startStandbyServices() throws IOException {
       try {
-        namesystem.startStandbyServices(getConf(),
-            state == NameNode.OBSERVER_STATE);
+        namesystem.startStandbyServices(getConf(), state);
       } catch (Throwable t) {
         doImmediateShutdown(t);
       }
@@ -2398,6 +2400,8 @@ public class NameNode extends ReconfigurableBase implements
       return newVal;
     } else if (property.equals(DFS_IMAGE_PARALLEL_LOAD_KEY)) {
       return reconfigureParallelLoad(newVal);
+    } else if (property.equals(DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY)) {
+      return reconfigureTailEditsOnlyDurableTxns(newVal);
     } else if (property.equals(DFS_HOSTS_MAINTENANCE_ENABLED_KEY)) {
       return reconfMaintenanceEnabled(datanodeManager, property, newVal);
     } else if (property.equals(DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR)) {
@@ -2822,6 +2826,24 @@ public class NameNode extends ReconfigurableBase implements
     namenodeQuotaInitThreads = this.namesystem.getFSDirectory()
         .reConfQuotaInitThreads(namenodeQuotaInitThreads);
     return String.valueOf(namenodeQuotaInitThreads);
+  }
+
+  private String reconfigureTailEditsOnlyDurableTxns(String newVal) {
+    boolean onlyDurableTxns;
+    if (newVal == null) {
+      onlyDurableTxns = DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT;
+    } else {
+      onlyDurableTxns = Boolean.parseBoolean(newVal);
+    }
+    EditLogTailer editLogTailer = this.namesystem.getEditLogTailer();
+    if (editLogTailer == null) {
+      LOG.warn("EditLogTailer is null and cannot support to reconfigure "
+          + DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY
+          + " and will just set this key in conf.");
+    } else {
+      onlyDurableTxns = editLogTailer.setOnlyDurableTxns(onlyDurableTxns);
+    }
+    return String.valueOf(onlyDurableTxns);
   }
 
   @Override  // ReconfigurableBase

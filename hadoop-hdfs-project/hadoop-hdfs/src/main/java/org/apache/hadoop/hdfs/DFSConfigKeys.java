@@ -1336,9 +1336,21 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_HA_TAILEDITS_INPROGRESS_KEY =
           "dfs.ha.tail-edits.in-progress";
   public static final boolean DFS_HA_TAILEDITS_INPROGRESS_DEFAULT = false;
+  public static final String  DFS_HA_TAILEDITS_INPROGRESS_STANDBY_KEY =
+      "dfs.ha.tail-edits.in-progress.standby";
+  public static final boolean DFS_HA_TAILEDITS_INPROGRESS_STANDBY_DEFAULT =
+      false;
+
+  public static final String  DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_KEY =
+      "dfs.ha.tail-edits.in-progress.observer";
+  public static final boolean DFS_HA_TAILEDITS_INPROGRESS_OBSERVER_DEFAULT =
+      false;
   public static final String DFS_HA_TAILEDITS_ROLLEDITS_TIMEOUT_KEY =
       "dfs.ha.tail-edits.rolledits.timeout";
   public static final int DFS_HA_TAILEDITS_ROLLEDITS_TIMEOUT_DEFAULT = 60; // 1m
+  public static final String DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY =
+      "dfs.ha.tail-edits.only.durable.txns.enabled";
+  public static final boolean DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT = true;
   public static final String DFS_HA_LOGROLL_RPC_TIMEOUT_KEY = "dfs.ha.log-roll.rpc.timeout";
   public static final int DFS_HA_LOGROLL_RPC_TIMEOUT_DEFAULT = 20000; // 20s
   public static final String DFS_HA_FENCE_METHODS_KEY = "dfs.ha.fencing.methods";
