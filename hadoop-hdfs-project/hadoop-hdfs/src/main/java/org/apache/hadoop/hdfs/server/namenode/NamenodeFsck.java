@@ -38,6 +38,7 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.commons.io.IOUtils;
+import org.apache.hadoop.hdfs.OperationName;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockUnderConstructionFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -287,7 +288,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
       return;
     }
 
-    namenode.getNamesystem().readLock();
+    namenode.getNamesystem().readLock(OperationName.FSCK);
     try {
       //get blockInfo
       Block block = new Block(Block.getBlockId(blockId));
@@ -347,7 +348,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
       out.print("\n\n" + errMsg);
       LOG.warn("Error in looking up block", e);
     } finally {
-      namenode.getNamesystem().readUnlock("fsck");
+      namenode.getNamesystem().readUnlock(OperationName.FSCK);
     }
   }
 
@@ -571,9 +572,8 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
     long fileLen = file.getLen();
     LocatedBlocks blocks = null;
     final FSNamesystem fsn = namenode.getNamesystem();
-    final String operationName = "fsckGetBlockLocations";
-    FSPermissionChecker.setOperationType(operationName);
-    fsn.readLock();
+    FSPermissionChecker.setOperationType(OperationName.FSCK_GET_BLOCK_LOCATIONS);
+    fsn.readLock(OperationName.FSCK_GET_BLOCK_LOCATIONS);
     try {
       blocks = FSDirStatAndListingOp.getBlockLocations(
           fsn.getFSDirectory(), fsn.getPermissionChecker(),
@@ -582,7 +582,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
     } catch (FileNotFoundException fnfe) {
       blocks = null;
     } finally {
-      fsn.readUnlock(operationName);
+      fsn.readUnlock(OperationName.FSCK_GET_BLOCK_LOCATIONS);
     }
     return blocks;
   }

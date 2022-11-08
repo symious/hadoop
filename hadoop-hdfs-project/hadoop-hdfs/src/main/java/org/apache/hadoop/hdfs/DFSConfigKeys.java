@@ -626,6 +626,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.lock.suppress.warning.interval";
   public static final long DFS_LOCK_SUPPRESS_WARNING_INTERVAL_DEFAULT =
       10000; //ms
+  public static final String DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_KEY =
+      "dfs.lock.wait.threshold.ms";
+  public static final long DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_DEFAULT = 100;
   public static final String DFS_DATANODE_LOCK_FAIR_KEY =
       "dfs.datanode.lock.fair";
   public static final boolean DFS_DATANODE_LOCK_FAIR_DEFAULT = true;

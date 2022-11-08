@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.TreeMap;
 
+import org.apache.hadoop.hdfs.OperationName;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
@@ -187,11 +188,11 @@ public class EncryptionZoneManager {
       final int count) throws IOException {
     INodesInPath iip;
     final FSPermissionChecker pc = dir.getPermissionChecker();
-    dir.getFSNamesystem().readLock();
+    dir.getFSNamesystem().readLock(OperationName.PAUSE_FOR_TESTING_AFTER_NTH_CHECKPOINT);
     try {
       iip = dir.resolvePath(pc, zone, DirOp.READ);
     } finally {
-      dir.getFSNamesystem().readUnlock();
+      dir.getFSNamesystem().readUnlock(OperationName.PAUSE_FOR_TESTING_AFTER_NTH_CHECKPOINT);
     }
     reencryptionHandler
         .pauseForTestingAfterNthCheckpoint(iip.getLastINode().getId(), count);
@@ -212,7 +213,7 @@ public class EncryptionZoneManager {
       throws IOException {
     final FSPermissionChecker pc = dir.getPermissionChecker();
     final INode inode;
-    dir.getFSNamesystem().readLock();
+    dir.getFSNamesystem().readLock(OperationName.GET_ZONE_STATUS);
     dir.readLock();
     try {
       final INodesInPath iip = dir.resolvePath(pc, zone, DirOp.READ);
@@ -223,7 +224,7 @@ public class EncryptionZoneManager {
       return getReencryptionStatus().getZoneStatus(inode.getId());
     } finally {
       dir.readUnlock();
-      dir.getFSNamesystem().readUnlock();
+      dir.getFSNamesystem().readUnlock(OperationName.GET_ZONE_STATUS);
     }
   }
 

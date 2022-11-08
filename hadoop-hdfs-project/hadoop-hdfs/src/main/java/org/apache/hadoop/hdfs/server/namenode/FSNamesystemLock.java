@@ -41,6 +41,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FSLOCK_FAIR_DEFA
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FSLOCK_FAIR_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOCK_DETAILED_METRICS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_DEFAULT;
@@ -67,8 +69,9 @@ class FSNamesystemLock {
   @VisibleForTesting
   protected ReentrantReadWriteLock coarseLock;
 
-  private final boolean metricsEnabled;
+  private volatile boolean metricsEnabled;
   private final MutableRatesWithAggregation detailedHoldTimeMetrics;
+  private final MutableRatesWithAggregation detailedWaitTimeMetrics;
   private final Timer timer;
 
   /**
@@ -78,14 +81,18 @@ class FSNamesystemLock {
   private final long lockSuppressWarningIntervalMs;
 
   /** Threshold (ms) for long holding write lock report. */
-  private final long writeLockReportingThresholdMs;
+  private volatile long writeLockReportingThresholdMs;
   /** Last time stamp for write lock. Keep the longest one for multi-entrance.*/
   private long writeLockHeldTimeStampNanos;
   /** Frequency limiter used for reporting long write lock hold times. */
   private final LogThrottlingHelper writeLockReportLogger;
 
   /** Threshold (ms) for long holding read lock report. */
-  private final long readLockReportingThresholdMs;
+  private volatile long readLockReportingThresholdMs;
+
+  /** Threshold (nanos) to consider a lock acquisition to be waiting */
+  private volatile long lockWaitThresholdNs;
+
   /**
    * Last time stamp for read lock. Keep the longest one for
    * multi-entrance. This is ThreadLocal since there could be
@@ -108,7 +115,6 @@ class FSNamesystemLock {
    */
   private final AtomicReference<LockHeldInfo> longestReadLockHeldInfo =
       new AtomicReference<>(new LockHeldInfo(0, 0, null));
-  private LockHeldInfo longestWriteLockHeldInfo = new LockHeldInfo(0, 0, null);
   /**
    * The number of time the read lock
    * has been held longer than the threshold.
@@ -122,20 +128,22 @@ class FSNamesystemLock {
 
   @VisibleForTesting
   static final String OP_NAME_OTHER = "OTHER";
+  static final String OP_NAME_INTERRUPTIBLY = "INTERRUPTIBLY";
   private static final String READ_LOCK_METRIC_PREFIX = "FSNReadLock";
   private static final String WRITE_LOCK_METRIC_PREFIX = "FSNWriteLock";
   private static final String LOCK_METRIC_SUFFIX = "Nanos";
+  private static final String WAIT_LOCK_METRIC_SUFFIX = "WaitNanos";
 
   private static final String OVERALL_METRIC_NAME = "Overall";
 
-  FSNamesystemLock(Configuration conf,
-      MutableRatesWithAggregation detailedHoldTimeMetrics) {
-    this(conf, detailedHoldTimeMetrics, new Timer());
+  FSNamesystemLock(Configuration conf, MutableRatesWithAggregation detailedHoldTimeMetrics,
+      MutableRatesWithAggregation detailedWaitTimeMetrics) {
+    this(conf, detailedHoldTimeMetrics, detailedWaitTimeMetrics, new Timer());
   }
 
   @VisibleForTesting
-  FSNamesystemLock(Configuration conf,
-      MutableRatesWithAggregation detailedHoldTimeMetrics, Timer timer) {
+  FSNamesystemLock(Configuration conf, MutableRatesWithAggregation detailedHoldTimeMetrics,
+      MutableRatesWithAggregation detailedWaitTimeMetrics, Timer timer) {
     boolean fair = conf.getBoolean(DFS_NAMENODE_FSLOCK_FAIR_KEY,
         DFS_NAMENODE_FSLOCK_FAIR_DEFAULT);
     FSNamesystem.LOG.info("fsLock is fair: " + fair);
@@ -148,6 +156,9 @@ class FSNamesystemLock {
     this.readLockReportingThresholdMs = conf.getLong(
         DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY,
         DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_DEFAULT);
+    this.lockWaitThresholdNs = conf.getLong(
+        DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_KEY,
+        DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_DEFAULT) * 1000;
     this.lockSuppressWarningIntervalMs = conf.getTimeDuration(
         DFS_LOCK_SUPPRESS_WARNING_INTERVAL_KEY,
         DFS_LOCK_SUPPRESS_WARNING_INTERVAL_DEFAULT, TimeUnit.MILLISECONDS);
@@ -156,13 +167,42 @@ class FSNamesystemLock {
     this.metricsEnabled = conf.getBoolean(
         DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY,
         DFS_NAMENODE_LOCK_DETAILED_METRICS_DEFAULT);
-    FSNamesystem.LOG.info("Detailed lock hold time metrics enabled: " +
+    FSNamesystem.LOG.info("Detailed lock time metrics enabled: " +
         this.metricsEnabled);
     this.detailedHoldTimeMetrics = detailedHoldTimeMetrics;
+    this.detailedWaitTimeMetrics = detailedWaitTimeMetrics;
+  }
+
+  public void refreshLockMetricsConfigs(Configuration conf) {
+    this.writeLockReportingThresholdMs = conf.getLong(
+        DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_KEY,
+        DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_DEFAULT);
+    this.readLockReportingThresholdMs = conf.getLong(
+        DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY,
+        DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_DEFAULT);
+    this.lockWaitThresholdNs = conf.getLong(
+        DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_KEY,
+        DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_DEFAULT) * 1000;
+    this.metricsEnabled = conf.getBoolean(
+        DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY,
+        DFS_NAMENODE_LOCK_DETAILED_METRICS_DEFAULT);
+
+    FSNamesystem.LOG.info("Detailed lock time metrics enabled: " +
+        this.metricsEnabled);
+    FSNamesystem.LOG.info("Refreshed lock wait threshold: " +
+        this.lockWaitThresholdNs / 1000 + " ms");
+    FSNamesystem.LOG.info("Refreshed read lock reporting threshold: " +
+        this.readLockReportingThresholdMs + " ms");
+    FSNamesystem.LOG.info("Refreshed write lock reporting threshold: " +
+        this.writeLockReportingThresholdMs + " ms");
   }
 
   public void readLock() {
-    doLock(false);
+    doLock(false, OP_NAME_OTHER);
+  }
+
+  public void readLock(String opName) {
+    doLock(false, opName);
   }
 
   public void readLockInterruptibly() throws InterruptedException {
@@ -221,7 +261,11 @@ class FSNamesystemLock {
   }
   
   public void writeLock() {
-    doLock(true);
+    doLock(true, OP_NAME_OTHER);
+  }
+
+  public void writeLock(String opName) {
+    doLock(true, opName);
   }
 
   public void writeLockInterruptibly() throws InterruptedException {
@@ -262,40 +306,18 @@ class FSNamesystemLock {
     final long writeLockIntervalMs =
         TimeUnit.NANOSECONDS.toMillis(writeLockIntervalNanos);
 
-    LogAction logAction = LogThrottlingHelper.DO_NOT_LOG;
-    if (needReport &&
-        writeLockIntervalMs >= this.writeLockReportingThresholdMs) {
-      numWriteLockLongHold.increment();
-      if (longestWriteLockHeldInfo.getIntervalMs() < writeLockIntervalMs) {
-        longestWriteLockHeldInfo =
-            new LockHeldInfo(currentTimeMs, writeLockIntervalMs,
-                StringUtils.getStackTrace(Thread.currentThread()));
-      }
-
-      logAction = writeLockReportLogger
-          .record("write", currentTimeMs, writeLockIntervalMs);
-    }
-
-    LockHeldInfo lockHeldInfo = longestWriteLockHeldInfo;
-    if (logAction.shouldLog()) {
-      longestWriteLockHeldInfo = new LockHeldInfo(0, 0, null);
-    }
-
+    boolean needLogSlowWrite = needReport &&
+        writeLockIntervalMs >= this.writeLockReportingThresholdMs;
     coarseLock.writeLock().unlock();
 
     if (needReport) {
       addMetric(opName, writeLockIntervalNanos, true);
     }
 
-    if (logAction.shouldLog()) {
-      FSNamesystem.LOG.info(
-          "\tNumber of suppressed write-lock reports: {}"
-              + "\n\tLongest write-lock held at {} for {}ms via {}"
-              + "\n\tTotal suppressed write-lock held time: {}",
-          logAction.getCount() - 1,
-          Time.formatTime(lockHeldInfo.getStartTimeMs()),
-          lockHeldInfo.getIntervalMs(), lockHeldInfo.getStackTrace(),
-          logAction.getStats(0).getSum() - lockHeldInfo.getIntervalMs());
+    if (needLogSlowWrite) {
+      FSNamesystem.LOG.info("\tLongest write-lock held at {} for {}ms via {}.",
+          Time.formatTime(currentTimeMs), writeLockIntervalMs,
+          StringUtils.getStackTrace(Thread.currentThread()));
     }
   }
 
@@ -355,24 +377,40 @@ class FSNamesystemLock {
    */
   private void addMetric(String operationName, long value, boolean isWrite) {
     if (metricsEnabled) {
-      String opMetric = getMetricName(operationName, isWrite);
+      String opMetric = getMetricName(operationName, isWrite, false);
       detailedHoldTimeMetrics.add(opMetric, value);
 
-      String overallMetric = getMetricName(OVERALL_METRIC_NAME, isWrite);
+      String overallMetric = getMetricName(OVERALL_METRIC_NAME, isWrite, false);
       detailedHoldTimeMetrics.add(overallMetric, value);
     }
     updateProcessingDetails(
         isWrite ? Timing.LOCKEXCLUSIVE : Timing.LOCKSHARED, value);
   }
 
-  private void doLock(boolean isWrite) {
+  /**
+   * Add the lock wait time for a recent operation to the metrics.
+   * @param operationName Name of the operation for which to record the time
+   * @param value Length of time the lock was held (nanoseconds)
+   */
+  private void addWaitMetric(String operationName, long value, boolean isWrite) {
+    if (metricsEnabled && value > lockWaitThresholdNs) {
+      String opMetric = getMetricName(operationName, isWrite, true);
+      detailedWaitTimeMetrics.add(opMetric, value);
+
+      String overallMetric = getMetricName(OVERALL_METRIC_NAME, isWrite, true);
+      detailedWaitTimeMetrics.add(overallMetric, value);
+    }
+  }
+
+  private void doLock(boolean isWrite, String opName) {
     long startNanos = timer.monotonicNowNanos();
     if (isWrite) {
       coarseLock.writeLock().lock();
     } else {
       coarseLock.readLock().lock();
     }
-    updateLockWait(startNanos, isWrite);
+    long waitDuration = updateLockWait(startNanos, isWrite);
+    addWaitMetric(opName, waitDuration, isWrite);
   }
 
   private void doLockInterruptibly(boolean isWrite)
@@ -383,12 +421,14 @@ class FSNamesystemLock {
     } else {
       coarseLock.readLock().lockInterruptibly();
     }
-    updateLockWait(startNanos, isWrite);
+    long waitDuration = updateLockWait(startNanos, isWrite);
+    addWaitMetric(OP_NAME_INTERRUPTIBLY, waitDuration, isWrite);
   }
 
-  private void updateLockWait(long startNanos, boolean isWrite) {
+  private long updateLockWait(long startNanos, boolean isWrite) {
     long now = timer.monotonicNowNanos();
-    updateProcessingDetails(Timing.LOCKWAIT, now - startNanos);
+    long waitDuration = now - startNanos;
+    updateProcessingDetails(Timing.LOCKWAIT, waitDuration);
     if (isWrite) {
       if (coarseLock.getWriteHoldCount() == 1) {
         writeLockHeldTimeStampNanos = now;
@@ -398,6 +438,7 @@ class FSNamesystemLock {
         readLockHeldTimeStampNanos.set(now);
       }
     }
+    return waitDuration;
   }
 
   private static void updateProcessingDetails(Timing type, long deltaNanos) {
@@ -407,10 +448,10 @@ class FSNamesystemLock {
     }
   }
 
-  private static String getMetricName(String operationName, boolean isWrite) {
+  private static String getMetricName(String operationName, boolean isWrite, boolean isWait) {
     return (isWrite ? WRITE_LOCK_METRIC_PREFIX : READ_LOCK_METRIC_PREFIX) +
-        org.apache.commons.lang3.StringUtils.capitalize(operationName) +
-        LOCK_METRIC_SUFFIX;
+        org.apache.commons.lang.StringUtils.capitalize(operationName) +
+        (isWait ? WAIT_LOCK_METRIC_SUFFIX : LOCK_METRIC_SUFFIX);
   }
 
   /**

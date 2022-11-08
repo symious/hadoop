@@ -27,6 +27,7 @@ import java.util.List;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.OperationName;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
 import org.apache.hadoop.hdfs.util.ReadOnlyList;
@@ -261,13 +262,13 @@ public abstract class FSTreeTraverser {
   }
 
   protected void readLock() {
-    dir.getFSNamesystem().readLock();
+    dir.getFSNamesystem().readLock(OperationName.FS_TREE_TRAVERSER);
     dir.readLock();
   }
 
   protected void readUnlock() {
     dir.readUnlock();
-    dir.getFSNamesystem().readUnlock("FSTreeTraverser");
+    dir.getFSNamesystem().readUnlock(OperationName.FS_TREE_TRAVERSER);
   }
 
 
