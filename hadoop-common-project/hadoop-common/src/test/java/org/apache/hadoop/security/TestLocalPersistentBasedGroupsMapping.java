@@ -34,7 +34,10 @@ import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.io.MD5Hash;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.hash.MD5FileUtils;
+import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
 
@@ -51,6 +54,14 @@ public class TestLocalPersistentBasedGroupsMapping {
   private final static String TEST_FILE2 = "usergroups2";
   private final static String TEST_FILE_TEMP = "usergroups.temp";
   private final static String TEST_FILE_INVALID = "usergroups.invalid";
+  private final static String TEST_FILE_EMPTY = "usergroups.empty";
+
+  @BeforeClass
+  public static void setDebugLog() {
+    org.apache.log4j.Logger log =
+        LogManager.getLogger(LocalPersistentBasedGroupsMapping.class);
+    log.setLevel(Level.DEBUG);
+  }
 
   /**
    * Initializes Mapping object, deletes checksum file if existed, executes
@@ -153,6 +164,23 @@ public class TestLocalPersistentBasedGroupsMapping {
     assertTrue("Expected the exception message to be about invalid"
             + " mapping format but was: " + mappingLog.getOutput(),
         mappingLog.getOutput().contains("Unable to process mapping:"));
+    mappingLog.clearOutput();
+  }
+
+  @Test
+  public void testEmptyMappingFormat() {
+    ClassLoader classLoader = getClass().getClassLoader();
+    final File testFileEmpty = new File(classLoader.getResource(TEST_FILE_EMPTY).getFile());
+    LocalPersistentBasedGroupsMapping mapping =
+        getMapping(testFileEmpty, false, true);
+
+    mapping.initializeMappingRefreshService();
+    assertTrue("Expected the exception message to be about empty"
+            + " mappings but was: " + mappingLog.getOutput(),
+        mappingLog.getOutput().contains("Empty group:"));
+    assertTrue("Expected the exception message to be about empty"
+            + " mappings but was: " + mappingLog.getOutput(),
+        mappingLog.getOutput().contains("Usergroup mappings are empty."));
     mappingLog.clearOutput();
   }
 

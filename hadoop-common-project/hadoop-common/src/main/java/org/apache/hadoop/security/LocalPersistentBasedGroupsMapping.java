@@ -172,9 +172,12 @@ public class LocalPersistentBasedGroupsMapping extends Configured
         while ((line = br.readLine()) != null) {
           try {
             processLine(groupUsers, line);
+          } catch (EmptyLocalMappingException e) {
+            metrics.mappingLineFailuresTotal.incr();
+            LOG.debug("Empty group: " + line, start);
           } catch (IllegalLocalMappingException e) {
             metrics.mappingLineFailuresTotal.incr();
-            LOG.error("Unable to process mapping: " + line, start);
+            LOG.warn("Unable to process mapping: " + line, start);
           }
         }
       } finally {
@@ -245,11 +248,14 @@ public class LocalPersistentBasedGroupsMapping extends Configured
     }
 
     private void processLine(ConcurrentHashMap<String, List<String>> groupUsers,
-        String line) throws IllegalLocalMappingException {
+        String line) throws LocalMappingException {
       if (line.startsWith("#"))
         return;
       String[] colonSplit = line.split(":");
-      if (line.split(":").length != 2) {
+      if (colonSplit.length == 1) {
+        throw new EmptyLocalMappingException(line);
+      }
+      if (colonSplit.length != 2) {
         throw new IllegalLocalMappingException(line);
       }
       String group = colonSplit[0];
@@ -289,7 +295,7 @@ public class LocalPersistentBasedGroupsMapping extends Configured
   @Override
   synchronized public void setConf(Configuration conf) {
     this.setConfWithoutServiceInit(conf);
-    if (mappingRefreshService == null) {
+    if (conf != null && mappingRefreshService == null) {
       initializeMappingRefreshService();
     }
   }
@@ -325,6 +331,7 @@ public class LocalPersistentBasedGroupsMapping extends Configured
     refreshTask = scheduledExecutor
         .scheduleWithFixedDelay(mappingRefreshService, refreshInterval,
             refreshInterval, TimeUnit.MILLISECONDS);
+    LOG.info("Initialized mapping loader with refreshInterval: " + refreshInterval + "ms");
   }
 
   @VisibleForTesting
@@ -359,6 +366,13 @@ public class LocalPersistentBasedGroupsMapping extends Configured
   private static class IllegalLocalMappingException
       extends LocalMappingException {
     public IllegalLocalMappingException(String message) {
+      super(message);
+    }
+  }
+
+  private static class EmptyLocalMappingException
+      extends LocalMappingException {
+    public EmptyLocalMappingException(String message) {
       super(message);
     }
   }
