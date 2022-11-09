@@ -229,6 +229,9 @@ public class TestFederationClientInterceptorRetry
     final ApplicationId appId =
         ApplicationId.newInstance(System.currentTimeMillis(), 1);
 
+    String submitErrorMessage = "Unable to submit the " +
+        "application " + appId + " to SubCluster " + bad2.getId();
+
     final SubmitApplicationRequest request = mockSubmitApplicationRequest(
         appId);
     try {
@@ -236,8 +239,7 @@ public class TestFederationClientInterceptorRetry
       Assert.fail();
     } catch (Exception e) {
       System.out.println(e);
-      Assert.assertTrue(e.getMessage()
-          .equals(FederationPolicyUtils.NO_ACTIVE_SUBCLUSTER_AVAILABLE));
+      Assert.assertTrue(e.getMessage().equals(submitErrorMessage));
     }
   }
 
@@ -268,6 +270,9 @@ public class TestFederationClientInterceptorRetry
     final ApplicationId appId =
         ApplicationId.newInstance(System.currentTimeMillis(), 1);
 
+    String submitErrorMessage = "Unable to submit the " +
+        "application " + appId + " to SubCluster ";
+
     final SubmitApplicationRequest request = mockSubmitApplicationRequest(
         appId);
     try {
@@ -275,8 +280,7 @@ public class TestFederationClientInterceptorRetry
       Assert.fail();
     } catch (Exception e) {
       System.out.println(e.toString());
-      Assert.assertTrue(e.getMessage()
-          .equals(FederationPolicyUtils.NO_ACTIVE_SUBCLUSTER_AVAILABLE));
+      Assert.assertTrue(e.getMessage().startsWith(submitErrorMessage));
     }
   }
 

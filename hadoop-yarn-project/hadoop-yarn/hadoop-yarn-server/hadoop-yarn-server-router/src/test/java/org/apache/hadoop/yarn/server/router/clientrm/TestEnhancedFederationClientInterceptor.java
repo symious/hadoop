@@ -22,7 +22,9 @@ import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.protocolrecords.GetClusterNodesRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetClusterNodesResponse;
 import org.apache.hadoop.yarn.api.records.NodeState;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.apache.hadoop.yarn.server.federation.policies.manager.UniformBroadcastPolicyManager;
 import org.apache.hadoop.yarn.server.federation.store.impl.MemoryFederationStateStore;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
 import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade;
@@ -46,7 +48,7 @@ import java.util.List;
  * {@code RouterClientRMService} has been written cleverly so that it can be
  * reused to validate different request intercepter chains.
  */
-public class TestEnhancedFederationClientInterceptor extends TestFederationClientInterceptor {
+public class TestEnhancedFederationClientInterceptor extends BaseRouterClientRMTest {
   private static final Logger LOG =
       LoggerFactory.getLogger(TestEnhancedFederationClientInterceptor.class);
 
@@ -95,6 +97,34 @@ public class TestEnhancedFederationClientInterceptor extends TestFederationClien
   @Override
   public void tearDown() {
     interceptor.shutdown();
+    super.tearDown();
+  }
+
+  @Override
+  protected YarnConfiguration createConfiguration() {
+    YarnConfiguration conf = new YarnConfiguration();
+    conf.setBoolean(YarnConfiguration.FEDERATION_ENABLED, true);
+    String mockPassThroughInterceptorClass =
+        PassThroughClientRequestInterceptor.class.getName();
+
+    // Create a request intercepter pipeline for testing. The last one in the
+    // chain is the federation intercepter that calls the mock resource manager.
+    // The others in the chain will simply forward it to the next one in the
+    // chain
+    conf.set(YarnConfiguration.ROUTER_CLIENTRM_INTERCEPTOR_CLASS_PIPELINE,
+        mockPassThroughInterceptorClass + "," + mockPassThroughInterceptorClass
+            + "," + TestableFederationClientInterceptor.class.getName());
+
+    conf.set(YarnConfiguration.FEDERATION_POLICY_MANAGER,
+        UniformBroadcastPolicyManager.class.getName());
+
+    // Disable StateStoreFacade cache
+    conf.setInt(YarnConfiguration.FEDERATION_CACHE_TIME_TO_LIVE_SECS, 0);
+
+    conf.setInt(YarnConfiguration.ROUTER_RPC_CACHE_TIME_TO_LIVE_SECS,
+        TEST_RPC_CACHE_TIME);
+
+    return conf;
   }
 
   @Test

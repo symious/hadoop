@@ -283,12 +283,17 @@ public class TestFederationInterceptorRESTRetry
   @Test
   public void testGetAppsOneBadSC()
       throws YarnException, IOException, InterruptedException {
-
     setupCluster(Arrays.asList(bad2));
-
-    AppsInfo response = interceptor.getApps(null, null, null, null, null, null,
-        null, null, null, null, null, null, null, null, null);
-    Assert.assertNull(response);
+    try {
+          interceptor.getApps(null, null, null,
+              null, null, null,
+              null, null, null, null,
+              null, null, null, null,
+              null);
+    } catch (Exception e) {
+      Assert.assertTrue(e.getMessage()
+          .equals("Failed to get application report and return immediately!"));
+    }
   }
 
   /**
@@ -299,10 +304,16 @@ public class TestFederationInterceptorRESTRetry
   public void testGetAppsTwoBadSCs()
       throws YarnException, IOException, InterruptedException {
     setupCluster(Arrays.asList(bad1, bad2));
-
-    AppsInfo response = interceptor.getApps(null, null, null, null, null, null,
-        null, null, null, null, null, null, null, null, null);
-    Assert.assertNull(response);
+    try {
+      interceptor.getApps(null, null, null,
+          null, null, null,
+          null, null, null, null,
+          null, null, null, null,
+          null);
+    } catch (Exception e) {
+      Assert.assertTrue(e.getMessage()
+          .equals("Failed to get application report and return immediately!"));
+    }
   }
 
   /**
@@ -313,11 +324,16 @@ public class TestFederationInterceptorRESTRetry
   public void testGetAppsOneBadOneGood()
       throws YarnException, IOException, InterruptedException {
     setupCluster(Arrays.asList(good, bad2));
-
-    AppsInfo response = interceptor.getApps(null, null, null, null, null, null,
-        null, null, null, null, null, null, null, null, null);
-    Assert.assertNotNull(response);
-    Assert.assertEquals(1, response.getApps().size());
+    try {
+      interceptor.getApps(null, null, null,
+          null, null, null,
+          null, null, null, null,
+          null, null, null, null,
+          null);
+    } catch (Exception e) {
+      Assert.assertTrue(e.getMessage()
+          .equals("Failed to get application report and return immediately!"));
+    }
   }
 
   /**

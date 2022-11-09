@@ -38,7 +38,7 @@ public class TestRouter {
     YarnConfiguration conf = new YarnConfiguration();
     Router router = new Router();
     router.init(conf);
-    assertEquals(3, router.getServices().size());
+    assertEquals(4, router.getServices().size());
   }
 
   @Test

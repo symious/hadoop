@@ -38,14 +38,6 @@ public class TestRouterAuditLogger {
   private static final String TARGET = "tgt";
   private static InetAddress IP = null;
 
-  static {
-    try {
-      IP = InetAddress.getLocalHost();
-    } catch (UnknownHostException e) {
-      e.printStackTrace();
-    }
-  }
-
   private static final String DESC = "description of an audit log";
 
   private static final ApplicationId APPID = mock(ApplicationId.class);
