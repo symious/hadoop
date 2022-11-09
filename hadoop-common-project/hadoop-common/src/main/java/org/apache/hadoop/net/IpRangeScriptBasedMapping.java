@@ -65,10 +65,19 @@ public class IpRangeScriptBasedMapping extends ScriptBasedMapping {
         needReloadList.size());
   }
 
+  public void setReturnActualRack(boolean returnActualRack) {
+    getRawMapping().setReturnActualRack(returnActualRack);
+  }
+
   protected static class IpRangeMapping extends RawScriptBasedMapping {
     private volatile String ipRange2DCFile = null;
     private final Set<String> cachedIps = new HashSet<>();
     private Map<Pair<String, Integer>, String> ipRangeDCMapping = null;
+    private volatile boolean returnActualRack = false;
+
+    public void setReturnActualRack(boolean returnActualRack) {
+      this.returnActualRack = returnActualRack;
+    }
 
     /**
      * Constructor. The mapping is not ready to use until
@@ -93,7 +102,7 @@ public class IpRangeScriptBasedMapping extends ScriptBasedMapping {
       for (int index = 0; index < names.size(); index++) {
         String network = superResult.get(index);
         // Can not get the actual network.
-        if (network.contains(NetworkTopology.DEFAULT_RACK)) {
+        if (network == null || network.contains(NetworkTopology.DEFAULT_RACK)) {
           // Try to get the DC from ipRang2DC mapping.
           String name = names.get(index);
           String rangeOut = resolveTopologyFromIpSegment(name);
@@ -101,8 +110,6 @@ public class IpRangeScriptBasedMapping extends ScriptBasedMapping {
           if (rangeOut != null) {
             superResult.set(index, rangeOut);
             cachedIps.add(name);
-          } else {
-            LOG.warn("Cannot resolve {} from ipRangeDC mapping, please confirm.", name);
           }
         }
       }
@@ -120,7 +127,13 @@ public class IpRangeScriptBasedMapping extends ScriptBasedMapping {
           return "/" + dcInfo + NetworkTopology.DEFAULT_RACK;
         }
       }
-      return null;
+      LOG.warn("Cannot resolve {} from ipRangeDC mapping", ip);
+      if (this.returnActualRack) {
+        LOG.warn("Using {} for {}", NetworkTopology.UNKNOWN_DC_RACK, ip);
+        return NetworkTopology.UNKNOWN_DC_RACK;
+      } else {
+        return null;
+      }
     }
 
     private Map<Pair<String, Integer>, String> load(String filename) {

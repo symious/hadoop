@@ -61,10 +61,13 @@ public class BlockPlacementPolicyWithDefaultFallbackDataCenter
           this.getClass().getCanonicalName() + " "
               + "must work with DFSNetworkTopologyWithDataCenter!");
     }
-this.defaultDC = conf.get(
+    this.defaultDC = conf.get(
         DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY,
         DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_DEFAULT);
     this.defaultScope = this.defaultDC == null ? null : "/" + this.defaultDC;
+    if (this.defaultScope == null) {
+      throw new IllegalArgumentException("The default scope shouldn't be null!");
+    }
     super.initialize(conf, stats, clusterMap, host2datanodeMap);
   }
 

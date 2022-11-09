@@ -201,6 +201,7 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.util.MBeans;
 import org.apache.hadoop.net.DNS;
 import org.apache.hadoop.net.DNSToSwitchMapping;
+import org.apache.hadoop.net.IpRangeScriptBasedMapping;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.net.ScriptBasedMapping;
 import org.apache.hadoop.net.unix.DomainSocket;
@@ -451,6 +452,9 @@ public class DataNode extends ReconfigurableBase
     this.switchMapping = ReflectionUtils.newInstance(
         conf.getClass(DFSConfigKeys.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
             ScriptBasedMapping.class, DNSToSwitchMapping.class), conf);
+    if (this.switchMapping instanceof IpRangeScriptBasedMapping) {
+      ((IpRangeScriptBasedMapping) this.switchMapping).setReturnActualRack(true);
+    }
     if (conf.getBoolean(DFSConfigKeys.DFS_DATANODE_AUDIT_ENABLE_KEY,
         DFSConfigKeys.DFS_DATANODE_AUDIT_ENABLE_DEFAULT)) {
       this.auditLogger = new DataNodeAuditLogger(conf);

@@ -121,6 +121,7 @@ public class DatanodeManager {
   private final Host2NodesMap host2DatanodeMap = new Host2NodesMap();
 
   private final DNSToSwitchMapping dnsToSwitchMapping;
+  private final DNSToSwitchMapping dnsToSwitchMappingForMetric;
   private final boolean rejectUnresolvedTopologyDN;
 
   private final int defaultXferPort;
@@ -305,6 +306,12 @@ public class DatanodeManager {
     this.dnsToSwitchMapping = ReflectionUtils.newInstance(
         conf.getClass(DFSConfigKeys.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY, 
             ScriptBasedMapping.class, DNSToSwitchMapping.class), conf);
+    this.dnsToSwitchMappingForMetric = ReflectionUtils.newInstance(
+        conf.getClass(DFSConfigKeys.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
+            ScriptBasedMapping.class, DNSToSwitchMapping.class), conf);
+    if (this.dnsToSwitchMappingForMetric instanceof IpRangeScriptBasedMapping) {
+      ((IpRangeScriptBasedMapping) this.dnsToSwitchMappingForMetric).setReturnActualRack(true);
+    }
     
     this.rejectUnresolvedTopologyDN = conf.getBoolean(
         DFSConfigKeys.DFS_REJECT_UNRESOLVED_DN_TOPOLOGY_MAPPING_KEY,
@@ -319,6 +326,7 @@ public class DatanodeManager {
         locations.add(addr.getAddress().getHostAddress());
       }
       dnsToSwitchMapping.resolve(locations);
+      dnsToSwitchMappingForMetric.resolve(locations);
     }
 
     heartbeatIntervalSeconds = conf.getLong(
@@ -394,6 +402,11 @@ public class DatanodeManager {
     }
     if (dnsToSwitchMapping != null && dnsToSwitchMapping instanceof IpRangeScriptBasedMapping) {
       ((IpRangeScriptBasedMapping) dnsToSwitchMapping).reloadIpRange2DC(conf);
+    }
+
+    if (dnsToSwitchMappingForMetric != null
+        && dnsToSwitchMappingForMetric instanceof IpRangeScriptBasedMapping) {
+      ((IpRangeScriptBasedMapping) dnsToSwitchMappingForMetric).reloadIpRange2DC(conf);
     }
   }
 
@@ -547,7 +560,7 @@ public class DatanodeManager {
     } else {
       List<String> hosts = new ArrayList<>(1);
       hosts.add(clientMachine);
-      List<String> resolvedHosts = dnsToSwitchMapping.resolve(hosts);
+      List<String> resolvedHosts = dnsToSwitchMappingForMetric.resolve(hosts);
       if (resolvedHosts != null && !resolvedHosts.isEmpty()) {
         clientLocation = resolvedHosts.get(0);
       } else {
@@ -1324,6 +1337,7 @@ public class DatanodeManager {
       refreshIpList.add(addr.getAddress().getHostAddress());
     }
     dnsToSwitchMapping.resolve(refreshIpList);
+    dnsToSwitchMappingForMetric.resolve(refreshIpList);
     namesystem.writeLock();
     try {
       refreshDatanodes();
@@ -1360,8 +1374,9 @@ public class DatanodeManager {
 
       // 2. Reload DNS to switch mapping.
       LOG.info("refreshTopology: " + ipAddr + " ...");
-      dnsToSwitchMapping.reloadCachedMappings(
-          Collections.singletonList(ipAddr));
+      List<String> names = Collections.singletonList(ipAddr);
+      dnsToSwitchMapping.reloadCachedMappings(names);
+      dnsToSwitchMappingForMetric.reloadCachedMappings(names);
 
       // 3. Update network topology
       for (DatanodeDescriptor datanode : datanodeMap.values()) {

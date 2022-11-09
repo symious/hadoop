@@ -64,6 +64,31 @@ public class TestIpRangeScriptBasedMapping {
   }
 
   @Test
+  public void testResolveWithUnknown() throws IOException {
+    File ipRange2DCFile = File.createTempFile(getClass().getSimpleName() +
+        ".testResolve", ".txt");
+    Files.write(ipRange1 + ",dc1\n" +
+        ipRange2 + ",dc2\n", ipRange2DCFile, Charsets.UTF_8);
+    ipRange2DCFile.deleteOnExit();
+    IpRangeScriptBasedMapping mapping = new IpRangeScriptBasedMapping();
+    Configuration conf = new Configuration();
+    conf.set(NET_TOPOLOGY_IP_RANGE_DC_MAPPING_FILE_KEY, ipRange2DCFile.getCanonicalPath());
+    mapping.setConf(conf);
+    mapping.setReturnActualRack(true);
+
+    List<String> names = new ArrayList<String>();
+    names.add(hostName1);
+    names.add(hostName2);
+    names.add(hostName3);
+
+    List<String> result = mapping.resolve(names);
+    assertEquals(names.size(), result.size());
+    assertEquals("/dc1" + NetworkTopology.DEFAULT_RACK, result.get(0));
+    assertEquals("/dc2" + NetworkTopology.DEFAULT_RACK, result.get(1));
+    assertEquals(NetworkTopology.UNKNOWN_DC_RACK, result.get(2));
+  }
+
+  @Test
   public void testTableCaching() throws IOException {
     File ipRange2DCFile = File.createTempFile(getClass().getSimpleName() +
         ".testResolve", ".txt");
