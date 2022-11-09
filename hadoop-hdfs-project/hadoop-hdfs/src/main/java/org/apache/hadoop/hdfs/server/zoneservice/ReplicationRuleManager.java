@@ -136,9 +136,30 @@ public class ReplicationRuleManager {
     }
 
     Date startTime = new Date();
+    final String methodName = "createUpdateMap";
     try {
       String threadName = "monitor_" + nameSpace;
       SignalRecord signalRecord = new SignalRecord(nameSpace, true);
+      SignalRecord existedSignalRecord =
+          driver.get(new Query<>(signalRecord), SignalRecord.class);
+
+      if (existedSignalRecord == null) {
+        if (!allowCreate) {
+          // There is no monitor for this namespace and will not create it
+          // because allowCreate is false.
+          LOG.warn("Monitor thread for {} not exist and not allow to create.", nameSpace);
+          AuditLogger.logRuleProcess(
+              methodName, nameSpace,
+              path, replicaRule, startTime, new Date(),
+              ResultCode.METHOD_ERROR.getMsg(), MONITOR_MODE);
+          return ResultCode.METHOD_ERROR;
+        }
+
+        // If there is no monitor thread for this namespace, it will create a new one
+        LOG.info("Monitor thread for {} not exist and need to create.", nameSpace);
+        createMonitorThread(nameSpace, threadName, driver, signalRecord, path, replicaRule,
+            startTime);
+      }
 
       MigrationRecord migrationRecordBatch = new MigrationRecord(nameSpace, path,
           replicaRule);
@@ -148,69 +169,49 @@ public class ReplicationRuleManager {
           driver.get(new Query<>(migrationRecord), MigrationRecord.class);
 
       // Check monitor record
+      ResultCode resultCode = ResultCode.CREATE_SUCCESS;
       if (existedRecord != null) {
         // If it is the same rule, return.
         if (checkRuleEquals(existedRecord.getRule(), replicaRule)) {
           LOG.info("The {} already has the replicationRule {}.", path, replicaRule);
-          return ResultCode.CREATE_SUCCESS;
+          return ResultCode.REJECT;
+        } else {
+          LOG.info("The {} has the different replicationRule, old: {} and new: {}.",
+              path, existedRecord.getRule(), replicaRule);
+          resultCode = ResultCode.UPDATE_SUCCESS;
         }
       }
-
-      Thread[] ts = new Thread[Thread.activeCount()];
-      Thread.enumerate(ts);
-      for (Thread tt : ts) {
-        //If the thread is existed the new path-rule will add into the thread
-        if (tt.getName().equals(threadName)) {
-          if (existedRecord == null) {
-            driver.put(migrationRecord, true, false);
-            driver.put(signalRecord, true, false);
-            if (!driver.put(migrationRecordBatch, false, true)) {
-              AuditLogger.logRuleProcess(
-                  "updatePathRuleMap", nameSpace,
-                  path, replicaRule, startTime, new Date(),
-                  ResultCode.REJECT.getMsg(), BATCH_MODE);
-            }
-            AuditLogger.logRuleProcess(
-                "setPathRuleMap", nameSpace,
-                path, replicaRule, startTime, new Date(),
-                ResultCode.CREATE_SUCCESS.getMsg(), MONITOR_MODE);
-            return ResultCode.CREATE_SUCCESS;
-          }
-        }
-      }
-      if (!allowCreate) {
-        //no thread on this namespace, not allow to create thread by this method
-        AuditLogger.logRuleProcess(
-            "refreshPathRuleMap", nameSpace,
-            path, replicaRule, startTime, new Date(),
-            ResultCode.METHOD_ERROR.getMsg(), MONITOR_MODE);
-        return ResultCode.METHOD_ERROR;
-      }
-      //If there is no monitor thread for this namespace, it will create a new one
-      Thread monitorThread = new MonitorThread(threadName, new Configuration(),
-          ZoneServiceUtil.getNamespaceUri(nameSpace, new Configuration()));
-      driver.put(migrationRecord, true, true);
+      driver.put(migrationRecord, true, false);
       driver.put(signalRecord, true, false);
       if (!driver.put(migrationRecordBatch, false, true)) {
-        AuditLogger.logRuleProcess(
-            "updatePathRuleMap", nameSpace,
-            path, replicaRule, startTime, new Date(),
-            ResultCode.REJECT.getMsg(), BATCH_MODE);
+        AuditLogger.logRuleProcess(methodName, nameSpace, path,
+            replicaRule, startTime, new Date(), ResultCode.REJECT.getMsg(), BATCH_MODE);
       }
-      monitorThread.start();
-      AuditLogger.logRuleProcess(
-          "CreatePathRuleMap", nameSpace,
-          path, replicaRule, startTime, new Date(),
-          ResultCode.CREATE_SUCCESS.getMsg(), MONITOR_MODE);
-      return ResultCode.CREATE_SUCCESS;
+      AuditLogger.logRuleProcess(methodName, nameSpace, path, replicaRule, startTime, new Date(),
+          resultCode.getMsg(), MONITOR_MODE);
+
+      return resultCode;
     } catch (IOException e) {
       LOG.error("Failed {} to createUpdateMap the replicationRule {}.",path, replicaRule, e);
-      AuditLogger.logRuleProcess(
-          "CreatePathRuleMap", nameSpace,
-          path, replicaRule, startTime, new Date(),
+      AuditLogger.logRuleProcess(methodName, nameSpace, path, replicaRule, startTime, new Date(),
           ResultCode.IO_EXCEPTION.getMsg(), MONITOR_MODE);
       return ResultCode.IO_EXCEPTION;
     }
+  }
+
+  private static synchronized void createMonitorThread(String nameSpace, String threadName,
+      StoreDriver driver, SignalRecord signalRecord, String path, String replicaRule,
+      Date startTime) throws IOException {
+    LOG.info("Starting monitor thread for {}.", nameSpace);
+    Thread monitorThread = new MonitorThread(threadName, new Configuration(),
+        ZoneServiceUtil.getNamespaceUri(nameSpace, new Configuration()),
+        driver, signalRecord);
+    driver.put(signalRecord, true, false);
+    monitorThread.start();
+    AuditLogger.logRuleProcess(
+        "createMonitorThread", nameSpace,
+        path, replicaRule, startTime, new Date(),
+        ResultCode.CREATE_SUCCESS.getMsg(), MONITOR_MODE);
   }
 
   /**

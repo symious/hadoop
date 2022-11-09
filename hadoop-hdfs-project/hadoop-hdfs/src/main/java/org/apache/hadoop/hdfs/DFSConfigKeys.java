@@ -687,6 +687,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONEMOVER_DISPATCHERTHREADS_KEY =
       "dfs.zonemover.dispatcherThreads";
   public static final int     DFS_ZONEMOVER_DISPATCHERTHREADS_DEFAULT = 200;
+  public static final String  DFS_ZONEMOVER_DISPATCHER_KEEP_ALIVE_TIME_KEY =
+      "dfs.zonemover.dispatcherKeepAliveTime";
+  public static final long    DFS_ZONEMOVER_DISPATCHER_KEEP_ALIVE_TIME_DEFAULT = 60000;
   public static final String  DFS_ZONEMOVER_BLOCK_DISPATCH_ATTEMPTS_KEY =
       "dfs.zonemover.blockDispatchAttempts";
   public static final int     DFS_ZONEMOVER_BLOCK_DISPATCH_ATTEMPTS_DEFAULT = 3;

@@ -233,6 +233,10 @@ public class ZoneService extends ReconfigurableBase  {
 
   //Start unfinished batch ZoneMover for every mapping file under specific file
   private void recoverZMProcess(Configuration conf) throws IOException {
+    //first remove all signal record.
+    LOG.info("remove all signal record.");
+    driver.removeAll(SignalRecord.class);
+
     Map<String, Map<String, ReplicationRule>> nsRuleMap = new HashMap<>();
     List<MigrationRecord> records =
         driver.getAll(MigrationRecord.class).getRecords();
@@ -254,12 +258,13 @@ public class ZoneService extends ReconfigurableBase  {
         LOG.error("Record is illegal: " + record);
       }
     }
+
     for (String ns: nsRuleMap.keySet()) {
       SignalRecord signalRecord = new SignalRecord(ns, true);
       driver.put(signalRecord, true, false);
       LOG.info("Starting monitor thread for {}.", ns);
       Thread monitorThread = new MonitorThread("monitor_" + ns,
-          conf, ZoneServiceUtil.getNamespaceUri(ns, conf));
+          conf, ZoneServiceUtil.getNamespaceUri(ns, conf), driver, signalRecord);
       monitorThread.start();
     }
     // Restart batch manager
