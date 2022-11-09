@@ -42,6 +42,10 @@ public final class FederationUtil {
 
   private static volatile RecordCostTime recentSlowQueryRecord;
 
+  //dynamic refresh params
+  private static volatile long getApplicationsMaxCostTime;
+  private static volatile long getApplicationsRecordExpireTime;
+
   private FederationUtil() {
     // Utility Class
   }
@@ -119,6 +123,51 @@ public final class FederationUtil {
       }
     }
     return recentSlowQueryRecord;
+  }
+
+  public static void initGetApplicationsMaxCostTime(Configuration conf) {
+    if (getApplicationsMaxCostTime == 0) {
+      synchronized (FederationUtil.class) {
+        if (getApplicationsMaxCostTime == 0) {
+          getApplicationsMaxCostTime = conf.getLong(
+              YarnConfiguration.ROUTER_QUERY_GET_APPLICATIONS_MAX_COST_TIME,
+              YarnConfiguration.DEFAULT_ROUTER_QUERY_GET_APPLICATIONS_MAX_COST_TIME);
+          LOG.info(
+              "InitGetApplicationsMaxCostTime : " + getApplicationsMaxCostTime);
+        }
+      }
+    }
+  }
+
+  public static long getApplicationsMaxCostTime() {
+    return getApplicationsMaxCostTime;
+  }
+
+  public static long setGetApplicationsMaxCostTime(long maxCostTime) {
+    return getApplicationsMaxCostTime = maxCostTime;
+  }
+
+  public static void initGetApplicationsRecordExpireTime(Configuration conf) {
+    if (getApplicationsRecordExpireTime == 0) {
+      synchronized (FederationUtil.class) {
+        if (getApplicationsRecordExpireTime == 0) {
+          getApplicationsRecordExpireTime = conf.getLong(
+              YarnConfiguration.ROUTER_QUERY_GET_APPLICATIONS_RECORD_EXPIRE_TIME,
+              YarnConfiguration.DEFAULT_ROUTER_QUERY_GET_APPLICATIONS_RECORD_EXPIRE_TIME);
+          LOG.info(
+              "InitGetApplicationsRecordExpireTime : " +
+                  getApplicationsRecordExpireTime);
+        }
+      }
+    }
+  }
+
+  public static long getApplicationsRecordExpireTime() {
+    return getApplicationsRecordExpireTime;
+  }
+
+  public static long setGetApplicationsRecordExpireTime(long expireTime) {
+    return getApplicationsRecordExpireTime = expireTime;
   }
 
 }

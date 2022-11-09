@@ -85,6 +85,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ResourceInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ResourceOptionInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.SchedulerTypeInfo;
 import org.apache.hadoop.yarn.server.router.Router;
+import org.apache.hadoop.yarn.server.router.utils.FederationUtil;
+import org.apache.hadoop.yarn.server.router.webapp.dao.DynamicRefreshConfiguration;
 import org.apache.hadoop.yarn.server.webapp.dao.ContainerInfo;
 import org.apache.hadoop.yarn.server.webapp.dao.ContainersInfo;
 import org.apache.hadoop.yarn.util.LRUCacheHashMap;
@@ -141,7 +143,7 @@ public class RouterWebServices implements RMWebServiceProtocol {
   /**
    * Returns the comma separated intercepter class names from the configuration.
    *
-   * @param conf
+   * @param config
    * @return the intercepter class names as an instance of ArrayList
    */
   private List<String> getInterceptorClassNames(Configuration config) {
@@ -310,6 +312,51 @@ public class RouterWebServices implements RMWebServiceProtocol {
     @Override
     protected void finalize() {
       rootInterceptor.shutdown();
+    }
+  }
+
+  @GET
+  @Path(RouterWSConsts.DYNAMIC_PARAMS_LIST)
+  @Produces({MediaType.APPLICATION_JSON + "; " + JettyUtils.UTF_8,
+      MediaType.APPLICATION_XML + "; " + JettyUtils.UTF_8})
+  public Response listParams(@Context HttpServletRequest hsr) {
+    DynamicRefreshConfiguration drc = new DynamicRefreshConfiguration();
+    drc.setGetApplicationsMaxCostTime(
+        FederationUtil.getApplicationsMaxCostTime());
+    drc.setGetApplicationsRecordExpireTime(
+        FederationUtil.getApplicationsRecordExpireTime());
+    return Response.status(Response.Status.OK).entity(drc).build();
+  }
+
+  @POST
+  @Path(RouterWSConsts.DYNAMIC_PARAMS_UPDATE)
+  @Produces({MediaType.APPLICATION_JSON + "; " + JettyUtils.UTF_8,
+      MediaType.APPLICATION_XML + "; " + JettyUtils.UTF_8})
+  @Consumes({MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML})
+  public Response updateParams(DynamicRefreshConfiguration drc,
+      @Context HttpServletRequest hsr) {
+    long newGetApplicationsMaxCostTime = drc.getGetApplicationsMaxCostTime();
+    long newGetApplicationsRecordExpireTime =
+        drc.getGetApplicationsRecordExpireTime();
+    LOG.info("newGetApplicationsMaxCostTime: " + newGetApplicationsMaxCostTime +
+        " ,newGetApplicationsRecordExpireTime:" +
+        newGetApplicationsRecordExpireTime);
+    if (newGetApplicationsMaxCostTime > 0 &&
+        newGetApplicationsRecordExpireTime > 0) {
+      FederationUtil
+          .setGetApplicationsMaxCostTime(newGetApplicationsMaxCostTime);
+      FederationUtil
+          .setGetApplicationsRecordExpireTime(
+              newGetApplicationsRecordExpireTime);
+      return Response.status(Response.Status.OK)
+          .entity("Update params success! " + drc.toString()).build();
+    } else {
+      return Response.status(Response.Status.BAD_REQUEST)
+          .entity("Update params failed, new params must bigger than 0: " +
+              "newGetApplicationsMaxCostTime: " +
+              newGetApplicationsMaxCostTime +
+              " ,newGetApplicationsRecordExpireTime:" +
+              newGetApplicationsRecordExpireTime).build();
     }
   }
 

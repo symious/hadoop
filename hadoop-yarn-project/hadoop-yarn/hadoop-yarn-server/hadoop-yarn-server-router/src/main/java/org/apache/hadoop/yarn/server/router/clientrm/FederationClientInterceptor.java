@@ -245,6 +245,10 @@ public class FederationClientInterceptor
     this.cache = routerRpcRequestCache.getCache();
 
     this.recentSlowQueryRecord = FederationUtil.getRecentSlowQueryRecord();
+
+    //Init dynamic refresh params
+    FederationUtil.initGetApplicationsMaxCostTime(conf);
+    FederationUtil.initGetApplicationsRecordExpireTime(conf);
   }
 
   /**

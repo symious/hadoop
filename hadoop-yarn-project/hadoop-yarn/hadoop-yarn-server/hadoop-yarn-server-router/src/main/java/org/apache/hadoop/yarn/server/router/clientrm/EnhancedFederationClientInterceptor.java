@@ -58,6 +58,7 @@ import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade
 import org.apache.hadoop.yarn.server.metrics.ApplicationMetricsConstants;
 import org.apache.hadoop.yarn.server.router.RouterMetrics;
 import org.apache.hadoop.yarn.server.router.RouterServerUtil;
+import org.apache.hadoop.yarn.server.router.utils.FederationUtil;
 import org.apache.hadoop.yarn.server.router.utils.RecordCostTime;
 import org.apache.hadoop.yarn.util.Clock;
 import org.apache.hadoop.yarn.util.MonotonicClock;
@@ -105,15 +106,11 @@ public class EnhancedFederationClientInterceptor
   }
 
   public long getApplicationsMaxCostTime() {
-    return getConf()
-        .getLong(YarnConfiguration.ROUTER_QUERY_GET_APPLICATIONS_MAX_COST_TIME,
-            YarnConfiguration.DEFAULT_ROUTER_QUERY_GET_APPLICATIONS_MAX_COST_TIME);
+    return FederationUtil.getApplicationsMaxCostTime();
   }
 
   public long getApplicationsRecordExpireTime() {
-    return getConf().getLong(
-        YarnConfiguration.ROUTER_QUERY_GET_APPLICATIONS_RECORD_EXPIRE_TIME,
-        YarnConfiguration.DEFAULT_ROUTER_QUERY_GET_APPLICATIONS_RECORD_EXPIRE_TIME);
+    return FederationUtil.getApplicationsRecordExpireTime();
   }
 
   public boolean enableQueryTimeLine(){
