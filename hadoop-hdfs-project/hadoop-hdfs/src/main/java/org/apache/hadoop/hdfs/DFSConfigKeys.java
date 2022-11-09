@@ -585,6 +585,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final int     DFS_NAMENODE_MAX_COMPONENT_LENGTH_DEFAULT = 255;
   public static final String  DFS_NAMENODE_MAX_DIRECTORY_ITEMS_KEY = "dfs.namenode.fs-limits.max-directory-items";
   public static final int     DFS_NAMENODE_MAX_DIRECTORY_ITEMS_DEFAULT = 1024*1024;
+  public static final String  DFS_NAMENODE_ALARM_DIRECTORY_ITEMS_THRESHOLD_KEY =
+      "dfs.namenode.fs-limits.alarm-directory-items.threshold";
+  public static final double  DFS_NAMENODE_ALARM_DIRECTORY_ITEMS_THRESHOLD_DEFUALT = 0.8;
   public static final String  DFS_NAMENODE_MIN_BLOCK_SIZE_KEY = "dfs.namenode.fs-limits.min-block-size";
   public static final long    DFS_NAMENODE_MIN_BLOCK_SIZE_DEFAULT = 1024*1024;
   public static final String  DFS_NAMENODE_MAX_BLOCKS_PER_FILE_KEY = "dfs.namenode.fs-limits.max-blocks-per-file";
@@ -719,6 +722,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_HOSTS_MAINTENANCE = "dfs.hosts.maintenance";
   public static final String  DFS_HOSTS_MAINTENANCE_ENABLED_KEY = "dfs.hosts.maintenance.enabled";
   public static final boolean DFS_HOSTS_MAINTENANCE_ENABLED_DEFAULT = false;
+  public static final String  DFS_HOSTS_MISS_NODES_CONSTRAINT_KEY = "dfs.hosts.miss.nodes.constraint";
+  public static final int     DFS_HOSTS_MISS_NODES_CONSTRAINT_DEFAULT = 5;
   public static final String  DFS_NAMENODE_AUDIT_LOGGERS_KEY = "dfs.namenode.audit.loggers";
   public static final String  DFS_NAMENODE_DEFAULT_AUDIT_LOGGER_NAME = "default";
   public static final String  DFS_NAMENODE_AUDIT_LOG_TOKEN_TRACKING_ID_KEY = "dfs.namenode.audit.log.token.tracking.id";

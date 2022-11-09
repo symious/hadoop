@@ -83,6 +83,7 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.RecursiveAction;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeys.FS_PROTECTED_DIRECTORIES;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_DEFAULT;
@@ -156,6 +157,8 @@ public class FSDirectory implements Closeable {
   private volatile boolean skipQuotaCheck = false; //skip while consuming edits
   private final int maxComponentLength;
   private final int maxDirItems;
+  private final int maxDirItemsAlarmThreshold;
+  private final AtomicInteger maxDirItemsAlarmNum;
   private final int lsLimit;  // max list limit
   private final int contentCountLimit; // max content summary counts per run
   private final long contentSleepMicroSec;
@@ -379,6 +382,16 @@ public class FSDirectory implements Closeable {
     this.maxDirItems = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_MAX_DIRECTORY_ITEMS_KEY,
         DFSConfigKeys.DFS_NAMENODE_MAX_DIRECTORY_ITEMS_DEFAULT);
+    double alarmThreshold = conf.getDouble(
+        DFSConfigKeys.DFS_NAMENODE_ALARM_DIRECTORY_ITEMS_THRESHOLD_KEY,
+        DFSConfigKeys.DFS_NAMENODE_ALARM_DIRECTORY_ITEMS_THRESHOLD_DEFUALT);
+    Preconditions.checkArgument(
+        alarmThreshold >= 0 &&
+            alarmThreshold <= 1.0, "Cannot set "
+            + DFSConfigKeys.DFS_NAMENODE_ALARM_DIRECTORY_ITEMS_THRESHOLD_KEY
+            + " to a value less than 0 or greater than 1.0");
+    this.maxDirItemsAlarmThreshold = (int) Math.ceil(this.maxDirItems * alarmThreshold);
+    this.maxDirItemsAlarmNum = new AtomicInteger(0);
     this.inodeXAttrsLimit = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_MAX_XATTRS_PER_INODE_KEY,
         DFSConfigKeys.DFS_NAMENODE_MAX_XATTRS_PER_INODE_DEFAULT);
@@ -1301,6 +1314,10 @@ public class FSDirectory implements Closeable {
         NameNode.LOG.error("FSDirectory.verifyMaxDirItems: "
             + e.getLocalizedMessage());
       }
+    } else if (count >= maxDirItemsAlarmThreshold) {
+      LOG.warn("File count exceeding alarm threshold for {}: {}/{}",
+          parentPath, count, this.maxDirItems);
+      this.maxDirItemsAlarmNum.incrementAndGet();
     }
   }
 
@@ -1581,6 +1598,10 @@ public class FSDirectory implements Closeable {
 
   long totalInodes() {
     return getInodeMapSize();
+  }
+
+  int getMaxDirItemsAlarmNum() {
+    return this.maxDirItemsAlarmNum.get();
   }
 
   /**

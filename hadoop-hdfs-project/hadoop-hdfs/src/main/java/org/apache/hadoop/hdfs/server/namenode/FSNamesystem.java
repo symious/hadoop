@@ -5280,6 +5280,12 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     return this.dir.totalInodes();
   }
 
+  @Override // FSNamesystemMBean
+  @Metric
+  public int getMaxDirectoryItemsAlarmNums() {
+    return this.dir.getMaxDirItemsAlarmNum();
+  }
+
   /**
    * Get aggregated count of all blocks pending to be reconstructed.
    */

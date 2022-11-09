@@ -81,6 +81,13 @@ public interface FSNamesystemMBean {
    * @return -  num of files and directories
    */
   public long getFilesTotal();
+
+  /**
+   * Total number of alarms that SubDirectoryItems
+   *   of one directory have reached alarm threshold.
+   * @return - num of alarms
+   */
+  public int getMaxDirectoryItemsAlarmNums();
  
   /**
    * Get aggregated count of all blocks pending to be reconstructed.
