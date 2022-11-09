@@ -2839,6 +2839,22 @@
 </property>
 
 <property>
+  <name>dfs.datanode.enable.audit.log</name>
+  <value>false</value>
+  <description>
+    If true, datanode will output some audit logs about block operations.
+  </description>
+</property>
+
+<property>
+  <name>dfs.datanode.audit.log.async</name>
+  <value>false</value>
+  <description>
+    If true, enables asynchronous audit log.
+  </description>
+</property>
+
+<property>
   <name>dfs.client.mmap.cache.size</name>
   <value>256</value>
   <description>

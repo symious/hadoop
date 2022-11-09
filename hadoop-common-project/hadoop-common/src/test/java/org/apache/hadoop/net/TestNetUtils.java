@@ -327,6 +327,26 @@ public class TestNetUtils {
   }
 
   @Test
+  public void testIpSegmentBasedOnMaskBit() {
+    String ip = "10.119.254.99";
+    int maskBit = 16;
+    String ipSegment = NetUtils.getIpSegment(ip, maskBit);
+    assertEquals("10.119.0.0", ipSegment);
+
+    maskBit = 17;
+    ipSegment = NetUtils.getIpSegment(ip, maskBit);
+    assertEquals("10.119.128.0", ipSegment);
+
+    maskBit = 22;
+    ipSegment = NetUtils.getIpSegment(ip, maskBit);
+    assertEquals("10.119.252.0", ipSegment);
+
+    maskBit = 24;
+    ipSegment = NetUtils.getIpSegment(ip, maskBit);
+    assertEquals("10.119.254.0", ipSegment);
+  }
+
+  @Test
   public void testGetConnectAddress() throws IOException {
     NetUtils.addStaticResolution("host", "127.0.0.1");
     InetSocketAddress addr = NetUtils.createSocketAddrForHost("host", 1);

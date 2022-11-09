@@ -125,6 +125,8 @@ public class BlockReaderRemote implements BlockReader {
 
   private final int networkDistance;
 
+  private boolean interDCRead = false;
+
   @VisibleForTesting
   public Peer getPeer() {
     return peer;
@@ -280,7 +282,7 @@ public class BlockReaderRemote implements BlockReader {
                               long startOffset, long firstChunkOffset,
                               long bytesToRead, Peer peer,
                               DatanodeID datanodeID, PeerCache peerCache,
-                              int networkDistance) {
+                              int networkDistance, boolean interDCRead) {
     // Path is used only for printing block and file information in debug
     this.peer = peer;
     this.datanodeID = datanodeID;
@@ -300,6 +302,7 @@ public class BlockReaderRemote implements BlockReader {
     bytesPerChecksum = this.checksum.getBytesPerChecksum();
     checksumSize = this.checksum.getChecksumSize();
     this.networkDistance = networkDistance;
+    this.interDCRead = interDCRead;
   }
 
 
@@ -431,7 +434,7 @@ public class BlockReaderRemote implements BlockReader {
 
     return new BlockReaderRemote(file, block.getBlockId(), checksum,
         verifyChecksum, startOffset, firstChunkOffset, len, peer, datanodeID,
-        peerCache, networkDistance);
+        peerCache, networkDistance, status.getIsInterDCRead());
   }
 
   static void checkSuccess(
@@ -472,5 +475,10 @@ public class BlockReaderRemote implements BlockReader {
   @Override
   public int getNetworkDistance() {
     return networkDistance;
+  }
+
+  @Override
+  public boolean getInterDCRead() {
+    return interDCRead;
   }
 }

@@ -20,7 +20,6 @@ package org.apache.hadoop.hdfs.server.zoneservice.web.resources;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.jersey.spi.resource.Singleton;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hdfs.server.zoneservice.store.BaseRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
@@ -40,9 +39,10 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_
 
 @Singleton
 @Path("migrationrecord/")
-public class ZoneMoverHistoryRecordRestAPI {
+public class ZoneMoverWebMigrationRecordMethods {
   private final static Configuration conf = new Configuration();
-  private final static String DEFAULT_MODE = "exact";
+  private final static String DEFAULT_MODE = "monitor";
+  private final static String DEFAULT_RECURSIVE = "false";
 
   public Class<? extends StoreDriver> driverClass = conf.getClass(
       DFS_ZONESERVICE_STORE_DRIVER_CLASS,
@@ -50,7 +50,7 @@ public class ZoneMoverHistoryRecordRestAPI {
       StoreDriver.class);
   private final StoreDriver driver = ReflectionUtils.newInstance(driverClass, conf);
 
-  public ZoneMoverHistoryRecordRestAPI() {
+  public ZoneMoverWebMigrationRecordMethods() {
     driver.init(conf, "historyServlet");
   }
 
@@ -84,37 +84,31 @@ public class ZoneMoverHistoryRecordRestAPI {
   @Path("{path:.*}")
   public String getMigrationRecord(@PathParam("path") String path,
       @QueryParam("namespace") String nameSpace,
-      @QueryParam("mode") @DefaultValue(DEFAULT_MODE) String mode) {
-    return getHistoryRecord(nameSpace, path, mode);
+      @QueryParam("mode") @DefaultValue(DEFAULT_MODE) String mode,
+      @QueryParam("recursive") @DefaultValue(DEFAULT_RECURSIVE) String recursive) {
+    return getHistoryRecord(nameSpace, path, mode, Boolean.parseBoolean(recursive));
   }
 
-  private String getHistoryRecord(String nameSpace, String path, String mode) {
+  private String getHistoryRecord(String nameSpace, String path, String mode, boolean recursive) {
     try {
-      if (mode.toLowerCase().equals("exact")) {
-        MigrationRecord migrationRecord =
-            new MigrationRecord(nameSpace, path, "");
-        Query<MigrationRecord> query = new Query<>(migrationRecord);
+      MigrationRecord migrationRecord =
+          new MigrationRecord(nameSpace, path, "", mode);
+      Query<MigrationRecord> query = new Query<>(migrationRecord);
+      if (!recursive) {
         MigrationRecord result = driver.get(query, MigrationRecord.class);
         if (result == null) {
           return new ZoneServiceHttpResponse(ResultCode.NO_MIGRATION_RECORD, "[]")
               .toString();
         }
         return new ZoneServiceHttpResponse(Object2String(result)).toString();
-      } else if (mode.toLowerCase().equals("recursive")) {
-        MigrationRecord migrationRecord =
-            new MigrationRecord(nameSpace, path, "");
-        Query<MigrationRecord> query = new Query<>(migrationRecord);
-        List<MigrationRecord> resultList =
-            driver.getLike(query, MigrationRecord.class);
+      } else {
+        List<MigrationRecord> resultList = driver.getLike(query, MigrationRecord.class);
         if (resultList.isEmpty()) {
           return new ZoneServiceHttpResponse(
               ResultCode.NO_MIGRATION_RECORD, "[]")
               .toString();
         }
         return new ZoneServiceHttpResponse(Object2String(resultList)).toString();
-      } else {
-        return new ZoneServiceHttpResponse(ResultCode.IO_EXCEPTION, "[]")
-            .toString();
       }
     } catch (IOException e) {
       e.printStackTrace();

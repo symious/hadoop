@@ -900,7 +900,7 @@ public class DFSInputStream extends FSInputStream
           }
           updateReadStatistics(readStatistics, result, blockReader);
           dfsClient.updateFileSystemReadStats(blockReader.getNetworkDistance(),
-              result);
+              result, blockReader.getInterDCRead());
           if (readStatistics.getBlockType() == BlockType.STRIPED) {
             dfsClient.updateFileSystemECReadStats(result);
           }
@@ -1228,7 +1228,7 @@ public class DFSInputStream extends FSInputStream
 
         IOUtilsClient.updateReadStatistics(readStatistics, nread, reader);
         dfsClient.updateFileSystemReadStats(
-            reader.getNetworkDistance(), nread);
+            reader.getNetworkDistance(), nread, reader.getInterDCRead());
         if (readStatistics.getBlockType() == BlockType.STRIPED) {
           dfsClient.updateFileSystemECReadStats(nread);
         }

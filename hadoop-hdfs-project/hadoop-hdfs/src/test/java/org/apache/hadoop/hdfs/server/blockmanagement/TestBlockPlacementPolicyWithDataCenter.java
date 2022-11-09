@@ -58,18 +58,17 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-
 public class TestBlockPlacementPolicyWithDataCenter {
 
-  private static final Logger LOG =
+  protected static final Logger LOG =
       LoggerFactory.getLogger(TestBlockPlacementPolicyWithDataCenter.class);
-  private static final short REPLICATION_FACTOR = (short) 3;
-  private static final int DEFAULT_BLOCK_SIZE = 1024;
-  private MiniDFSCluster cluster = null;
-  private NamenodeProtocols nameNodeRpc = null;
-  private FSNamesystem namesystem = null;
-  private PermissionStatus perm = null;
-  private final int times = 10;
+  protected static final short REPLICATION_FACTOR = (short) 3;
+  protected static final int DEFAULT_BLOCK_SIZE = 1024;
+  protected MiniDFSCluster cluster = null;
+  protected NamenodeProtocols nameNodeRpc = null;
+  protected FSNamesystem namesystem = null;
+  protected PermissionStatus perm = null;
+  protected final int times = 10;
 
   @Before
   public void setup() throws IOException {
@@ -121,7 +120,7 @@ public class TestBlockPlacementPolicyWithDataCenter {
    * @param clientMachine the client's machine
    * @return locations
    */
-  private DatanodeInfo[] getLocations(String clientMachine) throws IOException {
+  protected DatanodeInfo[] getLocations(String clientMachine) throws IOException {
     String src = "/test-datacenter" + System.nanoTime();
     // Create the file with client machine
     HdfsFileStatus fileStatus = namesystem.startFile(src, perm,
@@ -397,7 +396,7 @@ public class TestBlockPlacementPolicyWithDataCenter {
     assertEquals(0, results.length);
   }
 
-  private Map<String, List<DatanodeStorageInfo>> getDcMapFromDatanodes(
+  protected Map<String, List<DatanodeStorageInfo>> getDcMapFromDatanodes(
       Set<DatanodeDescriptor> datanodes) {
     Map<String, List<DatanodeStorageInfo>> dcMap = new HashMap<>();
     for (DatanodeDescriptor dn : datanodes) {

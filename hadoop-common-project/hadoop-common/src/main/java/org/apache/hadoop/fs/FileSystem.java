@@ -3814,6 +3814,8 @@ public abstract class FileSystem extends Configured
       private volatile long bytesReadDistanceOfThreeOrFour;
       private volatile long bytesReadDistanceOfFiveOrLarger;
       private volatile long bytesReadErasureCoded;
+      private volatile long interDCReads;
+      private volatile long interDCBytesRead;
 
       /**
        * Add another StatisticsData object to this one.
@@ -3831,6 +3833,8 @@ public abstract class FileSystem extends Configured
         this.bytesReadDistanceOfFiveOrLarger +=
             other.bytesReadDistanceOfFiveOrLarger;
         this.bytesReadErasureCoded += other.bytesReadErasureCoded;
+        this.interDCReads += other.interDCReads;
+        this.interDCBytesRead += other.interDCBytesRead;
       }
 
       /**
@@ -3849,13 +3853,16 @@ public abstract class FileSystem extends Configured
         this.bytesReadDistanceOfFiveOrLarger =
             -this.bytesReadDistanceOfFiveOrLarger;
         this.bytesReadErasureCoded = -this.bytesReadErasureCoded;
+        this.interDCReads -= this.interDCReads;
+        this.interDCBytesRead -= this.interDCBytesRead;
       }
 
       @Override
       public String toString() {
         return bytesRead + " bytes read, " + bytesWritten + " bytes written, "
             + readOps + " read ops, " + largeReadOps + " large read ops, "
-            + writeOps + " write ops";
+            + writeOps + " write ops, " + interDCReads + " inter DC reads, "
+            + interDCBytesRead + " inter DB bytes read.";
       }
 
       public long getBytesRead() {
@@ -3896,6 +3903,14 @@ public abstract class FileSystem extends Configured
 
       public long getBytesReadErasureCoded() {
         return bytesReadErasureCoded;
+      }
+
+      public long getInterDCReads() {
+        return interDCReads;
+      }
+
+      public long getInterDCBytesRead() {
+        return interDCBytesRead;
       }
     }
 
@@ -4124,6 +4139,20 @@ public abstract class FileSystem extends Configured
     }
 
     /**
+     * Increment the number of inter data center reads.
+     */
+    public void incrementInterDcReads() {
+      getThreadStatistics().interDCReads += 1;
+    }
+
+    /**
+     * Increment the number of inter data center bytes read.
+     */
+    public void incrementInterDcBytesRead(long numBytes) {
+      getThreadStatistics().interDCBytesRead += numBytes;
+    }
+
+    /**
      * Apply the given aggregator to all StatisticsData objects associated with
      * this Statistics object.
      *
@@ -4305,6 +4334,44 @@ public abstract class FileSystem extends Configured
 
         public Long aggregate() {
           return bytesReadErasureCoded;
+        }
+      });
+    }
+
+    /**
+     * Get the total number of inter DC reads.
+     * @return total number of reads
+     */
+    public long getInterDCReads() {
+      return visitAll(new StatisticsAggregator<Long>() {
+        private long interDCReads = 0;
+
+        @Override
+        public void accept(StatisticsData data) {
+          interDCReads += data.interDCReads;
+        }
+
+        public Long aggregate() {
+          return interDCReads;
+        }
+      });
+    }
+
+    /**
+     * Get the total number of inter DC bytes read.
+     * @return total number of bytes read
+     */
+    public long getInterDCBytesRead() {
+      return visitAll(new StatisticsAggregator<Long>() {
+        private long interDCBytesRead = 0;
+
+        @Override
+        public void accept(StatisticsData data) {
+          interDCBytesRead += data.interDCBytesRead;
+        }
+
+        public Long aggregate() {
+          return interDCBytesRead;
         }
       });
     }

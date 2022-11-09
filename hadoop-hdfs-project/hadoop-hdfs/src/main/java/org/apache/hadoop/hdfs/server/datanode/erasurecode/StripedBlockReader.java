@@ -204,7 +204,7 @@ class StripedBlockReader {
       stripedReader.getReconstructor().incrBytesRead(isLocal, nread);
     }
     return new BlockReadStats(n, blockReader.isShortCircuit(),
-        blockReader.getNetworkDistance());
+        blockReader.getNetworkDistance(), false);
   }
 
   // close block reader

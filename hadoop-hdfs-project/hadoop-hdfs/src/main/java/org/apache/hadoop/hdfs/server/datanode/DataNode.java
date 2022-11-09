@@ -78,6 +78,7 @@ import static org.apache.hadoop.util.ExitUtil.terminate;
 import static org.apache.hadoop.util.KMSUtil.checkNotNull;
 
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
 import org.apache.hadoop.hdfs.protocol.proto.ReconfigurationProtocolProtos.ReconfigurationProtocolService;
 
 import java.io.BufferedOutputStream;
@@ -142,6 +143,9 @@ import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.server.datanode.checker.DatasetVolumeChecker;
 import org.apache.hadoop.hdfs.server.datanode.checker.StorageLocationChecker;
 import org.apache.hadoop.hdfs.util.DataTransferThrottler;
+import org.apache.hadoop.net.DNSToSwitchMapping;
+import org.apache.hadoop.net.IpRangeScriptBasedMapping;
+import org.apache.hadoop.net.ScriptBasedMapping;
 import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.hdfs.client.BlockReportOptions;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
@@ -240,6 +244,7 @@ import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.DiskChecker.DiskErrorException;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.JvmPauseMonitor;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.ServicePlugin;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
@@ -301,6 +306,8 @@ public class DataNode extends ReconfigurableBase
   static{
     HdfsConfiguration.init();
   }
+
+  public static final String LOCAL_HOST = "127.0.0.1";
 
   public static final String DN_CLIENTTRACE_FORMAT =
         "src: %s" +      // src IP
@@ -466,6 +473,10 @@ public class DataNode extends ReconfigurableBase
 
   private final ExecutorService blockCopyExecutor;
 
+  private final DNSToSwitchMapping switchMapping;
+
+  private final DataNodeAuditLogger auditLogger;
+
   /**
    * Creates a dummy DataNode for testing purpose.
    */
@@ -473,6 +484,18 @@ public class DataNode extends ReconfigurableBase
   @InterfaceAudience.LimitedPrivate("HDFS")
   DataNode(final Configuration conf) throws DiskErrorException {
     super(conf);
+    this.switchMapping = ReflectionUtils.newInstance(
+        conf.getClass(DFSConfigKeys.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
+            ScriptBasedMapping.class, DNSToSwitchMapping.class), conf);
+    if (this.switchMapping instanceof IpRangeScriptBasedMapping) {
+      ((IpRangeScriptBasedMapping) this.switchMapping).setReturnActualRack(true);
+    }
+    if (conf.getBoolean(DFSConfigKeys.DFS_DATANODE_AUDIT_ENABLE_KEY,
+        DFSConfigKeys.DFS_DATANODE_AUDIT_ENABLE_DEFAULT)) {
+      this.auditLogger = new DataNodeAuditLogger(conf);
+    } else {
+      this.auditLogger = null;
+    }
     this.tracer = createTracer(conf);
     this.tracerConfigurationManager =
         new TracerConfigurationManager(DATANODE_HTRACE_PREFIX, conf);
@@ -505,6 +528,18 @@ public class DataNode extends ReconfigurableBase
            final StorageLocationChecker storageLocationChecker,
            final SecureResources resources) throws IOException {
     super(conf);
+    this.switchMapping = ReflectionUtils.newInstance(
+        conf.getClass(DFSConfigKeys.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
+            ScriptBasedMapping.class, DNSToSwitchMapping.class), conf);
+    if (this.switchMapping instanceof IpRangeScriptBasedMapping) {
+      ((IpRangeScriptBasedMapping) this.switchMapping).setReturnActualRack(true);
+    }
+    if (conf.getBoolean(DFSConfigKeys.DFS_DATANODE_AUDIT_ENABLE_KEY,
+        DFSConfigKeys.DFS_DATANODE_AUDIT_ENABLE_DEFAULT)) {
+      this.auditLogger = new DataNodeAuditLogger(conf);
+    } else {
+      this.auditLogger = null;
+    }
     this.tracer = createTracer(conf);
     this.tracerConfigurationManager =
         new TracerConfigurationManager(DATANODE_HTRACE_PREFIX, conf);
@@ -933,6 +968,36 @@ public class DataNode extends ReconfigurableBase
   @Override // Reconfigurable
   public Collection<String> getReconfigurableProperties() {
     return RECONFIGURABLE_PROPERTIES;
+  }
+
+  public void logAudit(String remoteHost, int remotePort, String cmd, String blockInfo) {
+    LOG.debug("Try to logAudit with remoteHost {}, cmd {} and blockInfo {}.",
+        remotePort, cmd, blockInfo);
+    if (this.auditLogger != null) {
+      this.auditLogger.logAuditEvent(remoteHost, remotePort, cmd, blockInfo);
+    }
+  }
+
+  public void logAudit(String localHost, String remoteHost,
+      int remotePort, String cmd, boolean localIsTrafficOut,
+      String blockInfo, long trafficSize) {
+    LOG.debug("Try to logAudit with localHost {} and remoteHost {} and cmd {}.",
+        localHost, remoteHost, cmd);
+    if (this.auditLogger != null) {
+      List<String> hosts = new ArrayList<>();
+      hosts.add(localHost);
+      hosts.add(remoteHost);
+      List<String> topologies = this.switchMapping.resolve(hosts);
+      LOG.debug("Topology of {} is {}.", hosts, topologies);
+      String localDC = DFSNetworkTopologyWithDataCenter.getDataCenter(topologies.get(0));
+      String remoteDC = DFSNetworkTopologyWithDataCenter.getDataCenter(topologies.get(1));
+      LOG.debug("LocalDC is {} and remoteDC is {}.", localDC, remoteDC);
+
+      String trafficInOrOut = localIsTrafficOut ? "out" : "in";
+
+      this.auditLogger.logAuditEvent(remoteHost, remotePort, remoteDC, cmd, blockInfo,
+          trafficSize, trafficInOrOut, localDC, !localDC.equals(remoteDC));
+    }
   }
 
   /**
@@ -1763,7 +1828,7 @@ public class DataNode extends ReconfigurableBase
     LOG.info("supergroup = {}", supergroup);
     initIpcServer();
 
-    metrics = DataNodeMetrics.create(getConf(), getDisplayName());
+    metrics = DataNodeMetrics.create(getConf(), getDisplayName(), this.switchMapping);
     peerMetrics = dnConf.peerStatsEnabled ?
         DataNodePeerMetrics.create(getDisplayName(), getConf()) : null;
     metrics.getJvmMetrics().setPauseMonitor(pauseMonitor);
@@ -4306,5 +4371,20 @@ public class DataNode extends ReconfigurableBase
     if (xserver != null) {
       xserver.refreshThrottlerConfig(conf);
     }
+  }
+
+  public boolean isInterDcRead(String localHost, String remoteHost) {
+    if (remoteHost.equals(LOCAL_HOST) || localHost.equals(remoteHost)) {
+      return false;
+    }
+    List<String> hosts = new ArrayList<>();
+    hosts.add(localHost);
+    hosts.add(remoteHost);
+    List<String> topologies = this.switchMapping.resolve(hosts);
+
+    String localDC = DFSNetworkTopologyWithDataCenter.getDataCenter(topologies.get(0));
+    String remoteDC = DFSNetworkTopologyWithDataCenter.getDataCenter(topologies.get(1));
+
+    return !localDC.equals(remoteDC);
   }
 }

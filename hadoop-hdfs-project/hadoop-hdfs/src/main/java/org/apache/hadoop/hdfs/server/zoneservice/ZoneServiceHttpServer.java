@@ -24,10 +24,9 @@ import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.server.common.JspHelper;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.StartupProgress;
-import org.apache.hadoop.hdfs.server.zoneservice.web.resources.ZoneMoverHistoryRecordRestAPI;
-import org.apache.hadoop.hdfs.server.zoneservice.web.resources.ZoneServiceRestAPI;
+import org.apache.hadoop.hdfs.server.zoneservice.web.resources.ZoneMoverWebMigrationRecordMethods;
+import org.apache.hadoop.hdfs.server.zoneservice.web.resources.ZoneServiceWebRuleManagementMethods;
 import org.apache.hadoop.hdfs.web.resources.AclPermissionParam;
-import org.apache.hadoop.hdfs.web.resources.Param;
 import org.apache.hadoop.http.HttpConfig;
 import org.apache.hadoop.http.HttpServer2;
 import org.apache.hadoop.net.NetUtils;
@@ -150,8 +149,8 @@ public class ZoneServiceHttpServer {
     httpServer = builder.build();
 
     initZoneService(conf, bindAddress.getHostName(), httpServer,
-        ZoneServiceRestAPI.class.getPackage().getName()
-            + ";" + ZoneMoverHistoryRecordRestAPI.class.getPackage().getName());
+        ZoneServiceWebRuleManagementMethods.class.getPackage().getName()
+            + ";" + ZoneMoverWebMigrationRecordMethods.class.getPackage().getName());
 
     httpServer.setAttribute(JspHelper.CURRENT_CONF, conf);
     httpServer.start();

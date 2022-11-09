@@ -97,7 +97,7 @@ public class MigrationRecord extends BaseRecord{
 
   @Override
   public String getPrimaryKey() {
-    return ns + "_" + path;
+    return ns + "_" + mode + "_" + path;
   }
 
   @Override
@@ -107,7 +107,7 @@ public class MigrationRecord extends BaseRecord{
     }
     MigrationRecord record = (MigrationRecord) obj;
     return this.ns.equals(record.ns) && this.path.equals(record.path)
-        && this.rule.equals(record.rule);
+        && this.rule.equals(record.rule) && this.mode.equals(record.mode);
   }
 
   @Override

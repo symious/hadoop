@@ -47,6 +47,7 @@ import org.apache.hadoop.hdfs.server.namenode.UnsupportedActionException;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneDispatcher.ZoneSource;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneDispatcher.ZoneDDatanode;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
@@ -138,10 +139,13 @@ public class ZoneMover {
     final long blockDispatchRetryInterval = conf.getLong(
         DFSConfigKeys.DFS_ZONEMOVER_BLOCK_DISPATCH_RETRY_INTERVAL_KEY,
         DFSConfigKeys.DFS_ZONEMOVER_BLOCK_DISPATCH_RETRY_INTERVAL_DEFAULT);
+    final long dispatcherKeepAliveTime = conf.getLong(
+        DFSConfigKeys.DFS_ZONEMOVER_DISPATCHER_KEEP_ALIVE_TIME_KEY,
+        DFSConfigKeys.DFS_ZONEMOVER_DISPATCHER_KEEP_ALIVE_TIME_DEFAULT);
     this.dispatcher = new ZoneDispatcher(nnc, Collections.emptySet(),
         Collections.emptySet(), movedWinWidth, dispatcherThreads,
         maxConcurrentMovesPerNode, conf,
-        blockDispatchAttempts, blockDispatchRetryInterval);
+        blockDispatchAttempts, blockDispatchRetryInterval, dispatcherKeepAliveTime);
     this.dfs = this.dispatcher.getDistributedFileSystem().getClient();
     this.storages = new StorageMap();
     this.targetPaths = nnc.getTargetPaths();
@@ -332,6 +336,7 @@ public class ZoneMover {
       // Set maxNotChangedIterations to 1 as ZoneMover does not need to loop
       nnc = new NameNodeConnector(ZoneMover.class.getSimpleName(),
           namenode, getIdPath(RunMode.BATCH), paths, conf, 1);
+      nnc.getKeyManager().startBlockKeyUpdater();
       if (rule != null) {
         zs = new ZoneMover(nnc, conf, rule, retryCount);
       } else {
@@ -389,11 +394,11 @@ public class ZoneMover {
    * @param namenode URI of the NameNode
    * @return a ExitStatus code
    */
-  public static int run(Configuration conf, URI namenode)
+  public static int run(Configuration conf, URI namenode, boolean loadMapFromStore)
       throws IOException {
     List<Path> paths = new ArrayList<>();
     return run(new ZoneMoverKafkaTrigger(conf, paths, namenode),
-        conf, namenode, paths, null, new HashMap<>());
+        conf, namenode, paths, null, new HashMap<>(), loadMapFromStore);
   }
 
   /**
@@ -407,8 +412,8 @@ public class ZoneMover {
    */
   public static int run(ZoneMoverTrigger zoneMoverTrigger,
       Configuration conf, URI namenode, List<Path> paths,
-      ReplicationRule rule) throws IOException {
-    return run(zoneMoverTrigger, conf, namenode, paths, rule, null);
+      ReplicationRule rule, boolean loadMapFromStore) throws IOException {
+    return run(zoneMoverTrigger, conf, namenode, paths, rule, null, loadMapFromStore);
   }
 
   /**
@@ -421,9 +426,9 @@ public class ZoneMover {
    * @return a ExitStatus code
    */
   public static int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
-      URI namenode, List<Path> paths, Map<String, ReplicationRule> pathRuleMap)
-      throws IOException {
-    return run(zoneMoverTrigger, conf, namenode, paths, null, pathRuleMap);
+      URI namenode, List<Path> paths, Map<String, ReplicationRule> pathRuleMap,
+      boolean loadMapFromStore) throws IOException {
+    return run(zoneMoverTrigger, conf, namenode, paths, null, pathRuleMap, loadMapFromStore);
   }
 
   /**
@@ -438,34 +443,59 @@ public class ZoneMover {
    */
   private static int run(ZoneMoverTrigger zoneMoverTrigger,
       Configuration conf, URI namenode, List<Path> paths,
-      ReplicationRule rule, Map<String, ReplicationRule> pathRuleMap)
-      throws IOException {
+      ReplicationRule rule, Map<String, ReplicationRule> pathRuleMap,
+      boolean loadMapFromStore) throws IOException {
+    if (!loadMapFromStore) {
+      try {
+        if (ExitStatus.SUCCESS.getExitCode() != run(conf, namenode, paths, rule, pathRuleMap)) {
+          LOG.error("Move the original data for {} in {} fail.", paths, namenode.getAuthority());
+        }
+      } catch (InterruptedException e) {
+        LOG.error("Batch process is interrupted.", e);
+      }
+    }
     checkDataCenterValues(conf, rule, pathRuleMap);
-    if (paths.isEmpty()) {
+    if (paths.isEmpty() && !loadMapFromStore) {
       return ExitStatus.SUCCESS.getExitCode();
     }
+    // Initialize ZoneService Metrics
+    ZoneServiceMetrics zoneServiceMetrics;
+    if (loadMapFromStore) {
+      zoneServiceMetrics = ZoneService.getMetrics();
+    } else {
+      zoneServiceMetrics = ZoneServiceMetrics.create();
+    }
+
     Class<? extends StoreDriver> driverClass = conf.getClass(
         DFS_ZONESERVICE_STORE_DRIVER_CLASS,
         DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT,
         StoreDriver.class);
-    final StoreDriver driver =
-        ReflectionUtils.newInstance(driverClass, conf);
-    driver.init(conf, "ZoneMover_" + namenode.getAuthority());
     NameNodeConnector nnc = null;
     ZoneMover zs = null;
+    Thread mapUpdaterThread;
+    StoreDriver driver;
+    String ns = namenode.getAuthority();
+    LOG.info("Initializing NameNodeConnector");
     try {
       nnc = new NameNodeConnector(ZoneMover.class.getSimpleName(),
           namenode, getIdPath(RunMode.MONITOR), paths, conf, 1);
+      nnc.getKeyManager().startBlockKeyUpdater();
       if (rule != null) {
         zs = new ZoneMover(nnc, conf, rule, new AtomicInteger(0));
       } else {
         zs = new ZoneMover(nnc, conf, pathRuleMap, new AtomicInteger(0));
       }
       zs.init();
-      //monitor if the path rule map is update or not
-      MapUpdater mapUpdater =
-          zs.new MapUpdater(namenode, driver, zoneMoverTrigger);
-      new Thread(mapUpdater,"Updater" + namenode.getAuthority()).start();
+      // Monitor if the path rule map is update or not when zk enable
+      if (loadMapFromStore) {
+        LOG.info("Initializing MapUpdater");
+        driver = ReflectionUtils.newInstance(driverClass, conf);
+        driver.init(conf, "ZoneMover_" + namenode.getAuthority());
+        MapUpdater mapUpdater =
+            zs.new MapUpdater(namenode, driver, zoneMoverTrigger);
+        mapUpdaterThread = new Thread(mapUpdater, "Updater" + namenode.getAuthority());
+        mapUpdaterThread.start();
+      }
       while (zoneMoverTrigger.hasNext()) {
         try {
           String curPath = zoneMoverTrigger.getNext();
@@ -473,7 +503,12 @@ public class ZoneMover {
           LOG.debug("Check path: " + curPath);
           ExitStatus exitStatus = zs.run(curPath);
           if (exitStatus != ExitStatus.SUCCESS) {
+            zoneServiceMetrics.incrFailMoveCount();
+            zoneServiceMetrics.incrNSMonitorFailMoveCount(ns);
             LOG.warn("Monitor process file fail: " + curPath);
+          } else {
+            zoneServiceMetrics.incrNSMonitorSuccessMoveCount(ns);
+            zoneServiceMetrics.incrSuccessMoveCount();
           }
         } catch (IllegalArgumentException e) {
           LOG.warn(e.toString());
@@ -1132,9 +1167,9 @@ public class ZoneMover {
             Thread.sleep(checkUpdateInterval * 1000L);
           }
         } catch (IOException e) {
-          e.printStackTrace();
+          LOG.error("There are some errors happen when ZoneMover updates path-rule pairs.", e);
         } catch (InterruptedException e) {
-          LOG.warn("Monitor path rule map process is interruptted!");
+          LOG.warn("Monitor path rule map process is interrupted!");
           break;
         }
       }
@@ -1400,7 +1435,7 @@ public class ZoneMover {
     int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
             URI namenode, List<Path> paths, ReplicationRule rule)
         throws IOException {
-      return ZoneMover.run(zoneMoverTrigger, conf, namenode, paths, rule);
+      return ZoneMover.run(zoneMoverTrigger, conf, namenode, paths, rule, false);
     }
 
     /**
@@ -1409,7 +1444,7 @@ public class ZoneMover {
     int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
             URI namenode, List<Path> paths, Map<String, ReplicationRule> pathRuleMap)
         throws IOException, InterruptedException {
-      return ZoneMover.run(zoneMoverTrigger, conf, namenode, paths, pathRuleMap);
+      return ZoneMover.run(zoneMoverTrigger, conf, namenode, paths, pathRuleMap, false);
     }
   }
 

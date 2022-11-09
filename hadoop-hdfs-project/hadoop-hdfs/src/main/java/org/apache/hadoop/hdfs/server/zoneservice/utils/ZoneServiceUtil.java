@@ -1,4 +1,4 @@
-/*
+/**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,19 +15,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.hadoop.hdfs.server.zoneservice.utils;
 
-package org.apache.hadoop.mapreduce;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.DFSUtil;
 
-import org.apache.hadoop.classification.InterfaceAudience;
+import java.net.URI;
+import java.util.Collection;
 
-@InterfaceAudience.Private
-public enum FileSystemCounter {
-  BYTES_READ,
-  BYTES_WRITTEN,
-  READ_OPS,
-  LARGE_READ_OPS,
-  WRITE_OPS,
-  BYTES_READ_EC,
-  INTERDC_READ_OPS,
-  INTERDC_BYTES_READ,
+public class ZoneServiceUtil {
+  public static URI getNamespaceUri(String namespace, Configuration conf)
+      throws IllegalArgumentException {
+    Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
+    for (URI namenode: namenodes) {
+      if (namenode.getAuthority().equals(namespace)) {
+        return namenode;
+      }
+    }
+    throw new IllegalArgumentException(
+        "Cannot find the NameNode for namespace: " + namespace);
+  }
 }

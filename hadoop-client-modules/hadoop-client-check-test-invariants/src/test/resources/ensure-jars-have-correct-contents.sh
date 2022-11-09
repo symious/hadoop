@@ -62,6 +62,13 @@ allowed_expr+="|^jndi.properties$"
 allowed_expr+="|^kafka/"
 #   * Used by Kafka
 allowed_expr+="|^kafka-version.properties$"
+allowed_expr+="|^common/"
+allowed_expr+="|^aix/"
+allowed_expr+="|^darwin/"
+allowed_expr+="|^freebsd/"
+allowed_expr+="|^include/"
+allowed_expr+="|^linux/"
+allowed_expr+="|^win/"
 
 allowed_expr+=")"
 declare -i bad_artifacts=0

@@ -283,8 +283,7 @@ public class BlockPlacementPolicyWithDataCenter extends
              null, null,
             numOfReplicas, scope, results.size());
       } else {
-        LOG.warn("(base.loc={}, base.name={}," +
-                " numOfReplicas={}, scope={}, results.size={}.",
+        LOG.debug("(base.loc={}, base.name={}, numOfReplicas={}, scope={}, results.size={}.",
             base.getNetworkLocation(), base.getName(),
             numOfReplicas, scope, results.size());
       }

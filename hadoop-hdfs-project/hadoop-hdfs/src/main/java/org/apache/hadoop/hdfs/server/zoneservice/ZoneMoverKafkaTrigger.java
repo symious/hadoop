@@ -50,11 +50,11 @@ import java.util.concurrent.LinkedBlockingQueue;
 public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   private static final Logger LOG = LoggerFactory.getLogger(ZoneMover.class);
 
+  private final String nameSpace;
   private final Consumer<String, String> consumer;
   private List<Path> monitorPaths;
-  private final Thread thread;
+  private final Thread monitorThread;
   private final BlockingQueue<String> pathQueue;
-  private final List<String> hostIpList = new ArrayList<>();
 
   //Init HDFS audit log kafka consumer
   public ZoneMoverKafkaTrigger(Configuration conf,
@@ -77,7 +77,7 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
         StringDeserializer.class.getName());
     properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
         StringDeserializer.class.getName());
-    String nameSpace = namenode.getAuthority();
+    nameSpace = namenode.getAuthority();
     properties.put("group.id", groupId + "_" + nameSpace);
 
     properties.setProperty("security.protocol", "SASL_PLAINTEXT");
@@ -85,7 +85,6 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
     properties.setProperty("sasl.jaas.config",
         "org.apache.kafka.common.security.plain.PlainLoginModule " +
             "required username=\""+username+"\" password=\""+password+"\";");
-    filterHostIp(conf, namenode);
     final int queueSize =
         conf.getInt(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_KEY,
             DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_DEFAULT);
@@ -95,9 +94,9 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
     consumer.subscribe(Collections.singletonList(topic));
 
     monitorPaths = paths;
-    thread = new monitorThread(this.getClass().getName()
-        + "_" + nameSpace);
-    thread.start();
+    monitorThread = new MonitorThread(this.getClass().getSimpleName() + "_" + nameSpace);
+    monitorThread.start();
+    LOG.info("ZoneMover trigger for {} has been started!", nameSpace);
   }
 
   @Override
@@ -114,37 +113,47 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
     while (true) {
       ConsumerRecords<String, String> records = consumer.poll(100);
       try {
-        for (ConsumerRecord<String, String> record : records) {
-          JSONObject jsonObject = new JSONObject(record.value());
-          String hostname = (new JSONObject(jsonObject.get("host")
-              .toString())).get("name").toString();
+        for (ConsumerRecord<String, String> record: records) {
+          String rawMessage = record.value();
+          JSONObject jsonObject = new JSONObject(rawMessage);
           //Filter the record doesn't belong to this namespace
-          if (!hostIpList.contains(hostname)) { continue; }
-          String message = jsonObject.get("message").toString();
-          if (message.contains("cmd=complete")) {
-            JSONObject jsonMessage = processMessage(message);
-            if (jsonMessage.get("allowed").equals("true")) {
-              if (checkPaths(jsonMessage.get("src").toString())) {
-                pathQueue.put(jsonMessage.get("src").toString());
-                LOG.debug("New create file: " +
-                    jsonMessage.get("src").toString());
-              }
-            }
-          } else if (message.contains("cmd=rename")) {
-            JSONObject jsonMessage = processMessage(message);
-            if (jsonMessage.get("allowed").equals("true")) {
-              if (checkPaths(jsonMessage.get("dst").toString())) {
-                pathQueue.put(jsonMessage.get("dst").toString());
-                LOG.debug("New create file: " +
-                    jsonMessage.get("dst").toString());
-              }
-            }
+          if (!jsonObject.get("ns").equals(nameSpace)) {
+            continue;
           }
+          String message = jsonObject.get("message").toString();
+
+          processMessage(message);
         }
       } catch (JSONException e) {
         e.printStackTrace();
       } catch (InterruptedException e) {
+        LOG.info("ZoneMover trigger thread is interrupted!");
         break;
+      }
+    }
+  }
+
+  /**
+   * Choose new files from HDFS audit log
+   */
+  private void processMessage(String message) throws JSONException, InterruptedException {
+    if (message.contains("cmd=complete")) {
+      JSONObject jsonMessage = message2json(message);
+      if (jsonMessage.get("allowed").equals("true")) {
+        if (checkPaths(jsonMessage.get("src").toString())) {
+          pathQueue.put(jsonMessage.get("src").toString());
+          LOG.debug("New create file: " +
+              jsonMessage.get("src").toString());
+        }
+      }
+    } else if (message.contains("cmd=rename")) {
+      JSONObject jsonMessage = message2json(message);
+      if (jsonMessage.get("allowed").equals("true")) {
+        if (checkPaths(jsonMessage.get("dst").toString())) {
+          pathQueue.put(jsonMessage.get("dst").toString());
+          LOG.debug("New create file: " +
+              jsonMessage.get("dst").toString());
+        }
       }
     }
   }
@@ -158,11 +167,10 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
    * we can get a jsonObject from which we can get the option
    * we want in audit log like jsonObject.get("ugi")->"A"
    */
-  protected static JSONObject processMessage(String rawMessage) {
+  protected static JSONObject message2json(String rawMessage) {
     JSONObject jsonObject = new JSONObject();
     try {
-      List<String> listString = Arrays
-          .asList(rawMessage.split("[ \t]"));
+      List<String> listString = extractCompletePath(rawMessage);
       for (int i = 0; i < listString.size(); i++) {
         listString.set(i,listString.get(i).replace(':','/'));
         listString.set(i,listString.get(i).replaceFirst("=", "\":\""));
@@ -184,6 +192,25 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   }
 
   /**
+   * Extract complete path from audit log, no matter what kind of special character path contains
+   */
+  private static List<String> extractCompletePath(String rawMessage)
+      throws ArrayIndexOutOfBoundsException {
+    List<String> result;
+    String[] s1 = rawMessage.split("src=");
+    String[] s2 = s1[1].split("dst=");
+    String[] s3 = s2[1].split("perm=");
+    result = new ArrayList<>(Arrays.asList(s1[0].split("[ \t]")));
+    result.add("src=" + s2[0].trim());
+    result.add("dst=" + s3[0].trim());
+    List<String> tmpList = Arrays.asList(("perm=" + s3[1].trim()).split("[ \t]"));
+    result.addAll(tmpList);
+    // Ignore "callContext" info in audit log
+    result.remove(result.size() -1);
+    return result;
+  }
+
+  /**
    * Check if the path is under the monitor paths
    * @param curPath path need to be checked
    * @return TRUE means current path is under monitor paths, need to process it
@@ -199,31 +226,6 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
     return false;
   }
 
-  /**
-   * Get the hostname and IP of this namespace's nn&ob, update hostIpList
-   * @param conf      Configuration of hdfs
-   * @param namenode  the URI of namespace
-   */
-  private void filterHostIp(Configuration conf, URI namenode) {
-    try {
-      Map<String, Map<String, InetSocketAddress>>
-          addressList = DFSUtil.getNNServiceRpcAddresses(conf);
-      String ns = namenode.getAuthority();
-      if (addressList.get(ns) == null) {
-        LOG.error("RPC addresses for namespace is null!");
-        throw new IllegalArgumentException("Null RPC address");
-      }
-      List<InetSocketAddress> hostList =
-          new ArrayList<>(addressList.get(ns).values());
-      for (InetSocketAddress address : hostList) {
-        String hostIp = address.toString().split(":")[0];
-        hostIpList.addAll(Arrays.asList(hostIp.split("/")));
-      }
-    } catch (IOException e) {
-      LOG.error("Cannot load rpc addresses from configuration!");
-    }
-  }
-
   @Override
   public void updatePaths(List<Path> paths) {
     monitorPaths = paths;
@@ -231,11 +233,11 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
 
   @Override
   public void shutdown() {
-    thread.interrupt();
+    monitorThread.interrupt();
   }
 
-  class monitorThread extends Thread {
-    public monitorThread(String name) {
+  class MonitorThread extends Thread {
+    public MonitorThread(String name) {
       super(name);
     }
 

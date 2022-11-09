@@ -20,6 +20,8 @@ package org.apache.hadoop.hdfs.server.namenode.metrics;
 import static org.apache.hadoop.metrics2.impl.MsInfo.ProcessName;
 import static org.apache.hadoop.metrics2.impl.MsInfo.SessionId;
 
+import com.google.common.annotations.VisibleForTesting;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.NamenodeRole;
@@ -34,6 +36,8 @@ import org.apache.hadoop.metrics2.lib.MutableQuantiles;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.metrics2.lib.MutableStat;
 import org.apache.hadoop.metrics2.source.JvmMetrics;
+
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * This class is for maintaining  the various NameNode activity statistics
@@ -159,11 +163,15 @@ public class NameNodeMetrics {
   MutableRate putImage;
 
   JvmMetrics jvmMetrics = null;
+  private final ConcurrentHashMap<String, MutableStat> crossDCTraffic = new ConcurrentHashMap<>();
+  MutableStat overallCrossDCTraffic;
   
   NameNodeMetrics(String processName, String sessionId, int[] intervals,
       final JvmMetrics jvmMetrics) {
     this.jvmMetrics = jvmMetrics;
     registry.tag(ProcessName, processName).tag(SessionId, sessionId);
+    this.overallCrossDCTraffic = this.registry.newStat("OverallCrossDCTraffic",
+        "OverallCrossDCTraffic", "Ops", "Size");
     
     final int len = intervals.length;
     syncsQuantiles = new MutableQuantiles[len];
@@ -456,6 +464,50 @@ public class NameNodeMetrics {
     editLogTailInterval.add(elapsed);
     for (MutableQuantiles q : editLogTailIntervalQuantiles) {
       q.add(elapsed);
+    }
+  }
+
+  private String formatDC(String dc) {
+    if (dc.startsWith("/")) {
+      return dc.substring(1);
+    } else {
+      return dc;
+    }
+  }
+
+  private String getTrafficKey(String clientDC, String dnDC, boolean isTrafficOut) {
+    clientDC = formatDC(clientDC);
+    dnDC = formatDC(dnDC);
+    if (isTrafficOut) {
+      return dnDC + "_" + clientDC;
+    } else {
+      return clientDC + "_"+ dnDC;
+    }
+  }
+
+  public void incrCrossDCTraffic(String clientDC, String dnDC, boolean isTrafficOut, long size) {
+    String metricKey = getTrafficKey(clientDC, dnDC, isTrafficOut);
+    MutableStat metricValue = crossDCTraffic.get(metricKey);
+    if (metricValue == null) {
+      synchronized (this) {
+        metricValue = crossDCTraffic.get(metricKey);
+        if (metricValue == null) {
+          String metricName = StringUtils.capitalize(metricKey + "CrossDCTraffic");
+          metricValue = registry.newStat(metricName, metricName, "Ops", "Size", false);
+          crossDCTraffic.put(metricKey, metricValue);
+        }
+      }
+    }
+    metricValue.add(size);
+    overallCrossDCTraffic.add(size);
+  }
+
+  @VisibleForTesting
+  public MutableStat getCrossDCTraffic(String key) {
+    if (key.contains("Overall")) {
+      return (MutableStat) registry.get("OverallCrossDCTraffic");
+    } else {
+      return (MutableStat) registry.get(key + "CrossDCTraffic");
     }
   }
 }

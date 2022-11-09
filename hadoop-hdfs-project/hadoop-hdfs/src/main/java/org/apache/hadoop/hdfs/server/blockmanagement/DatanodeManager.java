@@ -17,12 +17,20 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
+import static org.apache.hadoop.hdfs.protocol.HdfsConstants.CLIENT_DC_STR;
+import static org.apache.hadoop.hdfs.protocol.HdfsConstants.DATANODE_DC_STR;
+import static org.apache.hadoop.hdfs.protocol.HdfsConstants.FILE_LENGTH_DC_STR;
+import static org.apache.hadoop.hdfs.protocol.HdfsConstants.IS_INTER_DC_READ_STR;
+import static org.apache.hadoop.hdfs.protocol.HdfsConstants.TRAFFIC_DC_STR;
 import static org.apache.hadoop.hdfs.server.protocol.DatanodeProtocol.DNA_ERASURE_CODING_RECONSTRUCTION;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_DEFAULT;
 import static org.apache.hadoop.util.Time.monotonicNow;
 
 import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
+import org.apache.hadoop.hdfs.server.namenode.handler.DatanodeManagerRefreshHandler;
+import org.apache.hadoop.ipc.CallerContext;
+import org.apache.hadoop.ipc.RefreshRegistry;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -119,6 +127,7 @@ public class DatanodeManager {
   private final Host2NodesMap host2DatanodeMap = new Host2NodesMap();
 
   private final DNSToSwitchMapping dnsToSwitchMapping;
+  private final DNSToSwitchMapping dnsToSwitchMappingForMetric;
   private final boolean rejectUnresolvedTopologyDN;
 
   private final int defaultXferPort;
@@ -307,6 +316,12 @@ public class DatanodeManager {
     this.dnsToSwitchMapping = ReflectionUtils.newInstance(
         conf.getClass(DFSConfigKeys.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY, 
             ScriptBasedMapping.class, DNSToSwitchMapping.class), conf);
+    this.dnsToSwitchMappingForMetric = ReflectionUtils.newInstance(
+        conf.getClass(DFSConfigKeys.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
+            ScriptBasedMapping.class, DNSToSwitchMapping.class), conf);
+    if (this.dnsToSwitchMappingForMetric instanceof IpRangeScriptBasedMapping) {
+      ((IpRangeScriptBasedMapping) this.dnsToSwitchMappingForMetric).setReturnActualRack(true);
+    }
     
     this.rejectUnresolvedTopologyDN = conf.getBoolean(
         DFSConfigKeys.DFS_REJECT_UNRESOLVED_DN_TOPOLOGY_MAPPING_KEY,
@@ -321,6 +336,7 @@ public class DatanodeManager {
         locations.add(addr.getAddress().getHostAddress());
       }
       dnsToSwitchMapping.resolve(locations);
+      dnsToSwitchMappingForMetric.resolve(locations);
     }
 
     heartbeatIntervalSeconds = conf.getTimeDuration(
@@ -393,6 +409,25 @@ public class DatanodeManager {
     this.blocksPerPostponedMisreplicatedBlocksRescan = conf.getLong(
         DFSConfigKeys.DFS_NAMENODE_BLOCKS_PER_POSTPONEDBLOCKS_RESCAN_KEY,
         DFSConfigKeys.DFS_NAMENODE_BLOCKS_PER_POSTPONEDBLOCKS_RESCAN_KEY_DEFAULT);
+    RefreshRegistry.defaultRegistry().register(
+        DatanodeManagerRefreshHandler.DATANODE_MANAGER_REFRESH_HANDLER_IDENTIFIER,
+        new DatanodeManagerRefreshHandler(this));
+  }
+
+  /**
+   * Reload DNSToSwitchMapping.
+   */
+  public void reloadDNSToSwitchMapping(Configuration conf) {
+    if (conf == null) {
+      conf = new HdfsConfiguration();
+    }
+    if (dnsToSwitchMapping != null && dnsToSwitchMapping instanceof IpRangeScriptBasedMapping) {
+      ((IpRangeScriptBasedMapping) dnsToSwitchMapping).reloadIpRange2DC(conf);
+    }
+    if (dnsToSwitchMappingForMetric != null
+        && dnsToSwitchMappingForMetric instanceof IpRangeScriptBasedMapping) {
+      ((IpRangeScriptBasedMapping) dnsToSwitchMappingForMetric).reloadIpRange2DC(conf);
+    }
   }
 
   private void startSlowPeerCollector() {
@@ -530,8 +565,9 @@ public class DatanodeManager {
   }
 
   /** Check if the read traffic is inter-dc. */
-  public boolean isInterDCRead(final String clientMachine,
-      final List<LocatedBlock> locatedblocks) {
+  @VisibleForTesting
+  public boolean checkInterDCRead(final String clientMachine,
+      final List<LocatedBlock> locatedblocks, final long fileLength) {
     if (locatedblocks.size() == 0) {
       return false;
     }
@@ -543,7 +579,7 @@ public class DatanodeManager {
     } else {
       List<String> hosts = new ArrayList<>(1);
       hosts.add(clientMachine);
-      List<String> resolvedHosts = dnsToSwitchMapping.resolve(hosts);
+      List<String> resolvedHosts = dnsToSwitchMappingForMetric.resolve(hosts);
       if (resolvedHosts != null && !resolvedHosts.isEmpty()) {
         clientLocation = resolvedHosts.get(0);
       } else {
@@ -553,14 +589,47 @@ public class DatanodeManager {
       }
     }
     String clientDC = NetworkTopologyUtil.getDataCenter(clientLocation);
-
+    // The first DN node is big probability to be read, so record its DC information.
+    String firstDnDC = null;
     DatanodeInfo[] locations = locatedblocks.get(0).getLocations();
-    for (DatanodeInfo location: locations) {
-      if (NetworkTopologyUtil.getDataCenter(location).equals(clientDC)) {
+    for (DatanodeInfo location : locations) {
+      String dnDC = NetworkTopologyUtil.getDataCenter(location);
+      if (firstDnDC == null) {
+        firstDnDC = dnDC;
+      }
+      if (dnDC.equals(clientDC)) {
         return false;
       }
     }
+
+    NameNode.getNameNodeMetrics().incrCrossDCTraffic(clientDC, firstDnDC, true, fileLength);
+
+    // for trafficInOrOut is referenced to DN, so set to true.
+    appendInterDCReadToCallerContext(fileLength, clientDC, firstDnDC, true);
     return true;
+  }
+
+  /**
+   * For marking inter-dc reads.
+   * It adds trace info "isInterDCRead:true,clientDC:/dc1,dnDC:/dc2,
+   * trafficDC:out,fileLengthDC:1024"
+   * to caller context.
+   */
+  private void appendInterDCReadToCallerContext(
+      long fileLength, String clientDC, String dnDC, boolean isTrafficOut) {
+    final CallerContext ctx = CallerContext.getCurrent();
+    String origContext = ctx == null ? null : ctx.getContext();
+    byte[] origSignature = ctx == null ? null : ctx.getSignature();
+    String trafficInOrOut = isTrafficOut ? "out" : "in";
+    CallerContext.setCurrent(
+        new CallerContext.Builder(origContext)
+            .append(IS_INTER_DC_READ_STR, Boolean.toString(true))
+            .append(CLIENT_DC_STR, clientDC)
+            .append(DATANODE_DC_STR, dnDC)
+            .append(TRAFFIC_DC_STR, trafficInOrOut)
+            .append(FILE_LENGTH_DC_STR, Long.toString(fileLength))
+            .setSignature(origSignature)
+            .build());
   }
   
   /**
@@ -1377,8 +1446,10 @@ public class DatanodeManager {
       checkTopologySwitchMappingImpl(conf);
 
       // 2. Reload DNS to switch mapping.
-      dnsToSwitchMapping.reloadCachedMappings(
-          Collections.singletonList(ipAddr));
+      LOG.info("refreshTopology: " + ipAddr + " ...");
+      List<String> names = Collections.singletonList(ipAddr);
+      dnsToSwitchMapping.reloadCachedMappings(names);
+      dnsToSwitchMappingForMetric.reloadCachedMappings(names);
 
       // 3. Update network topology
       for (DatanodeDescriptor datanode : datanodeMap.values()) {
@@ -1431,6 +1502,7 @@ public class DatanodeManager {
       refreshIpList.add(addr.getAddress().getHostAddress());
     }
     dnsToSwitchMapping.resolve(refreshIpList);
+    dnsToSwitchMappingForMetric.resolve(refreshIpList);
     namesystem.writeLock();
     try {
       refreshDatanodes();

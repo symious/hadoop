@@ -40,6 +40,9 @@ import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.server.namenode.NameNode;
+import org.apache.hadoop.metrics2.lib.MutableStat;
+import org.apache.hadoop.metrics2.util.SampleStat;
 import org.apache.hadoop.net.StaticMapping;
 import org.apache.hadoop.test.LambdaTestUtils;
 import org.slf4j.Logger;
@@ -343,15 +346,29 @@ public class TestDatanodeManager {
     StaticMapping.addNodeToRack(clientMachine, "/dc0/rack1");
     Assert.assertEquals(1, blocks.size());
     Assert.assertEquals(3, blocks.get(0).getLocations().length);
-    Assert.assertFalse(dm.isInterDCRead(clientMachine, blocks));
+    Assert.assertFalse(dm.checkInterDCRead(clientMachine, blocks, 1024));
 
     // client in /dc1
     StaticMapping.addNodeToRack(clientMachine, "/dc1/rack1");
-    Assert.assertFalse(dm.isInterDCRead(clientMachine, blocks));
+    Assert.assertFalse(dm.checkInterDCRead(clientMachine, blocks, 1024));
 
     // client in /dc2
     StaticMapping.addNodeToRack(clientMachine, "/dc2/rack1");
-    Assert.assertTrue(dm.isInterDCRead(clientMachine, blocks));
+    Assert.assertTrue(dm.checkInterDCRead(clientMachine, blocks, 1024));
+
+    MutableStat overallMutableStat = NameNode.getNameNodeMetrics().getCrossDCTraffic("Overall");
+    assertNotNull(overallMutableStat);
+    SampleStat overallSampleStat = overallMutableStat.lastStat();
+    assertNotNull(overallSampleStat);
+    assertEquals(1, overallSampleStat.numSamples());
+    assertEquals(1024, overallSampleStat.total(), 0.1);
+
+    MutableStat detailDCMutableStat = NameNode.getNameNodeMetrics().getCrossDCTraffic("Dc0_dc2");
+    assertNotNull(detailDCMutableStat);
+    SampleStat detailDCSampleStat = detailDCMutableStat.lastStat();
+    assertNotNull(detailDCSampleStat);
+    assertEquals(1, detailDCSampleStat.numSamples());
+    assertEquals(1024, detailDCSampleStat.total(), 0.1);
 
     cluster.shutdown();
   }

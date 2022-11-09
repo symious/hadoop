@@ -19,10 +19,12 @@ package org.apache.hadoop.hdfs.server.datanode.metrics;
 
 import static org.apache.hadoop.metrics2.impl.MsInfo.SessionId;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.protocol.DataNodeUsageReport;
 import org.apache.hadoop.hdfs.server.protocol.DataNodeUsageReportUtil;
 import org.apache.hadoop.metrics2.MetricsSystem;
@@ -36,6 +38,7 @@ import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.metrics2.lib.MutableGaugeInt;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.metrics2.lib.MutableRatesWithAggregation;
+import org.apache.hadoop.metrics2.lib.MutableStat;
 import org.apache.hadoop.metrics2.source.JvmMetrics;
 import org.apache.hadoop.net.DNSToSwitchMapping;
 import org.apache.hadoop.net.ScriptBasedMapping;
@@ -43,6 +46,7 @@ import org.apache.hadoop.util.ReflectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -176,6 +180,8 @@ public class DataNodeMetrics {
   private MutableGaugeLong blocksReceivedInPendingIBR;
   @Metric("Count of blocks at deleted status in pending IBR")
   private MutableGaugeLong blocksDeletedInPendingIBR;
+  private final ConcurrentHashMap<String, MutableStat> dnCrossDCTraffic = new ConcurrentHashMap<>();
+  private final MutableStat overallDNCrossDCTraffic;
   @Metric("Count of erasure coding reconstruction tasks")
   MutableCounterLong ecReconstructionTasks;
   @Metric("Count of erasure coding failed reconstruction tasks")
@@ -213,7 +219,6 @@ public class DataNodeMetrics {
   final String name;
   JvmMetrics jvmMetrics = null;
   private final DNSToSwitchMapping dnsToSwitchMapping;
-  private static final String LOCAL_HOST = "127.0.0.1";
   private DataNodeUsageReportUtil dnUsageReportUtil;
 
   public DataNodeMetrics(String name, String sessionId, int[] intervals,
@@ -221,6 +226,8 @@ public class DataNodeMetrics {
     this.name = name;
     this.jvmMetrics = jvmMetrics;    
     registry.tag(SessionId, sessionId);
+    this.overallDNCrossDCTraffic = registry.newStat("OverallCrossDCTraffic",
+        "OverallCrossDCTraffic", "Ops", "Size");
     
     final int len = intervals.length;
     dnUsageReportUtil = new DataNodeUsageReportUtil();
@@ -263,7 +270,8 @@ public class DataNodeMetrics {
     this.dnsToSwitchMapping = switchMapping;
   }
 
-  public static DataNodeMetrics create(Configuration conf, String dnName) {
+  public static DataNodeMetrics create(Configuration conf,
+      String dnName, DNSToSwitchMapping switchMapping) {
     String sessionId = conf.get(DFSConfigKeys.DFS_METRICS_SESSION_ID_KEY);
     MetricsSystem ms = DefaultMetricsSystem.instance();
     JvmMetrics jm = JvmMetrics.create("DataNode", sessionId, ms);
@@ -272,11 +280,7 @@ public class DataNodeMetrics {
             : dnName.replace(':', '-'));
 
     // Percentile measurement is off by default, by watching no intervals
-    int[] intervals = 
-        conf.getInts(DFSConfigKeys.DFS_METRICS_PERCENTILES_INTERVALS_KEY);
-    DNSToSwitchMapping switchMapping = ReflectionUtils.newInstance(
-        conf.getClass(DFSConfigKeys.NET_TOPOLOGY_NODE_SWITCH_MAPPING_IMPL_KEY,
-            ScriptBasedMapping.class, DNSToSwitchMapping.class), conf);
+    int[] intervals = conf.getInts(DFSConfigKeys.DFS_METRICS_PERCENTILES_INTERVALS_KEY);
     
     return ms.register(name, null, new DataNodeMetrics(name, sessionId,
         intervals, jm, switchMapping));
@@ -438,41 +442,25 @@ public class DataNodeMetrics {
 
   private boolean isLocal(String localHostAddress,
       String remoteHostAddress) {
-    return remoteHostAddress.equals(LOCAL_HOST) ||
+    return remoteHostAddress.equals(DataNode.LOCAL_HOST) ||
         localHostAddress.equals(remoteHostAddress);
   }
 
-  private void internalUpdateBytes(String localHostAddress,
-      String remoteHostAddress, long size, boolean forRead) {
-    MutableCounterLong localCount = forRead ?
-        readsFromLocalClient : writesFromLocalClient;
-    MutableCounterLong localBytes = forRead ?
-        localBytesRead : localBytesWritten;
-    MutableCounterLong remoteCount = forRead ?
-        readsFromRemoteClient : writesFromRemoteClient;
-    MutableCounterLong remoteBytes = forRead ?
-        remoteBytesRead : remoteBytesWritten;
-    MutableCounterLong localRackCount = forRead ?
-        readsFromLocalRack : writesFromLocalRack;
-    MutableCounterLong localRackBytes = forRead ?
-        localRackBytesRead : localRackBytesWritten;
-    MutableCounterLong localCenterCount = forRead ?
-        readsFromLocalDataCenter : writesFromLocalDataCenter;
-    MutableCounterLong localCenterBytes = forRead ?
-        localDataCenterBytesRead : localDataCenterBytesWritten;
-    MutableCounterLong remoteCenterCount = forRead ?
-        readsFromRemoteDataCenter : writesFromRemoteDataCenter;
-    MutableCounterLong remoteCenterBytes = forRead ?
-        remoteDataCenterBytesRead :  remoteDataCenterBytesWritten;
-
+  public void incrWritesFromClient(String localHostAddress,
+      String remoteHostAddress, long size) {
     // locality: node-local
-    if (isLocal(localHostAddress, remoteHostAddress)) {
-      localCount.incr();
-      localBytes.incr(size);
-    } else {
-      remoteCount.incr();
-      remoteBytes.incr(size);
+    if (remoteHostAddress.equals(DataNode.LOCAL_HOST) ||
+        localHostAddress.equals(remoteHostAddress)) {
+      writesFromLocalClient.incr();
+      localBytesWritten.incr(size);
+      return;
+    }
 
+    // keep writesFromRemoteClient and remoteBytesWritten consistent
+    //  with incrWritesFromClient(boolean local, long size)
+    writesFromRemoteClient.incr();
+    remoteBytesWritten.incr(size);
+    if (dnsToSwitchMapping != null) {
       List<String> names = new ArrayList<>();
       names.add(localHostAddress);
       names.add(remoteHostAddress);
@@ -481,24 +469,22 @@ public class DataNodeMetrics {
       String remoteLocation = racks.get(1);
       // locality: rack-local
       if (localLocation.equals(remoteLocation)) {
-        localRackCount.incr();
-        localRackBytes.incr(size);
-      } else if (DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation)
-          .equals(DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation))) {
-        // locality: datacenter-local
-        localCenterCount.incr();
-        localCenterBytes.incr(size);
-      } else {
-        // locality: datacenter-off
-        remoteCenterCount.incr();
-        remoteCenterBytes.incr(size);
+        writesFromLocalRack.incr();
+        localRackBytesWritten.incr(size);
+        return;
       }
-    }
-  }
 
-  public void incrWritesFromClient(String localHostAddress,
-      String remoteHostAddress, long size) {
-    internalUpdateBytes(localHostAddress, remoteHostAddress, size, false);
+      // locality: datacenter-local
+      if (DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation).equals(
+          DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation))) {
+        writesFromLocalDataCenter.incr();
+        localDataCenterBytesWritten.incr(size);
+        return;
+      }
+      // locality: datacenter-off
+      writesFromRemoteDataCenter.incr();
+      remoteDataCenterBytesWritten.incr(size);
+    }
   }
 
   public void incrReadsFromClient(boolean local, long size) {
@@ -512,7 +498,47 @@ public class DataNodeMetrics {
 
   public void incrReadsFromClient(String localHostAddress,
       String remoteHostAddress, long size) {
-    internalUpdateBytes(localHostAddress, remoteHostAddress, size, true);
+    // locality: node-local
+    if (remoteHostAddress.equals(DataNode.LOCAL_HOST) ||
+        localHostAddress.equals(remoteHostAddress)) {
+      readsFromLocalClient.incr();
+      localBytesRead.incr(size);
+      return;
+    }
+
+    // keep readsFromRemoteClient and remoteBytesRead consistent
+    //  with incrReadsFromClient(boolean local, long size)
+    readsFromRemoteClient.incr();
+    remoteBytesRead.incr(size);
+    if (dnsToSwitchMapping != null) {
+      List<String> names = new ArrayList<>();
+      names.add(localHostAddress);
+      names.add(remoteHostAddress);
+      List<String> racks = dnsToSwitchMapping.resolve(names);
+      String localLocation = racks.get(0);
+      String remoteLocation = racks.get(1);
+      // locality: rack-local
+      if (localLocation.equals(remoteLocation)) {
+        readsFromLocalRack.incr();
+        localRackBytesRead.incr(size);
+        return;
+      }
+
+      // locality: datacenter-local
+      String localDC = DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation);
+      String remoteDC = DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation);
+      if (localDC.equals(remoteDC)) {
+        readsFromLocalDataCenter.incr();
+        localDataCenterBytesRead.incr(size);
+        return;
+      }
+
+      // locality: datacenter-off
+      readsFromRemoteDataCenter.incr();
+      remoteDataCenterBytesRead.incr(size);
+
+      incrCrossDCTraffic(remoteDC, localDC, true, size);
+    }
   }
 
   public void incrVolumeFailures(int size) {
@@ -740,5 +766,40 @@ public class DataNodeMetrics {
    */
   public void addNumProcessedCommands(long latency) {
     processedCommandsOp.add(latency);
+  }
+
+  private String formatDC(String dc) {
+    if (dc.startsWith("/")) {
+      return dc.substring(1);
+    } else {
+      return dc;
+    }
+  }
+
+  private String getTrafficKey(String clientDC, String dnDC, boolean isTrafficOut) {
+    clientDC = formatDC(clientDC);
+    dnDC = formatDC(dnDC);
+    if (isTrafficOut) {
+      return dnDC + "_" + clientDC;
+    } else {
+      return clientDC + "_"+ dnDC;
+    }
+  }
+
+  private void incrCrossDCTraffic(String remoteDC, String localDC, boolean isTrafficOut, long size) {
+    String metricKey = getTrafficKey(remoteDC, localDC, isTrafficOut);
+    MutableStat metricValue = dnCrossDCTraffic.get(metricKey);
+    if (metricValue == null) {
+      synchronized (this) {
+        metricValue = dnCrossDCTraffic.get(metricKey);
+        if (metricValue == null) {
+          String metricName = StringUtils.capitalize(metricKey + "DNCrossDCTraffic");
+          metricValue = registry.newStat(metricName, metricName, "Ops", "Size", false);
+          dnCrossDCTraffic.put(metricKey, metricValue);
+        }
+      }
+    }
+    metricValue.add(size);
+    overallDNCrossDCTraffic.add(size);
   }
 }

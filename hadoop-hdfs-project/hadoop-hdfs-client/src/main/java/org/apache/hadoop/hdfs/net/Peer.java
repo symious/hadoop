@@ -132,4 +132,10 @@ public interface Peer extends Closeable {
    *                       connection to the peer.
    */
   String getRemoteHostAddress();
+
+  /**
+   * @return               An int representing the remote end port of our
+   *                       connection to the peer.
+   */
+  int getRemotePort();
 }

@@ -55,6 +55,17 @@ public final class HadoopExecutors {
         new LinkedBlockingQueue<Runnable>());
   }
 
+  public static ExecutorService newFixedThreadPool(int nThreads, long keepAliveTime) {
+    HadoopThreadPoolExecutor threadPoolExecutor = new HadoopThreadPoolExecutor(
+        nThreads, nThreads, keepAliveTime, TimeUnit.MILLISECONDS,
+        new LinkedBlockingQueue<Runnable>());
+    if (keepAliveTime > 0) {
+      threadPoolExecutor.allowCoreThreadTimeOut(true);
+    }
+    return threadPoolExecutor;
+  }
+
+
   //Executors.newSingleThreadExecutor has special semantics - for the
   // moment we'll delegate to it rather than implement the semantics here.
   public static ExecutorService newSingleThreadExecutor() {

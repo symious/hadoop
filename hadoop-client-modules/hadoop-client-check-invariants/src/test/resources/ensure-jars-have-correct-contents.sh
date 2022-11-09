@@ -67,6 +67,14 @@ allowed_expr+="|^krb5_udp-template.conf$"
 # Jetty uses this style sheet for directory listings. TODO ensure our
 # internal use of jetty disallows directory listings and remove this.
 allowed_expr+="|^jetty-dir.css$"
+#   * Used by Kafka
+allowed_expr+="|^common/"
+allowed_expr+="|^aix/"
+allowed_expr+="|^darwin/"
+allowed_expr+="|^freebsd/"
+allowed_expr+="|^include/"
+allowed_expr+="|^linux/"
+allowed_expr+="|^win/"
 
 allowed_expr+=")"
 declare -i bad_artifacts=0

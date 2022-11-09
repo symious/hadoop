@@ -304,6 +304,8 @@ message BlockOpResponseProto {
    * read.
    */
   optional uint32 shortCircuitAccessVersion = 6;
+
+  optional bool isInterDCRead = 100 [default = false];
 }
 
 /**

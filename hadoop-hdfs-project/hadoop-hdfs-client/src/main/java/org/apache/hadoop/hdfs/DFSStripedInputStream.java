@@ -342,7 +342,7 @@ public class DFSStripedInputStream extends DFSInputStream {
     updateReadStatistics(readStatistics, stats.getBytesRead(),
         stats.isShortCircuit(), stats.getNetworkDistance());
     dfsClient.updateFileSystemReadStats(stats.getNetworkDistance(),
-        stats.getBytesRead());
+        stats.getBytesRead(), stats.isInterDCRead());
     assert readStatistics.getBlockType() == BlockType.STRIPED;
     dfsClient.updateFileSystemECReadStats(stats.getBytesRead());
   }

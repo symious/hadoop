@@ -1127,7 +1127,7 @@ abstract public class Task implements Writable, Configurable {
     private List<FileSystem.Statistics> stats;
     private Counters.Counter readBytesCounter, writeBytesCounter,
         readOpsCounter, largeReadOpsCounter, writeOpsCounter,
-        readBytesEcCounter;
+        readBytesEcCounter, interDCReadsCounter, interDCBytesReadCounter;
     private String scheme;
     FileSystemStatisticUpdater(List<FileSystem.Statistics> stats, String scheme) {
       this.stats = stats;
@@ -1160,12 +1160,22 @@ abstract public class Task implements Writable, Configurable {
         readBytesEcCounter =
             counters.findCounter(scheme, FileSystemCounter.BYTES_READ_EC);
       }
+      if (interDCReadsCounter == null) {
+        interDCReadsCounter = counters.findCounter(scheme,
+            FileSystemCounter.INTERDC_READ_OPS);
+      }
+      if (interDCBytesReadCounter == null) {
+        interDCBytesReadCounter = counters.findCounter(scheme,
+            FileSystemCounter.INTERDC_BYTES_READ);
+      }
       long readBytes = 0;
       long writeBytes = 0;
       long readOps = 0;
       long largeReadOps = 0;
       long writeOps = 0;
       long readBytesEC = 0;
+      long interDCReads = 0;
+      long interDCBytesRead = 0;
       for (FileSystem.Statistics stat: stats) {
         readBytes = readBytes + stat.getBytesRead();
         writeBytes = writeBytes + stat.getBytesWritten();
@@ -1173,6 +1183,8 @@ abstract public class Task implements Writable, Configurable {
         largeReadOps = largeReadOps + stat.getLargeReadOps();
         writeOps = writeOps + stat.getWriteOps();
         readBytesEC = readBytesEC + stat.getBytesReadErasureCoded();
+        interDCReads = interDCReads + stat.getInterDCReads();
+        interDCBytesRead = interDCBytesRead + stat.getInterDCBytesRead();
       }
       readBytesCounter.setValue(readBytes);
       writeBytesCounter.setValue(writeBytes);
@@ -1182,6 +1194,8 @@ abstract public class Task implements Writable, Configurable {
       if (readBytesEcCounter != null) {
         readBytesEcCounter.setValue(readBytesEC);
       }
+      interDCReadsCounter.setValue(interDCReads);
+      interDCBytesReadCounter.setValue(interDCBytesRead);
     }
   }
   

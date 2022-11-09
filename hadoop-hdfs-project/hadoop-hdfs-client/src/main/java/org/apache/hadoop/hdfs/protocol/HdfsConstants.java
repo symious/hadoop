@@ -125,6 +125,13 @@ public final class HdfsConstants {
    */
   public static final long LEASE_SOFTLIMIT_PERIOD = 60 * 1000;
 
+  // Inter DC related constants.
+  public static final String IS_INTER_DC_READ_STR = "isInterDCRead";
+  public static final String CLIENT_DC_STR = "clientDC";
+  public static final String DATANODE_DC_STR = "dnDC";
+  public static final String FILE_LENGTH_DC_STR = "size";
+  public static final String TRAFFIC_DC_STR = "traffic";
+
   // SafeMode actions
   public enum SafeModeAction {
     SAFEMODE_LEAVE, SAFEMODE_ENTER, SAFEMODE_GET, SAFEMODE_FORCE_EXIT

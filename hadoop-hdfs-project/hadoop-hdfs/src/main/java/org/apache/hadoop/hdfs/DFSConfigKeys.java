@@ -756,17 +756,51 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONESERVICE_KEYTAB_FILE_KEY = "dfs.zoneservice.keytab.file";
   public static final String  DFS_ZONESERVICE_THREADS_KEY = "dfs.zoneservice.threads";
   public static final int     DFS_ZONESERVICE_THREADS_DEFAULT = 50;
+  //ZoneService Generte ReplicationRule kafka trigger related keys
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_BOOTSTRAP_SERVERS =
+      "dfs.zone.generate.replicationrule.kafka.bootstrap.servers";
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_TOPIC =
+      "dfs.zone.generate.replicationrule.kafka.topic";
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_GROUP_ID =
+      "dfs.zone.generate.replicationrule.kafka.group.id";
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_USERNAME =
+      "dfs.zone.generate.replicationrule.kafka.username";
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_PASSWORD =
+      "dfs.zone.generate.replicationrule.kafka.password";
+  public static final String DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_POLL_TIMEOUT_MS =
+      "dfs.zone.generate.replicationrule.kafka-poll.timeout";
+  public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_POLL_TIMEOUT_DEFAULT = 100;
+
+  public static final String DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_REQUEST_TIMEOUT_MS =
+      "dfs.zone.generate.replicationrule.kafka-request.timeout";
+  public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_REQUEST_TIMEOUT_DEFAULT = 30000;
+
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY =
+      "dfs.zone.generate.replicationrule.enabled";
+  public static final boolean DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY_DEFAULT =
+      false;
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KEY =
+      "dfs.zone.generate.replicationrule";
+  //clientDC:1,dnDC:2
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_DEFAULT = "1:2";
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_PATH_SIZE_LIMIT_KEY =
+      "dfs.zone.generate.replicationrule.path.size.limit";
+  //default pathSizeLimit is 200TB.
+  public static final long  DFS_ZONE_GENERTE_REPLICATION_RULE_PATH_SIZE_LIMIT_DEFAULT =
+      219902325555200L;
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_MIN_CROSS_RAEAD_SIZE_KEY =
+      "dfs.zone.generate.replicationrule.min.crossread.size";
+  //default min for cross-read size is 2TB.
+  public static final long  DFS_ZONE_GENERTE_REPLICATION_RULE_MIN_CROSS_RAEAD_SIZE_DEFAULT =
+      2199023255552L;
   public static final String  DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_KEY =
       "dfs.namenode.audit.log.with.remote.port";
   public static final boolean DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_DEFAULT =
       false;
-  public static final String  DFS_ZONESERVICE_BATCH_THREAD_POOL_SIZE = "dfs.zoneservice.batch.thread.pool.size";
-  public static final int     DFS_ZONESERVICE_BATCH_THREAD_POOL_SIZE_DEFAULT = 5;
-  public static final String  DFS_ZONESERVICE_BATCH_THREAD_POOL_MAX_SIZE = "dfs.zoneservice.batch.thread.pool.size.max";
-  public static final int     DFS_ZONESERVICE_BATCH_THREAD_POOL_MAX_SIZE_DEFAULT = 5;
-  public static final String  DFS_ZONESERVICE_BATCH_THREAD_POOL_ALIVE_TIME = "dfs.zoneservice.batch.thread.pool.alive.time";
-  public static final int     DFS_ZONESERVICE_BATCH_THREAD_POOL_ALIVE_TIME_DEFAULT = 3600;
-
+  public static final String  DFS_ZONESERVICE_BATCH_NS_THREAD_CONSTRAINT_KEY = "dfs.zoneservice.batch.ns.thread.constraint";
+  public static final int     DFS_ZONESERVICE_BATCH_NS_THREAD_CONSTRAINT_DEFAULT = 3;
+  public static final String  DFS_ZONESERVICE_BATCH_THREAD_REFRESH_INTERVAL_KEY = "dfs.zoneservice.batch.thread.refresh.interval";
+  public static final long    DFS_ZONESERVICE_BATCH_THREAD_REFRESH_INTERVAL_DEFAULT = 10000L;
 
   /**
    * The maximum number of getBlocks RPCs data movement utilities can make to
@@ -833,6 +867,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONEMOVER_DISPATCHERTHREADS_KEY =
       "dfs.zonemover.dispatcherThreads";
   public static final int     DFS_ZONEMOVER_DISPATCHERTHREADS_DEFAULT = 200;
+  public static final String  DFS_ZONEMOVER_DISPATCHER_KEEP_ALIVE_TIME_KEY =
+      "dfs.zonemover.dispatcherKeepAliveTime";
+  public static final long    DFS_ZONEMOVER_DISPATCHER_KEEP_ALIVE_TIME_DEFAULT = 60000;
   public static final String  DFS_ZONEMOVER_BLOCK_DISPATCH_ATTEMPTS_KEY =
       "dfs.zonemover.blockDispatchAttempts";
   public static final int     DFS_ZONEMOVER_BLOCK_DISPATCH_ATTEMPTS_DEFAULT = 3;
@@ -1514,6 +1551,12 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_KEY = "dfs.datanode.xceiver.stop.timeout.millis";
   public static final long   DFS_DATANODE_XCEIVER_STOP_TIMEOUT_MILLIS_DEFAULT = 60000;
 
+  // DataNode AuditLog
+  public static final String  DFS_DATANODE_AUDIT_ENABLE_KEY = "dfs.datanode.enable.audit.log";
+  public static final boolean DFS_DATANODE_AUDIT_ENABLE_DEFAULT = false;
+  public static final String  DFS_DATANODE_AUDIT_LOG_ASYNC_KEY = "dfs.datanode.audit.log.async";
+  public static final boolean DFS_DATANODE_AUDIT_LOG_ASYNC_DEFAULT = false;
+
   // WebHDFS retry policy
   @Deprecated
   public static final String  DFS_HTTP_CLIENT_RETRY_POLICY_ENABLED_KEY =
@@ -2032,4 +2075,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       HdfsClientConfigKeys.DFS_LEASE_HARDLIMIT_KEY;
   public static final long DFS_LEASE_HARDLIMIT_DEFAULT =
       HdfsClientConfigKeys.DFS_LEASE_HARDLIMIT_DEFAULT;
+
+  public static final String DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY =
+      "dfs.namenode.data-center-block-placement-policy.fallback-data-center";
+  public static final String
+      DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_DEFAULT =
+      null;
 }

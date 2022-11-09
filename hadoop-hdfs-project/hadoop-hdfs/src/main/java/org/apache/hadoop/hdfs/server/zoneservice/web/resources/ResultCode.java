@@ -20,6 +20,8 @@ package org.apache.hadoop.hdfs.server.zoneservice.web.resources;
 
 import org.json.JSONObject;
 
+import java.util.Objects;
+
 public enum ResultCode {
   SUCCESS(0, "Success!"),
   CREATE_SUCCESS(1, "Create Success!"),
@@ -57,5 +59,10 @@ public enum ResultCode {
 
   public String toString() {
     return (new JSONObject(this)).toString();
+  }
+
+  public boolean equal(ResultCode resultCode) {
+    return Objects.equals(resultCode.getCode(), this.code)
+        && resultCode.getMsg().equals(this.msg);
   }
 }

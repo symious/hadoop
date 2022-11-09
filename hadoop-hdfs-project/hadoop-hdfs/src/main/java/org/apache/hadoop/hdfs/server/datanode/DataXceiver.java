@@ -445,6 +445,8 @@ class DataXceiver extends Receiver implements Runnable {
       if (fis != null) {
         IOUtils.cleanupWithLogger(null, fis);
       }
+      datanode.logAudit(peer.getRemoteHostAddress(), peer.getRemotePort(),
+          "requestShortCircuitFds", blk.toString());
     }
   }
 
@@ -616,7 +618,8 @@ class DataXceiver extends Receiver implements Runnable {
       }
       
       // send op status
-      writeSuccessWithChecksumInfo(blockSender, new DataOutputStream(getOutputStream()));
+      writeSuccessWithChecksumInfo(blockSender, new DataOutputStream(getOutputStream()),
+          datanode.isInterDcRead(peer.getLocalHostAddress(), peer.getRemoteHostAddress()));
 
       long beginRead = Time.monotonicNow();
       read = blockSender.sendBlock(out, baseStream, dataXceiverServer.getReadThrottler()); // send data
@@ -675,6 +678,8 @@ class DataXceiver extends Receiver implements Runnable {
     //datanode.metrics.incrReadsFromClient(peer.isLocal(), read);
     datanode.metrics.incrReadsFromClient(
         peer.getLocalHostAddress(), peer.getRemoteHostAddress(), read);
+    datanode.logAudit(peer.getLocalHostAddress(), peer.getRemoteHostAddress(),
+        peer.getRemotePort(), "readBlock", true, block.toString(), read);
   }
 
   @Override
@@ -969,6 +974,9 @@ class DataXceiver extends Receiver implements Runnable {
     //datanode.getMetrics().incrWritesFromClient(peer.isLocal(), size);
     datanode.getMetrics().incrWritesFromClient(
         peer.getLocalHostAddress(), peer.getRemoteHostAddress(), size);
+    datanode.logAudit(peer.getLocalHostAddress(), peer.getRemoteHostAddress(),
+        peer.getRemotePort(), "writeBlock", false,
+        block.toString(), block.getNumBytes());
   }
 
   @Override
@@ -997,6 +1005,8 @@ class DataXceiver extends Receiver implements Runnable {
       throw ioe;
     } finally {
       IOUtils.closeStream(out);
+      datanode.logAudit(peer.getRemoteHostAddress(), peer.getRemotePort(),
+          "transferBlock", blk.toString());
     }
   }
 
@@ -1038,6 +1048,8 @@ class DataXceiver extends Receiver implements Runnable {
       IOUtils.closeStream(out);
     }
 
+    datanode.logAudit(peer.getRemoteHostAddress(), peer.getRemotePort(),
+        "blockChecksum", block.toString());
     //update metrics
     datanode.metrics.addBlockChecksumOp(elapsed());
   }
@@ -1124,7 +1136,8 @@ class DataXceiver extends Receiver implements Runnable {
       OutputStream baseStream = getOutputStream();
 
       // send status first
-      writeSuccessWithChecksumInfo(blockSender, reply);
+      // set interdc read = false for copyBlock
+      writeSuccessWithChecksumInfo(blockSender, reply, false);
 
       long beginRead = Time.monotonicNow();
       // send block content to the target
@@ -1136,6 +1149,8 @@ class DataXceiver extends Receiver implements Runnable {
       datanode.metrics.incrTotalReadTime(duration);
       
       LOG.info("Copied {} to {}", block, peer.getRemoteAddressString());
+      datanode.logAudit(peer.getLocalHostAddress(), peer.getRemoteHostAddress(),
+          peer.getRemotePort(), "copyBlock", true, block.toString(), read);
     } catch (IOException ioe) {
       isOpSuccess = false;
       LOG.info("opCopyBlock {} received exception {}", block, ioe.toString());
@@ -1265,6 +1280,9 @@ class DataXceiver extends Receiver implements Runnable {
         
         LOG.info("Moved {} from {}, delHint={}",
             block, peer.getRemoteAddressString(), delHint);
+        datanode.logAudit(peer.getLocalHostAddress(), peer.getRemoteHostAddress(),
+            peer.getRemotePort(), "replaceBlock", false,
+            r.toString(), r.getNumBytes());
       }
     } catch (IOException ioe) {
       opStatus = ERROR;
@@ -1369,17 +1387,21 @@ class DataXceiver extends Receiver implements Runnable {
   }
   
   private void writeSuccessWithChecksumInfo(BlockSender blockSender,
-      DataOutputStream out) throws IOException {
+      DataOutputStream out, boolean interDCRead) throws IOException {
 
     ReadOpChecksumInfoProto ckInfo = ReadOpChecksumInfoProto.newBuilder()
       .setChecksum(DataTransferProtoUtil.toProto(blockSender.getChecksum()))
       .setChunkOffset(blockSender.getOffset())
       .build();
-      
-    BlockOpResponseProto response = BlockOpResponseProto.newBuilder()
-      .setStatus(SUCCESS)
-      .setReadOpChecksumInfo(ckInfo)
-      .build();
+
+    BlockOpResponseProto.Builder builder = BlockOpResponseProto.newBuilder()
+        .setStatus(SUCCESS)
+        .setReadOpChecksumInfo(ckInfo);
+    if (interDCRead) {
+      builder.setIsInterDCRead(true);
+    }
+
+    BlockOpResponseProto response = builder.build();
     response.writeDelimitedTo(out);
     out.flush();
   }

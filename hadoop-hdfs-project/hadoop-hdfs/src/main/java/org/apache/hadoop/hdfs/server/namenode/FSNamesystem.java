@@ -395,7 +395,6 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       registry.newRatesWithAggregation("detailedLockHoldTimeMetrics");
   @Metric final MutableRatesWithAggregation detailedLockWaitTimeMetrics =
       registry.newRatesWithAggregation("detailedLockWaitTimeMetrics");
-  private static final String IS_INTER_DC_READ_STR = "isInterDCRead";
 
   private final String contextFieldSeparator;
 
@@ -2191,15 +2190,6 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       throw e;
     }
 
-    LocatedBlocks blocks = res.blocks;
-    if (blocks != null && blockManager.getDataCenterAwareness()) {
-      if (blockManager.getDatanodeManager().isInterDCRead(
-          clientMachine, blocks.getLocatedBlocks())) {
-        appendInterDCReadToCallerContext();
-      }
-    }
-    logAuditEvent(true, OperationName.OPEN, srcArg);
-
     if (!isInSafeMode() && res.updateAccessTime()) {
       String src = srcArg;
       checkOperation(OperationCategory.WRITE);
@@ -2228,7 +2218,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       }
     }
 
+    LocatedBlocks blocks = res.blocks;
     sortLocatedBlocks(clientMachine, blocks);
+    logAuditEvent(true, OperationName.OPEN, srcArg);
     return blocks;
   }
 
@@ -2241,6 +2233,10 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       }
       blockManager.getDatanodeManager().sortLocatedBlocks(clientMachine,
           blkList);
+      if (blockManager.getDataCenterAwareness()) {
+        blockManager.getDatanodeManager().checkInterDCRead(clientMachine,
+            blocks.getLocatedBlocks(), blocks.getFileLength());
+      }
 
       // lastBlock is not part of getLocatedBlocks(), might need to sort it too
       LocatedBlock lastBlock = blocks.getLastLocatedBlock();
@@ -2250,21 +2246,6 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
             lastBlockList);
       }
     }
-  }
-
-  /**
-   * For marking inter-dc reads.
-   * It adds trace info "isInterDCRead:true" to caller context.
-   */
-  private void appendInterDCReadToCallerContext() {
-    final CallerContext ctx = CallerContext.getCurrent();
-    String origContext = ctx == null ? null : ctx.getContext();
-    byte[] origSignature = ctx == null ? null : ctx.getSignature();
-    CallerContext.setCurrent(
-        new CallerContext.Builder(origContext)
-            .append(IS_INTER_DC_READ_STR, Boolean.toString(true))
-            .setSignature(origSignature)
-            .build());
   }
 
   /**

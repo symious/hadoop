@@ -157,6 +157,11 @@ public class TestPeerCache {
     public String getRemoteHostAddress() {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public int getRemotePort() {
+      return -1;
+    }
   }
 
   @Test

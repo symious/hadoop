@@ -47,6 +47,7 @@ import java.util.function.Consumer;
 @InterfaceStability.Unstable
 public class NetworkTopology {
   public final static String DEFAULT_RACK = "/default-rack";
+  public final static String UNKNOWN_DC_RACK = "/unknown/default-rack";
   public static final Logger LOG =
       LoggerFactory.getLogger(NetworkTopology.class);
 
