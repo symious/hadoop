@@ -23,12 +23,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import org.apache.hadoop.fs.UnsupportedFileSystemException;
+import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.yarn.api.protocolrecords.ContainerUpdateRequest;
@@ -46,8 +49,10 @@ import org.apache.hadoop.yarn.api.records.ContainerSubState;
 import org.apache.hadoop.yarn.api.records.ExecutionType;
 import org.apache.hadoop.yarn.api.records.Token;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.exceptions.ConfigurationException;
 import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.apache.hadoop.yarn.security.ContainerTokenIdentifier;
 import org.apache.hadoop.yarn.security.NMTokenIdentifier;
 import org.apache.hadoop.yarn.server.api.records.ContainerQueuingLimit;
 import org.apache.hadoop.yarn.server.nodemanager.ContainerExecutor;
@@ -67,6 +72,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resource
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.monitor.ContainersMonitor;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.monitor.ContainersMonitorImpl;
 import org.apache.hadoop.yarn.server.nodemanager.executor.ContainerStartContext;
+import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.junit.Assert;
 import org.junit.Test;
@@ -77,6 +83,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Tests to verify that the {@link ContainerScheduler} is able to queue and
@@ -1291,23 +1298,65 @@ public class TestContainerSchedulerQueuing extends BaseContainerManagerTest {
     Assert.assertTrue(updateResponse.getFailedRequests().isEmpty());
 
     final GetContainerStatusesRequest statRequest =
-            GetContainerStatusesRequest.newInstance(
-                    Collections.singletonList(cId));
+        GetContainerStatusesRequest.newInstance(
+            Collections.singletonList(cId));
     final org.apache.hadoop.yarn.api.records.ContainerState expectedState =
-            org.apache.hadoop.yarn.api.records.ContainerState.RUNNING;
+        org.apache.hadoop.yarn.api.records.ContainerState.RUNNING;
 
     GenericTestUtils.waitFor(() -> {
       List<ContainerStatus> containerStatuses;
       try {
         containerStatuses = containerManager
-                .getContainerStatuses(statRequest).getContainerStatuses();
+            .getContainerStatuses(statRequest).getContainerStatuses();
       } catch (YarnException | IOException e) {
         return false;
       }
       Assert.assertEquals(1, containerStatuses.size());
       ContainerStatus status = containerStatuses.get(0);
       return (status.getState() == expectedState
-              && status.getExecutionType() == ExecutionType.OPPORTUNISTIC);
+          && status.getExecutionType() == ExecutionType.OPPORTUNISTIC);
     }, 20, 10000);
+  }
+
+  @Test
+  public void testContainerUpdateWithAdd()
+      throws Exception {
+    Set<Thread> threadSet = new HashSet<>();
+    for (int j = 0; j < 20; j++) {
+      Thread t = new Thread(new Runnable() {
+        @Override
+        public void run() {
+          for (int cid = 1; cid< 100; cid++) {
+            ContainerLaunchContext launchContext = mock(ContainerLaunchContext.class);
+            ContainerTokenIdentifier identifier = mock(ContainerTokenIdentifier.class);
+            Dispatcher dispatcher = mock(Dispatcher.class);
+            Credentials credentials = mock(Credentials.class);
+            NMStateStoreService.RecoveredContainerState rcs = mock(
+                NMStateStoreService.RecoveredContainerState.class);
+            when(identifier.getContainerID()).thenReturn(createContainerId(cid));
+            Container container =
+                new ContainerImpl(new YarnConfiguration(), dispatcher, launchContext
+                    , credentials, metrics, identifier, context, rcs);
+            containerManager.getContainerScheduler().putRunningContainers(container);
+            try {
+              Thread.sleep(20);
+            } catch (InterruptedException e) {
+              LOG.error("ex: ",e);
+            }
+          }
+        }
+      });
+      threadSet.add(t);
+    }
+    for (int i = 0; i < 5; i++) {
+      Thread t2 = new Thread(new Runnable() {
+        @Override
+        public void run() {
+          containerManager.getContainerScheduler().updateContainersLevels(new HashMap<>());
+        }
+      });
+      threadSet.add(t2);
+    }
+    threadSet.stream().forEach( thread -> thread.start());
   }
 }

@@ -33,7 +33,7 @@ import java.util.Set;
 @InterfaceStability.Unstable
 public interface CpuResourceHandler extends ResourceHandler {
 
-  void cleanLeakContainers(Set<String> containerIDs) throws IOException;
+  void cleanLeakContainers() throws IOException;
 
   void updateTotalCGroupsResource(Configuration conf) throws ResourceHandlerException;
 }

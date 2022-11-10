@@ -38,7 +38,6 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.CpuResourceHandler;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.ResourceHandler;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.ResourceHandlerChain;
-import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.ResourceHandlerException;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.ResourceHandlerModule;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.monitor
     .ChangeMonitoringContainerResourceEvent;
@@ -57,13 +56,12 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * The ContainerScheduler manages a collection of runnable containers. It
@@ -100,6 +98,9 @@ public class ContainerScheduler extends AbstractService implements
   // have been marked to run, but not yet RUNNING.
   private final LinkedHashMap<ContainerId, Container> runningContainers =
       new LinkedHashMap<>();
+
+  private ReentrantReadWriteLock.ReadLock readLock;
+  private ReentrantReadWriteLock.WriteLock writeLock;
 
   private final ContainerQueuingLimit queuingLimit =
       ContainerQueuingLimit.newInstance();
@@ -150,6 +151,9 @@ public class ContainerScheduler extends AbstractService implements
             YarnConfiguration.NM_CONTAINER_QUEUING_USE_PAUSE_FOR_PREEMPTION,
             YarnConfiguration.
                 DEFAULT_NM_CONTAINER_QUEUING_USE_PAUSE_FOR_PREEMPTION);
+    ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    readLock = lock.readLock();
+    writeLock = lock.writeLock();
   }
 
   @VisibleForTesting
@@ -256,21 +260,25 @@ public class ContainerScheduler extends AbstractService implements
   }
 
   public void updateContainersByLoad(boolean isHighLoad) {
-    // If enabled loadBalance strategy
-    if (null != runningContainers && runningContainers.size() > 0) {
-      for (Container container : runningContainers.values()) {
-        try {
+    readLock.lock();
+    try {
+      // If enabled loadBalance strategy
+      if (null != runningContainers && runningContainers.size() > 0) {
+        Iterator<Container> containerIterator = runningContainers.values().iterator();
+        while (containerIterator.hasNext()) {
+          Container container = containerIterator.next();
           container.setHighLoad(isHighLoad);
           resourceHandlerChain.updateContainer(container);
           if (LOG.isDebugEnabled()) {
             LOG.debug("Container Info: " + container.getContainerId().toString() + ", level:" +
                 container.getContainerLevel() + ", HighLoad:" + isHighLoad);
           }
-        } catch (
-            ResourceHandlerException e) {
-          LOG.error("Update Container Resource: ", e);
         }
       }
+    } catch (Exception e) {
+      LOG.error("Update Container Resource: ", e);
+    } finally {
+      readLock.unlock();
     }
   }
 
@@ -299,7 +307,12 @@ public class ContainerScheduler extends AbstractService implements
       metrics.setQueuedContainers(queuedOpportunisticContainers.size(),
           queuedGuaranteedContainers.size());
     } else if (rcs.getStatus() == RecoveredContainerStatus.LAUNCHED) {
-      runningContainers.put(container.getContainerId(), container);
+      writeLock.lock();
+      try {
+        runningContainers.put(container.getContainerId(), container);
+      } finally {
+        writeLock.unlock();
+      }
       utilizationTracker.addContainerResources(container);
     }
     if (rcs.getStatus() != RecoveredContainerStatus.COMPLETED
@@ -340,6 +353,16 @@ public class ContainerScheduler extends AbstractService implements
   @VisibleForTesting
   public int getNumRunningContainers() {
     return this.runningContainers.size();
+  }
+
+  @VisibleForTesting
+  public void putRunningContainers(Container container) {
+    writeLock.lock();
+    try {
+      this.runningContainers.put(container.getContainerId(), container);
+    } finally {
+      writeLock.unlock();
+    }
   }
 
   @VisibleForTesting
@@ -385,9 +408,14 @@ public class ContainerScheduler extends AbstractService implements
             container.getContainerId(), container);
       }
     }
-    // decrement only if it was a running container
-    Container completedContainer = runningContainers.remove(container
-        .getContainerId());
+    writeLock.lock();
+    Container completedContainer = null;
+    try {
+      // decrement only if it was a running container
+      completedContainer = runningContainers.remove(container.getContainerId());
+    } finally {
+      writeLock.unlock();
+    }
     // only a running container releases resources upon completion
     boolean resourceReleased = completedContainer != null;
     if (resourceReleased) {
@@ -566,7 +594,12 @@ public class ContainerScheduler extends AbstractService implements
     LOG.info("Starting container [" + container.getContainerId()+ "]");
     // Skip to put into runningContainers and addUtilization when recover
     if (!runningContainers.containsKey(container.getContainerId())) {
-      runningContainers.put(container.getContainerId(), container);
+      writeLock.lock();
+      try {
+        runningContainers.put(container.getContainerId(), container);
+      }finally {
+        writeLock.unlock();
+      }
       this.utilizationTracker.addContainerResources(container);
     }
     if (container.getContainerTokenIdentifier().getExecutionType() ==
@@ -589,8 +622,7 @@ public class ContainerScheduler extends AbstractService implements
     // Use a descending iterator to kill more recently started containers.
     Iterator<Container> lifoIterator = new LinkedList<>(
         runningContainers.values()).descendingIterator();
-    while(lifoIterator.hasNext() &&
-        !hasSufficientResources(resourcesToFreeUp)) {
+    while (lifoIterator.hasNext() && !hasSufficientResources(resourcesToFreeUp)) {
       Container runningCont = lifoIterator.next();
       if (runningCont.getContainerTokenIdentifier().getExecutionType() ==
           ExecutionType.OPPORTUNISTIC) {
@@ -701,33 +733,38 @@ public class ContainerScheduler extends AbstractService implements
   }
 
   public void updateContainersLevels(Map<String, String> levelMap) {
-    if (null != runningContainers && runningContainers.size() > 0) {
-      for (ContainerId containerId : runningContainers.keySet()) {
-        Container container = runningContainers.get(containerId);
-        String level =
-            levelMap.get(containerId.getApplicationAttemptId().getApplicationId().toString());
-        container.setContainerLevel(level);
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("Update Container Level: " + containerId.toString() + ", level:" + level);
+    readLock.lock();
+    try {
+      if (null != runningContainers && runningContainers.size() > 0) {
+        Iterator<Container> containerIterator = runningContainers.values().iterator();
+        while (containerIterator.hasNext()) {
+          Container container = containerIterator.next();
+          String level =
+              levelMap.get(container.getContainerId().getApplicationAttemptId().getApplicationId()
+                  .toString());
+          container.setContainerLevel(level);
+          if (LOG.isDebugEnabled()) {
+            LOG.debug(
+                "Update Container Level: " + container.getContainerId().toString() + ", level:" +
+                    level);
+          }
         }
       }
+    } catch (Exception e) {
+      LOG.error("update Containers Levels: ", e);
+    } finally {
+      readLock.unlock();
     }
   }
 
   public void cleanLeakContainers() {
-    Set<String> containerIDs = new HashSet<>();
-    if (null != runningContainers && runningContainers.size() > 0) {
-      for (Container container : runningContainers.values()) {
-        containerIDs.add(container.getContainerId().toString());
-      }
-    }
     try {
       List<ResourceHandler> handlers = resourceHandlerChain.getResourceHandlerList();
       if (!CollectionUtils.isEmpty(handlers)) {
         for (ResourceHandler handler : handlers) {
           if (handler instanceof CpuResourceHandler) {
             CpuResourceHandler cpuResourceHandler = (CpuResourceHandler) handler;
-            cpuResourceHandler.cleanLeakContainers(containerIDs);
+            cpuResourceHandler.cleanLeakContainers();
             break;
           }
         }

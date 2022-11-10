@@ -442,8 +442,8 @@ public class CGroupsCpuResourceHandlerImpl implements CpuResourceHandler {
   }
 
   @Override
-  public void cleanLeakContainers(Set<String> containerIDs) throws IOException {
-    this.cGroupsHandler.cleanLeakContainers(containerIDs);
+  public void cleanLeakContainers() throws IOException {
+    this.cGroupsHandler.cleanLeakContainers();
   }
 
   @Override

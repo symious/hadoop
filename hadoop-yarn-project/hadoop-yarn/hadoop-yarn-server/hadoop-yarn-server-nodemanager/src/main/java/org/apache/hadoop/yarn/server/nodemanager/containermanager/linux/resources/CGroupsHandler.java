@@ -196,5 +196,5 @@ public interface CGroupsHandler {
    */
   String getCGroupMountPath();
 
-  void cleanLeakContainers(Set<String> containerIDs) throws IOException;
+  void cleanLeakContainers() throws IOException;
 }

@@ -629,7 +629,7 @@ class CGroupsHandlerImpl implements CGroupsHandler {
   }
 
   @Override
-  public void cleanLeakContainers(Set<String> containerIDs) throws IOException {
+  public void cleanLeakContainers() throws IOException {
     String cgPath = this.cGroupsMountConfig.getMountPath() + "/" + this.cGroupPrefix;
     if (!cgroupsV2Enabled) {
       cgPath = this.cGroupsMountConfig.getMountPath() + "/cpu/" + this.cGroupPrefix;

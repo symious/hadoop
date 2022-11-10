@@ -1555,12 +1555,6 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
             // ContainerLauncher.
             List<SignalContainerRequest> containersToSignal = response
                 .getContainersToSignalList();
-            List <ApplicationLevel> levels = response.getApplicationLevel();
-            if (!CollectionUtils.isEmpty(levels)) {
-              for (ApplicationLevel le : levels) {
-                LOG.debug("ID:" + le.getApplicationId() + ", level:" + le.getApplicationLevel());
-              }
-            }
             if (!containersToSignal.isEmpty()) {
               dispatcher.getEventHandler().handle(
                   new CMgrSignalContainersEvent(containersToSignal));
@@ -1596,6 +1590,11 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
           }
           // Refresh the containers level
           List<ApplicationLevel> levels = response.getApplicationLevel();
+          if (!CollectionUtils.isEmpty(levels)) {
+            for (ApplicationLevel le : levels) {
+              LOG.debug("ID:" + le.getApplicationId() + ", level:" + le.getApplicationLevel());
+            }
+          }
           updateContainerLevel(levels);
         } catch (ConnectException e) {
           //catch and throw the exception if tried MAX wait time to connect RM
@@ -1681,12 +1680,12 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
   }
 
   private void updateContainerLevel(List<ApplicationLevel> levels) {
+    Map<String, String> levelMap = new HashMap<>();
     if (!CollectionUtils.isEmpty(levels)) {
-      Map<String, String> levelMap = new HashMap<>();
       for (ApplicationLevel level : levels) {
         levelMap.put(level.getApplicationId(), level.getApplicationLevel());
       }
-      context.getContainerManager().getContainerScheduler().updateContainersLevels(levelMap);
     }
+    context.getContainerManager().getContainerScheduler().updateContainersLevels(levelMap);
   }
 }
