@@ -1851,4 +1851,8 @@ public final class HttpServer2 implements FilterContainer {
             splitVal[1]);
     return headers;
   }
+
+  public QueuedThreadPool getThreadPool() {
+    return (QueuedThreadPool) webServer.getThreadPool();
+  }
 }

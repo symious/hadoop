@@ -28,6 +28,7 @@ import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.http.HttpServer2;
+import org.apache.hadoop.http.HttpServerMetrics;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.HttpCrossOriginFilterInitializer;
 import org.apache.hadoop.security.SecurityUtil;
@@ -64,6 +65,7 @@ public class TimelineReaderServer extends CompositeService {
       "timeline.reader.manager";
 
   private HttpServer2 readerWebServer;
+  private HttpServerMetrics metrics;
   private TimelineReaderManager timelineReaderManager;
   private String webAppURLWithoutScheme;
 
@@ -218,6 +220,7 @@ public class TimelineReaderServer extends CompositeService {
       readerWebServer.setAttribute(TIMELINE_READER_MANAGER_ATTR,
           timelineReaderManager);
       readerWebServer.start();
+      metrics = HttpServerMetrics.create(readerWebServer);
     } catch (Exception e) {
       String msg = "TimelineReaderWebApp failed to start.";
       LOG.error(msg, e);
