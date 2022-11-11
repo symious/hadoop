@@ -30,6 +30,9 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.base.Preconditions;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.server.datanode.DataNodeFaultInjector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
@@ -63,9 +66,7 @@ class FsDatasetAsyncDiskService {
       LoggerFactory.getLogger(FsDatasetAsyncDiskService.class);
   
   // ThreadPool core pool size
-  private static final int CORE_THREADS_PER_VOLUME = 1;
-  // ThreadPool maximum pool size
-  private static final int MAXIMUM_THREADS_PER_VOLUME = 4;
+  private final int threadsPerVolume;
   // ThreadPool keep-alive time for threads over core pool size
   private static final long THREADS_KEEP_ALIVE_SECONDS = 60; 
   
@@ -90,6 +91,12 @@ class FsDatasetAsyncDiskService {
     this.datanode = datanode;
     this.fsdatasetImpl = fsdatasetImpl;
     this.threadGroup = new ThreadGroup(getClass().getSimpleName());
+    this.threadsPerVolume = datanode.getConf().getInt(
+        DFSConfigKeys.DFS_DATANODE_FSDATASETASYNCDISK_THREADS_PER_VOLUME_KEY,
+        DFSConfigKeys.DFS_DATANODE_FSDATASETASYNCDISK_THREADS_PER_VOLUME_DEFAULT);
+    Preconditions.checkArgument(this.threadsPerVolume > 0,
+        DFSConfigKeys.DFS_DATANODE_FSDATASETASYNCDISK_THREADS_PER_VOLUME_KEY +
+            " must be a positive integer.");
   }
 
   private void addExecutorForVolume(final FsVolumeImpl volume) {
@@ -110,7 +117,7 @@ class FsDatasetAsyncDiskService {
     };
 
     ThreadPoolExecutor executor = new ThreadPoolExecutor(
-        CORE_THREADS_PER_VOLUME, MAXIMUM_THREADS_PER_VOLUME,
+        this.threadsPerVolume, this.threadsPerVolume,
         THREADS_KEEP_ALIVE_SECONDS, TimeUnit.SECONDS,
         new LinkedBlockingQueue<Runnable>(), threadFactory);
 
@@ -323,6 +330,12 @@ class FsDatasetAsyncDiskService {
     @Override
     public void run() {
       try {
+        // For testing, simulate the case asynchronously deletion of the
+        // replica task stacked pending.
+        DataNodeFaultInjector.get().delayDeleteReplica();
+        if (!fsdatasetImpl.removeReplicaFromMem(block, volume)) {
+          return;
+        }
         final long blockLength = replicaToDelete.getBlockDataLength();
         final long metaLength = replicaToDelete.getMetadataLength();
         boolean result;
