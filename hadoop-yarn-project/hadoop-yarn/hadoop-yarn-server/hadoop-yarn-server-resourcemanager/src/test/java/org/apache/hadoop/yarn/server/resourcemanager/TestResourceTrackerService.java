@@ -517,7 +517,6 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     rm.waitForState(id1, NodeState.DECOMMISSIONED);
   }
 
-
   /**
   * Decommissioning using a post-configured include hosts file
   */
@@ -528,6 +527,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     rm.start();
     MockNM nm1 = rm.registerNode("host1:1234", 5120);
     MockNM nm2 = rm.registerNode("host2:5678", 10240);
+    MockNM nm3 = rm.registerNode("10.123.25.10:5678", 10240);
     ClusterMetrics metrics = ClusterMetrics.getMetrics();
     assert(metrics != null);
     int initialMetricCount = metrics.getNumShutdownNMs();
@@ -539,7 +539,11 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     Assert.assertEquals(
         NodeAction.NORMAL,
         nodeHeartbeat.getNodeAction());
-    writeToHostsFile("host1");
+    nodeHeartbeat = nm3.nodeHeartbeat(true);
+    Assert.assertEquals(
+        NodeAction.NORMAL,
+        nodeHeartbeat.getNodeAction());
+    writeToHostsFile("host1", "10.123.0.0/16");
     conf.set(YarnConfiguration.RM_NODES_INCLUDE_FILE_PATH, hostFile
         .getAbsolutePath());
     rm.getNodesListManager().refreshNodes(conf);
@@ -549,6 +553,13 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
         "Node should not have been shutdown.",
         NodeAction.NORMAL,
         nodeHeartbeat.getNodeAction());
+
+    nodeHeartbeat = nm3.nodeHeartbeat(true);
+    Assert.assertEquals(
+        "Node should not have been shutdown.",
+        NodeAction.NORMAL,
+        nodeHeartbeat.getNodeAction());
+
     NodeState nodeState =
         rm.getRMContext().getInactiveRMNodes().get(nm2.getNodeId()).getState();
     Assert.assertEquals("Node should have been shutdown but is in state" +

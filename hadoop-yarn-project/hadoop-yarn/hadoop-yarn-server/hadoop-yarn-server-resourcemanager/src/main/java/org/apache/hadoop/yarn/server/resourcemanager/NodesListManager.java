@@ -25,6 +25,7 @@ import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -76,11 +77,17 @@ public class NodesListManager extends CompositeService implements
   private String excludesFile;
   private String coLocateFile;
   private Set<String> coLocate;
+  private Set<Pair<String, Integer>> ipRangeSet;
 
   private Resolver resolver;
   private Timer removalTimer;
   private int nodeRemovalCheckInterval;
   private Set<RMNode> gracefulDecommissionableNodes;
+
+  private static final String IP_MASK_PATTERN =
+      "^(?:(?:\\d|[1-9]\\d|1\\d\\d|2[0-4]\\d|25[0-5])\\.){3}(?:\\d|[1-9]\\d|1\\d\\d|2[0-4]\\d|25[0-5])/(?:\\d|[1-2]\\d|3[0-2])$";
+  private static final String IP_PATTERN =
+      "^(?:(?:\\d|[1-9]\\d|1\\d\\d|2[0-4]\\d|25[0-5])\\.){3}(?:\\d|[1-9]\\d|1\\d\\d|2[0-4]\\d|25[0-5])$";
 
   public NodesListManager(RMContext rmContext) {
     super(NodesListManager.class.getName());
@@ -114,6 +121,7 @@ public class NodesListManager extends CompositeService implements
           createHostsFileReader(this.includesFile, this.excludesFile);
       this.coLocateFile = conf.get(YarnConfiguration.RM_NODES_COLOCATE_FILE_PATH,
           YarnConfiguration.DEFAULT_RM_NODES_COLOCATE_FILE_PATH);
+      loadIpRange();
       loadCoLocate();
       setDecommissionedNMs();
       printConfiguredHosts(false);
@@ -161,6 +169,23 @@ public class NodesListManager extends CompositeService implements
     }, nodeRemovalCheckInterval, nodeRemovalCheckInterval);
 
     super.serviceInit(conf);
+  }
+
+  public void loadIpRange() {
+    Set<Pair<String, Integer>> newIpRange = new HashSet<>();
+    Iterator<String> iter = hostsReader.getHosts().iterator();
+    String host = null;
+    while (iter.hasNext()) {
+      host = iter.next();
+      if (host.matches(IP_MASK_PATTERN)) {
+        String[] ipAndMask = host.split("/");
+        String ip = ipAndMask[0];
+        int mask = Integer.parseInt(ipAndMask[1]);
+        newIpRange.add(Pair.of(ip, mask));
+      }
+    }
+    this.ipRangeSet = newIpRange;
+    LOG.info("IpRange: " + ipRangeSet);
   }
 
   public void loadCoLocate() throws IOException, YarnException {
@@ -268,7 +293,7 @@ public class NodesListManager extends CompositeService implements
     } else {
       hostsReader.refresh(includesFile, excludesFile);
     }
-
+    loadIpRange();
     printConfiguredHosts(graceful);
 
     LOG.info("hostsReader include:{" +
@@ -527,8 +552,36 @@ public class NodesListManager extends CompositeService implements
       String hostName, Set<String> hostsList, Set<String> excludeList) {
     String ip = resolver.resolve(hostName);
     return (hostsList.isEmpty() || hostsList.contains(hostName) || hostsList
-        .contains(ip))
+        .contains(ip) || checkIpRange(ip, ipRangeSet))
         && !(excludeList.contains(hostName) || excludeList.contains(ip));
+  }
+
+  private boolean checkIpRange(String ip, Set<Pair<String, Integer>> ipRangeList) {
+    if (!ip.matches(IP_PATTERN)) {
+      return false;
+    }
+    for (Pair<String, Integer> ipRange : ipRangeList) {
+      String ipSegment = ipRange.getLeft();
+      int maskBit = ipRange.getRight();
+      String allowSubnet = getSubnet(ipSegment, maskBit);
+      String currentSubnet = getSubnet(ip, maskBit);
+      if (allowSubnet.equals(currentSubnet)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private String getSubnet(String ip, int maskBit) {
+    int mask = 0xffffffff <<  (32 - maskBit);
+    String[] data = ip.split("\\.");
+
+    int firstSegment = mask >> 24 & Integer.parseInt(data[0]);
+    int secondSegment = mask >> 16 & Integer.parseInt(data[1]);
+    int thirdSegment = mask >> 8 & Integer.parseInt(data[2]);
+    int fourthSegment = mask &  Integer.parseInt(data[3]);
+
+    return firstSegment + "." + secondSegment + "." + thirdSegment + "." + fourthSegment;
   }
 
   private void sendRMAppNodeUpdateEventToNonFinalizedApps(
