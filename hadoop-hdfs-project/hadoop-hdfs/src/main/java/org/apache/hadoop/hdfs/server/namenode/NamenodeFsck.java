@@ -573,10 +573,11 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
     LocatedBlocks blocks = null;
     final FSNamesystem fsn = namenode.getNamesystem();
     FSPermissionChecker.setOperationType(OperationName.FSCK_GET_BLOCK_LOCATIONS);
+    FSPermissionChecker pc = fsn.getPermissionChecker();
     fsn.readLock(OperationName.FSCK_GET_BLOCK_LOCATIONS);
     try {
       blocks = FSDirStatAndListingOp.getBlockLocations(
-          fsn.getFSDirectory(), fsn.getPermissionChecker(),
+          fsn.getFSDirectory(), pc,
           path, 0, fileLen, false)
           .blocks;
     } catch (FileNotFoundException fnfe) {
