@@ -115,11 +115,6 @@ public class FSDirAttrOp {
       if (fsd.isPermissionEnabled()) {
         fsd.checkPathAccess(pc, iip, FsAction.WRITE);
       }
-      final INode inode = iip.getLastINode();
-      if (inode == null) {
-        throw new FileNotFoundException("File/Directory " + iip.getPath() +
-                                            " does not exist.");
-      }
       boolean changed = unprotectedSetTimes(fsd, iip, mtime, atime, true);
       if (changed) {
         fsd.getEditLog().logTimes(iip.getPath(), mtime, atime);
@@ -300,7 +295,7 @@ public class FSDirAttrOp {
 
   static boolean setTimes(
       FSDirectory fsd, INodesInPath iip, long mtime, long atime, boolean force)
-          throws QuotaExceededException {
+          throws FileNotFoundException {
     fsd.writeLock();
     try {
       return unprotectedSetTimes(fsd, iip, mtime, atime, force);
@@ -492,11 +487,14 @@ public class FSDirAttrOp {
 
   static boolean unprotectedSetTimes(
       FSDirectory fsd, INodesInPath iip, long mtime, long atime, boolean force)
-          throws QuotaExceededException {
+          throws FileNotFoundException {
     assert fsd.hasWriteLock();
     boolean status = false;
     INode inode = iip.getLastINode();
     int latest = iip.getLatestSnapshotId();
+    if (inode == null) {
+      throw new FileNotFoundException("File/Directory " + iip.getPath() + " does not exist.");
+    }
     if (mtime >= 0) {
       inode = inode.setModificationTime(mtime, latest);
       status = true;
