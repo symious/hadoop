@@ -73,8 +73,7 @@ public class BlockLocation implements Serializable {
   private boolean corrupt;
 
   private static final String[] EMPTY_STR_ARRAY = new String[0];
-  private static final StorageType[] EMPTY_STORAGE_TYPE_ARRAY =
-      new StorageType[0];
+  private static final StorageType[] EMPTY_STORAGE_TYPE_ARRAY = StorageType.EMPTY_ARRAY;;
 
   /**
    * Default Constructor.

@@ -314,10 +314,9 @@ public class TestRouterRpcMultiDestination extends TestRouterRpc {
       assertEquals(1, proxyNumAddBlock2 - proxyNumAddBlock);
 
       // Get additionalDatanode via router and block is not null.
-      DatanodeInfo[] exclusions = new DatanodeInfo[0];
       LocatedBlock newBlock = clientProtocol.getAdditionalDatanode(
           testPath, status.getFileId(), blockTwo.getBlock(),
-          blockTwo.getLocations(), blockTwo.getStorageIDs(), exclusions,
+          blockTwo.getLocations(), blockTwo.getStorageIDs(), DatanodeInfo.EMPTY_ARRAY,
           1, clientName);
       assertNotNull(newBlock);
       long proxyNumAdditionalDatanode = metrics.getProcessingOps();

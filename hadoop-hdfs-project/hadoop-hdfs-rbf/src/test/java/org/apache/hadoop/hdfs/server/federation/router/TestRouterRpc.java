@@ -1218,10 +1218,9 @@ public class TestRouterRpc {
         newRouterFile, clientName, null, null,
         status.getFileId(), null, null);
 
-    DatanodeInfo[] exclusions = new DatanodeInfo[0];
     LocatedBlock newBlock = routerProtocol.getAdditionalDatanode(
         newRouterFile, status.getFileId(), block.getBlock(),
-        block.getLocations(), block.getStorageIDs(), exclusions, 1, clientName);
+        block.getLocations(), block.getStorageIDs(), DatanodeInfo.EMPTY_ARRAY, 1, clientName);
     assertNotNull(newBlock);
   }
 
