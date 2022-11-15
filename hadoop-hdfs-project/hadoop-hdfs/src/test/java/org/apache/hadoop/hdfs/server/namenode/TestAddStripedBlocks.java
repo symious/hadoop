@@ -352,7 +352,7 @@ public class TestAddStripedBlocks {
           bll)};
       cluster.getNameNodeRpc().blockReport(dn.getDNRegistrationForBP(bpId),
           bpId, reports,
-          new BlockReportContext(1, 0, System.nanoTime(), 0, true));
+          new BlockReportContext(1, 0, System.nanoTime(), 0));
     }
 
     DatanodeStorageInfo[] locs = lastBlock.getUnderConstructionFeature()
