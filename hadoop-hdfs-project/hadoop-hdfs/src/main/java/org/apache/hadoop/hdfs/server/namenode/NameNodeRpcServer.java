@@ -525,6 +525,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
           .setPort(msyncRpcAddr.getPort())
           .setNumHandlers(msyncHandlerCount)
           .setVerbose(false)
+          .setRpcPasswordAuthenticate(clientRPCSdiAuthEnabled)
           .setSecretManager(namesystem.getDelegationTokenSecretManager())
           .setAlignmentContext(stateIdContext)
           .build();
@@ -556,7 +557,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
         .setVerbose(false)
         .setSecretManager(namesystem.getDelegationTokenSecretManager())
         .setAlignmentContext(stateIdContext)
-        .setRpcPasswordAuthenticate(true)
+        .setRpcPasswordAuthenticate(clientRPCSdiAuthEnabled)
         .build();
 
     // Add all the RPC protocols that the namenode implements

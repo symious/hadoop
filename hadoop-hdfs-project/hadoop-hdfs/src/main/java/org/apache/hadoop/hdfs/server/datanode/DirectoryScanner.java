@@ -55,7 +55,7 @@ import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTest
 import org.apache.hadoop.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ListMultimap;
 
-import static org.apache.commons.lang.time.DateUtils.MILLIS_PER_SECOND;
+import static org.apache.commons.lang3.time.DateUtils.MILLIS_PER_SECOND;
 
 /**
  * Periodically scans the data directories for block and block metadata files.
