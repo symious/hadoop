@@ -45,6 +45,8 @@ import java.util.EnumSet;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import org.apache.hadoop.hdfs.protocol.Block;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoContiguous;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import org.apache.commons.text.TextStringBuilder;
 import org.apache.hadoop.fs.BlockLocation;
@@ -670,6 +672,21 @@ public class TestDecommission extends AdminStatesBaseTest {
     }
 
     fdos.close();
+  }
+
+  @Test(timeout = 20000)
+  public void testDecommissionWithUnknownBlock() throws IOException {
+    startCluster(1, 3);
+
+    FSNamesystem ns = getCluster().getNamesystem(0);
+    DatanodeManager datanodeManager = ns.getBlockManager().getDatanodeManager();
+
+    BlockInfo blk = new BlockInfoContiguous(new Block(1L), (short) 1);
+    DatanodeDescriptor dn = datanodeManager.getDatanodes().iterator().next();
+    dn.getStorageInfos()[0].addBlock(blk, blk);
+
+    datanodeManager.getDatanodeAdminManager().startDecommission(dn);
+    waitNodeState(dn, DatanodeInfo.AdminStates.DECOMMISSIONED);
   }
 
   private static String scanIntoString(final ByteArrayOutputStream baos) {
