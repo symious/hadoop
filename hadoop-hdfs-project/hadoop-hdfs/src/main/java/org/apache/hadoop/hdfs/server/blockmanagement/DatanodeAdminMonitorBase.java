@@ -54,6 +54,12 @@ public abstract class DatanodeAdminMonitorBase
       PENDING_NODES_QUEUE_COMPARATOR);
 
   /**
+   * Any nodes where decommission or maintenance has been cancelled are added
+   * to this queue for later processing.
+   */
+  private final Queue<DatanodeDescriptor> cancelledNodes = new ArrayDeque<>();
+
+  /**
    * The maximum number of nodes to track in outOfServiceNodeBlocks.
    * A value of 0 means no limit.
    */
@@ -145,6 +151,11 @@ public abstract class DatanodeAdminMonitorBase
   @Override
   public void startTrackingNode(DatanodeDescriptor dn) {
     pendingNodes.add(dn);
+  }
+
+  @Override
+  public Queue<DatanodeDescriptor> getCancelledNodes() {
+    return cancelledNodes;
   }
 
   /**

@@ -72,12 +72,6 @@ public class DatanodeAdminBackoffMonitor extends DatanodeAdminMonitorBase
       outOfServiceNodeBlocks = new HashMap<>();
 
   /**
-   * Any nodes where decommission or maintenance has been cancelled are added
-   * to this queue for later processing.
-   */
-  private final Queue<DatanodeDescriptor> cancelledNodes = new ArrayDeque<>();
-
-  /**
    * The numbe of blocks to process when moving blocks to pendingReplication
    * before releasing and reclaiming the namenode lock.
    */
@@ -151,7 +145,7 @@ public class DatanodeAdminBackoffMonitor extends DatanodeAdminMonitorBase
   @Override
   public void stopTrackingNode(DatanodeDescriptor dn) {
     getPendingNodes().remove(dn);
-    cancelledNodes.add(dn);
+    getCancelledNodes().add(dn);
   }
 
   @Override
@@ -230,7 +224,7 @@ public class DatanodeAdminBackoffMonitor extends DatanodeAdminMonitorBase
           "in maintenance or transitioning state. {} nodes pending. {} " +
           "nodes waiting to be cancelled.",
           numBlocksChecked, outOfServiceNodeBlocks.size(), getPendingNodes().size(),
-          cancelledNodes.size());
+          getCancelledNodes().size());
     }
   }
 
@@ -257,8 +251,8 @@ public class DatanodeAdminBackoffMonitor extends DatanodeAdminMonitorBase
    * write lock to prevent the cancelledNodes list being modified externally.
    */
   private void processCancelledNodes() {
-    while(!cancelledNodes.isEmpty()) {
-      DatanodeDescriptor dn = cancelledNodes.poll();
+    while(!getCancelledNodes().isEmpty()) {
+      DatanodeDescriptor dn = getCancelledNodes().poll();
       outOfServiceNodeBlocks.remove(dn);
       pendingRep.remove(dn);
     }
