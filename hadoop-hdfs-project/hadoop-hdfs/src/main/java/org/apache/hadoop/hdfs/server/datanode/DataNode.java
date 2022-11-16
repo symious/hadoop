@@ -4361,6 +4361,10 @@ public class DataNode extends ReconfigurableBase
     return blockPoolManager.isSlownode();
   }
 
+  BlockPoolManager getBlockPoolManager() {
+    return blockPoolManager;
+  }
+
   @Override // ClientDatanodeProtocol
   public void refreshThrottlerConfig() throws IOException {
     refreshThrottlerConfig(new Configuration());
