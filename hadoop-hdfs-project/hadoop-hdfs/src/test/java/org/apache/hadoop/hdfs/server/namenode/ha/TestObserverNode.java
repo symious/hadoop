@@ -394,6 +394,12 @@ public class TestObserverNode {
     dfs.open(testPath);
     assertSentTo(0);
 
+    dfs.getClient().listPaths("/", new byte[0], true);
+    assertSentTo(0);
+
+    dfs.getClient().getLocatedFileInfo(testPath.toString(), false);
+    assertSentTo(0);
+
     Mockito.reset(bmSpy);
   }
 
@@ -625,6 +631,29 @@ public class TestObserverNode {
         fail("Unexpected exception: " + e);
       }
     }
+  }
+
+  @Test
+  public void testSimpleReadEmptyDirOrFile() throws IOException {
+    // read empty dir
+    dfs.mkdirs(new Path("/emptyDir"));
+    assertSentTo(0);
+
+    dfs.getClient().listPaths("/", new byte[0], true);
+    assertSentTo(2);
+
+    dfs.getClient().getLocatedFileInfo("/emptyDir", true);
+    assertSentTo(2);
+
+    // read empty file
+    dfs.create(new Path("/emptyFile"), (short)1);
+    assertSentTo(0);
+
+    dfs.getClient().getLocatedFileInfo("/emptyFile", true);
+    assertSentTo(2);
+
+    dfs.getClient().getBlockLocations("/emptyFile", 0, 1);
+    assertSentTo(2);
   }
 
   private static void assertSentTo(DistributedFileSystem fs, int nnIdx)
