@@ -69,6 +69,7 @@ public class SerialNumberMap<T> {
       }
       Integer old = t2i.putIfAbsent(t, sn);
       if (old != null) {
+        current.getAndDecrement();
         return old;
       }
       i2t.put(sn, t);
