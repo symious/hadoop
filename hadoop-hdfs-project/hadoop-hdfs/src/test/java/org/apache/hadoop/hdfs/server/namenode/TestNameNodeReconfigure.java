@@ -28,6 +28,7 @@ import org.junit.After;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
 import static org.junit.Assert.*;
@@ -433,6 +434,22 @@ public class TestNameNodeReconfigure {
     assertTrue(nameNode.getConf().getBoolean(
         DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
         DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT));
+  }
+
+  @Test
+  public void testEnableSlowNodesParametersAfterReconfigured()
+      throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode(0);
+    final DatanodeManager datanodeManager = nameNode.namesystem
+        .getBlockManager().getDatanodeManager();
+
+    // By default, avoidSlowDataNodesForRead is false.
+    assertFalse(datanodeManager.getEnableAvoidSlowDataNodesForRead());
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY, "true");
+
+    // After reconfigured, avoidSlowDataNodesForRead is true.
+    assertTrue(datanodeManager.getEnableAvoidSlowDataNodesForRead());
   }
 
   @After
