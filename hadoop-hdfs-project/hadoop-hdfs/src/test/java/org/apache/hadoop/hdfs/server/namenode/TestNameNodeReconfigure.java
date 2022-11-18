@@ -27,6 +27,7 @@ import org.junit.Test;
 import org.junit.Before;
 import org.junit.After;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_PEER_STATS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
@@ -464,6 +465,34 @@ public class TestNameNodeReconfigure {
     // After reconfigured, excludeSlowNodesEnabled is true.
     assertTrue(blockManager.getExcludeSlowNodesEnabled(BlockType.CONTIGUOUS));
     assertTrue(blockManager.getExcludeSlowNodesEnabled(BlockType.STRIPED));
+  }
+
+  @Test
+  public void testSlowPeerTrackerEnabled() throws Exception {
+    final NameNode nameNode = cluster.getNameNode(0);
+    final DatanodeManager datanodeManager = nameNode.namesystem.getBlockManager()
+        .getDatanodeManager();
+
+    assertFalse("SlowNode tracker is already enabled. It should be disabled by default",
+        datanodeManager.getSlowPeerTracker().isSlowPeerTrackerEnabled());
+
+    try {
+      nameNode.reconfigurePropertyImpl(DFS_DATANODE_PEER_STATS_ENABLED_KEY, "non-boolean");
+      fail("should not reach here");
+    } catch (ReconfigurationException e) {
+      assertEquals(
+          "Could not change property dfs.datanode.peer.stats.enabled from 'false' to 'non-boolean'",
+          e.getMessage());
+    }
+
+    nameNode.reconfigurePropertyImpl(DFS_DATANODE_PEER_STATS_ENABLED_KEY, "True");
+    assertTrue("SlowNode tracker is still disabled. Reconfiguration could not be successful",
+        datanodeManager.getSlowPeerTracker().isSlowPeerTrackerEnabled());
+
+    nameNode.reconfigurePropertyImpl(DFS_DATANODE_PEER_STATS_ENABLED_KEY, null);
+    assertFalse("SlowNode tracker is still enabled. Reconfiguration could not be successful",
+        datanodeManager.getSlowPeerTracker().isSlowPeerTrackerEnabled());
+
   }
 
   @After
