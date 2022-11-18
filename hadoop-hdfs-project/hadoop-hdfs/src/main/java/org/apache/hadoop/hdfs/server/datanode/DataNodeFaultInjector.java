@@ -146,4 +146,9 @@ public class DataNodeFaultInjector {
    * Just delay delete replica a while.
    */
   public void delayDeleteReplica() {}
+
+  /**
+   * Used as a hook to delay sending the response of the last packet.
+   */
+  public void delayAckLastPacket() throws IOException {}
 }
