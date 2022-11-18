@@ -692,12 +692,6 @@ class DataStreamer extends Daemon {
           if (shouldStop()) {
             continue;
           }
-          // get packet to be sent.
-          try {
-            backOffIfNecessary();
-          } catch (InterruptedException e) {
-            LOG.debug("Thread interrupted", e);
-          }
           one = dataQueue.getFirst(); // regular data packet
           SpanId[] parents = one.getTraceParents();
           if (parents.length > 0) {
@@ -756,6 +750,12 @@ class DataStreamer extends Daemon {
           }
         }
 
+        // get packet to be sent.
+        try {
+          backOffIfNecessary();
+        } catch (InterruptedException e) {
+          LOG.debug("Thread interrupted", e);
+        }
         LOG.debug("{} sending {}", this, one);
 
         // write out data to remote datanode
