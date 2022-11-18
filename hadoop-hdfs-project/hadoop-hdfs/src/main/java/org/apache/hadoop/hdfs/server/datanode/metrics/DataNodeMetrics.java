@@ -210,6 +210,12 @@ public class DataNodeMetrics {
   private MutableCounterLong numProcessedCommands;
   @Metric("Rate of processed commands of all BPServiceActors")
   private MutableRate processedCommandsOp;
+  @Metric MutableCounterLong packetsReceived;
+  @Metric MutableCounterLong packetsSlowWriteToMirror;
+  @Metric MutableCounterLong packetsSlowWriteToDisk;
+  @Metric MutableCounterLong packetsSlowWriteToOsCache;
+  @Metric private MutableCounterLong slowFlushOrSyncCount;
+  @Metric private MutableCounterLong slowAckToUpstreamCount;
 
   final MetricsRegistry registry = new MetricsRegistry("datanode");
   @Metric("Milliseconds spent on calling NN rpc")
@@ -545,6 +551,14 @@ public class DataNodeMetrics {
     volumeFailures.incr(size);
   }
 
+  public void incrSlowFlushOrSyncCount() {
+    slowFlushOrSyncCount.incr();
+  }
+
+  public void incrSlowAckToUpstreamCount() {
+    slowAckToUpstreamCount.incr();
+  }
+
   public void incrDatanodeNetworkErrors() {
     datanodeNetworkErrors.incr();
   }
@@ -801,5 +815,21 @@ public class DataNodeMetrics {
     }
     metricValue.add(size);
     overallDNCrossDCTraffic.add(size);
+  }
+
+  public void incrPacketsReceived() {
+    packetsReceived.incr();
+  }
+
+  public void incrPacketsSlowWriteToMirror() {
+    packetsSlowWriteToMirror.incr();
+  }
+
+  public void incrPacketsSlowWriteToDisk() {
+    packetsSlowWriteToDisk.incr();
+  }
+
+  public void incrPacketsSlowWriteToOsCache() {
+    packetsSlowWriteToOsCache.incr();
   }
 }

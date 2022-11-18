@@ -42,6 +42,7 @@ import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 
 import net.jcip.annotations.NotThreadSafe;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology;
+import org.mockito.stubbing.Answer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -522,6 +523,58 @@ public class TestDataNodeMetrics {
     assertCounter("HeartbeatsNumOps", 1L, rb);
   }
 
+  @Test(timeout = 60000)
+  public void testSlowMetrics() throws Exception {
+    DataNodeFaultInjector dnFaultInjector = new DataNodeFaultInjector() {
+      @Override public void delay() {
+        try {
+          Thread.sleep(310);
+        } catch (InterruptedException ignored) {
+        }
+      }
+    };
+    DataNodeFaultInjector oldDnInjector = DataNodeFaultInjector.get();
+    DataNodeFaultInjector.set(dnFaultInjector);
+
+    Configuration conf = new HdfsConfiguration();
+    MiniDFSCluster cluster = null;
+    try {
+      cluster = new MiniDFSCluster.Builder(conf).numDataNodes(3).build();
+      final FileSystem fs = cluster.getFileSystem();
+      List<DataNode> datanodes = cluster.getDataNodes();
+      assertEquals(datanodes.size(), 3);
+      final DataNode datanode = datanodes.get(0);
+      MetricsRecordBuilder rb = getMetrics(datanode.getMetrics().name());
+      final long longFileLen = 10;
+      final long startFlushOrSyncValue =
+          getLongCounter("SlowFlushOrSyncCount", rb);
+      final long startAckToUpstreamValue =
+          getLongCounter("SlowAckToUpstreamCount", rb);
+      final AtomicInteger x = new AtomicInteger(0);
+
+      GenericTestUtils.waitFor(() -> {
+        x.getAndIncrement();
+        try {
+          DFSTestUtil.createFile(fs, new Path("/time.txt." + x.get()), longFileLen,
+              (short) 3, Time.monotonicNow());
+        } catch (IOException ioe) {
+          LOG.error("Caught IOException while ingesting DN metrics", ioe);
+          return false;
+        }
+        MetricsRecordBuilder rbNew = getMetrics(datanode.getMetrics().name());
+        final long endFlushOrSyncValue = getLongCounter("SlowFlushOrSyncCount", rbNew);
+        final long endAckToUpstreamValue = getLongCounter("SlowAckToUpstreamCount", rbNew);
+        return endFlushOrSyncValue > startFlushOrSyncValue
+            && endAckToUpstreamValue > startAckToUpstreamValue;
+      }, 30, 30000);
+    } finally {
+      DataNodeFaultInjector.set(oldDnInjector);
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
+
   @Test
   public void testNNRpcMetricsWithHA() throws IOException {
     Configuration conf = new HdfsConfiguration();
@@ -629,6 +682,58 @@ public class TestDataNodeMetrics {
       if (!excluded.contains(metric)) {
         assertCounter(metric, 0L, rb);
       }
+    }
+  }
+
+  @Test
+  public void testReceivePacketSlowMetrics() throws Exception {
+    Configuration conf = new HdfsConfiguration();
+    final int interval = 1;
+    conf.setInt(DFSConfigKeys.DFS_METRICS_PERCENTILES_INTERVALS_KEY, interval);
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
+        .numDataNodes(3).build();
+    DataNodeFaultInjector oldInjector = DataNodeFaultInjector.get();
+    try {
+      cluster.waitActive();
+      DistributedFileSystem fs = cluster.getFileSystem();
+      final DataNodeFaultInjector injector =
+          Mockito.mock(DataNodeFaultInjector.class);
+      Answer answer = invocationOnMock -> {
+        // make the op taking longer time
+        Thread.sleep(1000);
+        return null;
+      };
+      Mockito.doAnswer(answer).when(injector).
+          stopSendingPacketDownstream(Mockito.anyString());
+      Mockito.doAnswer(answer).when(injector).delayWriteToOsCache();
+      Mockito.doAnswer(answer).when(injector).delayWriteToDisk();
+      DataNodeFaultInjector.set(injector);
+      Path testFile = new Path("/testFlushNanosMetric.txt");
+      FSDataOutputStream fout = fs.create(testFile);
+      DFSOutputStream dout = (DFSOutputStream) fout.getWrappedStream();
+      fout.write(new byte[1]);
+      fout.hsync();
+      DatanodeInfo[] pipeline = dout.getPipeline();
+      fout.close();
+      dout.close();
+      DatanodeInfo headDatanodeInfo = pipeline[0];
+      List<DataNode> datanodes = cluster.getDataNodes();
+      DataNode headNode = datanodes.stream().filter(d -> d.getDatanodeId().equals(headDatanodeInfo))
+          .findFirst().orElseGet(null);
+      assertNotNull("Could not find the head of the datanode write pipeline",
+          headNode);
+      MetricsRecordBuilder dnMetrics = getMetrics(headNode.getMetrics().name());
+      assertTrue("More than 1 packet received",
+          getLongCounter("PacketsReceived", dnMetrics) > 1L);
+      assertTrue("More than 1 slow packet to mirror",
+          getLongCounter("PacketsSlowWriteToMirror", dnMetrics) > 1L);
+      assertCounter("PacketsSlowWriteToDisk", 1L, dnMetrics);
+      assertCounter("PacketsSlowWriteToOsCache", 0L, dnMetrics);
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+      DataNodeFaultInjector.set(oldInjector);
     }
   }
 }

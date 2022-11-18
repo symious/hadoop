@@ -412,6 +412,7 @@ class BlockReceiver implements Closeable {
   void flushOrSync(boolean isSync) throws IOException {
     long flushTotalNanos = 0;
     long begin = Time.monotonicNow();
+    DataNodeFaultInjector.get().delay();
     if (checksumOut != null) {
       long flushStartNanos = System.nanoTime();
       checksumOut.flush();
@@ -445,6 +446,7 @@ class BlockReceiver implements Closeable {
     }
     long duration = Time.monotonicNow() - begin;
     if (duration > datanodeSlowLogThresholdMs && LOG.isWarnEnabled()) {
+      datanode.metrics.incrSlowFlushOrSyncCount();
       LOG.warn("Slow flushOrSync took " + duration + "ms (threshold="
           + datanodeSlowLogThresholdMs + "ms), isSync:" + isSync + ", flushTotalNanos="
           + flushTotalNanos + "ns, volume=" + getVolumeBaseUri()
@@ -587,6 +589,8 @@ class BlockReceiver implements Closeable {
       return 0;
     }
 
+    datanode.metrics.incrPacketsReceived();
+
     //First write the packet to the mirror:
     if (mirrorOut != null && !mirrorError) {
       try {
@@ -603,6 +607,7 @@ class BlockReceiver implements Closeable {
             duration);
         trackSendPacketToLastNodeInPipeline(duration);
         if (duration > datanodeSlowLogThresholdMs && LOG.isWarnEnabled()) {
+          datanode.metrics.incrPacketsSlowWriteToMirror();
           LOG.warn("Slow BlockReceiver write packet to mirror took " + duration
               + "ms (threshold=" + datanodeSlowLogThresholdMs + "ms), "
               + "downstream DNs=" + Arrays.toString(downstreamDNs)
@@ -736,8 +741,11 @@ class BlockReceiver implements Closeable {
           long begin = Time.monotonicNow();
           streams.writeDataToDisk(dataBuf.array(),
               startByteToDisk, numBytesToDisk);
+          // no-op in prod
+          DataNodeFaultInjector.get().delayWriteToDisk();
           long duration = Time.monotonicNow() - begin;
           if (duration > datanodeSlowLogThresholdMs && LOG.isWarnEnabled()) {
+            datanode.metrics.incrPacketsSlowWriteToDisk();
             LOG.warn("Slow BlockReceiver write data to disk cost:" + duration
                 + "ms (threshold=" + datanodeSlowLogThresholdMs + "ms), "
                 + "volume=" + getVolumeBaseUri()
@@ -929,8 +937,11 @@ class BlockReceiver implements Closeable {
               POSIX_FADV_DONTNEED);
         }
         lastCacheManagementOffset = offsetInBlock;
+        // For testing. Normally no-op.
+        DataNodeFaultInjector.get().delayWriteToOsCache();
         long duration = Time.monotonicNow() - begin;
         if (duration > datanodeSlowLogThresholdMs && LOG.isWarnEnabled()) {
+          datanode.metrics.incrPacketsSlowWriteToOsCache();
           LOG.warn("Slow manageWriterOsCache took " + duration
               + "ms (threshold=" + datanodeSlowLogThresholdMs
               + "ms), volume=" + getVolumeBaseUri()
@@ -1641,6 +1652,7 @@ class BlockReceiver implements Closeable {
       }
       // send my ack back to upstream datanode
       long begin = Time.monotonicNow();
+      DataNodeFaultInjector.get().delay();
       /* for test only, no-op in production system */
       DataNodeFaultInjector.get().delaySendingAckToUpstream(inAddr);
       replyAck.write(upstreamOut);
@@ -1650,6 +1662,7 @@ class BlockReceiver implements Closeable {
           inAddr,
           duration);
       if (duration > datanodeSlowLogThresholdMs) {
+        datanode.metrics.incrSlowAckToUpstreamCount();
         LOG.warn("Slow PacketResponder send ack to upstream took " + duration
             + "ms (threshold=" + datanodeSlowLogThresholdMs + "ms), " + myString
             + ", replyAck=" + replyAck
