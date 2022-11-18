@@ -112,6 +112,7 @@ public class DFSOutputStream extends FSOutputSummer
   protected final String src;
   protected final long fileId;
   private final String namespace;
+  private final String uniqKey;
   protected final long blockSize;
   protected final int bytesPerChecksum;
 
@@ -194,6 +195,14 @@ public class DFSOutputStream extends FSOutputSummer
     this.src = src;
     this.fileId = stat.getFileId();
     this.namespace = stat.getNamespace();
+    if (this.namespace == null) {
+      String defaultKey = dfsClient.getConfiguration().get(
+          HdfsClientConfigKeys.DFS_OUTPUT_STREAM_UNIQ_DEFAULT_KEY,
+          HdfsClientConfigKeys.DFS_OUTPUT_STREAM_UNIQ_DEFAULT_KEY_DEFAULT);
+      this.uniqKey = defaultKey + "_" + this.fileId;
+    } else {
+      this.uniqKey = this.namespace + "_" + this.fileId;
+    }
     this.blockSize = stat.getBlockSize();
     this.blockReplication = stat.getReplication();
     this.fileEncryptionInfo = stat.getFileEncryptionInfo();
@@ -816,7 +825,7 @@ public class DFSOutputStream extends FSOutputSummer
 
   void setClosed() {
     closed = true;
-    dfsClient.endFileLease(fileId);
+    dfsClient.endFileLease(getUniqKey());
     getStreamer().release();
   }
 
@@ -1056,6 +1065,11 @@ public class DFSOutputStream extends FSOutputSummer
   @VisibleForTesting
   public String getNamespace() {
     return namespace;
+  }
+
+  @VisibleForTesting
+  public String getUniqKey() {
+    return this.uniqKey;
   }
 
   /**
