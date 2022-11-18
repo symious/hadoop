@@ -21,6 +21,8 @@ package org.apache.hadoop.hdfs.server.namenode;
 import java.io.IOException;
 
 import org.apache.hadoop.hdfs.MiniDFSNNTopology;
+import org.apache.hadoop.hdfs.protocol.BlockType;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
 import org.junit.Test;
 import org.junit.Before;
 import org.junit.After;
@@ -29,6 +31,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
 import static org.junit.Assert.*;
@@ -440,16 +443,27 @@ public class TestNameNodeReconfigure {
   public void testEnableSlowNodesParametersAfterReconfigured()
       throws ReconfigurationException {
     final NameNode nameNode = cluster.getNameNode(0);
-    final DatanodeManager datanodeManager = nameNode.namesystem
-        .getBlockManager().getDatanodeManager();
+    final BlockManager blockManager = nameNode.namesystem.getBlockManager();
+    final DatanodeManager datanodeManager = blockManager.getDatanodeManager();
 
     // By default, avoidSlowDataNodesForRead is false.
     assertFalse(datanodeManager.getEnableAvoidSlowDataNodesForRead());
-
-    nameNode.reconfigureProperty(DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY, "true");
+    nameNode.reconfigureProperty(
+        DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY, Boolean.toString(true));
 
     // After reconfigured, avoidSlowDataNodesForRead is true.
     assertTrue(datanodeManager.getEnableAvoidSlowDataNodesForRead());
+
+    // By default, excludeSlowNodesEnabled is false.
+    assertFalse(blockManager.getExcludeSlowNodesEnabled(BlockType.CONTIGUOUS));
+    assertFalse(blockManager.getExcludeSlowNodesEnabled(BlockType.STRIPED));
+
+    nameNode.reconfigureProperty(
+        DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY, Boolean.toString(true));
+
+    // After reconfigured, excludeSlowNodesEnabled is true.
+    assertTrue(blockManager.getExcludeSlowNodesEnabled(BlockType.CONTIGUOUS));
+    assertTrue(blockManager.getExcludeSlowNodesEnabled(BlockType.STRIPED));
   }
 
   @After
