@@ -498,4 +498,8 @@ public class DNConf {
         DFS_DATANODE_OUTLIERS_REPORT_INTERVAL_KEY,
         DFS_DATANODE_OUTLIERS_REPORT_INTERVAL_DEFAULT, TimeUnit.MILLISECONDS);
   }
+
+  public long getBlockReportInterval() {
+    return blockReportInterval;
+  }
 }
