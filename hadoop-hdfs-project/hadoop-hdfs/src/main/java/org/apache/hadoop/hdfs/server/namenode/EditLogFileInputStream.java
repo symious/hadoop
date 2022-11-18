@@ -324,7 +324,10 @@ public class EditLogFileInputStream extends EditLogInputStream {
   
   @Override
   public String toString() {
-    return getName();
+    return "EditLogFileInputStream{" + "log=" + log.getName() +
+        ", firstTxId=" + firstTxId + ", lastTxId=" + lastTxId +
+        ", isInProgress=" + isInProgress + ", maxOpSize=" + maxOpSize +
+        ", state=" + state + ", logVersion=" + logVersion +'}';
   }
 
   /**
