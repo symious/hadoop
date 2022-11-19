@@ -417,6 +417,11 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
       } while (deadLine > System.currentTimeMillis());
       throw new IOException("Minimum length was not achieved within timeout");
     }
+
+    @Override
+    public FsVolumeSpi getVolume() {
+      return getStorage(theBlock).getVolume();
+    }
   }
 
   /**
