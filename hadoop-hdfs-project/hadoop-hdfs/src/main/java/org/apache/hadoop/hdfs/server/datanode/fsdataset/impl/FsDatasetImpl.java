@@ -49,6 +49,7 @@ import javax.management.NotCompliantMBeanException;
 import javax.management.ObjectName;
 import javax.management.StandardMBean;
 
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.hdfs.server.datanode.DataSetLockManager;
 import org.apache.hadoop.hdfs.server.datanode.LocalReplicaInPipeline;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -2494,6 +2495,8 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       final long diskGS = diskMetaFileExists ?
           Block.getGenerationStamp(diskMetaFile.getName()) :
           HdfsConstants.GRANDFATHER_GENERATION_STAMP;
+      final boolean isRegular = FileUtil.isRegularFile(diskMetaFile, false) &&
+          FileUtil.isRegularFile(diskFile, false);
 
       if (vol.getStorageType() == StorageType.PROVIDED) {
         if (memBlockInfo == null) {
@@ -2662,6 +2665,9 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
             + memBlockInfo.getNumBytes() + " to "
             + memBlockInfo.getBlockDataLength());
         memBlockInfo.setNumBytes(memBlockInfo.getBlockDataLength());
+      } else if (!isRegular) {
+        corruptBlock = new Block(memBlockInfo);
+        LOG.warn("Block:{} is not a regular file.", corruptBlock.getBlockId());
       }
     }
 
