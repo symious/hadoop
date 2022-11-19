@@ -176,6 +176,11 @@ public class LocalReplicaInPipeline extends LocalReplica
   }
 
   @Override
+  public void releaseReplicaInfoBytesReserved() {
+    bytesReserved = 0;
+  }
+
+  @Override
   public void setLastChecksumAndDataLen(long dataLength, byte[] checksum) {
     lock.lock();
     try {

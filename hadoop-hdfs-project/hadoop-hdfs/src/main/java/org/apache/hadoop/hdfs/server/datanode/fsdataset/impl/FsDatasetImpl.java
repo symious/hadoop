@@ -1820,6 +1820,9 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
 
         newReplicaInfo = v.addFinalizedBlock(
             bpid, replicaInfo, replicaInfo, replicaInfo.getBytesReserved());
+        if (replicaInfo instanceof ReplicaInPipeline) {
+          ((ReplicaInPipeline) replicaInfo).releaseReplicaInfoBytesReserved();
+        }
         if (v.isTransientStorage()) {
           releaseLockedMemory(
               replicaInfo.getOriginalBytesReserved()
@@ -3562,6 +3565,10 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     ReplicaInfo replicaInfo = new FinalizedReplica(dstBlock.getLocalBlock(),
         getVolume(srcBlock), dstBlockFinalFile.getParentFile());
     volumeMap.add(dstBlock.getBlockPoolId(), replicaInfo);
+  }
+
+  public List<FsVolumeImpl> getVolumeList() {
+    return volumes.getVolumes();
   }
 }
 
