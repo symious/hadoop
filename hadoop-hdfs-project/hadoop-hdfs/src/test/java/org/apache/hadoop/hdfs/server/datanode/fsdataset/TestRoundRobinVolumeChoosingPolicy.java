@@ -21,12 +21,15 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
+
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_ROUND_ROBIN_VOLUME_CHOOSING_POLICY_ADDITIONAL_AVAILABLE_SPACE_KEY;
 
 public class TestRoundRobinVolumeChoosingPolicy {
 
@@ -65,6 +68,46 @@ public class TestRoundRobinVolumeChoosingPolicy {
     // Fail if no volume can be chosen?
     try {
       policy.chooseVolume(volumes, Long.MAX_VALUE, null);
+      Assert.fail();
+    } catch (IOException e) {
+      // Passed.
+    }
+  }
+
+  // Test the Round-Robin block-volume choosing algorithm with
+  // additional available space configured.
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testRRWithAdditionalAvailableSpace() throws Exception {
+    Configuration conf = new Configuration();
+    // Set the additional available space needed
+    conf.setLong(DFS_DATANODE_ROUND_ROBIN_VOLUME_CHOOSING_POLICY_ADDITIONAL_AVAILABLE_SPACE_KEY,
+        100);
+    final RoundRobinVolumeChoosingPolicy<FsVolumeSpi> policy =
+        ReflectionUtils.newInstance(RoundRobinVolumeChoosingPolicy.class, conf);
+    testRRWithAdditionalAvailableSpace(policy);
+  }
+
+  public static void testRRWithAdditionalAvailableSpace(
+      VolumeChoosingPolicy<FsVolumeSpi> policy) throws Exception {
+    final List<FsVolumeSpi> volumes = new ArrayList<FsVolumeSpi>();
+
+    // First volume, with 100 bytes of space.
+    volumes.add(Mockito.mock(FsVolumeSpi.class));
+    Mockito.when(volumes.get(0).getAvailable()).thenReturn(100L);
+
+    // Second volume, with 200 bytes of space.
+    volumes.add(Mockito.mock(FsVolumeSpi.class));
+    Mockito.when(volumes.get(1).getAvailable()).thenReturn(200L);
+
+    // The first volume has only 100L space, so the policy should choose
+    // the second one with additional available space configured as 100L.
+    Assert.assertEquals(volumes.get(1), policy.chooseVolume(volumes, 0, null));
+    Assert.assertEquals(volumes.get(1), policy.chooseVolume(volumes, 0, null));
+
+    // Fail if no volume can be chosen?
+    try {
+      policy.chooseVolume(volumes, 100, null);
       Assert.fail();
     } catch (IOException e) {
       // Passed.
