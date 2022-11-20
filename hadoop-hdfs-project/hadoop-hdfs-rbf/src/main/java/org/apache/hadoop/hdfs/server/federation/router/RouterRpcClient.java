@@ -1305,19 +1305,12 @@ public class RouterRpcClient {
    * @return If the call succeeds in any location.
    * @throws IOException If any of the calls return an exception.
    */
-  public <T extends RemoteLocationContext, R> boolean invokeAll(
+  public <T extends RemoteLocationContext> boolean invokeAll(
       final Collection<T> locations, final RemoteMethod method)
-          throws IOException {
-    boolean anyResult = false;
+      throws IOException {
     Map<T, Boolean> results =
         invokeConcurrent(locations, method, false, false, Boolean.class);
-    for (Boolean value : results.values()) {
-      boolean result = value.booleanValue();
-      if (result) {
-        anyResult = true;
-      }
-    }
-    return anyResult;
+    return results.containsValue(true);
   }
 
   /**
