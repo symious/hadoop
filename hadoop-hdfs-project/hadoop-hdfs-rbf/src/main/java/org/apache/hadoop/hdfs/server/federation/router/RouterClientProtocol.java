@@ -1129,24 +1129,26 @@ public class RouterClientProtocol implements ClientProtocol {
   public HdfsFileStatus getFileInfo(String src) throws IOException {
     rpcServer.checkOperation(NameNode.OperationCategory.READ);
 
-    final List<RemoteLocation> locations =
-        rpcServer.getLocationsForPath(src, false, false);
-    RemoteMethod method = new RemoteMethod("getFileInfo",
-        new Class<?>[] {String.class}, new RemoteParam());
-
     HdfsFileStatus ret = null;
-    String invokeType = INVOKE_TYPE_SEQUENTIAL;
+    IOException noLocationException = null;
+    String type = INVOKE_TYPE_SEQUENTIAL;
     try {
+      final List<RemoteLocation> locations = rpcServer.getLocationsForPath(src, false, false);
+      RemoteMethod method = new RemoteMethod("getFileInfo",
+          new Class<?>[] {String.class}, new RemoteParam());
+
       // If it's a directory, we check in all locations
       if (rpcServer.isPathAll(src)) {
-        invokeType = INVOKE_TYPE_CONCURRENT;
+        type = INVOKE_TYPE_CONCURRENT;
         ret = getFileInfoAll(locations, method);
       } else {
         // Check for file information sequentially
         ret = rpcClient.invokeSequential(locations, method, HdfsFileStatus.class, null);
       }
-    } catch (IOException e) {
-      logAuditEvent(false, OperationName.GET_FILE_INFO, invokeType, src);
+    } catch (NoLocationException | RouterResolveException e) {
+      noLocationException = e;
+    } catch (Exception e) {
+      logAuditEvent(false, OperationName.GET_FILE_INFO, type, src);
       throw e;
     }
 
@@ -1156,7 +1158,7 @@ public class RouterClientProtocol implements ClientProtocol {
       if (children != null && !children.isEmpty()) {
         Map<String, Long> dates = getMountPointDates(src);
         long date = 0;
-        if (dates != null && dates.containsKey(src)) {
+        if (dates.containsKey(src)) {
           date = dates.get(src);
         }
         ret = getMountPointStatus(src, children.size(), date);
@@ -1166,7 +1168,14 @@ public class RouterClientProtocol implements ClientProtocol {
       }
     }
 
-    logAuditEvent(true, OperationName.GET_FILE_INFO, invokeType, src);
+    // Can't find mount point for path and the path didn't contain any sub monit points,
+    // throw the NoLocationException to client.
+    if (ret == null && noLocationException != null) {
+      logAuditEvent(false, OperationName.GET_FILE_INFO, type, src);
+      throw noLocationException;
+    }
+
+    logAuditEvent(true, OperationName.GET_FILE_INFO, type, src);
     return ret;
   }
 

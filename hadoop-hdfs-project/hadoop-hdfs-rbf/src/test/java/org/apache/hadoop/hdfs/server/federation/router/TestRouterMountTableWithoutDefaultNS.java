@@ -22,12 +22,12 @@ import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster;
 import org.apache.hadoop.hdfs.server.federation.RouterConfigBuilder;
 import org.apache.hadoop.hdfs.server.federation.StateStoreDFSCluster;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableManager;
 import org.apache.hadoop.hdfs.server.federation.resolver.MountTableResolver;
+import org.apache.hadoop.hdfs.server.federation.resolver.RouterResolveException;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.AddMountTableEntryRequest;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.AddMountTableEntryResponse;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntriesRequest;
@@ -54,7 +54,6 @@ public class TestRouterMountTableWithoutDefaultNS {
   private static StateStoreDFSCluster cluster;
   private static MiniRouterDFSCluster.RouterContext routerContext;
   private static MountTableResolver mountTable;
-  private static ClientProtocol routerProtocol;
   private static FileSystem nnFs0;
   private static FileSystem nnFs1;
 
@@ -78,7 +77,6 @@ public class TestRouterMountTableWithoutDefaultNS {
     nnFs1 = cluster.getNamenode("ns1", null).getFileSystem();
     routerContext = cluster.getRandomRouter();
     Router router = routerContext.getRouter();
-    routerProtocol = routerContext.getClient().getNamenode();
     mountTable = (MountTableResolver) router.getSubclusterResolver();
   }
 
@@ -159,5 +157,18 @@ public class TestRouterMountTableWithoutDefaultNS {
         outputStream.write(writeSize);
       }
     }
+  }
+
+  /**
+   * Verify that RBF doesn't support get the file information
+   * with no location and sub mount points.
+   */
+  @Test
+  public void testGetFileInfoWithoutSubMountPoint() throws Exception {
+    MountTable addEntry = MountTable.newInstance("/testdir/1",
+        Collections.singletonMap("ns0", "/testdir/1"));
+    assertTrue(addMountTable(addEntry));
+    LambdaTestUtils.intercept(RouterResolveException.class,
+        () -> routerContext.getRouter().getRpcServer().getFileInfo("/testdir2"));
   }
 }
