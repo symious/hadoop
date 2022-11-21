@@ -81,6 +81,11 @@ public abstract class StripedBlockChecksumReconstructor
       long remaining = maxTargetLength - getPositionInBlock();
       final int toReconstructLen = (int) Math
           .min(getStripedReader().getBufferSize(), remaining);
+
+      long bytesToRead = (long) toReconstructLen * getStripedReader().getMinRequiredSources();
+      if (getDatanode().getEcReconstructReadThrottler() != null) {
+        getDatanode().getEcReconstructReadThrottler().throttle(bytesToRead);
+      }
       // step1: read from minimum source DNs required for reconstruction.
       // The returned success list is the source DNs we do real read from
       getStripedReader().readMinimumSources(toReconstructLen);
