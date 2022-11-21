@@ -702,6 +702,7 @@ public class TestBlockManager {
             new NumberReplicas(),
             new ArrayList<Byte>(),
             new ArrayList<Byte>(),
+            new ArrayList<Byte>(),
             LowRedundancyBlocks.QUEUE_HIGHEST_PRIORITY)[0]);
 
     assertEquals("Does not choose a source node for a less-than-highest-priority"
@@ -712,6 +713,7 @@ public class TestBlockManager {
             cntNodes,
             liveNodes,
             new NumberReplicas(),
+            new ArrayList<Byte>(),
             new ArrayList<Byte>(),
             new ArrayList<Byte>(),
             LowRedundancyBlocks.QUEUE_VERY_LOW_REDUNDANCY).length);
@@ -727,6 +729,7 @@ public class TestBlockManager {
             cntNodes,
             liveNodes,
             new NumberReplicas(),
+            new ArrayList<Byte>(),
             new ArrayList<Byte>(),
             new ArrayList<Byte>(),
             LowRedundancyBlocks.QUEUE_HIGHEST_PRIORITY).length);
@@ -775,6 +778,7 @@ public class TestBlockManager {
     NumberReplicas numReplicas = new NumberReplicas();
     List<Byte> liveBlockIndices = new ArrayList<>();
     List<Byte> liveBusyBlockIndices = new ArrayList<>();
+    List<Byte> excludeReconstructedIndices = new ArrayList<>();
 
     bm.chooseSourceDatanodes(
             aBlockInfoStriped,
@@ -782,6 +786,7 @@ public class TestBlockManager {
             liveNodes,
             numReplicas, liveBlockIndices,
             liveBusyBlockIndices,
+            excludeReconstructedIndices,
             LowRedundancyBlocks.QUEUE_VERY_LOW_REDUNDANCY);
 
     assertEquals("Choose the source node for reconstruction with one node reach"
@@ -838,6 +843,7 @@ public class TestBlockManager {
     NumberReplicas numReplicas = new NumberReplicas();
     List<Byte> liveBlockIndices = new ArrayList<>();
     List<Byte> liveBusyBlockIndices = new ArrayList<>();
+    List<Byte> excludeReconstructedIndices = new ArrayList<>();
 
     bm.chooseSourceDatanodes(
         aBlockInfoStriped,
@@ -845,6 +851,7 @@ public class TestBlockManager {
         nodesContainingLiveReplicas,
         numReplicas, liveBlockIndices,
         liveBusyBlockIndices,
+        excludeReconstructedIndices,
         LowRedundancyBlocks.QUEUE_HIGHEST_PRIORITY);
     assertEquals("There are 5 live replicas in " +
             "[ds2, ds3, ds4, ds5, ds6] datanodes ",
@@ -975,6 +982,7 @@ public class TestBlockManager {
             new NumberReplicas(),
             new LinkedList<Byte>(),
             new ArrayList<Byte>(),
+            new ArrayList<Byte>(),
             LowRedundancyBlocks.QUEUE_LOW_REDUNDANCY)[0]);
 
 
@@ -990,6 +998,7 @@ public class TestBlockManager {
             liveNodes,
             new NumberReplicas(),
             new LinkedList<Byte>(),
+            new ArrayList<Byte>(),
             new ArrayList<Byte>(),
             LowRedundancyBlocks.QUEUE_LOW_REDUNDANCY).length);
   }

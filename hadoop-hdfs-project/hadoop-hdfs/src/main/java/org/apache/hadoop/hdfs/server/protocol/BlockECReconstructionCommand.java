@@ -78,21 +78,24 @@ public class BlockECReconstructionCommand extends DatanodeCommand {
     private String[] targetStorageIDs;
     private StorageType[] targetStorageTypes;
     private final byte[] liveBlockIndices;
+    private final byte[] excludeReconstructedIndices;
     private final ErasureCodingPolicy ecPolicy;
 
     public BlockECReconstructionInfo(ExtendedBlock block,
         DatanodeInfo[] sources, DatanodeStorageInfo[] targetDnStorageInfo,
-        byte[] liveBlockIndices, ErasureCodingPolicy ecPolicy) {
+        byte[] liveBlockIndices, byte[] excludeReconstructedIndices,
+        ErasureCodingPolicy ecPolicy) {
       this(block, sources, DatanodeStorageInfo
           .toDatanodeInfos(targetDnStorageInfo), DatanodeStorageInfo
           .toStorageIDs(targetDnStorageInfo), DatanodeStorageInfo
-          .toStorageTypes(targetDnStorageInfo), liveBlockIndices, ecPolicy);
+          .toStorageTypes(targetDnStorageInfo), liveBlockIndices,
+          excludeReconstructedIndices, ecPolicy);
     }
 
     public BlockECReconstructionInfo(ExtendedBlock block,
         DatanodeInfo[] sources, DatanodeInfo[] targets,
         String[] targetStorageIDs, StorageType[] targetStorageTypes,
-        byte[] liveBlockIndices, ErasureCodingPolicy ecPolicy) {
+        byte[] liveBlockIndices, byte[] excludeReconstructedIndices, ErasureCodingPolicy ecPolicy) {
       this.block = block;
       this.sources = sources;
       this.targets = targets;
@@ -100,6 +103,7 @@ public class BlockECReconstructionCommand extends DatanodeCommand {
       this.targetStorageTypes = targetStorageTypes;
       this.liveBlockIndices = liveBlockIndices == null ?
           new byte[]{} : liveBlockIndices;
+      this.excludeReconstructedIndices = excludeReconstructedIndices;
       this.ecPolicy = ecPolicy;
     }
 
@@ -129,6 +133,10 @@ public class BlockECReconstructionCommand extends DatanodeCommand {
 
     public ErasureCodingPolicy getErasureCodingPolicy() {
       return ecPolicy;
+    }
+
+    public byte[] getExcludeReconstructedIndices() {
+      return excludeReconstructedIndices;
     }
 
     @Override

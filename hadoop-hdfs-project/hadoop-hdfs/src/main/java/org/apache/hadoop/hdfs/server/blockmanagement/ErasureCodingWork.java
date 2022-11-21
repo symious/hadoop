@@ -33,6 +33,7 @@ import java.util.Set;
 class ErasureCodingWork extends BlockReconstructionWork {
   private final byte[] liveBlockIndicies;
   private final byte[] liveBusyBlockIndicies;
+  private final byte[] excludeReconstructedIndices;
   private final String blockPoolId;
 
   public ErasureCodingWork(String blockPoolId, BlockInfo block,
@@ -41,12 +42,14 @@ class ErasureCodingWork extends BlockReconstructionWork {
       List<DatanodeDescriptor> containingNodes,
       List<DatanodeStorageInfo> liveReplicaStorages,
       int additionalReplRequired, int priority,
-      byte[] liveBlockIndicies, byte[] liveBusyBlockIndicies) {
+      byte[] liveBlockIndicies, byte[] liveBusyBlockIndicies,
+      byte[] excludeReconstrutedIndices) {
     super(block, bc, srcNodes, containingNodes,
         liveReplicaStorages, additionalReplRequired, priority);
     this.blockPoolId = blockPoolId;
     this.liveBlockIndicies = liveBlockIndicies;
     this.liveBusyBlockIndicies = liveBusyBlockIndicies;
+    this.excludeReconstructedIndices=excludeReconstrutedIndices;
     LOG.debug("Creating an ErasureCodingWork to {} reconstruct ",
         block);
   }
@@ -148,7 +151,7 @@ class ErasureCodingWork extends BlockReconstructionWork {
     } else {
       targets[0].getDatanodeDescriptor().addBlockToBeErasureCoded(
           new ExtendedBlock(blockPoolId, stripedBlk), getSrcNodes(), targets,
-          getLiveBlockIndicies(), stripedBlk.getErasureCodingPolicy());
+          liveBlockIndicies, excludeReconstructedIndices, stripedBlk.getErasureCodingPolicy());
     }
   }
 
