@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs;
 
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -65,4 +66,6 @@ public class DFSClientFaultInjector {
   public void sleepBeforeHedgedGet() {}
 
   public void delayWhenRenewLeaseTimeout() {}
+
+  public void onCreateBlockReader(LocatedBlock block, int chunkIndex, long offset, long length) {}
 }
