@@ -23,6 +23,10 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.EnumSet;
 
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
+import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+import org.apache.hadoop.tools.DistCpOptions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -48,6 +52,8 @@ import org.apache.hadoop.tools.util.RetriableCommand;
 import org.apache.hadoop.tools.util.ThrottledInputStream;
 
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+
+import static org.apache.hadoop.tools.mapred.CopyMapper.getFileAttributeSettings;
 
 /**
  * This class extends RetriableCommand to implement the copy of files,
@@ -107,18 +113,19 @@ public class RetriableFileCopyCommand extends RetriableCommand {
   @SuppressWarnings("unchecked")
   @Override
   protected Object doExecute(Object... arguments) throws Exception {
-    assert arguments.length == 4 : "Unexpected argument list.";
+    assert arguments.length == 5 : "Unexpected argument list.";
     CopyListingFileStatus source = (CopyListingFileStatus)arguments[0];
     assert !source.isDirectory() : "Unexpected file-status. Expected file.";
     Path target = (Path)arguments[1];
     Mapper.Context context = (Mapper.Context)arguments[2];
     EnumSet<FileAttribute> fileAttributes
             = (EnumSet<FileAttribute>)arguments[3];
-    return doCopy(source, target, context, fileAttributes);
+    FileStatus sourceStatus = (FileStatus)arguments[4];
+    return doCopy(source, target, context, fileAttributes, sourceStatus);
   }
 
   private long doCopy(CopyListingFileStatus source, Path target,
-      Mapper.Context context, EnumSet<FileAttribute> fileAttributes)
+      Mapper.Context context, EnumSet<FileAttribute> fileAttributes, FileStatus sourceStatus)
       throws IOException {
     LOG.info("Copying {} to {}", source.getPath(), target);
 
@@ -142,7 +149,7 @@ public class RetriableFileCopyCommand extends RetriableCommand {
       long offset = (action == FileAction.APPEND) ?
           targetFS.getFileStatus(target).getLen() : source.getChunkOffset();
       long bytesRead = copyToFile(targetPath, targetFS, source,
-          offset, context, fileAttributes, sourceChecksum);
+          offset, context, fileAttributes, sourceChecksum, sourceStatus);
 
       if (!source.isSplit()) {
         DistCpUtils.compareFileLengthsAndChecksums(source.getLen(), sourceFS,
@@ -185,16 +192,26 @@ public class RetriableFileCopyCommand extends RetriableCommand {
     return conf.getBoolean(DistCpConstants.CONF_LABEL_FAST_COPY_ENABLE, false);
   }
 
+  @SuppressWarnings("checkstyle:parameternumber")
   private long copyToFile(Path targetPath, FileSystem targetFS,
       CopyListingFileStatus source, long sourceOffset, Mapper.Context context,
-      EnumSet<FileAttribute> fileAttributes, final FileChecksum sourceChecksum)
-      throws IOException {
+      EnumSet<FileAttribute> fileAttributes, final FileChecksum sourceChecksum,
+      FileStatus sourceStatus) throws IOException {
     Configuration conf = context.getConfiguration();
     FsPermission permission = FsPermission.getFileDefault().applyUMask(
         FsPermission.getUMask(targetFS.getConf()));
     int copyBufferSize = conf.getInt(
         DistCpOptionSwitch.COPY_BUFFER_SIZE.getConfigLabel(),
         DistCpConstants.COPY_BUFFER_SIZE_DEFAULT);
+    boolean preserveEC = getFileAttributeSettings(context)
+        .contains(DistCpOptions.FileAttribute.ERASURECODINGPOLICY);
+
+    ErasureCodingPolicy ecPolicy = null;
+    if (preserveEC && sourceStatus.isErasureCoded()
+        && sourceStatus instanceof HdfsFileStatus
+        && targetFS instanceof DistributedFileSystem) {
+      ecPolicy = ((HdfsFileStatus) sourceStatus).getErasureCodingPolicy();
+    }
     final OutputStream outStream;
     FastCopy fcp = null;
     if (action == FileAction.OVERWRITE) {
@@ -224,10 +241,24 @@ public class RetriableFileCopyCommand extends RetriableCommand {
             targetFS, targetPath);
         final long blockSize = getBlockSize(fileAttributes, source,
             targetFS, targetPath);
-        FSDataOutputStream out = targetFS.create(targetPath, permission,
-            EnumSet.of(CreateFlag.CREATE, CreateFlag.OVERWRITE),
-            copyBufferSize, repl, blockSize, context,
-            getChecksumOpt(fileAttributes, sourceChecksum));
+        FSDataOutputStream out;
+        ChecksumOpt checksumOpt = getChecksumOpt(fileAttributes, sourceChecksum);
+        if (!preserveEC || ecPolicy == null) {
+          out = targetFS.create(targetPath, permission,
+              EnumSet.of(CreateFlag.CREATE, CreateFlag.OVERWRITE), copyBufferSize,
+              repl, blockSize, context, checksumOpt);
+        } else {
+          DistributedFileSystem dfs = (DistributedFileSystem) targetFS;
+          DistributedFileSystem.HdfsDataOutputStreamBuilder builder =
+              dfs.createFile(targetPath).permission(permission).create()
+                  .overwrite(true).bufferSize(copyBufferSize).replication(repl)
+                  .blockSize(blockSize).progress(context).recursive()
+                  .ecPolicyName(ecPolicy.getName());
+          if (checksumOpt != null) {
+            builder.checksumOpt(checksumOpt);
+          }
+          out = builder.build();
+        }
         outStream = new BufferedOutputStream(out);
       }
     } else {
