@@ -783,6 +783,11 @@ public class BlockManager implements BlockStatsMXBean {
     return placementPolicies.getPolicy(CONTIGUOUS);
   }
 
+  @VisibleForTesting
+  public BlockPlacementPolicy getStripedBlockPlacementPolicy() {
+    return placementPolicies.getPolicy(STRIPED);
+  }
+
   public void refreshBlockPlacementPolicy(Configuration conf) {
     BlockPlacementPolicies bpp =
         new BlockPlacementPolicies(conf, datanodeManager.getFSClusterStats(),
