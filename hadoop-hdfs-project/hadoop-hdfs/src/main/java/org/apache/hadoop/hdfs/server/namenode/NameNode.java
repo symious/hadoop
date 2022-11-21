@@ -132,6 +132,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_SERVER_RPC_CATEGO
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_MAX_NODES_TO_REPORT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_PEER_STATS_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_PEER_STATS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_NN_NOT_BECOME_ACTIVE_IN_SAFEMODE;
@@ -161,6 +162,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_INVALIDATE_WORK_
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_FULL_BLOCK_REPORT_LEASES;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_FULL_BLOCK_REPORT_LEASES_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR_DEFAULT;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT;
@@ -374,6 +377,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY,
           DFS_IMAGE_PARALLEL_LOAD_KEY,
           DFS_DATANODE_PEER_STATS_ENABLED_KEY,
+          DFS_DATANODE_MAX_NODES_TO_REPORT_KEY,
+          DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY,
           DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY,
           DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY,
           DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR,
@@ -381,7 +386,6 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_FULL_BLOCK_REPORT_LEASE_LENGTH_MS,
           DFS_NAMENODE_BLOCK_DELETION_INCREMENT_KEY,
           DFS_NAMENODE_INVALIDATE_WORK_PCT_PER_ITERATION,
-          DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION,
           DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY,
           DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES,
           DFS_LEASE_HARDLIMIT_KEY,
@@ -2405,8 +2409,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigureSPSModeEvent(newVal, property);
     } else if (property.equals(DFS_NAMENODE_REPLICATION_MAX_STREAMS_KEY)
         || property.equals(DFS_NAMENODE_REPLICATION_STREAMS_HARD_LIMIT_KEY)
-        || property.equals(
-            DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION)) {
+        || property.equals(DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION)
+        || property.equals(DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY)) {
       return reconfReplicationParameters(newVal, property);
     } else if (property.equals(DFS_BLOCK_REPLICATOR_CLASSNAME_KEY) || property
         .equals(DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY)) {
@@ -2433,9 +2437,7 @@ public class NameNode extends ReconfigurableBase implements
       return reconfBlockDeletionIncrement(property, newVal);
     } else if (property.equals(DFS_NAMENODE_INVALIDATE_WORK_PCT_PER_ITERATION)) {
       return reconfReplicationWorkPctPerIteration(property, newVal);
-    } else if (property.equals(DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION)) {
-      return reconfReplicationWorkMultiplierPerIteration(property, newVal);
-    }  else if (property.equals(DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY)) {
+    } else if (property.equals(DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY)) {
       return reconfDecommissionBlocksPerInterval(property, newVal);
     } else if (property.equals(DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES)) {
       return reconfDecommissionMaxConcurrentTrackedNodes(property, newVal);
@@ -2506,6 +2508,10 @@ public class NameNode extends ReconfigurableBase implements
                 DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION_DEFAULT,
                 newVal));
         newSetting = bm.getBlocksReplWorkMultiplier();
+      } else if (property.equals(DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY)) {
+        bm.setReconstructionPendingTimeout(
+            adjustNewVal(DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_DEFAULT, newVal));
+        newSetting = bm.getReconstructionPendingTimeout();
       } else {
         throw new IllegalArgumentException("Unexpected property " +
             property + " in reconfReplicationParameters");
@@ -2744,24 +2750,6 @@ public class NameNode extends ReconfigurableBase implements
       LOG.info("RECONFIGURE* changed decommissionMaxConcurrentTrackedNodes to "
           + namesystem.getBlockManager().getDatanodeManager()
           .getDatanodeAdminManager().getMaxConcurrentTrackedNodes());
-    }
-  }
-
-  private String reconfReplicationWorkMultiplierPerIteration(String property,
-      String newVal) throws ReconfigurationException {
-    try {
-      int replicationWorkMultiplierIteration = (newVal == null ?
-          DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION_DEFAULT :
-          Integer.parseInt(newVal));
-      namesystem.getBlockManager().setReplicationWorkMultiplierPerIteration(
-          replicationWorkMultiplierIteration);
-      return String.valueOf(replicationWorkMultiplierIteration);
-    } catch (UnsupportedOperationException | IllegalArgumentException e) {
-      throw new ReconfigurationException(property, newVal, getConf().get(
-          property), e);
-    } finally {
-      LOG.info("RECONFIGURE* changed replicationWorkMultiplierPerIteration to "
-          + namesystem.getBlockManager().getBlocksReplWorkMultiplier());
     }
   }
 

@@ -1032,6 +1032,25 @@ public class BlockManager implements BlockStatsMXBean {
     blocksReplWorkMultiplier = newVal;
   }
 
+  /**
+   * Updates the value used for pendingReconstruction timeout, which is set by
+   * {@code DFSConfigKeys.
+   *     DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY} initially.
+   *
+   * @param newVal - Must be a positive non-zero integer.
+   */
+  public void setReconstructionPendingTimeout(int newVal) {
+    ensurePositiveInt(newVal, DFSConfigKeys.DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY);
+    pendingReconstruction.setTimeout(newVal * 1000L);
+  }
+
+  /** Returns the current setting for pendingReconstruction timeout, set by
+   * {@code DFSConfigKeys.DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY}.
+   */
+  public int getReconstructionPendingTimeout() {
+    return (int)(pendingReconstruction.getTimeout() / 1000L);
+  }
+
   public int getDefaultStorageNum(BlockInfo block) {
     switch (block.getBlockType()) {
     case STRIPED: return ((BlockInfoStriped) block).getRealTotalBlockNum();
@@ -5374,12 +5393,6 @@ public class BlockManager implements BlockStatsMXBean {
 
   public float getBlocksInvalidateWorkPct() {
     return this.blocksInvalidateWorkPct;
-  }
-
-  public void setReplicationWorkMultiplierPerIteration(
-      int replicationWorkMultiplierPerIteration) {
-    this.blocksReplWorkMultiplier =
-        DFSUtil.getReplWorkMultiplier(replicationWorkMultiplierPerIteration);
   }
 
   @VisibleForTesting
