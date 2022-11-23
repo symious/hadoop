@@ -110,6 +110,9 @@ public class ApplicationHomeSubClusterPBImpl extends ApplicationHomeSubCluster {
   @Override
   public ApplicationId getApplicationId() {
     ApplicationHomeSubClusterProtoOrBuilder p = viaProto ? proto : builder;
+    if (this.applicationId != null) {
+      return this.applicationId;
+    }
     if (!p.hasApplicationId()) {
       return null;
     }
@@ -125,6 +128,7 @@ public class ApplicationHomeSubClusterPBImpl extends ApplicationHomeSubCluster {
       return;
     }
     this.applicationId = applicationId;
+    builder.setApplicationId(convertToProtoFormat(applicationId));
   }
 
   @Override
