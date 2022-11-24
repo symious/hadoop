@@ -69,6 +69,9 @@ allowed_expr+="|^freebsd/"
 allowed_expr+="|^include/"
 allowed_expr+="|^linux/"
 allowed_expr+="|^win/"
+allowed_expr+="|^resources/"
+allowed_expr+="|^jtermios/"
+allowed_expr+="|^purejavacomm/"
 
 allowed_expr+=")"
 declare -i bad_artifacts=0
