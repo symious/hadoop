@@ -21,15 +21,12 @@
       <link rel="stylesheet" href="xterm/dist/xterm.css" />
       <link rel="stylesheet" href="css/style.css" />
       <script src="xterm/dist/xterm.js"></script>
-      <script src="xterm/dist/addons/attach/attach.js"></script>
-      <script src="xterm/dist/addons/fit/fit.js"></script>
-      <script src="xterm/dist/addons/winptyCompat/winptyCompat.js"></script>
-      <script src="xterm/dist/addons/fullscreen/fullscreen.js"></script>
+      <script src="xterm/dist/xterm-addon-attach.js"></script>
+      <script src="xterm/dist/xterm-addon-fit.js"></script>
+      <script src="xterm/dist/xterm-addon-canvas.js"></script>
     </head>
     <body>
-      <div class="container">
-        <div id="terminal-container"></div>
-      </div>
+      <div id="terminal"></div>
       <script>
         function getQueryVariable(variable) {
           var query = window.location.search.substring(1);
@@ -42,39 +39,6 @@
           }
           return null;
         }
-
-        Terminal.applyAddon(attach);
-        Terminal.applyAddon(fit);
-        Terminal.applyAddon(winptyCompat);
-        Terminal.applyAddon(fullscreen);
-        var term = new Terminal({
-                fontSize: 13,
-                fontFamily: '"Menlo for Powerline", Menlo, Consolas, "Liberation Mono", Courier, monospace',
-                theme: {
-                    foreground: '#d2d2d2',
-                    background: '#2b2b2b',
-                    cursor: '#adadad',
-                    black: '#000000',
-                    red: '#d81e00',
-                    green: '#5ea702',
-                    yellow: '#cfae00',
-                    blue: '#427ab3',
-                    magenta: '#89658e',
-                    cyan: '#00a7aa',
-                    white: '#dbded8',
-                    brightBlack: '#686a66',
-                    brightRed: '#f54235',
-                    brightGreen: '#99e343',
-                    brightYellow: '#fdeb61',
-                    brightBlue: '#84b0d8',
-                    brightMagenta: '#bc94b7',
-                    brightCyan: '#37e6e8',
-                    brightWhite: '#f1f1f0'
-                }
-            }),
-            container = document.getElementById('terminal-container'),
-            socketUrl = document.getElementById('socket-url'),
-            socketForm = document.getElementById('socket-form');
 
         var arr = window.location.href.split("/");
         var protocol = "ws://";
@@ -89,10 +53,23 @@
         }
         document.title = getQueryVariable("container");
         console.log(url);
+
         var sock = new WebSocket(url);
-        sock.addEventListener('open', function () {
-          term.attach(sock, true, true);
+        var term = new Terminal({
+          cursorBlink: true,
         });
+
+        attachAddon = new AttachAddon.AttachAddon(sock);
+        fitAddon = new FitAddon.FitAddon();
+        canvasAddon = new CanvasAddon.CanvasAddon();
+
+        term.loadAddon(attachAddon);
+        term.loadAddon(fitAddon);
+//        term.open(document.getElementById('terminal'));
+//        term.loadAddon(canvasAddon);
+//        term.focus();
+//        fitAddon.fit();
+
         sock.addEventListener('close', function(event) {
           switch(event.code) {
             case 1000:
@@ -109,11 +86,21 @@
               break;
           }
         });
-        term.open(container);
-        term.winptyCompatInit();
-        term.fit();
-        term.toggleFullScreen(true);
-        term.focus();
+
+        function resizeScreen() {
+          fitAddon.fit();
+          sock.send("RESIZE{" + term.cols + ":" + term.rows + "}");
+        }
+
+        sock.onopen = () => {
+          term.open(document.getElementById('terminal'));
+          term.loadAddon(canvasAddon);
+          term.focus();
+          resizeScreen();
+        };
+
+        window.addEventListener("resize", resizeScreen)
+
         function ping() {
           if (sock.readyState === WebSocket.OPEN) {
             sock.send("1{}");
@@ -121,7 +108,7 @@
             clearInterval(pingTimer);
           }
         }
-        var pingTimer = setInterval(ping, 100);
+//        var pingTimer = setInterval(ping, 10000);
       </script>
     </body>
   </html>

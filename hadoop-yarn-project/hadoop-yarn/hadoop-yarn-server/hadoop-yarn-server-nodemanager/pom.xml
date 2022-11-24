@@ -181,6 +181,12 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+
+    <dependency>
+      <groupId>org.jetbrains.pty4j</groupId>
+      <artifactId>pty4j</artifactId>
+      <version>0.12.9-sdi-1.0.0</version>
+    </dependency>
   </dependencies>
 
   <profiles>

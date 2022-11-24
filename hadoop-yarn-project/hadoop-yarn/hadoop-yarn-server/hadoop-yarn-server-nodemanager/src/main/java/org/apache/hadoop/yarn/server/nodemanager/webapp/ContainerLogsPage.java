@@ -271,6 +271,10 @@ public class ContainerLogsPage extends NMView {
       if (!foundLogFile) {
         html.h1("No logs available for container " + $(CONTAINER_ID));
         return;
+      } else {
+        html.p().a(root_url("terminal",
+            "terminal.template?container=" + $(CONTAINER_ID)
+                + "&user.name=yarn"), "Web Terminal").__();
       }
     }
 

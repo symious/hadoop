@@ -780,7 +780,7 @@ static int create_container_directories(const char* user, const char *app_id,
     sprintf(combined_name, "%s/%s", app_id, container_id);
     char* const* log_dir_ptr;
     // Log dirs need 750 access
-    const mode_t logdir_perms = S_IRWXU | S_IRGRP | S_IXGRP;
+    const mode_t logdir_perms = S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
 
     for(log_dir_ptr = log_dir; *log_dir_ptr != NULL; ++log_dir_ptr) {
       char *container_log_dir = get_app_log_directory(*log_dir_ptr, combined_name);
@@ -994,7 +994,7 @@ static int change_owner(const char* path, uid_t user, gid_t group) {
  */
 int create_directory_for_user(const char* path) {
   // set 2750 permissions and group sticky bit
-  mode_t permissions = S_IRWXU | S_IRGRP | S_IXGRP | S_ISGID;
+  mode_t permissions = S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH | S_ISGID;
   uid_t user = geteuid();
   gid_t group = getegid();
   uid_t root = 0;
@@ -1409,6 +1409,7 @@ int exec_container(const char *command_file) {
   char input[4000];
   int docker = 0;
   char *user = NULL;
+  char *usePty = NULL;
 
   int ret = read_config(command_file, &command_config);
   if (ret != 0) {
@@ -1443,9 +1444,35 @@ int exec_container(const char *command_file) {
       if (user == NULL) {
         goto cleanup;
       }
+      usePty = get_configuration_value("use-pty", COMMAND_FILE_SECTION, &command_config);
     } else {
       goto cleanup;
     }
+  }
+
+  if (usePty != NULL && strcasecmp(usePty, "true") == 0) {
+    ret = chdir(workdir);
+    if (ret != 0) {
+      exit_code = DOCKER_EXEC_FAILED;
+      goto cleanup;
+    }
+    exit_code = set_user(user);
+    if (exit_code!=0) {
+      goto cleanup;
+    }
+    if (change_user(user_detail->pw_uid, user_detail->pw_gid) != 0) {
+      exit_code = DOCKER_EXEC_FAILED;
+      goto cleanup;
+    }
+    ret = execve(binary, args, env);
+    if (ret != 0) {
+      fprintf(ERRORFILE, "Couldn't execute the container launch with args %s - %s\n",
+            binary, strerror(errno));
+      exit_code = DOCKER_EXEC_FAILED;
+    } else {
+      exit_code = 0;
+    }
+    goto cleanup;
   }
 
   fdm = posix_openpt(O_RDWR);
@@ -2238,7 +2265,7 @@ int launch_container_as_user(const char *user, const char *app_id,
   fclose(stdout);
   fclose(stderr);
 #endif
-  umask(0027);
+  umask(0022);
 
   if (execlp(script_file_dest, script_file_dest, NULL) != 0) {
     fprintf(LOGFILE, "Couldn't execute the container launch file %s - %s\n",

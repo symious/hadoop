@@ -24,10 +24,6 @@ body {
   height: 100%;
 }
 
-.container {
-  height: 100%;
-}
-
-#terminal-container {
+#terminal {
   height: 100%;
 }

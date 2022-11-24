@@ -1351,7 +1351,7 @@ public class ContainerLaunch implements Callable<Integer> {
       // set permissions to 640 because we need to be able to run
       // log aggregation in secure mode as well
       if(dest.isAbsolute()) {
-        line("chmod 640 \"", dest.toUri().getPath(), "\"");
+        line("chmod 644 \"", dest.toUri().getPath(), "\"");
       }
     }
 
