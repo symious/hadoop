@@ -45,6 +45,7 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.net.InetSocketAddress;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -361,11 +362,12 @@ public class ProtobufRpcEngine implements RpcEngine {
       int queueSizePerHandler, boolean verbose, Configuration conf,
       SecretManager<? extends TokenIdentifier> secretManager,
       String portRangeConfig, AlignmentContext alignmentContext,
-      boolean rpcPasswordAuthenticate)
+      boolean rpcPasswordAuthenticate, boolean deepHandlersEnabled)
       throws IOException {
     return new Server(protocol, protocolImpl, conf, bindAddress, port,
         numHandlers, numReaders, queueSizePerHandler, verbose, secretManager,
-        portRangeConfig, alignmentContext, rpcPasswordAuthenticate);
+        portRangeConfig, alignmentContext, rpcPasswordAuthenticate,
+        deepHandlersEnabled);
   }
 
   public static class Server extends RPC.Server {
@@ -435,17 +437,19 @@ public class ProtobufRpcEngine implements RpcEngine {
      * @param verbose whether each call should be logged
      * @param portRangeConfig A config parameter that can be used to restrict
      * @param alignmentContext provides server state info on client responses
+     * @param deepHandlersEnabled true to enable a second layer of RPC handlers
      */
     public Server(Class<?> protocolClass, Object protocolImpl,
         Configuration conf, String bindAddress, int port, int numHandlers,
         int numReaders, int queueSizePerHandler, boolean verbose,
         SecretManager<? extends TokenIdentifier> secretManager,
         String portRangeConfig, AlignmentContext alignmentContext,
-        boolean rpcPasswordAuthenticate)
+        boolean rpcPasswordAuthenticate, boolean deepHandlersEnabled)
         throws IOException {
-      super(bindAddress, port, null, numHandlers,
-          numReaders, queueSizePerHandler, conf, classNameBase(protocolImpl
-              .getClass().getName()), secretManager, portRangeConfig);
+      super(bindAddress, port, null, numHandlers, numReaders,
+          queueSizePerHandler, conf,
+          classNameBase(protocolImpl.getClass().getName()), secretManager,
+          portRangeConfig, deepHandlersEnabled);
       setAlignmentContext(alignmentContext);
       setRpcPasswordAuthenticate(rpcPasswordAuthenticate);
       this.verbose = verbose;
@@ -518,7 +522,7 @@ public class ProtobufRpcEngine implements RpcEngine {
           throw new RpcNoSuchMethodException(msg);
         }
         Message prototype = service.getRequestPrototype(methodDescriptor);
-        Message param = request.getValue(prototype);
+        Message param = request.tryGetFromCache(prototype);
 
         Message result;
         Call currentCall = Server.getCurCall().get();
@@ -557,6 +561,8 @@ public class ProtobufRpcEngine implements RpcEngine {
     private volatile RequestHeaderProto requestHeader;
     private Message payload;
 
+    private final Map<Message, Message> cache = new HashMap<>();
+
     public RpcProtobufRequest() {
     }
 
@@ -590,6 +596,14 @@ public class ProtobufRpcEngine implements RpcEngine {
       } catch (IOException e) {
         throw new IllegalArgumentException(e);
       }
+    }
+
+    public Message tryGetFromCache(Message prototype) throws IOException {
+      if (!this.cache.containsKey(prototype)) {
+        Message value = getValue(prototype);
+        this.cache.put(prototype, value);
+      }
+      return this.cache.get(prototype);
     }
   }
 }

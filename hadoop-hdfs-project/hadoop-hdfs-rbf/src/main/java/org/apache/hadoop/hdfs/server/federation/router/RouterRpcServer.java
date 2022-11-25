@@ -24,6 +24,8 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_C
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_MAX_SIZE_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SIGNATURE_MAX_SIZE_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_SIGNATURE_MAX_SIZE_KEY;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_DEEP_HANDLER_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_DEEP_HANDLER_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_QUEUE_SIZE_DEFAULT;
@@ -272,6 +274,10 @@ public class RouterRpcServer extends AbstractService
     int handlerQueueSize = this.conf.getInt(DFS_ROUTER_HANDLER_QUEUE_SIZE_KEY,
         DFS_ROUTER_HANDLER_QUEUE_SIZE_DEFAULT);
 
+    boolean deepHandlersEnabled = this.conf.getBoolean(
+        DFS_ROUTER_DEEP_HANDLER_ENABLED_KEY,
+        DFS_ROUTER_DEEP_HANDLER_ENABLED_DEFAULT);
+
     // Override Hadoop Common IPC setting
     int readerQueueSize = this.conf.getInt(DFS_ROUTER_READER_QUEUE_SIZE_KEY,
         DFS_ROUTER_READER_QUEUE_SIZE_DEFAULT);
@@ -310,6 +316,7 @@ public class RouterRpcServer extends AbstractService
         .setnumReaders(readerCount)
         .setQueueSizePerHandler(handlerQueueSize)
         .setVerbose(false)
+        .setDeepHandlersEnabled(deepHandlersEnabled)
         .build();
 
     // Add all the RPC protocols that the Router implements

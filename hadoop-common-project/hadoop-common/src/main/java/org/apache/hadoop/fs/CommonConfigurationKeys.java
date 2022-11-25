@@ -416,4 +416,12 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
 
   public static final String SDI_CREDENTIAL_CONF_VAR = "hadoop.user.rpcpassword";
 
+  // Deep handler configurations
+  public static final String DFS_ROUTER_DEEP_HANDLER_COUNT_KEY = "rpc.deep.handler.count";
+  public static final int DFS_ROUTER_DEEP_HANDLER_COUNT_DEFAULT = 10;
+  public static final String DFS_ROUTER_DEEP_QUEUE_CAPACITY_KEY = "rpc.deep.queue.capacity";
+  public static final int DFS_ROUTER_DEEP_QUEUE_CAPACITY_DEFAULT = 10;
+  public static final String DFS_ROUTER_DEEP_HANDLER_MAX_UTILIZATION_PERCENTAGE_KEY =
+      "rpc.deep.handler.max.utilization.pct";
+  public static final double DFS_ROUTER_DEEP_HANDLER_MAX_UTILIZATION_PERCENTAGE_DEFAULT = 0.3;
 }

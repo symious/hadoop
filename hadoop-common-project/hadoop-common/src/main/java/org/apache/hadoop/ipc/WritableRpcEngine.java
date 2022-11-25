@@ -340,11 +340,13 @@ public class WritableRpcEngine implements RpcEngine {
                       boolean verbose, Configuration conf,
                       SecretManager<? extends TokenIdentifier> secretManager,
                       String portRangeConfig, AlignmentContext alignmentContext,
-                      boolean rpcPasswordAuthenticate)
+                      boolean rpcPasswordAuthenticate,
+                      boolean deepHandlersEnabled)
     throws IOException {
     return new Server(protocolClass, protocolImpl, conf, bindAddress, port,
         numHandlers, numReaders, queueSizePerHandler, verbose, secretManager,
-        portRangeConfig, alignmentContext, rpcPasswordAuthenticate);
+        portRangeConfig, alignmentContext, rpcPasswordAuthenticate,
+        deepHandlersEnabled);
   }
 
 
@@ -426,7 +428,7 @@ public class WritableRpcEngine implements RpcEngine {
         throws IOException {
       this(null, protocolImpl,  conf,  bindAddress,   port,
           numHandlers,  numReaders,  queueSizePerHandler,  verbose,
-          secretManager, null, null, false);
+          secretManager, null, null, false, false);
     }
 
     /**
@@ -440,18 +442,19 @@ public class WritableRpcEngine implements RpcEngine {
      * @param numHandlers the number of method handler threads to run
      * @param verbose whether each call should be logged
      * @param alignmentContext provides server state info on client responses
+     * @param deepHandlersEnabled true to enable a second layer of RPC handlers
      */
     public Server(Class<?> protocolClass, Object protocolImpl,
         Configuration conf, String bindAddress,  int port,
         int numHandlers, int numReaders, int queueSizePerHandler,
         boolean verbose, SecretManager<? extends TokenIdentifier> secretManager,
         String portRangeConfig, AlignmentContext alignmentContext,
-        boolean rpcPasswordAuthenticate)
+        boolean rpcPasswordAuthenticate, boolean deepHandlersEnabled)
         throws IOException {
       super(bindAddress, port, null, numHandlers, numReaders,
           queueSizePerHandler, conf,
           classNameBase(protocolImpl.getClass().getName()), secretManager,
-          portRangeConfig);
+          portRangeConfig, deepHandlersEnabled);
       setAlignmentContext(alignmentContext);
       setRpcPasswordAuthenticate(rpcPasswordAuthenticate);
       this.verbose = verbose;

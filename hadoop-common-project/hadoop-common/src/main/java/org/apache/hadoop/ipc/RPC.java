@@ -800,6 +800,7 @@ public class RPC {
     private String portRangeConfig = null;
     private AlignmentContext alignmentContext = null;
     private boolean rpcPasswordAuthenticate = false;
+    private boolean deepHandlersEnabled = false;
 
     public Builder(Configuration conf) {
       this.conf = conf;
@@ -878,6 +879,12 @@ public class RPC {
       return this;
     }
 
+    /** Default: false */
+    public Builder setDeepHandlersEnabled(boolean deepHandlersEnabled) {
+      this.deepHandlersEnabled = deepHandlersEnabled;
+      return this;
+    }
+
     /**
      * Build the RPC Server. 
      * @throws IOException on error
@@ -898,7 +905,8 @@ public class RPC {
           this.protocol, this.instance, this.bindAddress, this.port,
           this.numHandlers, this.numReaders, this.queueSizePerHandler,
           this.verbose, this.conf, this.secretManager, this.portRangeConfig,
-          this.alignmentContext, this.rpcPasswordAuthenticate);
+          this.alignmentContext, this.rpcPasswordAuthenticate,
+          this.deepHandlersEnabled);
     }
   }
   
@@ -1047,14 +1055,15 @@ public class RPC {
      return new VerProtocolImpl(highestVersion,  highest);   
    }
   
-    protected Server(String bindAddress, int port, 
+    protected Server(String bindAddress, int port,
                      Class<? extends Writable> paramClass, int handlerCount,
                      int numReaders, int queueSizePerHandler,
                      Configuration conf, String serverName, 
                      SecretManager<? extends TokenIdentifier> secretManager,
-                     String portRangeConfig) throws IOException {
-      super(bindAddress, port, paramClass, handlerCount, numReaders, queueSizePerHandler,
-            conf, serverName, secretManager, portRangeConfig);
+                     String portRangeConfig, boolean areDeepHandlersEnabled) throws IOException {
+      super(bindAddress, port, paramClass, handlerCount, numReaders,
+          queueSizePerHandler, conf, serverName, secretManager, portRangeConfig,
+          areDeepHandlersEnabled);
       initProtocolMetaInfo(conf);
     }
     

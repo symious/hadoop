@@ -657,4 +657,41 @@
     </description>
   </property>
 
+  <property>
+    <name>dfs.federation.router.deep.handler.enabled</name>
+    <value>false</value>
+    <description>
+      Enable a second layer of RPC call handlers to handle calls that fail from
+      overloaded RPC permit controllers.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.federation.router.deep.handler.count</name>
+    <value>10</value>
+    <description>
+      Number of handler threads to handle calls that fail from
+      overloaded RPC permit controllers.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.federation.router.deep.queue.capacity</name>
+    <value>10</value>
+    <description>
+      Deep queue capacity for 2nd layer of RPC. Acts as a buffer.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.federation.router.deep.handler.max.utilization.EXAMPLENAMESERVICE</name>
+    <value>1</value>
+    <description>
+      Peak number of deep handlers nameservice EXAMPLENAMESERVICE can use
+      at any time.
+      All of these added together should not exceed the total number of deep
+      handlers configured by dfs.federation.router.deep.handler.count. There
+      should be one of this config for each nameservice.
+    </description>
+  </property>
 </configuration>
