@@ -120,7 +120,7 @@ public class TestDataNodeRollingUpgrade {
     ReplicaInfo info = Mockito.mock(ReplicaInfo.class);
     Mockito.when(info.getBlockURI()).thenReturn(blockFile.toURI());
     File trashFile = new File(
-        dn0.getStorage().getTrashDirectoryForReplica(blockPoolId, info));
+        dn0.getStorage().getTrashDirectoryForReplica(blockPoolId, info, true));
     assertEquals(exists, trashFile.exists());
     return trashFile;
   }

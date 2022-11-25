@@ -144,6 +144,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_DEFAU
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MSYNC_RPC_BIND_HOST_KEY;
@@ -376,6 +378,7 @@ public class NameNode extends ReconfigurableBase implements
           DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
           DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY,
           DFS_IMAGE_PARALLEL_LOAD_KEY,
+          DFS_NAMENODE_DISABLE_EC_KEY,
           DFS_DATANODE_PEER_STATS_ENABLED_KEY,
           DFS_DATANODE_MAX_NODES_TO_REPORT_KEY,
           DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY,
@@ -2418,7 +2421,9 @@ public class NameNode extends ReconfigurableBase implements
       return newVal;
     } else if (property.equals(DFS_IMAGE_PARALLEL_LOAD_KEY)) {
       return reconfigureParallelLoad(newVal);
-    }  else if (property.equals(DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY) ||
+    } else if (property.equals(DFS_NAMENODE_DISABLE_EC_KEY)) {
+      return reconfigureDisableECFeature(newVal);
+    } else if (property.equals(DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY) ||
         (property.equals(DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY)) ||
         (property.equals(DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY)) ||
         (property.equals(DFS_DATANODE_PEER_STATS_ENABLED_KEY))) {
@@ -2678,6 +2683,17 @@ public class NameNode extends ReconfigurableBase implements
     }
     FSImageFormatProtobuf.refreshParallelSaveAndLoad(enableParallelLoad);
     return Boolean.toString(enableParallelLoad);
+  }
+
+  String reconfigureDisableECFeature(String newVal) {
+    boolean disableECFeature;
+    if (newVal == null) {
+      disableECFeature = DFS_NAMENODE_DISABLE_EC_DEFAULT;
+    } else {
+      disableECFeature = Boolean.parseBoolean(newVal);
+    }
+    this.rpcServer.resetDisableECFeature(disableECFeature);
+    return Boolean.toString(disableECFeature);
   }
 
   private String reconfConsiderLoadFactor(String property, String newVal)

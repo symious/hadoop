@@ -23,6 +23,8 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CLIENT_R
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CLIENT_RPC_SDI_AUTHENTICATION_ENABLED_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SERVICE_RPC_SDI_AUTHENTICATION_ENABLED_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SERVICE_RPC_SDI_AUTHENTICATION_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_SPECIAL_TRASH_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_SPECIAL_TRASH_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_DEFAULT;
@@ -294,6 +296,8 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   private final String defaultECPolicyName;
   private final boolean enableSpecialTrash;
 
+  private volatile boolean disableECFeature = false;
+
   public NameNodeRpcServer(Configuration conf, NameNode nn)
       throws IOException {
     this.nn = nn;
@@ -303,6 +307,8 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     this.enableSpecialTrash = conf.getBoolean(
         DFS_NAMENODE_ENABLE_SPECIAL_TRASH_KEY,
         DFS_NAMENODE_ENABLE_SPECIAL_TRASH_DEFAULT);
+    resetDisableECFeature(conf.getBoolean(DFS_NAMENODE_DISABLE_EC_KEY,
+        DFS_NAMENODE_DISABLE_EC_DEFAULT));
 
     int handlerCount = 
       conf.getInt(DFS_NAMENODE_HANDLER_COUNT_KEY, 
@@ -656,6 +662,16 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     }
   }
 
+  public void resetDisableECFeature(boolean disableECFeature) {
+    LOG.info("Change disableECFeature from {} to {}.", this.disableECFeature, disableECFeature);
+    this.disableECFeature = disableECFeature;
+  }
+
+  @VisibleForTesting
+  public boolean isDisableECFeature() {
+    return this.disableECFeature;
+  }
+
   /** Allow access to the lifeline RPC server for testing */
   @VisibleForTesting
   RPC.Server getLifelineRpcServer() {
@@ -914,6 +930,9 @@ public class NameNodeRpcServer implements NamenodeProtocols {
       String storagePolicy)
       throws IOException {
     checkNNStartup();
+    if (disableECFeature && ecPolicyName != null) {
+      throw new UnsupportedOperationException("Operation create ec file is not supported");
+    }
     String clientMachine = getClientMachine();
     if (stateChangeLog.isDebugEnabled()) {
       stateChangeLog.debug("*DIR* NameNode.create: file "
@@ -2476,6 +2495,9 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public void setErasureCodingPolicy(String src, String ecPolicyName)
       throws IOException {
     checkNNStartup();
+    if (disableECFeature && ecPolicyName != null) {
+      throw new UnsupportedOperationException("Operation setErasureCodingPolicy not supported");
+    }
     namesystem.checkOperation(OperationCategory.WRITE);
     final CacheEntry cacheEntry = getCacheEntry();
     if (cacheEntry != null && cacheEntry.isSuccess()) {
@@ -2715,24 +2737,36 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public ErasureCodingPolicyInfo[] getErasureCodingPolicies()
       throws IOException {
     checkNNStartup();
+    if (disableECFeature) {
+      throw new UnsupportedOperationException("Operation getErasureCodingPolicies not supported");
+    }
     return namesystem.getErasureCodingPolicies();
   }
 
   @Override // ClientProtocol
   public Map<String, String> getErasureCodingCodecs() throws IOException {
     checkNNStartup();
+    if (disableECFeature) {
+      throw new UnsupportedOperationException("Operation getErasureCodingCodecs not supported");
+    }
     return namesystem.getErasureCodingCodecs();
   }
 
   @Override // ClientProtocol
   public ErasureCodingPolicy getErasureCodingPolicy(String src) throws IOException {
     checkNNStartup();
+    if (disableECFeature) {
+      throw new UnsupportedOperationException("Operation getErasureCodingPolicy not supported");
+    }
     return namesystem.getErasureCodingPolicy(src);
   }
 
   @Override // ClientProtocol
   public void unsetErasureCodingPolicy(String src) throws IOException {
     checkNNStartup();
+    if (disableECFeature) {
+      throw new UnsupportedOperationException("Operation unsetErasureCodingPolicy not supported");
+    }
     namesystem.checkOperation(OperationCategory.WRITE);
     final CacheEntry cacheEntry = getCacheEntry();
     if (cacheEntry != null && cacheEntry.isSuccess()) {
@@ -2751,6 +2785,10 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   @Override
   public ECTopologyVerifierResult getECTopologyResultForPolicies(
       String... policyNames) throws IOException {
+    if (disableECFeature) {
+      throw new UnsupportedOperationException(
+          "Operation getECTopologyResultForPolicies not supported");
+    }
     return namesystem.getECTopologyResultForPolicies(policyNames);
   }
 
@@ -2758,6 +2796,9 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public AddErasureCodingPolicyResponse[] addErasureCodingPolicies(
       ErasureCodingPolicy[] policies) throws IOException {
     checkNNStartup();
+    if (disableECFeature) {
+      throw new UnsupportedOperationException("Operation addErasureCodingPolicies not supported");
+    }
     namesystem.checkOperation(OperationCategory.WRITE);
     namesystem.checkSuperuserPrivilege();
     final CacheEntryWithPayload cacheEntry = getCacheEntryWithPayload(null);
@@ -2781,6 +2822,9 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public void removeErasureCodingPolicy(String ecPolicyName)
       throws IOException {
     checkNNStartup();
+    if (disableECFeature && ecPolicyName != null) {
+      throw new UnsupportedOperationException("Operation removeErasureCodingPolicy not supported");
+    }
     namesystem.checkOperation(OperationCategory.WRITE);
     namesystem.checkSuperuserPrivilege();
     final CacheEntry cacheEntry = getCacheEntry();
@@ -2800,6 +2844,9 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public void enableErasureCodingPolicy(String ecPolicyName)
       throws IOException {
     checkNNStartup();
+    if (disableECFeature && ecPolicyName != null) {
+      throw new UnsupportedOperationException("Operation enableErasureCodingPolicy not supported");
+    }
     namesystem.checkOperation(OperationCategory.WRITE);
     namesystem.checkSuperuserPrivilege();
     final CacheEntry cacheEntry = getCacheEntry();
@@ -2819,6 +2866,9 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public void disableErasureCodingPolicy(String ecPolicyName)
       throws IOException {
     checkNNStartup();
+    if (disableECFeature && ecPolicyName != null) {
+      throw new UnsupportedOperationException("Operation disableErasureCodingPolicy not supported");
+    }
     namesystem.checkOperation(OperationCategory.WRITE);
     namesystem.checkSuperuserPrivilege();
     final CacheEntry cacheEntry = getCacheEntry();

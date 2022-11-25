@@ -1091,6 +1091,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.namenode.decommission.backoff.monitor.pending.blocks.per.lock";
   public static final int DFS_NAMENODE_DECOMMISSION_BACKOFF_MONITOR_PENDING_BLOCKS_PER_LOCK_DEFAULT
       = 1000;
+  public static final String  DFS_NAMENODE_DISABLE_EC_KEY = "dfs.namenode.disable.ec";
+  public static final boolean DFS_NAMENODE_DISABLE_EC_DEFAULT = false;
   public static final String  DFS_NAMENODE_ENABLE_SPECIAL_TRASH_KEY =
       "dfs.namenode.enable.special.trash";
   public static final boolean DFS_NAMENODE_ENABLE_SPECIAL_TRASH_DEFAULT = false;
@@ -1574,6 +1576,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final boolean DFS_DATANODE_AUDIT_ENABLE_DEFAULT = false;
   public static final String  DFS_DATANODE_AUDIT_LOG_ASYNC_KEY = "dfs.datanode.audit.log.async";
   public static final boolean DFS_DATANODE_AUDIT_LOG_ASYNC_DEFAULT = false;
+
+  public static final String DFS_DATANODE_ENABLE_TRASH_KEY = "dfs.datanode.enable.trash";
+  public static final boolean DFS_DATANODE_ENABLE_TRASH_DEFAULT = true;
 
   // WebHDFS retry policy
   @Deprecated

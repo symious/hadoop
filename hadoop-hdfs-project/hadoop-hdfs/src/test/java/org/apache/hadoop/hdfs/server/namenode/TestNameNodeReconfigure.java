@@ -33,6 +33,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
 import static org.junit.Assert.*;
@@ -543,5 +544,19 @@ public class TestNameNodeReconfigure {
         .getFSDirectory().getQuotaInitThreads());
     assertEquals(preOldQuotaInit, nameNode.getConf().getInt(
         DFS_NAMENODE_QUOTA_INIT_THREADS_KEY, -1));
+  }
+
+  @Test
+  public void testReconfigureDisableECFeature()
+      throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode(0);
+    NameNodeRpcServer rpcServer = (NameNodeRpcServer) nameNode.getRpcServer();
+    assertFalse(rpcServer.isDisableECFeature());
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_DISABLE_EC_KEY, "true");
+    assertTrue(rpcServer.isDisableECFeature());
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_DISABLE_EC_KEY, "false");
+    assertFalse(rpcServer.isDisableECFeature());
   }
 }
