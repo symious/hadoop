@@ -1235,6 +1235,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_DATANODE_AUDIT_LOG_ASYNC_KEY = "dfs.datanode.audit.log.async";
   public static final boolean DFS_DATANODE_AUDIT_LOG_ASYNC_DEFAULT = false;
 
+  public static final String DFS_DATANODE_ENABLE_TRASH_KEY = "dfs.datanode.enable.trash";
+  public static final boolean DFS_DATANODE_ENABLE_TRASH_DEFAULT = true;
+
   // WebHDFS retry policy
   @Deprecated
   public static final String  DFS_HTTP_CLIENT_RETRY_POLICY_ENABLED_KEY =

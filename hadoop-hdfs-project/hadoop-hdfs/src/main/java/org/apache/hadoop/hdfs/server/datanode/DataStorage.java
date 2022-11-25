@@ -204,8 +204,8 @@ public class DataStorage extends Storage {
    * @return trash directory if rolling upgrade is in progress, null
    *         otherwise.
    */
-  public String getTrashDirectoryForBlockFile(String bpid, File blockFile) {
-    if (trashEnabledBpids.contains(bpid)) {
+  public String getTrashDirectoryForBlockFile(String bpid, File blockFile, boolean enableTrash) {
+    if (enableTrash && trashEnabledBpids.contains(bpid)) {
       return getBPStorage(bpid).getTrashDirectory(blockFile);
     }
     return null;

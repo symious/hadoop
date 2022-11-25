@@ -2221,12 +2221,12 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
           asyncDiskService.deleteAsync(v.obtainReference(), f,
               FsDatasetUtil.getMetaFile(f, invalidBlks[i].getGenerationStamp()),
               new ExtendedBlock(bpid, invalidBlks[i]),
-              dataStorage.getTrashDirectoryForBlockFile(bpid, f));
+              dataStorage.getTrashDirectoryForBlockFile(bpid, f, datanode.enableTrash()));
         } else {
           asyncDiskService.deleteSync(v.obtainReference(), f,
               FsDatasetUtil.getMetaFile(f, invalidBlks[i].getGenerationStamp()),
               new ExtendedBlock(bpid, invalidBlks[i]),
-              dataStorage.getTrashDirectoryForBlockFile(bpid, f));
+              dataStorage.getTrashDirectoryForBlockFile(bpid, f, datanode.enableTrash()));
         }
       } catch (ClosedChannelException e) {
         LOG.warn("Volume " + v + " is closed, ignore the deletion task for " +

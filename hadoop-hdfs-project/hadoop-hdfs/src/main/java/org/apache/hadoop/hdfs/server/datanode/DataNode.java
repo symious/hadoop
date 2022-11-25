@@ -25,6 +25,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_IN
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DNS_INTERFACE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_DNS_NAMESERVER_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_ENABLE_TRASH_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_FAILED_VOLUMES_TOLERATED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_FAILED_VOLUMES_TOLERATED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_HANDLER_COUNT_DEFAULT;
@@ -328,6 +329,7 @@ public class DataNode extends ReconfigurableBase
               DFS_DATANODE_MAX_RECEIVER_THREADS_KEY,
               DFS_DATANODE_SLOW_IO_WARNING_THRESHOLD_KEY,
               DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY,
+              DFS_DATANODE_ENABLE_TRASH_KEY,
               DFS_DATANODE_SCAN_PERIOD_HOURS_KEY));
 
   public static final Log METRICS_LOG = LogFactory.getLog("DataNodeMetricsLog");
@@ -442,6 +444,17 @@ public class DataNode extends ReconfigurableBase
 
   private final DataNodeAuditLogger auditLogger;
 
+  private volatile boolean enableTrash;
+
+  public void resetEnableTrash(boolean enableTrash) {
+    LOG.info("Will change enableTrash from {} to {}.", this.enableTrash, enableTrash);
+    this.enableTrash = enableTrash;
+  }
+
+  public boolean enableTrash() {
+    return this.enableTrash;
+  }
+
   /**
    * Creates a dummy DataNode for testing purpose.
    */
@@ -462,6 +475,9 @@ public class DataNode extends ReconfigurableBase
       this.auditLogger = null;
     }
     this.blockScanner = new BlockScanner(this, conf);
+    resetEnableTrash(conf.getBoolean(
+        DFS_DATANODE_ENABLE_TRASH_KEY,
+        DFSConfigKeys.DFS_DATANODE_ENABLE_TRASH_DEFAULT));
     this.tracer = createTracer(conf);
     this.tracerConfigurationManager =
         new TracerConfigurationManager(DATANODE_HTRACE_PREFIX, conf);
@@ -502,6 +518,9 @@ public class DataNode extends ReconfigurableBase
     } else {
       this.auditLogger = null;
     }
+    resetEnableTrash(conf.getBoolean(
+        DFS_DATANODE_ENABLE_TRASH_KEY,
+        DFSConfigKeys.DFS_DATANODE_ENABLE_TRASH_DEFAULT));
     this.tracer = createTracer(conf);
     this.tracerConfigurationManager =
         new TracerConfigurationManager(DATANODE_HTRACE_PREFIX, conf);
@@ -788,6 +807,31 @@ public class DataNode extends ReconfigurableBase
             LOG.warn(String.format(
                 "Exception in updating datanode scan period hours ms %s to %s",
                 property, newVal), rootException);
+            throw rootException;
+          }
+        }
+        break;
+      }
+      case DFS_DATANODE_ENABLE_TRASH_KEY: {
+        ReconfigurationException rootException = null;
+        try {
+          LOG.info("Reconfiguring " + property + " to " + newVal);
+          boolean enableTrash;
+          if (newVal == null) {
+            // set to default
+            enableTrash = DFSConfigKeys.DFS_DATANODE_ENABLE_TRASH_DEFAULT;
+          } else {
+            enableTrash = Boolean.parseBoolean(newVal);
+          }
+          resetEnableTrash(enableTrash);
+          return Boolean.toString(enableTrash);
+        } catch (Exception e) {
+          rootException = new ReconfigurationException(
+              property, newVal, getConf().get(property), e);
+        } finally {
+          if (rootException != null) {
+            LOG.warn("Exception in updating enable trash from {} to {}.",
+                enableTrash(), newVal, rootException);
             throw rootException;
           }
         }
