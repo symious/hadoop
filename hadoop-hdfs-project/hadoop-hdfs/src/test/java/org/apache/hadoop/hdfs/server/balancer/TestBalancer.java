@@ -781,6 +781,18 @@ public class TestBalancer {
         useTool, useFile, false, 0.3);
   }
 
+  @Test
+  public void testBalancePathForMultiPath() {
+    Path balancePath = Balancer.getBalancePathForMultiDC("/Telin-3");
+    assertEquals(new Path(Balancer.BALANCER_ID_PATH, "Telin-3"), balancePath);
+
+    Path balancePath2 = Balancer.getBalancePathForMultiDC("");
+    assertEquals(Balancer.BALANCER_ID_PATH, balancePath2);
+
+    Path balancePath3 = Balancer.getBalancePathForMultiDC("/AT");
+    assertEquals(new Path(Balancer.BALANCER_ID_PATH, "AT"), balancePath3);
+  }
+
   /** This test start a cluster with specified number of nodes,
    * and fills it to be 30% full (with a single file replicated identically
    * to all datanodes);
