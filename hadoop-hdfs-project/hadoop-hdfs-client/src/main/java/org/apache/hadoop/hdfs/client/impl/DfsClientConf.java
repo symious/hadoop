@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Options.ChecksumCombineMode;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.ReplicaAccessorBuilder;
+import org.apache.hadoop.hdfs.client.HdfsUtils;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.util.ByteArrayManager;
 import org.apache.hadoop.ipc.Client;
@@ -175,6 +176,7 @@ public class DfsClientConf {
   private final int slowNodeCacheExpiryMillis;
   private final int slowNodeCacheSize;
   private final long slowNodeCacheThresholdMillis;
+  private final String fakeRack;
 
   public DfsClientConf(Configuration conf) {
     // The hdfsTimeout is currently the same as the ipc timeout
@@ -338,6 +340,10 @@ public class DfsClientConf {
     leaseHardLimitPeriod =
         conf.getLong(HdfsClientConfigKeys.DFS_LEASE_HARDLIMIT_KEY,
             HdfsClientConfigKeys.DFS_LEASE_HARDLIMIT_DEFAULT) * 1000;
+
+    fakeRack = HdfsUtils.getValidFakeRack(
+        conf.get(HdfsClientConfigKeys.DFS_CLIENT_FAKE_RACK_KEY,
+            HdfsClientConfigKeys.DFS_CLIENT_FAKE_RACK_DEFAULT));
   }
 
   @SuppressWarnings("unchecked")
@@ -710,6 +716,10 @@ public class DfsClientConf {
    */
   public long getleaseHardLimitPeriod() {
     return leaseHardLimitPeriod;
+  }
+
+  public String getFakeRack() {
+    return fakeRack;
   }
 
   /**

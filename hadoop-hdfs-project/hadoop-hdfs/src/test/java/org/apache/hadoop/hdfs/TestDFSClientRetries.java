@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SOCKET_TIMEOUT_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
@@ -948,6 +949,17 @@ public class TestDFSClientRetries {
     } finally {
       cluster.shutdown();
     }
+  }
+
+  @Test
+  public void testGetValidFakeRack() {
+    assertEquals("/dc/rack1", HdfsUtils.getValidFakeRack("/dc/rack1"));
+    assertEquals("/dc/rack1", HdfsUtils.getValidFakeRack("/dc/rack1/"));
+    assertNull(HdfsUtils.getValidFakeRack(null));
+    assertNull(HdfsUtils.getValidFakeRack(""));
+    assertNull(HdfsUtils.getValidFakeRack("dc/rack1/"));
+    assertNull(HdfsUtils.getValidFakeRack("dc/rack1"));
+    assertNull(HdfsUtils.getValidFakeRack("dc"));
   }
 
   /** Test client retry with namenode restarting. */

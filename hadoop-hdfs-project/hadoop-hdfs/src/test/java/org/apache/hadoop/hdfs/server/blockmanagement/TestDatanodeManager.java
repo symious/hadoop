@@ -336,15 +336,15 @@ public class TestDatanodeManager {
     StaticMapping.addNodeToRack(clientMachine, "/dc0/rack1");
     Assert.assertEquals(1, blocks.size());
     Assert.assertEquals(3, blocks.get(0).getLocations().length);
-    Assert.assertFalse(dm.checkInterDCRead(clientMachine, blocks, 1024));
+    Assert.assertFalse(dm.checkInterDCRead(clientMachine, blocks, 1024, null));
 
     // client in /dc1
     StaticMapping.addNodeToRack(clientMachine, "/dc1/rack1");
-    Assert.assertFalse(dm.checkInterDCRead(clientMachine, blocks, 1024));
+    Assert.assertFalse(dm.checkInterDCRead(clientMachine, blocks, 1024, null));
 
     // client in /dc2
     StaticMapping.addNodeToRack(clientMachine, "/dc2/rack1");
-    Assert.assertTrue(dm.checkInterDCRead(clientMachine, blocks, 1024));
+    Assert.assertTrue(dm.checkInterDCRead(clientMachine, blocks, 1024, null));
 
     MutableStat overallMutableStat = NameNode.getNameNodeMetrics().getCrossDCTraffic("Overall");
     assertNotNull(overallMutableStat);

@@ -2001,12 +2001,17 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     logAuditEvent(true, operationName, src, null, auditStat);
   }
 
+  LocatedBlocks getBlockLocations(String clientMachine, String srcArg,
+      long offset, long length) throws IOException {
+    return getBlockLocations(clientMachine, srcArg, offset, length, null);
+  }
+
   /**
    * Get block locations within the specified range.
    * @see ClientProtocol#getBlockLocations(String, long, long)
    */
   LocatedBlocks getBlockLocations(String clientMachine, String srcArg,
-      long offset, long length) throws IOException {
+      long offset, long length, String fakeRack) throws IOException {
     final String operationName = "open";
     checkOperation(OperationCategory.READ);
     GetBlockLocationsResult res = null;
@@ -2078,18 +2083,18 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     LocatedBlocks blocks = res.blocks;
     if (blocks != null) {
       blockManager.getDatanodeManager().sortLocatedBlocks(
-          clientMachine, blocks.getLocatedBlocks());
+          clientMachine, blocks.getLocatedBlocks(), fakeRack);
 
       if (blockManager.getDataCenterAwareness()) {
         blockManager.getDatanodeManager().checkInterDCRead(clientMachine,
-            blocks.getLocatedBlocks(), blocks.getFileLength());
+            blocks.getLocatedBlocks(), blocks.getFileLength(), fakeRack);
       }
       // lastBlock is not part of getLocatedBlocks(), might need to sort it too
       LocatedBlock lastBlock = blocks.getLastLocatedBlock();
       if (lastBlock != null) {
         ArrayList<LocatedBlock> lastBlockList = Lists.newArrayList(lastBlock);
         blockManager.getDatanodeManager().sortLocatedBlocks(
-            clientMachine, lastBlockList);
+            clientMachine, lastBlockList, fakeRack);
       }
     }
 

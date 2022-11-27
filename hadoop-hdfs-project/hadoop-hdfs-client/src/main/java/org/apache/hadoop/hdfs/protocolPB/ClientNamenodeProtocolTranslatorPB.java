@@ -290,6 +290,26 @@ public class ClientNamenodeProtocolTranslatorPB implements
   }
 
   @Override
+  public LocatedBlocks getBlockLocationsWithFakeRack(String src, long offset,
+       long length, String fakeRack) throws IOException {
+    GetBlockLocationsRequestProto.Builder builder = GetBlockLocationsRequestProto.newBuilder()
+        .setSrc(src)
+        .setOffset(offset)
+        .setLength(length);
+    if (fakeRack != null) {
+      builder.setFakeRack(fakeRack);
+    }
+
+    GetBlockLocationsRequestProto req = builder.build();
+    try {
+      GetBlockLocationsResponseProto resp = rpcProxy.getBlockLocationsWithFakeRack(null, req);
+      return resp.hasLocations() ? PBHelperClient.convert(resp.getLocations()) : null;
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+  }
+
+  @Override
   public FsServerDefaults getServerDefaults() throws IOException {
     GetServerDefaultsRequestProto req = VOID_GET_SERVER_DEFAULT_REQUEST;
     try {

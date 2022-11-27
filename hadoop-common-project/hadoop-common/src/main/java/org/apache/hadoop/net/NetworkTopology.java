@@ -59,6 +59,14 @@ public class NetworkTopology {
       super(msg);
     }
   }
+
+  public String getValidFakeRack(String fakeRack) {
+    if (fakeRack != null && fakeRack.startsWith("/")
+        && fakeRack.split("/").length == depthOfAllLeaves) {
+      return fakeRack;
+    }
+    return null;
+  }
   
   /**
    * Get an instance of NetworkTopology based on the value of the configuration
