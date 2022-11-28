@@ -797,6 +797,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   //default min for cross-read size is 2TB.
   public static final long  DFS_ZONE_GENERTE_REPLICATION_RULE_MIN_CROSS_RAEAD_SIZE_DEFAULT =
       2199023255552L;
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_FILTER_PATHS_CAPACITY_LIMIT_KEY =
+      "dfs.zone.generate.replicationrule.filterpaths.capacity.limit";
+  public static final long  DFS_ZONE_GENERTE_REPLICATION_RULE_FILTER_PATHS_CAPACITY_LIMIT_DEFAULT =
+      10000L;
   public static final String  DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_KEY =
       "dfs.namenode.audit.log.with.remote.port";
   public static final boolean DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_DEFAULT =

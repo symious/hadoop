@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice;
 
+import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.ContentSummary;
@@ -31,6 +32,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.codehaus.jettison.json.JSONObject;
 import org.slf4j.Logger;
@@ -38,7 +40,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 
 import static org.apache.hadoop.util.Time.now;
@@ -58,12 +62,14 @@ public class ReplicationRuleGenerateKafkaTrigger {
   private long pathSizeLimit;
   private long minCrossReadSize;
   private int pollTimeOut;
+  private long capacityLimit;
   // "," is the separator of pattern "/dc1:replica1,/dc2:replica2"
   private final static String SECTION_SEPARATOR = ",";
   private final static String FIELD_SEPARATOR = ":";
   private final ReplicationRuleManager replicationRuleManager;
   private final Thread monitorServer;
   private final ExecutorService executor;
+  private final Set<String> filterPaths = Collections.synchronizedSet(new HashSet<String>());
 
   public ReplicationRuleGenerateKafkaTrigger(Configuration conf) throws IOException {
     final String username =
@@ -101,7 +107,12 @@ public class ReplicationRuleGenerateKafkaTrigger {
     this.replicationRuleManager = new ReplicationRuleManager(conf);
     this.consumer = new KafkaConsumer<>(properties);
     consumer.subscribe(Collections.singletonList(topic));
-
+    Set<TopicPartition> assignment = Sets.newHashSet();
+    while (assignment.size() == 0) {
+      consumer.poll(100L);
+      assignment = consumer.assignment();
+    }
+    consumer.seekToEnd(assignment);
     setReplicationRuleParam(conf);
     this.monitorServer = new Thread(new Monitor(), "replicationRuleGenerateKafkaTrigger");
     this.monitorServer.start();
@@ -164,6 +175,14 @@ public class ReplicationRuleGenerateKafkaTrigger {
     pollTimeOut = conf.getInt(
         DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_POLL_TIMEOUT_MS,
         DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_POLL_TIMEOUT_DEFAULT);
+
+    capacityLimit = conf.getLong(
+        DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_FILTER_PATHS_CAPACITY_LIMIT_KEY,
+        DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_FILTER_PATHS_CAPACITY_LIMIT_DEFAULT);
+
+    LOG.info("Init ReplicationRuleParam with ruleGenerateKey = {}, pathSizeLimit = {}, " +
+            "minCrossReadSize = {}, pollTimeOut = {}, capacityLimit = {} ", ruleGenerateKey,
+        pathSizeLimit, minCrossReadSize, pollTimeOut, capacityLimit);
   }
 
   private class Monitor implements Runnable {
@@ -190,6 +209,11 @@ public class ReplicationRuleGenerateKafkaTrigger {
         String ns = jsonObject.getString("ns");
         String path = jsonObject.getString("path");
         long crossReadSize = jsonObject.getLong("size");
+        if (filterPaths.contains(path)) {
+          LOG.warn("Can not add replication rule: {} and filterPaths contain {} skip.",
+              record, path);
+          return;
+        }
         ContentSummary contentSummary = fs.getContentSummary(new Path(path));
         long pathSize = contentSummary.getLength();
         String[] rules = ruleGenerateKey.split(FIELD_SEPARATOR);
@@ -205,6 +229,14 @@ public class ReplicationRuleGenerateKafkaTrigger {
           LOG.info("{} {} add replication rule: {} {} and cost {} ms.", ns, path, replicationRule,
               resultCode.getMsg(), now() - start);
         } else {
+          if (pathSize > pathSizeLimit) {
+            if (filterPaths.size() < capacityLimit) {
+              filterPaths.add(path);
+            } else {
+              LOG.warn("Can not add {} to filterPaths and " + "capacity = {}, limit = {}.",
+                  path, filterPaths.size(), capacityLimit);
+            }
+          }
           LOG.warn("Can not add replication rule: {} and cost {} ms.", record, now() - start);
         }
       } catch (Exception e) {
