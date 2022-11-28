@@ -51,6 +51,7 @@
     <module>hadoop-aliyun</module>
     <module>hadoop-fs2img</module>
     <module>hadoop-fastcopy</module>
+    <module>hadoop-shopee</module>
   </modules>
 
   <build>

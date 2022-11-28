@@ -19,150 +19,103 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.hadoop</groupId>
-    <artifactId>hadoop-project-dist</artifactId>
+    <artifactId>hadoop-project</artifactId>
     <version>3.3.sdi-049-SNAPSHOT</version>
-    <relativePath>../../hadoop-project-dist</relativePath>
+    <relativePath>../../hadoop-project</relativePath>
   </parent>
-  <artifactId>hadoop-tools-dist</artifactId>
+  <artifactId>hadoop-shopee</artifactId>
   <version>3.3.sdi-049-SNAPSHOT</version>
-  <description>Apache Hadoop Tools Dist</description>
-  <name>Apache Hadoop Tools Dist</name>
+  <description>Apache Hadoop Shopee Tools</description>
+  <name>Apache Hadoop Shopee Tools</name>
   <packaging>jar</packaging>
 
   <properties>
-    <hadoop.component>tools</hadoop.component>
+    <file.encoding>UTF-8</file.encoding>
+    <downloadSources>true</downloadSources>
+    <hadoop.log.dir>${project.build.directory}/log</hadoop.log.dir>
   </properties>
 
   <dependencies>
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-streaming</artifactId>
-      <scope>compile</scope>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-distcp</artifactId>
-      <scope>compile</scope>
+      <artifactId>hadoop-common</artifactId>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-fastcopy</artifactId>
-      <scope>compile</scope>
+      <artifactId>hadoop-annotations</artifactId>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-archives</artifactId>
-      <scope>compile</scope>
+      <artifactId>hadoop-mapreduce-client-app</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-archive-logs</artifactId>
-      <scope>compile</scope>
+      <artifactId>hadoop-mapreduce-client-hs</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-rumen</artifactId>
-      <scope>compile</scope>
+      <artifactId>hadoop-mapreduce-client-core</artifactId>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-datajoin</artifactId>
-      <scope>compile</scope>
+      <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-extras</artifactId>
-      <scope>compile</scope>
+      <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
+      <scope>test</scope>
+      <type>test-jar</type>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-gridmix</artifactId>
-      <scope>compile</scope>
+      <artifactId>hadoop-hdfs-client</artifactId>
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-pipes</artifactId>
-      <scope>compile</scope>
-      <type>pom</type>
-      <version>${project.version}</version>
+      <artifactId>hadoop-hdfs</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-openstack</artifactId>
-      <scope>compile</scope>
-      <version>${project.version}</version>
+      <artifactId>hadoop-hdfs</artifactId>
+      <scope>test</scope>
+      <type>test-jar</type>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-aws</artifactId>
-      <scope>compile</scope>
-      <version>${project.version}</version>
+      <artifactId>hadoop-common</artifactId>
+      <scope>test</scope>
+      <type>test-jar</type>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-kafka</artifactId>
-      <scope>compile</scope>
-      <version>${project.version}</version>
+      <artifactId>hadoop-yarn-server-tests</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-azure</artifactId>
-      <scope>compile</scope>
-      <version>${project.version}</version>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-core</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-aliyun</artifactId>
-      <scope>compile</scope>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-sls</artifactId>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-        <groupId>org.apache.hadoop</groupId>
-        <artifactId>hadoop-resourceestimator</artifactId>
-        <version>${project.version}</version>
-        <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-azure-datalake</artifactId>
-      <scope>compile</scope>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-fs2img</artifactId>
-      <scope>compile</scope>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.hadoop</groupId>
-      <artifactId>hadoop-shopee</artifactId>
-      <scope>compile</scope>
-      <version>${project.version}</version>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
     </dependency>
   </dependencies>
-
-  <build>
-    <plugins>
-      <plugin>
-        <artifactId>maven-deploy-plugin</artifactId>
-        <configuration>
-          <skip>true</skip>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.rat</groupId>
-        <artifactId>apache-rat-plugin</artifactId>
-        <configuration>
-        </configuration>
-      </plugin>
-    </plugins>
-  </build>
 
   <profiles>
     <profile>
@@ -172,7 +125,7 @@
       </activation>
       <build>
         <plugins>
-         <plugin>
+          <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-assembly-plugin</artifactId>
             <dependencies>
@@ -194,8 +147,36 @@
                   <attach>false</attach>
                   <finalName>${project.artifactId}-${project.version}</finalName>
                   <descriptorRefs>
-                    <descriptorRef>hadoop-tools</descriptorRef>
+                    <descriptorRef>hadoop-shopee</descriptorRef>
                   </descriptorRefs>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-jar-plugin</artifactId>
+            <configuration>
+              <archive>
+                <manifest>
+                  <mainClass>org.apache.hadoop.tools.ec.ECValidatorJob</mainClass>
+                </manifest>
+              </archive>
+            </configuration>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-dependency-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>deplist</id>
+                <phase>compile</phase>
+                <goals>
+                  <goal>list</goal>
+                </goals>
+                <configuration>
+                  <!-- referenced by a built-in command -->
+                  <outputFile>${project.basedir}/target/hadoop-tools-deps/${project.artifactId}.tools-builtin.txt</outputFile>
                 </configuration>
               </execution>
             </executions>

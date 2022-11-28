@@ -25,6 +25,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfoWithStorage;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
@@ -270,6 +271,29 @@ public class TestDebugAdmin {
         "-out", metaFile.getAbsolutePath()});
     assertTrue(runCmd(new String[]{"verifyEC", "-file", "/ec/foo_corrupt"})
         .contains("Status: ERROR, message: EC compute result not match."));
-  }
 
+    Path checkSumFailedFile = new Path(ecDir, "foo_checksum_failed");
+    DFSTestUtil.createFile(fs, checkSumFailedFile, 5841961, repl, seed);
+    blocks = DFSTestUtil.getAllBlocks(fs, checkSumFailedFile);
+    assertEquals(1, blocks.size());
+    blockGroup = (LocatedStripedBlock) blocks.get(0);
+    indexedBlocks = StripedBlockUtil.parseStripedBlockGroup(blockGroup,
+        ecPolicy.getCellSize(), ecPolicy.getNumDataUnits(), ecPolicy.getNumParityUnits());
+    // Try checkSumFailed block 0 in block group.
+    LocatedBlock toFailedLocatedBlock = indexedBlocks[0];
+    ExtendedBlock toFailedBlock = toFailedLocatedBlock.getBlock();
+    DatanodeInfoWithStorage datanodeInfoWithStorage = toFailedLocatedBlock.getLocations()[0];
+    datanode = cluster.getDataNode(datanodeInfoWithStorage.getIpcPort());
+    blockFile = getBlockFile(datanode.getFSDataset(),
+        toFailedBlock.getBlockPoolId(), toFailedBlock.getLocalBlock());
+
+    // Write error bytes to block file and not to update meta file, trigger ChecksumException.
+    errorBytes = new byte[2097152];
+    new Random(seed).nextBytes(errorBytes);
+    FileUtils.writeByteArrayToFile(blockFile, errorBytes);
+    assertTrue(runCmd(new String[]{"verifyEC", "-file", "/ec/foo_checksum_failed"})
+        .contains("Status: ERROR, message: [" + blockGroup.getBlock().getBlockName() + "$" +
+            toFailedBlock.getLocalBlock().toString() + "$" +
+            datanodeInfoWithStorage.getXferAddr() + "$org.apache.hadoop.fs.ChecksumException"));
+  }
 }

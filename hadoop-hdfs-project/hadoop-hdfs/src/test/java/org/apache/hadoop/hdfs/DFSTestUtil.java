@@ -488,6 +488,17 @@ public class DFSTestUtil {
       }
     }
   }
+
+  public static void createFile(Path root, String fileName, FileSystem fs, byte[] fileContent)
+      throws IOException {
+    final Path path = new Path(root, fileName);
+    final FSDataOutputStream out = fs.create(path);
+    try {
+      out.write(fileContent);
+    } finally {
+      out.close();
+    }
+  }
   
   public static byte[] calculateFileContentsFromSeed(long seed, int length) {
     Random rb = new Random(seed);

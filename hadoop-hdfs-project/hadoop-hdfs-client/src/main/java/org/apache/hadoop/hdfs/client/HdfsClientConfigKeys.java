@@ -141,6 +141,19 @@ public interface HdfsClientConfigKeys {
   int     DFS_CHECKSUM_EC_SOCKET_TIMEOUT_DEFAULT = 3000;
   String  DFS_DATANODE_SOCKET_WRITE_TIMEOUT_KEY =
       "dfs.datanode.socket.write.timeout";
+
+  String  DFS_DATANODE_USE_DN_HOSTNAME = "dfs.datanode.use.datanode.hostname";
+  boolean DFS_DATANODE_USE_DN_HOSTNAME_DEFAULT = false;
+
+  String  DFS_DN_EC_RECONSTRUCTION_STRIPED_READ_BUFFER_SIZE_KEY = "dfs.datanode.ec.reconstruction.stripedread.buffer.size";
+  int     DFS_DN_EC_RECONSTRUCTION_STRIPED_READ_BUFFER_SIZE_DEFAULT = 64 * 1024;
+
+  String  DFS_EC_VALIDATOR_THREADS_KEY = "dfs.ec.validator.threads";
+  int     DFS_EC_VALIDATOR_THREADS_DEFAULT = 14; // default max ErasurePolicy is RS_10_4_SCHEMA.
+
+  String  DFS_EC_VALIDATOR_FIELD_SEPARATOR_KEY = "dfs.ec.validator.field.separator";
+  String  DFS_EC_VALIDATOR_FIELD_SEPARATOR_DEFAULT = "|";
+
   String  DFS_CLIENT_DOMAIN_SOCKET_DATA_TRAFFIC =
       "dfs.client.domain.socket.data.traffic";
   boolean DFS_CLIENT_DOMAIN_SOCKET_DATA_TRAFFIC_DEFAULT = false;

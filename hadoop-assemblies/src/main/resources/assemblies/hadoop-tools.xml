@@ -40,6 +40,14 @@
       <fileMode>0755</fileMode>
     </fileSet>
     <fileSet>
+      <directory>../hadoop-shopee/src/main/shellprofile.d</directory>
+      <includes>
+        <include>*</include>
+      </includes>
+      <outputDirectory>/libexec/shellprofile.d</outputDirectory>
+      <fileMode>0755</fileMode>
+    </fileSet>
+    <fileSet>
       <directory>../hadoop-distcp/src/main/shellprofile.d</directory>
       <includes>
         <include>*</include>
@@ -124,6 +132,17 @@
       <includes>
         <include>*-sources.jar</include>
       </includes>
+    </fileSet>
+    <fileSet>
+      <directory>../hadoop-shopee/target</directory>
+      <outputDirectory>/share/hadoop/${hadoop.component}/sources</outputDirectory>
+      <includes>
+        <include>*-sources.jar</include>
+      </includes>
+    </fileSet>
+    <fileSet>
+      <directory>../hadoop-shopee/target/hadoop-shopee-${project.version}/shopee</directory>
+      <outputDirectory>/share/hadoop/${hadoop.component}/shopee</outputDirectory>
     </fileSet>
     <fileSet>
       <directory>../hadoop-gridmix/target</directory>

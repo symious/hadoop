@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.tools.offlineImageViewer;
 
+import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
@@ -49,7 +50,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.Closeable;
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -66,6 +69,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import static org.apache.hadoop.hdfs.server.common.HdfsServerConstants.XATTR_ERASURECODING_POLICY;
 
 /**
  * This class reads the protobuf-based fsimage and generates text output
@@ -819,5 +824,23 @@ abstract class PBImageTextWriter implements Closeable {
       }
     }
     return HdfsConstants.BLOCK_STORAGE_POLICY_ID_UNSPECIFIED;
+  }
+
+  public String getErasureCodingPolicyName
+      (INodeSection.XAttrFeatureProto xattrFeatureProto) {
+    List<XAttr> xattrs =
+        FSImageFormatPBINode.Loader.loadXAttrs(xattrFeatureProto, stringTable);
+    for (XAttr xattr : xattrs) {
+      if (XATTR_ERASURECODING_POLICY.contains(xattr.getName())){
+        try{
+          ByteArrayInputStream bIn = new ByteArrayInputStream(xattr.getValue());
+          DataInputStream dIn = new DataInputStream(bIn);
+          return WritableUtils.readString(dIn);
+        } catch (IOException ioException){
+          return null;
+        }
+      }
+    }
+    return null;
   }
 }
