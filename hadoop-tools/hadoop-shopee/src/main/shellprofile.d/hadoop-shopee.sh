@@ -36,6 +36,28 @@ function hadoop_subcommand_ecvalidator
 
 fi
 
+
+if ! declare -f hadoop_subcommand_compatibilitytest >/dev/null 2>/dev/null; then
+
+  if [[ "${HADOOP_SHELL_EXECNAME}" = hadoop ]]; then
+    hadoop_add_subcommand "compatibilitytest" client "run a compatibility test between different hadoop versions"
+  fi
+
+  # this can't be indented otherwise shelldocs won't get it
+
+## @description  compatibilitytest command for hadoop
+## @audience     public
+## @stability    stable
+## @replaceable  yes
+function hadoop_subcommand_compatibilitytest
+{
+  # shellcheck disable=SC2034
+  HADOOP_CLASSNAME=org.apache.hadoop.tools.compatibility.TestCase
+  hadoop_add_to_classpath_tools hadoop-shopee
+}
+
+fi
+
 if ! declare -f mapred_subcommand_ecvalidator >/dev/null 2>/dev/null; then
 
   if [[ "${HADOOP_SHELL_EXECNAME}" = mapred ]]; then
@@ -44,7 +66,7 @@ if ! declare -f mapred_subcommand_ecvalidator >/dev/null 2>/dev/null; then
 
   # this can't be indented otherwise shelldocs won't get it
 
-## @description  ecvalidator command for mapred (calls hadoop)
+## @description  ecvalidator command
 ## @audience     public
 ## @stability    stable
 ## @replaceable  yes
@@ -52,6 +74,27 @@ function mapred_subcommand_ecvalidator
 {
   # shellcheck disable=SC2034
   HADOOP_CLASSNAME=org.apache.hadoop.tools.ec.ECValidatorJob
+  hadoop_add_to_classpath_tools hadoop-shopee
+}
+
+fi
+
+if ! declare -f mapred_subcommand_compatibilitytest >/dev/null 2>/dev/null; then
+
+  if [[ "${HADOOP_SHELL_EXECNAME}" = mapred ]]; then
+    hadoop_add_subcommand "compatibilitytest" client "run a compatibility test between different hadoop versions"
+  fi
+
+  # this can't be indented otherwise shelldocs won't get it
+
+## @description  compatibilitytest command
+## @audience     public
+## @stability    stable
+## @replaceable  yes
+function mapred_subcommand_compatibilitytest
+{
+  # shellcheck disable=SC2034
+  HADOOP_CLASSNAME=org.apache.hadoop.tools.compatibility.TestCase
   hadoop_add_to_classpath_tools hadoop-shopee
 }
 
