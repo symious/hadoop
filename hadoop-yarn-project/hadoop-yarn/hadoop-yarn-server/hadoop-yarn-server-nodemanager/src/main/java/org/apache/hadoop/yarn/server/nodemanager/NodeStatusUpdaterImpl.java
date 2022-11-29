@@ -42,6 +42,8 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.yarn.server.api.records.ApplicationLevel;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManagerImpl;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.dynamicresource.DynamicResourcePublisher;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ContainerLocalizer;
 
 import org.apache.hadoop.util.SysInfo;
@@ -1654,6 +1656,12 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
             if (nmTimelinePublisher != null) {
               nmTimelinePublisher.setTimelineServiceAddress(
                   application.getAppId(), collectorData.getCollectorAddr());
+            }
+            DynamicResourcePublisher dynamicResourcePublisher =
+                context.getDynamicResourcePublisher();
+            if (dynamicResourcePublisher != null) {
+              dynamicResourcePublisher
+                  .setAppCollectorData(application.getAppId(), collectorData);
             }
             // Update information for the node manager itself.
             knownCollectors.put(appId, collectorData);

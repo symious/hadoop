@@ -35,6 +35,7 @@ import org.apache.hadoop.util.ExitUtil;
 import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.JvmPauseMonitor;
 import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.dynamicresource.DynamicResourcePublisher;
 import org.apache.hadoop.yarn.server.nodemanager.health.NodeHealthCheckerService;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Shell;
@@ -679,6 +680,8 @@ public class NodeManager extends CompositeService
 
     private NMTimelinePublisher nmTimelinePublisher;
 
+    private DynamicResourcePublisher dynamicResourcePublisher;
+
     private ContainerStateTransitionListener containerStateTransitionListener;
 
     private ResourcePluginManager resourcePluginManager;
@@ -961,6 +964,17 @@ public class NodeManager extends CompositeService
     @Override
     public AuxServices getAuxServices() {
       return this.auxServices;
+    }
+
+    @Override
+    public void setDynamicResourcePublisher(
+        DynamicResourcePublisher dynamicResourcePublisher) {
+      this.dynamicResourcePublisher = dynamicResourcePublisher;
+    }
+
+    @Override
+    public DynamicResourcePublisher getDynamicResourcePublisher() {
+      return dynamicResourcePublisher;
     }
   }
 

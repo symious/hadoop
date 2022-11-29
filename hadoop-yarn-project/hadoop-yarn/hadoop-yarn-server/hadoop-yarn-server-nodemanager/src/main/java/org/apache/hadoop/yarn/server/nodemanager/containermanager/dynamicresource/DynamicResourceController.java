@@ -4,12 +4,13 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.server.api.ContainerType;
 import org.apache.hadoop.yarn.server.nodemanager.Context;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class DynamicResourceController extends Thread{
+public class DynamicResourceController extends Thread {
 
   private final static Logger LOG =
       LoggerFactory.getLogger(DynamicResourceController.class);
@@ -18,8 +19,7 @@ public class DynamicResourceController extends Thread{
   private Policy policy;
   private long monitoringInterval;
 
-  public DynamicResourceController(Configuration conf,
-      Context context) {
+  public DynamicResourceController(Configuration conf, Context context) {
     super("DynamicMemoryController");
     this.context = context;
     policy = getPolicy(conf);
@@ -38,15 +38,22 @@ public class DynamicResourceController extends Thread{
 
   @Override
   public void run() {
-    while(true) {
+    while (true) {
       for (Container container : context.getContainers().values()) {
-        if (!container.isRunning()) {
+        if (!container.isRunning() || container.getContainerTokenIdentifier()
+            .getContainerType().equals(ContainerType.APPLICATION_MASTER)) {
           continue;
         }
         UpdateContainerRequest updateContainerRequest = policy.apply(container);
         if (updateContainerRequest != null) {
-          context.getTobeUpdatedContainers()
-              .put(container.getContainerId(), updateContainerRequest);
+          LOG.info("Generate DynamicEvent. updateContainerRequest: "
+              + updateContainerRequest);
+          context.getDynamicResourcePublisher().publishDynamicResourceEvent(
+              new DynamicResourceEvent(
+                  DynamicResourceEventType.PUBLISH_UPDATE_CONTAINER_REQUEST,
+                  updateContainerRequest.getContainerId()
+                      .getApplicationAttemptId().getApplicationId(),
+                  updateContainerRequest));
         }
       }
       try {

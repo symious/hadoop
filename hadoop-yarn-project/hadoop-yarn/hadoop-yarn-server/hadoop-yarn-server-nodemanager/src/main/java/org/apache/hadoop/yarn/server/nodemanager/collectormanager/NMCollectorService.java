@@ -22,6 +22,8 @@ import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.dynamicresource.DynamicResourcePublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -128,6 +130,12 @@ public class NMCollectorService extends CompositeService implements
         if (nmTimelinePublisher != null) {
           nmTimelinePublisher.setTimelineServiceAddress(appId,
               collector.getCollectorAddr());
+        }
+        DynamicResourcePublisher dynamicResourcePublisher =
+            context.getDynamicResourcePublisher();
+        if (dynamicResourcePublisher != null) {
+          collector.setCollectorToken(dynamicResourcePublisher.getToken(appId));
+          dynamicResourcePublisher.setAppCollectorData(appId, collector);
         }
       }
       Map<ApplicationId, AppCollectorData> registeringCollectors

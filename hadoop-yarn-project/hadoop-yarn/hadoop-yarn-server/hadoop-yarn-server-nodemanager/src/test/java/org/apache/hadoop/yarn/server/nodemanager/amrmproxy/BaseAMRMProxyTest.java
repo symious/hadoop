@@ -59,6 +59,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.AuxServices;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManager;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.Application;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.dynamicresource.DynamicResourcePublisher;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.ResourcePluginManager;
 import org.apache.hadoop.yarn.server.nodemanager.logaggregation.tracker.NMLogAggregationStatusTracker;
 import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
@@ -847,6 +848,17 @@ public abstract class BaseAMRMProxyTest {
 
     @Override
     public AuxServices getAuxServices() {
+      return null;
+    }
+
+    @Override
+    public void setDynamicResourcePublisher(
+        DynamicResourcePublisher dynamicResourcePublisher) {
+
+    }
+
+    @Override
+    public DynamicResourcePublisher getDynamicResourcePublisher() {
       return null;
     }
   }

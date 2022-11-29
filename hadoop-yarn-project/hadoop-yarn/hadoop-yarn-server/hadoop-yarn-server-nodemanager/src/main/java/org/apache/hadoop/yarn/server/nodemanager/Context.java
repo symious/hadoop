@@ -35,6 +35,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.AuxServices;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManager;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.Application;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.dynamicresource.DynamicResourcePublisher;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.ResourcePluginManager;
 import org.apache.hadoop.yarn.server.nodemanager.logaggregation.tracker.NMLogAggregationStatusTracker;
 import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
@@ -147,4 +148,8 @@ public interface Context {
   void setAuxServices(AuxServices auxServices);
 
   AuxServices getAuxServices();
+
+  void setDynamicResourcePublisher(DynamicResourcePublisher dynamicResourcePublisher);
+
+  DynamicResourcePublisher getDynamicResourcePublisher();
 }

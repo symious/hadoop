@@ -27,6 +27,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.dynamicresource.DynamicResourcePublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -610,6 +611,12 @@ public class ApplicationImpl implements Application {
           app.context.getNMTimelinePublisher();
       if (nmTimelinePublisher != null) {
         nmTimelinePublisher.stopTimelineClient(app.getAppId());
+      }
+
+      DynamicResourcePublisher dynamicResourcePublisher =
+          app.context.getDynamicResourcePublisher();
+      if (dynamicResourcePublisher != null) {
+        dynamicResourcePublisher.stopApplication(app.getAppId());
       }
     }
 

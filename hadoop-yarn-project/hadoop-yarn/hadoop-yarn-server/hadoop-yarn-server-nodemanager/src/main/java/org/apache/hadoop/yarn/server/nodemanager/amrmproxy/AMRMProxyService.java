@@ -278,6 +278,11 @@ public class AMRMProxyService extends CompositeService implements
               + "Yarn registry access might not work", attemptId);
         }
 
+        if (nmContext.getDynamicResourcePublisher() != null) {
+          nmContext.getDynamicResourcePublisher()
+              .updateAMRMProxyToken(attemptId.getApplicationId(), localToken);
+        }
+
         // Create the intercepter pipeline for the AM
         initializePipeline(attemptId, user, amrmToken, localToken,
             entry.getValue(), true, amCred);
@@ -436,6 +441,11 @@ public class AMRMProxyService extends CompositeService implements
       initializePipeline(appAttemptId,
           containerTokenIdentifierForKey.getApplicationSubmitter(), amrmToken,
           localToken, null, false, credentials);
+
+      if (nmContext.getDynamicResourcePublisher() != null) {
+        nmContext.getDynamicResourcePublisher()
+            .updateAMRMProxyToken(applicationID, localToken);
+      }
 
       long endTime = clock.getTime();
       this.metrics.succeededAppStartRequests(endTime - startTime);
@@ -650,6 +660,12 @@ public class AMRMProxyService extends CompositeService implements
             this.secretManager.createAndGetAMRMToken(pipeline
                 .getApplicationAttemptId());
         context.setLocalAMRMToken(localToken);
+
+        if (nmContext.getDynamicResourcePublisher() != null) {
+          nmContext.getDynamicResourcePublisher().updateAMRMProxyToken(
+              amrmTokenIdentifier.getApplicationAttemptId().getApplicationId(),
+              localToken);
+        }
       }
 
       allocateResponse

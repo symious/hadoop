@@ -24,6 +24,7 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.yarn.api.protocolrecords.GetLocalizationStatusesRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetLocalizationStatusesResponse;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.UpdateContainerTokenEvent;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.dynamicresource.DynamicResourcePublisher;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.loghandler.event.LogHandlerTokenUpdatedEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.scheduler.ContainerSchedulerEvent;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.RecoveryIterator;
@@ -235,6 +236,8 @@ public class ContainerManagerImpl extends CompositeService implements
   private NMTimelinePublisher nmMetricsPublisher;
   private boolean timelineServiceV2Enabled;
 
+  private DynamicResourcePublisher dynamicResourcePublisher;
+
   public ContainerManagerImpl(Context context, ContainerExecutor exec,
       DeletionService deletionContext, NodeStatusUpdater nodeStatusUpdater,
       NodeManagerMetrics metrics, LocalDirsHandlerService dirsHandler) {
@@ -279,6 +282,13 @@ public class ContainerManagerImpl extends CompositeService implements
       }
       this.timelineServiceV2Enabled = true;
     }
+
+    if (conf.getBoolean(YarnConfiguration.NM_DYNAMIC_ADJUSTMENT_ENABLED,
+        YarnConfiguration.DEFAULT_NM_DYNAMIC_ADJUSTMENT_ENABLED)) {
+      dynamicResourcePublisher = createDynamicResourcePublisher(context);
+      context.setDynamicResourcePublisher(dynamicResourcePublisher);
+    }
+
     this.containersMonitor = createContainersMonitor(exec);
     addService(this.containersMonitor);
 
@@ -569,6 +579,14 @@ public class ContainerManagerImpl extends CompositeService implements
         new NMTimelinePublisher(ctxt);
     addIfService(nmTimelinePublisherLocal);
     return nmTimelinePublisherLocal;
+  }
+
+  protected DynamicResourcePublisher createDynamicResourcePublisher(
+      Context ctxt) {
+    DynamicResourcePublisher dynamicResourcePublisher =
+        new DynamicResourcePublisher(ctxt);
+    addIfService(dynamicResourcePublisher);
+    return dynamicResourcePublisher;
   }
 
   protected AbstractContainersLauncher createContainersLauncher(
