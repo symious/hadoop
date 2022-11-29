@@ -101,6 +101,10 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
 
   private static final int DEFAULT_MULTI_LABEL_ACCESS_PRIORITY = 80;
 
+  public static final String MAX_PENDING_COUNT_ON_MULTI_LABEL = "max-pending-count-on-multi-label";
+
+  public static final int DEFAULT_MAX_PENDING_COUNT_ON_MULTI_LABEL = 100;
+
   @Private
   public static final String OPPORTUNISTIC_ENABLED =
       "opportunistic-enabled";
@@ -522,6 +526,11 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   public int getMultiLabelAccessPriorityPerLabel(String label) {
     return getInt(PREFIX + label + DOT + MULTI_LABEL_ACCESS_PRIORITY,
         DEFAULT_MULTI_LABEL_ACCESS_PRIORITY);
+  }
+
+  public int getMaxPendingCountOnMultiLabel() {
+    return getInt(PREFIX + MAX_PENDING_COUNT_ON_MULTI_LABEL,
+        DEFAULT_MAX_PENDING_COUNT_ON_MULTI_LABEL);
   }
 
   /**

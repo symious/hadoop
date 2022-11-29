@@ -114,6 +114,8 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
 
   private boolean runnable;
 
+  public int pendingCountWithHeartbeat;
+
   /**
    * to hold the message if its app doesn't not get container from a node
    */

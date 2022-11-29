@@ -18,9 +18,12 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager;
 
+import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceUsage;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.LeafQueue;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerApp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -264,12 +267,30 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
       // if submitHour is contains on the access times
       // if currentHour is out of the access times range
       if (null != accessMultiLabelTimes &&
-          accessMultiLabelTimes.contains(submitHour) &&
-          !accessMultiLabelTimes.contains(currentHour)) {
-        asc.setNodeLabelExpression(null);
-        LOG.warn(
-            "Queue: " + app.getQueue() + " AppId: " + app.getApplicationId() +
-                " is out of accessMultiLabelTimes, we set nodeLabel null");
+          accessMultiLabelTimes.contains(submitHour)) {
+        if (!accessMultiLabelTimes.contains(currentHour)) {
+          asc.setNodeLabelExpression(null);
+          LOG.warn(
+              "Queue: " + app.getQueue() + " AppId: " + app.getApplicationId() +
+                  " is out of accessMultiLabelTimes, we set nodeLabel null");
+        }
+
+        FiCaSchedulerApp fiCaSchedulerApp = cs.getApplicationAttempt(appAttemptId);
+        ResourceUsage resourceUsage = fiCaSchedulerApp.getAppAttemptResourceUsage();
+        if (resourceUsage.getAllPending().compareTo(Resource.newInstance(0, 0)) > 0) {
+          fiCaSchedulerApp.pendingCountWithHeartbeat++;
+          if (fiCaSchedulerApp.pendingCountWithHeartbeat > cs.getMaxPendingCountOnMultiLabel()) {
+            asc.setNodeLabelExpression(null);
+            LOG.warn(
+                "Queue: " + app.getQueue() + " AppId: " + app.getApplicationId() +
+                    " is pending on partition for " + fiCaSchedulerApp.pendingCountWithHeartbeat +
+                    " heartbeat, then set nodeLabel null");
+          }
+        }
+
+        if (StringUtils.isNullOrEmpty(asc.getNodeLabelExpression())) {
+          fiCaSchedulerApp.updatePendingResourceRequests();
+        }
       }
     }
 

@@ -18,8 +18,11 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler;
 
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 import java.util.*;
 
@@ -27,9 +30,15 @@ import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.api.records.ResourceInformation;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CSQueue;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CSQueueMetrics;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerContext;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.LeafQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSLeafQueue;
 import org.apache.hadoop.yarn.server.scheduler.SchedulerRequestKey;
@@ -174,5 +183,66 @@ public class TestAppSchedulingInfo {
     reqs.add(req1);
     info.updateResourceRequests(reqs, false);
     Assert.assertEquals(0, info.getSchedulerKeys().size());
+  }
+
+  @Test
+  public void testUpdatePendingResourceRequests() {
+    ApplicationId appIdImpl = ApplicationId.newInstance(0, 1);
+    ApplicationAttemptId appAttemptId =
+        ApplicationAttemptId.newInstance(appIdImpl, 1);
+
+    String qName = "qtest";
+    CapacitySchedulerContext cs = mock(CapacitySchedulerContext.class);
+    when(cs.getRMContext()).thenReturn(mock(RMContext.class));
+    CapacitySchedulerConfiguration capacitySchedulerConfiguration =
+        mock(CapacitySchedulerConfiguration.class);
+    when(cs.getConfiguration()).thenReturn(capacitySchedulerConfiguration);
+
+    CSQueue root = mock(CSQueue.class);
+    when(root.getQueueName()).thenReturn("");
+    Resource resource = mock(Resource.class);
+    when(resource.getResources()).thenReturn(new ResourceInformation[2]);
+    when(root.getMaximumAllocation()).thenReturn(resource);
+    when(capacitySchedulerConfiguration.getQueueMaximumAllocation(anyString())).thenReturn(
+        mock(Resource.class));
+    Queue queue = mock(LeafQueue.class);
+
+    when(queue.getQueueName()).thenReturn(qName);
+    CSQueueMetrics metrics =
+        spy(CSQueueMetrics.forQueue(qName, root, false, new YarnConfiguration()));
+    when(queue.getMetrics()).thenReturn(metrics);
+
+    when(queue.getDefaultNodeLabelExpression()).thenReturn("");
+    when(queue.getAccessibleNodeLabels()).thenReturn(Collections.singleton("test1"));
+
+    RMContext rmContext = mock(RMContext.class);
+    doReturn(new YarnConfiguration()).when(rmContext).getYarnConfiguration();
+    AppSchedulingInfo info = new AppSchedulingInfo(
+        appAttemptId, "test", queue, mock(ActiveUsersManager.class), 0,
+        new ResourceUsage(), new HashMap<>(), rmContext);
+    Assert.assertEquals(0, info.getSchedulerKeys().size());
+
+    Priority pri1 = Priority.newInstance(1);
+    ResourceRequest req1 = ResourceRequest.newInstance(pri1,
+        ResourceRequest.ANY, Resource.newInstance(1024, 1), 1);
+    req1.setNodeLabelExpression("test1");
+    Priority pri2 = Priority.newInstance(2);
+    ResourceRequest req2 = ResourceRequest.newInstance(pri2,
+        ResourceRequest.ANY, Resource.newInstance(1024, 1), 2);
+    req2.setNodeLabelExpression("test1");
+    List<ResourceRequest> reqs = new ArrayList<>();
+    reqs.add(req1);
+    reqs.add(req2);
+    info.updateResourceRequests(reqs, false);
+
+    QueueMetrics testMetrics = metrics.getPartitionQueueMetrics("test1");
+    Assert.assertEquals(3, testMetrics.getPendingContainers());
+    Assert.assertEquals(0, metrics.getPendingContainers());
+
+    // Move to default label
+    info.updatePendingResourceRequests();
+
+    Assert.assertEquals(0, testMetrics.getPendingContainers());
+    Assert.assertEquals(3, metrics.getPendingContainers());
   }
 }

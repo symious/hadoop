@@ -839,4 +839,37 @@ public class AppSchedulingInfo {
   public RMContext getRMContext() {
     return this.rmContext;
   }
+
+  public void updatePendingResourceRequests() {
+    writeLock.lock();
+    try {
+      List<ResourceRequest> requests = new ArrayList<>();
+      for (AppPlacementAllocator ap : schedulerKeyToAppPlacementAllocator
+          .values()) {
+        requests.addAll(ap.getResourceRequests().values());
+      }
+      if (null == requests || requests.isEmpty()) {
+        return;
+      }
+
+      // A map to group resource requests and dedup
+      Map<SchedulerRequestKey, Map<String, ResourceRequest>> dedupRequests =
+          new HashMap<>();
+
+      // Group resource request by schedulerRequestKey and resourceName
+      for (ResourceRequest request : requests) {
+        ResourceRequest newRR = ResourceRequest.clone(request);
+        newRR.setNodeLabelExpression(queue.getDefaultNodeLabelExpression());
+        SchedulerRequestKey schedulerKey = SchedulerRequestKey.create(newRR);
+        if (!dedupRequests.containsKey(schedulerKey)) {
+          dedupRequests.put(schedulerKey, new HashMap<>());
+        }
+        dedupRequests.get(schedulerKey).put(newRR.getResourceName(), newRR);
+      }
+
+      internalAddResourceRequests(false, dedupRequests);
+    } finally {
+      writeLock.unlock();
+    }
+  }
 }

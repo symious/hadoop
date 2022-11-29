@@ -200,6 +200,8 @@ public class CapacityScheduler extends
 
   private int maxAssignPerHeartbeat;
 
+  private int maxPendingCountOnMultiLabel;
+
   private CSConfigurationProvider csConfProvider;
 
   @Override
@@ -359,6 +361,8 @@ public class CapacityScheduler extends
       this.assignMultipleEnabled = this.conf.getAssignMultipleEnabled();
       this.maxAssignPerHeartbeat = this.conf.getMaxAssignPerHeartbeat();
 
+      this.maxPendingCountOnMultiLabel = this.conf.getMaxPendingCountOnMultiLabel();
+
       // number of threads for async scheduling
       int maxAsyncSchedulingThreads = this.conf.getInt(
           CapacitySchedulerConfiguration.SCHEDULE_ASYNCHRONOUSLY_MAXIMUM_THREAD,
@@ -507,6 +511,8 @@ public class CapacityScheduler extends
         LOG.info("assignMultipleEnabled = " + assignMultipleEnabled + "\n" +
             "maxAssignPerHeartbeat = " + maxAssignPerHeartbeat + "\n" +
             "offswitchPerHeartbeatLimit = " + offswitchPerHeartbeatLimit);
+
+        this.maxPendingCountOnMultiLabel = this.conf.getMaxPendingCountOnMultiLabel();
 
         super.reinitialize(newConf, rmContext);
       }
@@ -3493,5 +3499,9 @@ public class CapacityScheduler extends
   @VisibleForTesting
   public void setQueueManager(CapacitySchedulerQueueManager qm) {
     this.queueManager = qm;
+  }
+
+  public int getMaxPendingCountOnMultiLabel() {
+    return this.maxPendingCountOnMultiLabel;
   }
 }

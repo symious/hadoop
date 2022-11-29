@@ -453,7 +453,7 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
   public Queue getQueue() {
     return queue;
   }
-  
+
   public boolean updateResourceRequests(
       List<ResourceRequest> requests) {
     writeLock.lock();
@@ -462,6 +462,17 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
         return appSchedulingInfo.updateResourceRequests(requests, false);
       }
       return false;
+    } finally {
+      writeLock.unlock();
+    }
+  }
+
+  public void updatePendingResourceRequests() {
+    writeLock.lock();
+    try {
+      if (!isStopped) {
+        appSchedulingInfo.updatePendingResourceRequests();
+      }
     } finally {
       writeLock.unlock();
     }
