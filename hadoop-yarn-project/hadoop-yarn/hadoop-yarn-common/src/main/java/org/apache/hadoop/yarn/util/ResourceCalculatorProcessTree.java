@@ -141,6 +141,10 @@ public abstract class ResourceCalculatorProcessTree extends Configured {
     return UNAVAILABLE;
   }
 
+  public int getFdNum() {
+    return UNAVAILABLE;
+  }
+
   /**
    * Get the CPU usage by all the processes in the process-tree based on
    * average between samples as a ratio of overall CPU cycles similar to top.

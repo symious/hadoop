@@ -73,6 +73,7 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
 
   public static final String PROCFS_STAT_FILE = "stat";
   public static final String PROCFS_CMDLINE_FILE = "cmdline";
+  public static final String PROCFS_FD_DIR = "fd";
   public static final long PAGE_SIZE = SysInfoLinux.PAGE_SIZE;
   public static final long JIFFY_LENGTH_IN_MILLIS =
       SysInfoLinux.JIFFY_LENGTH_IN_MILLIS; // in millisecond
@@ -380,6 +381,19 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
     return isAvailable ? total : UNAVAILABLE;
   }
 
+  @Override
+  public int getFdNum() {
+    int total = 0;
+    boolean isAvailable = false;
+    for (ProcessInfo p : processTree.values()) {
+      if (p != null) {
+        isAvailable = true;
+        total += p.getFdNum();
+      }
+    }
+    return isAvailable ? total : UNAVAILABLE;
+  }
+
   /**
    * Get the resident set size (RSS) memory used by all the processes
    * in the process-tree that are older than the passed in age. RSS is
@@ -557,6 +571,8 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
             + " for process with pid " + pinfo.getPid());
         ret = null;
       }
+      File fdDir = new File(procfsDir + pinfo.getPid(), PROCFS_FD_DIR);
+      pinfo.updateFdNum(fdDir.list().length);
     } catch (IOException io) {
       LOG.warn("Error reading the stream", io);
       ret = null;
@@ -615,6 +631,7 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
     private final BigInteger MAX_LONG = BigInteger.valueOf(Long.MAX_VALUE);
     private BigInteger stime = new BigInteger("0"); // # of jiffies in kernel mode
     private Integer threadNum;
+    private Integer fdNum;
     // how many times has this process been seen alive
     private int age;
 
@@ -668,6 +685,10 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
       return threadNum;
     }
 
+    public Integer getFdNum() {
+      return fdNum;
+    }
+
     public Long getDtime() {
       return dtime;
     }
@@ -711,6 +732,10 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
 
     public void updateAge(ProcessInfo oldInfo) {
       this.age = oldInfo.age + 1;
+    }
+
+    public void updateFdNum(int fdNum) {
+      this.fdNum = fdNum;
     }
 
     public boolean addChild(ProcessInfo p) {

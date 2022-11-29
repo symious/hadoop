@@ -118,6 +118,7 @@ public class ContainersMonitorImpl extends AbstractService implements
   private boolean pmemCheckEnabled;
   private boolean vmemCheckEnabled;
   private boolean threadNumCheckEnabled;
+  private boolean fdNumCheckEnabled;
   private boolean elasticMemoryEnforcement;
   private boolean strictMemoryEnforcement;
   private boolean containersMonitorEnabled;
@@ -126,6 +127,7 @@ public class ContainersMonitorImpl extends AbstractService implements
 
   private long maxVCoresAllottedForContainers;
   private int threadNumLimit;
+  private int fdNumLimit;
 
   private static final long UNKNOWN_MEMORY_LIMIT = -1L;
   private int nodeCpuPercentageForYARN;
@@ -230,6 +232,9 @@ public class ContainersMonitorImpl extends AbstractService implements
     threadNumCheckEnabled = this.conf.getBoolean(
         YarnConfiguration.NM_THREAD_NUM_CHECK_ENABLED,
         YarnConfiguration.DEFAULT_NM_THREAD_NUM_CHECK_ENABLED);
+    fdNumCheckEnabled = this.conf
+        .getBoolean(YarnConfiguration.NM_FD_NUM_CHECK_ENABLED,
+            YarnConfiguration.DEFAULT_NM_FD_NUM_CHECK_ENABLED);
     elasticMemoryEnforcement = this.conf.getBoolean(
         YarnConfiguration.NM_ELASTIC_MEMORY_CONTROL_ENABLED,
         YarnConfiguration.DEFAULT_NM_ELASTIC_MEMORY_CONTROL_ENABLED);
@@ -241,11 +246,16 @@ public class ContainersMonitorImpl extends AbstractService implements
     LOG.info("Elastic memory control enabled: {}", elasticMemoryEnforcement);
     LOG.info("Strict memory control enabled: {}", strictMemoryEnforcement);
     LOG.info("Thread number check enabled: {}", threadNumCheckEnabled);
+    LOG.info("Fd number check enabled: {}", fdNumCheckEnabled);
 
     if (threadNumCheckEnabled) {
       this.threadNumLimit = this.conf
           .getInt(YarnConfiguration.NM_THREAD_NUM_LIMIT,
               YarnConfiguration.DEFAULT_NM_THREAD_NUM_LIMIT);
+    }
+    if (fdNumCheckEnabled) {
+      this.fdNumLimit = this.conf.getInt(YarnConfiguration.NM_FD_NUM_LIMIT,
+          YarnConfiguration.DEFAULT_NM_FD_NUM_LIMIT);
     }
 
     if (elasticMemoryEnforcement) {
@@ -863,7 +873,18 @@ public class ContainersMonitorImpl extends AbstractService implements
           containerExitStatus = ContainerExitStatus.KILLED_EXCEEDED_THREAD_NUMBER;
         }
       }
-      if (isMemoryOverLimit || isThreadNumOverLimit
+      boolean isFdNumOverLimit = false;
+      if (fdNumCheckEnabled) {
+        long totalFdNum = pTree.getFdNum();
+        if (totalFdNum > fdNumLimit) {
+          msg += String.format(
+              "Container [pid=%s,containerID=%s] is running %d beyond the '%d' fd number limit.",
+              pId, containerId, totalFdNum, fdNumLimit);
+          isFdNumOverLimit = true;
+          containerExitStatus = ContainerExitStatus.KILLED_EXCEEDED_FD_NUMBER;
+        }
+      }
+      if (isMemoryOverLimit || isThreadNumOverLimit || isFdNumOverLimit
           && trackingContainers.remove(containerId) != null) {
         // Virtual or physical memory over limit. Fail the container and
         // remove
