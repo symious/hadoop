@@ -105,6 +105,10 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
 
   public static final int DEFAULT_MAX_PENDING_COUNT_ON_MULTI_LABEL = 100;
 
+  public static final String MULTI_LABEL_ACCESS_APP_TYPE = "multi-label-access-app-type";
+
+  public static final String DEFAULT_MULTI_LABEL_ACCESS_APP_TYPE = "*";
+
   @Private
   public static final String OPPORTUNISTIC_ENABLED =
       "opportunistic-enabled";
@@ -547,6 +551,21 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     Set<String> set = new HashSet<String>();
     if (!StringUtils.isNullOrEmpty(hours)) {
       for (String str : hours.split(",")) {
+        if (!str.trim().isEmpty()) {
+          set.add(str.trim());
+        }
+      }
+    }
+    return set;
+  }
+
+  // Get the app type on the label
+  public Set<String> getMultiLabelAccessAppTypePerLabel(String label) {
+    String multiLabelAppTypeStr = get(PREFIX + label + DOT + MULTI_LABEL_ACCESS_APP_TYPE,
+        DEFAULT_MULTI_LABEL_ACCESS_APP_TYPE);
+    Set<String> set = new HashSet<String>();
+    if (!StringUtils.isNullOrEmpty(multiLabelAppTypeStr)) {
+      for (String str : multiLabelAppTypeStr.split(",")) {
         if (!str.trim().isEmpty()) {
           set.add(str.trim());
         }

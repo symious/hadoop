@@ -85,6 +85,7 @@ import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.SettableFu
 import org.apache.hadoop.yarn.util.StringHelper;
 
 import static org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager.NO_LABEL;
+import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.DEFAULT_MULTI_LABEL_ACCESS_APP_TYPE;
 import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.DEFAULT_MULTI_LABEL_RESOURCE_BUFFER_RATIO;
 
 /**
@@ -414,7 +415,7 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
       try {
         CapacityScheduler cs = (CapacityScheduler) this.scheduler;
         LeafQueue queue = (LeafQueue) cs.getQueue(queueName);
-        Set<String> labels = selectLabelsFromQueue(queue,cs.getConfiguration(), appPriority);
+        Set<String> labels = selectLabelsFromQueue(queue,cs.getConfiguration(), appPriority, submissionContext.getApplicationType());
         if (labels.size()==0) {
           return;
         }
@@ -436,7 +437,7 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
 
   // select labels which will be used for multi labels
   private Set<String> selectLabelsFromQueue(LeafQueue queue,
-      CapacitySchedulerConfiguration csConfiguration, int appPriority) {
+      CapacitySchedulerConfiguration csConfiguration, int appPriority, String appType) {
     // If out of the range of the access multi-label time will skip this part
     // like 1,2,3,4,5,6,10,20,21,23
     String currentHour =
@@ -450,6 +451,15 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
           if (LOG.isDebugEnabled()) {
             LOG.debug("Skip multi-label due to high priority, job priority:" + appPriority +
                 ", label limit priority:" + labelPriority);
+          }
+          continue;
+        }
+        Set<String> multiLabelAppTypes =
+            csConfiguration.getMultiLabelAccessAppTypePerLabel(labelName);
+        if (!multiLabelAppTypes.contains(DEFAULT_MULTI_LABEL_ACCESS_APP_TYPE) &&
+            !multiLabelAppTypes.contains(appType)) {
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Skip multi-label due to app type limitation, app type:" + appType);
           }
           continue;
         }
