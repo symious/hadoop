@@ -878,7 +878,45 @@ public class TestProportionalCapacityPreemptionPolicy {
     verify(mDisp, times(4)).handle(argThat(new IsPreemptionRequestFor(appA)));
     setAMContainer = false;
   }
-  
+
+  @Test
+  public void testPreemptSkippedAllAMContainers() {
+    int[][] qData = new int[][] {
+        //  /   A   B
+        { 100, 10, 90 }, // abs
+        { 100, 100, 100 }, // maxcap
+        { 100, 100, 0 }, // used
+        { 70, 20, 90 }, // pending
+        { 0, 0, 0 }, // reserved
+        { 5, 4, 1 }, // apps
+        { -1, 5, 5 }, // req granularity
+        { 2, 0, 0 }, // subqueues
+    };
+    setAMContainer = true;
+    conf.setBoolean(CapacitySchedulerConfiguration.AM_PREEMPTION_ENABLED,
+        false);
+    when(mCS.getConfiguration()).thenReturn(
+        new CapacitySchedulerConfiguration(conf));
+
+    ProportionalCapacityPreemptionPolicy policy = buildPolicy(qData);
+    policy.editSchedule();
+
+    // By skipping AM Container, all other 4 containers of appD will be
+    verify(mDisp, times(4)).handle(argThat(new IsPreemptionRequestFor(appD)));
+
+    // By skipping AM Container, all other 4 containers of appC will be
+    verify(mDisp, times(4)).handle(argThat(new IsPreemptionRequestFor(appC)));
+
+    // By skipping AM Container, all other 4 containers of appB will be
+    // preempted
+    verify(mDisp, times(4)).handle(argThat(new IsPreemptionRequestFor(appB)));
+
+    // By skipping AM Container, all other 4 containers of appA will be
+    // preempted
+    verify(mDisp, times(4)).handle(argThat(new IsPreemptionRequestFor(appA)));
+    setAMContainer = false;
+  }
+
   @Test
   public void testAMResourcePercentForSkippedAMContainers() {
     int[][] qData = new int[][] {

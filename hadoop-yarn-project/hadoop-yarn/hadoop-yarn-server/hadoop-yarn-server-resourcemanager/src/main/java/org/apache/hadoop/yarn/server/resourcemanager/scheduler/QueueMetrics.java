@@ -72,6 +72,8 @@ public class QueueMetrics implements MetricsSource {
       aggregateContainersPreempted;
   @Metric("Aggregate # of preempted containers") MutableCounterLong
       aggregateContainersFastPreempted;
+  @Metric("Aggregate # of preempted AM containers") MutableCounterLong
+      aggregateAMContainersPreempted;
   @Metric("Aggregate # of preempted memory seconds") MutableCounterLong
       aggregateMemoryMBSecondsPreempted;
   @Metric("Aggregate # of preempted vcore seconds") MutableCounterLong
@@ -888,6 +890,13 @@ public class QueueMetrics implements MetricsSource {
     }
   }
 
+  public void preemptAMContainer() {
+    aggregateAMContainersPreempted.incr();
+    if (parent != null) {
+      parent.preemptAMContainer();
+    }
+  }
+
   public void updatePreemptedMemoryMBSeconds(long mbSeconds) {
     aggregateMemoryMBSecondsPreempted.incr(mbSeconds);
     if (parent != null) {
@@ -1216,6 +1225,10 @@ public class QueueMetrics implements MetricsSource {
 
   public long getAggregateFastPreemptedContainers() {
     return aggregateContainersFastPreempted.value();
+  }
+
+  public long getAggregateAMPreemptedContainers() {
+    return aggregateAMContainersPreempted.value();
   }
 
   public void incrQueueChooseCount() {

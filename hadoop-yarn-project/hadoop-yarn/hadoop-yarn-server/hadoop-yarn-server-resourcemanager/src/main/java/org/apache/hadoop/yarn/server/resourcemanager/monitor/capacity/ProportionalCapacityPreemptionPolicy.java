@@ -115,6 +115,8 @@ public class ProportionalCapacityPreemptionPolicy
   private boolean crossQueuePreemptionConservativeDRF;
   private boolean inQueuePreemptionConservativeDRF;
 
+  private boolean preemptionEnabledForAM;
+
   // Current configuration
   private CapacitySchedulerConfiguration csConfig;
 
@@ -239,6 +241,10 @@ public class ProportionalCapacityPreemptionPolicy
         CapacitySchedulerConfiguration.
         DEFAULT_IN_QUEUE_PREEMPTION_CONSERVATIVE_DRF);
 
+    preemptionEnabledForAM = config.getBoolean(
+        CapacitySchedulerConfiguration.AM_PREEMPTION_ENABLED,
+        CapacitySchedulerConfiguration.DEFAULT_AM_PREEMPTION);
+
     candidatesSelectionPolicies = new ArrayList<>();
 
     // Do we need white queue-priority preemption policy?
@@ -319,7 +325,9 @@ public class ProportionalCapacityPreemptionPolicy
         "cross-queue-preemption.conservative-drf = " +
           crossQueuePreemptionConservativeDRF + "\n" +
         "in-queue-preemption.conservative-drf = " +
-          inQueuePreemptionConservativeDRF);
+          inQueuePreemptionConservativeDRF + "\n" +
+        "Preemption-AM-enabled = " +
+        preemptionEnabledForAM);
 
     csConfig = config;
   }
@@ -814,5 +822,10 @@ public class ProportionalCapacityPreemptionPolicy
   @Override
   public long getDefaultMaximumKillWaitTimeout() {
     return maxWaitTime;
+  }
+
+  @Override
+  public boolean getAMPreemptionEnabled() {
+    return preemptionEnabledForAM;
   }
 }

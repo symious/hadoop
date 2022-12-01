@@ -269,8 +269,10 @@ public class FifoCandidatesSelector
 
       // Skip AM Container from preemption for now.
       if (c.isAMContainer()) {
-        skippedAMContainerlist.add(c);
-        Resources.addTo(skippedAMSize, c.getAllocatedResource());
+        if (preemptionContext.getAMPreemptionEnabled()) {
+          skippedAMContainerlist.add(c);
+          Resources.addTo(skippedAMSize, c.getAllocatedResource());
+        }
         continue;
       }
 

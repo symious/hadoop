@@ -78,4 +78,6 @@ public interface CapacitySchedulerPreemptionContext {
   boolean getCrossQueuePreemptionConservativeDRF();
 
   boolean getInQueuePreemptionConservativeDRF();
+
+  boolean getAMPreemptionEnabled();
 }

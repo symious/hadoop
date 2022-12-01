@@ -2458,6 +2458,9 @@ public class LeafQueue extends AbstractCSQueue {
     final long usedSeconds = usedMillis / DateUtils.MILLIS_PER_SECOND;
     Resource containerResource = rmc.getAllocatedResource();
     metrics.preemptContainer();
+    if (rmc.isAMContainer()) {
+      metrics.preemptAMContainer();
+    }
     if (usedMillis <= fastPreemptionMetricTime) {
       metrics.fastPreemptContainer();
     }

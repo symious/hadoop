@@ -251,8 +251,6 @@ public class CapacityScheduler extends
 
   private ClusterMetrics metrics = ClusterMetrics.getMetrics();
 
-  private boolean preemptionEnabledForAM;
-
   public CapacityScheduler() {
     super(CapacityScheduler.class.getName());
     this.maxRunningEnforcer = new CSMaxRunningAppsEnforcer(this);
@@ -395,8 +393,6 @@ public class CapacityScheduler extends
             this.conf.getMultiNodePlacementPolicies());
       }
 
-      this.preemptionEnabledForAM = this.conf.getAMPreemptionEnabled();
-
       LOG.info("Initialized CapacityScheduler with " + "calculator="
           + getResourceCalculator().getClass() + ", " + "minimumAllocation=<"
           + getMinimumResourceCapability() + ">, " + "maximumAllocation=<"
@@ -406,8 +402,7 @@ public class CapacityScheduler extends
           + multiNodePlacementEnabled + ", " + "assignMultipleEnabled="
           + assignMultipleEnabled + ", " + "maxAssignPerHeartbeat="
           + maxAssignPerHeartbeat + ", " + "offswitchPerHeartbeatLimit="
-          + offswitchPerHeartbeatLimit + "，" + "preemptionEnabledForAM=" +
-          preemptionEnabledForAM);
+          + offswitchPerHeartbeatLimit);
     } finally {
       writeLock.unlock();
     }
@@ -498,10 +493,6 @@ public class CapacityScheduler extends
 
         // update lazy preemption
         this.isLazyPreemptionEnabled = this.conf.getLazyPreemptionEnabled();
-
-        // update preemptionEnabledForAM
-        preemptionEnabledForAM = this.conf.getAMPreemptionEnabled();
-        LOG.info("reinitialize preemptionEnabledForAM: " + preemptionEnabledForAM);
 
         // Setup how many containers we can allocate for each round
         assignMultipleEnabled = this.conf.getAssignMultipleEnabled();
@@ -2054,9 +2045,6 @@ public class CapacityScheduler extends
           (ContainerPreemptEvent)event;
       ApplicationAttemptId aid = preemptContainerEvent.getAppId();
       RMContainer containerToBePreempted = preemptContainerEvent.getContainer();
-      if (containerToBePreempted.isAMContainer() && !preemptionEnabledForAM) {
-        break;
-      }
       markContainerForPreemption(aid, containerToBePreempted);
     }
     break;
