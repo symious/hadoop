@@ -1312,6 +1312,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     rm2.waitForState(app1.getApplicationId(), RMAppState.RUNNING);
 
     // AM request for new containers
+    rm2.getRMContext().setSchedulerReady(false);
     am1.allocate("127.0.0.1", 1000, 1, new ArrayList<ContainerId>());
 
     List<Container> containers = new ArrayList<Container>();

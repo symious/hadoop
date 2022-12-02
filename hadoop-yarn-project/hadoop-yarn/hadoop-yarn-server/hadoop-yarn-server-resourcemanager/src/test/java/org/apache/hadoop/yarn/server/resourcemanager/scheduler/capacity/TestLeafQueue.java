@@ -231,6 +231,7 @@ public class TestLeafQueue {
     when(spyRMContext.getYarnConfiguration())
         .thenReturn(new YarnConfiguration());
     when(cs.getNumClusterNodes()).thenReturn(3);
+    spyRMContext.setSchedulerReady(true);
     cs.start();
   }
 
@@ -1525,7 +1526,7 @@ public class TestLeafQueue {
     FiCaSchedulerNode node_0 = TestUtils.getMockNode(host_0, DEFAULT_RACK, 0, 8*GB);
     String host_1 = "127.0.0.2";
     FiCaSchedulerNode node_1 = TestUtils.getMockNode(host_1, DEFAULT_RACK, 0, 8*GB);
-    
+
     final int numNodes = 2;
     Resource clusterResource = 
         Resources.createResource(numNodes * (8*GB), numNodes * 16);

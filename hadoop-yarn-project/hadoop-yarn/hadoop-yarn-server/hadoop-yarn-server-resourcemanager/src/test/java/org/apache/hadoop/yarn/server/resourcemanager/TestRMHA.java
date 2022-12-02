@@ -205,7 +205,7 @@ public class TestRMHA {
     assertFalse("RM is ready to become active before being started",
         rm.adminService.getServiceStatus().isReadyToBecomeActive());
     checkMonitorHealth();
-
+    rm.getRMContext().setSchedulerReady(true);
     rm.start();
     checkMonitorHealth();
     checkStandbyRMFunctionality();
@@ -219,12 +219,14 @@ public class TestRMHA {
 
     // 2. Transition to active
     rm.adminService.transitionToActive(requestInfo);
+    rm.getRMContext().setSchedulerReady(true);
     checkMonitorHealth();
     checkActiveRMFunctionality();
     verifyClusterMetrics(1, 1, 1, 1, 2048, 1);
 
     // 3. Transition to active - no-op
     rm.adminService.transitionToActive(requestInfo);
+    rm.getRMContext().setSchedulerReady(true);
     checkMonitorHealth();
     checkActiveRMFunctionality();
     verifyClusterMetrics(1, 2, 2, 2, 2048, 2);
@@ -237,6 +239,7 @@ public class TestRMHA {
 
     // 5. Transition to active to check Active->Standby->Active works
     rm.adminService.transitionToActive(requestInfo);
+    rm.getRMContext().setSchedulerReady(true);
     checkMonitorHealth();
     checkActiveRMFunctionality();
     verifyClusterMetrics(1, 1, 1, 1, 2048, 1);

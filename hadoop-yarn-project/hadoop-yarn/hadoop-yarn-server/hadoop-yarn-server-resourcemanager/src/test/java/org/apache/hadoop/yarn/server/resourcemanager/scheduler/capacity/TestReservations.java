@@ -156,6 +156,7 @@ public class TestReservations {
         .thenReturn(new YarnConfiguration());
 
     cs.setRMContext(spyRMContext);
+    spyRMContext.setSchedulerReady(true);
     cs.init(csConf);
     cs.start();
   }

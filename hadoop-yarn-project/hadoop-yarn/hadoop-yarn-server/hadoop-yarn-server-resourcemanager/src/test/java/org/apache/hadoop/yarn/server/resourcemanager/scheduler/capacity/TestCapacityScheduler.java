@@ -228,6 +228,7 @@ public class TestCapacityScheduler extends CapacitySchedulerTestBase {
     resourceManager.init(conf);
     resourceManager.getRMContext().getContainerTokenSecretManager().rollMasterKey();
     resourceManager.getRMContext().getNMTokenSecretManager().rollMasterKey();
+    resourceManager.getRMContext().setSchedulerReady(true);
     ((AsyncDispatcher)resourceManager.getRMContext().getDispatcher()).start();
     mockContext = mock(RMContext.class);
     when(mockContext.getConfigurationProvider()).thenReturn(
@@ -1882,6 +1883,7 @@ public class TestCapacityScheduler extends CapacitySchedulerTestBase {
     conf.setClass(YarnConfiguration.RM_SCHEDULER, CapacityScheduler.class,
         ResourceScheduler.class);
     MockRM rm = new MockRM(conf);
+    rm.getRMContext().setSchedulerReady(true);
     rm.start();
     return rm;
   }
@@ -4168,6 +4170,7 @@ public class TestCapacityScheduler extends CapacitySchedulerTestBase {
     conf.setClass(YarnConfiguration.RM_SCHEDULER, CapacityScheduler.class,
         ResourceScheduler.class);
     MockRM rm = new MockRM(conf);
+    rm.getRMContext().setSchedulerReady(true);
     rm.start();
     CapacityScheduler cs = (CapacityScheduler) rm.getResourceScheduler();
 
@@ -5326,6 +5329,7 @@ public class TestCapacityScheduler extends CapacitySchedulerTestBase {
     conf.setInt("yarn.scheduler.minimum-allocation-mb", 512);
     conf.setInt("yarn.scheduler.minimum-allocation-vcores", 1);
     MockRM rm = new MockRM(conf);
+    rm.getRMContext().setSchedulerReady(true);
     rm.start();
     rm.registerNode("127.0.0.1:1234", 10 * GB);
     rm.registerNode("127.0.0.1:1235", 10 * GB);
@@ -5793,6 +5797,7 @@ public class TestCapacityScheduler extends CapacitySchedulerTestBase {
         ResourceScheduler.class);
 
     MockRM rm = new MockRM(conf);
+    rm.getRMContext().setSchedulerReady(true);
     rm.start();
 
     CapacityScheduler cs = (CapacityScheduler) rm.getResourceScheduler();
@@ -5827,8 +5832,8 @@ public class TestCapacityScheduler extends CapacitySchedulerTestBase {
     assertEquals(3000, maxCapA11
         .get(TestQueueMetricsForCustomResources.CUSTOM_RES_1).longValue());
 
-    assertEquals(10240, ((CSQueueMetrics)cs.getQueue("a").getMetrics()).getGuaranteedMB());
-    assertEquals(71680, ((CSQueueMetrics)cs.getQueue("b1").getMetrics()).getGuaranteedMB());
+    assertEquals(10751, ((CSQueueMetrics)cs.getQueue("a").getMetrics()).getGuaranteedMB());
+    assertEquals(72585, ((CSQueueMetrics)cs.getQueue("b1").getMetrics()).getGuaranteedMB());
     assertEquals(102400, ((CSQueueMetrics)cs.getQueue("a").getMetrics()).getMaxCapacityMB());
     assertEquals(102400, ((CSQueueMetrics)cs.getQueue("b1").getMetrics()).getMaxCapacityMB());
     Map<String, Long> guaranteedCapA =
@@ -5858,8 +5863,8 @@ public class TestCapacityScheduler extends CapacitySchedulerTestBase {
 
     // Remove a node, metrics should be updated
     cs.handle(new NodeRemovedSchedulerEvent(n2));
-    assertEquals(5120, ((CSQueueMetrics)cs.getQueue("a").getMetrics()).getGuaranteedMB());
-    assertEquals(35840, ((CSQueueMetrics)cs.getQueue("b1").getMetrics()).getGuaranteedMB());
+    assertEquals(5375, ((CSQueueMetrics)cs.getQueue("a").getMetrics()).getGuaranteedMB());
+    assertEquals(36292, ((CSQueueMetrics)cs.getQueue("b1").getMetrics()).getGuaranteedMB());
     assertEquals(51200, ((CSQueueMetrics)cs.getQueue("a").getMetrics()).getMaxCapacityMB());
     assertEquals(51200, ((CSQueueMetrics)cs.getQueue("b1").getMetrics()).getMaxCapacityMB());
     Map<String, Long> guaranteedCapA1 =
@@ -5917,8 +5922,8 @@ public class TestCapacityScheduler extends CapacitySchedulerTestBase {
         new NMTokenSecretManagerInRM(csConf),
         new ClientToAMTokenSecretManagerInRM(), null));
 
-    assertEquals(1024, ((CSQueueMetrics)cs.getQueue("a2").getMetrics()).getGuaranteedMB());
-    assertEquals(2048, ((CSQueueMetrics)cs.getQueue("a3").getMetrics()).getGuaranteedMB());
+    assertEquals(1585, ((CSQueueMetrics)cs.getQueue("a2").getMetrics()).getGuaranteedMB());
+    assertEquals(2177, ((CSQueueMetrics)cs.getQueue("a3").getMetrics()).getGuaranteedMB());
     assertEquals(51200, ((CSQueueMetrics)cs.getQueue("a2").getMetrics()).getMaxCapacityMB());
     assertEquals(25600, ((CSQueueMetrics)cs.getQueue("a3").getMetrics()).getMaxCapacityMB());
 

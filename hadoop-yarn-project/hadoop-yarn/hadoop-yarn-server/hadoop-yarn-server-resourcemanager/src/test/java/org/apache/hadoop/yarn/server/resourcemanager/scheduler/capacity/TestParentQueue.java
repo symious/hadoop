@@ -104,6 +104,7 @@ public class TestParentQueue {
     when(csContext.getResourceCalculator()).
         thenReturn(resourceComparator);
     when(csContext.getRMContext()).thenReturn(rmContext);
+    rmContext.setSchedulerReady(true);
   }
   
   private static final String A = "a";

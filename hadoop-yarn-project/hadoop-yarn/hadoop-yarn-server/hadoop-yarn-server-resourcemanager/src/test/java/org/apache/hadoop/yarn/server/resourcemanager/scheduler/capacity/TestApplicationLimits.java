@@ -126,6 +126,7 @@ public class TestApplicationLimits {
     containerTokenSecretManager.rollMasterKey();
     when(csContext.getContainerTokenSecretManager()).thenReturn(
         containerTokenSecretManager);
+    rmContext.setSchedulerReady(true);
 
     CSQueueStore queues = new CSQueueStore();
     root = CapacitySchedulerQueueManager

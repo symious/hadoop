@@ -170,6 +170,7 @@ public class MockRM extends ResourceManager {
         setRMStateStore(mockStateStore);
       }
     }
+    getRMContext().setSchedulerReady(true);
     GenericTestUtils.setRootLogLevel(Level.DEBUG);
     disableDrainEventsImplicitly = false;
   }

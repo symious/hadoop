@@ -526,6 +526,12 @@ public class RMActiveServiceContext {
 
   @Private
   @Unstable
+  public void setSchedulerReady(boolean isSchedulerReady) {
+    this.isSchedulerReady = isSchedulerReady;
+  }
+
+  @Private
+  @Unstable
   public void setSystemClock(Clock clock) {
     this.systemClock = clock;
   }

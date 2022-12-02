@@ -100,6 +100,7 @@ public class TestChildQueueOrder {
         thenReturn(resourceComparator);
     when(csContext.getRMContext()).thenReturn(rmContext);
     when(csContext.getPreemptionManager()).thenReturn(new PreemptionManager());
+    rmContext.setSchedulerReady(true);
   }
 
   private FiCaSchedulerApp getMockApplication(int appId, String user) {

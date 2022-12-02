@@ -575,6 +575,12 @@ public class RMContextImpl implements RMContext {
 
   @Private
   @VisibleForTesting
+  public void setSchedulerReady(boolean isSchedulerReady) {
+    activeServiceContext.setSchedulerReady(isSchedulerReady);
+  }
+
+  @Private
+  @VisibleForTesting
   public void setSystemClock(Clock clock) {
     activeServiceContext.setSystemClock(clock);
   }

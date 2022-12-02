@@ -155,6 +155,8 @@ public interface RMContext extends ApplicationMasterServiceContext {
   boolean isSchedulerReadyForAllocatingContainers();
 
   boolean isSchedulerReady();
+
+  void setSchedulerReady(boolean isSchedulerReady);
   
   Configuration getYarnConfiguration();
   
