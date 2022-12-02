@@ -1402,12 +1402,12 @@ public class RouterClientProtocol implements ClientProtocol {
 
     // Throw original exception if no original nor mount points
     if (summaries.isEmpty() && notFoundException != null) {
-      logAuditEvent(false, "getContentSummary", INVOKE_TYPE_CONCURRENT, null);
+      logAuditEvent(false, "getContentSummary", INVOKE_TYPE_CONCURRENT, path);
       throw notFoundException;
     }
 
     ContentSummary ret = aggregateContentSummary(summaries);
-    logAuditEvent(true, "getContentSummary", INVOKE_TYPE_CONCURRENT, null);
+    logAuditEvent(true, "getContentSummary", INVOKE_TYPE_CONCURRENT, path);
     return ret;
   }
 
