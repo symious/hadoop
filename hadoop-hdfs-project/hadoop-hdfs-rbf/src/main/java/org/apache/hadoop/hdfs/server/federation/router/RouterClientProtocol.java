@@ -1600,7 +1600,7 @@ public class RouterClientProtocol implements ClientProtocol {
         if (ioe instanceof FileNotFoundException) {
           notFoundException = (FileNotFoundException)ioe;
         } else if (!allowPartialList) {
-          logAuditEvent(false, OperationName.GET_CONTENT_SUMMARY, INVOKE_TYPE_CONCURRENT, null);
+          logAuditEvent(false, OperationName.GET_CONTENT_SUMMARY, INVOKE_TYPE_CONCURRENT, path);
           throw ioe;
         }
       } else if (result.getResult() != null) {
@@ -1610,11 +1610,11 @@ public class RouterClientProtocol implements ClientProtocol {
 
     // Throw original exception if no original nor mount points
     if (summaries.isEmpty() && notFoundException != null) {
-      logAuditEvent(false, OperationName.GET_CONTENT_SUMMARY, INVOKE_TYPE_CONCURRENT, null);
+      logAuditEvent(false, OperationName.GET_CONTENT_SUMMARY, INVOKE_TYPE_CONCURRENT, path);
       throw notFoundException;
     }
 
-    logAuditEvent(true, OperationName.GET_CONTENT_SUMMARY, INVOKE_TYPE_CONCURRENT, null);
+    logAuditEvent(true, OperationName.GET_CONTENT_SUMMARY, INVOKE_TYPE_CONCURRENT, path);
     return aggregateContentSummary(summaries);
   }
 
