@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.monitor.capacity;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.server.resourcemanager.monitor.capacity.mockframework.ProportionalCapacityPreemptionPolicyMockFramework;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
 import org.junit.Before;
@@ -28,6 +29,7 @@ import java.io.IOException;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Test class for IntraQueuePreemption scenarios.
@@ -40,6 +42,7 @@ public class TestProportionalCapacityPreemptionPolicyIntraQueueUserLimit
     super.setup();
     conf.setBoolean(
         CapacitySchedulerConfiguration.INTRAQUEUE_PREEMPTION_ENABLED, true);
+    when(rmContext.getYarnConfiguration()).thenReturn(new Configuration(false));
     policy = new ProportionalCapacityPreemptionPolicy(rmContext, cs, mClock);
   }
 

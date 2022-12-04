@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.monitor.capacity;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.protocolrecords.ResourceTypes;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceInformation;
@@ -51,6 +52,7 @@ public class TestProportionalCapacityPreemptionPolicyIntraQueueWithDRF
         CapacitySchedulerConfiguration.INTRAQUEUE_PREEMPTION_ENABLED, true);
     resourceCalculator = new DominantResourceCalculator();
     when(cs.getResourceCalculator()).thenReturn(resourceCalculator);
+    when(rmContext.getYarnConfiguration()).thenReturn(new Configuration(false));
     policy = new ProportionalCapacityPreemptionPolicy(rmContext, cs, mClock);
   }
 
