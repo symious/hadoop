@@ -559,6 +559,13 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     return set;
   }
 
+  @VisibleForTesting
+  public void setMultiLabelAccessHoursPerQueueWithLabel(String queue,
+      String labelName, String hours) {
+    set(getQueuePrefix(queue) + labelName + DOT + MULTI_LABEL_ACCESS_HOURS,
+        hours);
+  }
+
   // Get the app type on the label
   public Set<String> getMultiLabelAccessConfigPerLabel(String label) {
     String multiLabelAppTypeStr = get(PREFIX + label + DOT + MULTI_LABEL_ACCESS_CONFIG,

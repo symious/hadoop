@@ -27,6 +27,7 @@ import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueMetrics;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceUsage;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CSQueueMetrics;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.LeafQueue;
 import org.slf4j.Logger;
@@ -239,7 +240,7 @@ public class TestAppManager extends AppManagerTestBase{
 
   @SuppressWarnings("deprecation")
   @Before
-  public void setUp() throws IOException {
+  public void setUp() throws IOException, YarnException {
     long now = System.currentTimeMillis();
 
     rmContext = mockRMContext(1, now - 10);
@@ -275,6 +276,10 @@ public class TestAppManager extends AppManagerTestBase{
     mockDefaultQueueInfo = mock(QueueInfo.class);
     when(scheduler.getQueueInfo("default", false, false))
         .thenReturn(mockDefaultQueueInfo);
+
+    when(scheduler.checkAndGetApplicationPriority(any(Priority.class),
+        any(UserGroupInformation.class), anyString(), any(ApplicationId.class)))
+        .thenReturn(Priority.newInstance(0));
 
     setupDispatcher(rmContext, conf);
   }
@@ -845,6 +850,7 @@ public class TestAppManager extends AppManagerTestBase{
   }
 
   private RMApp testRMAppSubmit() throws Exception {
+    Assert.assertEquals(asContext.getPriority().getPriority(), 0);
     appMonitor.submitApplication(asContext, "test");
     RMApp app = rmContext.getRMApps().get(appId);
     Assert.assertNotNull("app is null", app);
@@ -920,6 +926,9 @@ public class TestAppManager extends AppManagerTestBase{
         if (individualMaxAppAttempts[i][j] != 0) {
           asContext.setMaxAppAttempts(individualMaxAppAttempts[i][j]);
         }
+        when(scheduler.checkAndGetApplicationPriority(any(Priority.class),
+            any(UserGroupInformation.class), anyString(), any(ApplicationId.class)))
+            .thenReturn(Priority.newInstance(0));
         appMonitor.submitApplication(asContext, "test");
         RMApp app = rmContext.getRMApps().get(appID);
         Assert.assertEquals("max application attempts doesn't match",
@@ -993,27 +1002,66 @@ public class TestAppManager extends AppManagerTestBase{
     when(rmContext.getYarnConfiguration()).thenReturn(conf);
     when(conf.getBoolean(NODE_LABELS_ENABLED, DEFAULT_NODE_LABELS_ENABLED))
         .thenReturn(true);
+    CapacitySchedulerConfiguration csConf = new CapacitySchedulerConfiguration();
+    when(cs.getConfiguration()).thenReturn(csConf);
     RMAppManager appManager = new RMAppManager(rmContext, cs, null, null, conf);
     ApplicationSubmissionContext asc =
         ApplicationSubmissionContext
-            .newInstance(null, null, "root.q1", null, null,
+            .newInstance(null, null, "root.q1", Priority.newInstance(0), null,
                 false, false, 0, Resources.none(), null, false, null, null);
     //mock q1
     LeafQueue q1 = mock(LeafQueue.class);
     when(cs.getQueue("root.q1")).thenReturn(q1);
     Set<String> q1Label = new HashSet<>();
     q1Label.addAll(Arrays.asList("l1", "l2"));
+    when(q1.getQueuePath()).thenReturn("root.q1");
     when(q1.getAccessibleNodeLabels()).thenReturn(q1Label);
     CSQueueMetrics csQueueMetrics = mock(CSQueueMetrics.class);
     when(q1.getMetrics()).thenReturn(csQueueMetrics);
+
     QueueMetrics queueMetrics1 = mock(QueueMetrics.class);
     QueueMetrics queueMetrics2 = mock(QueueMetrics.class);
+    QueueMetrics queueMetrics3 = mock(QueueMetrics.class);
+
     when(csQueueMetrics.getPartitionQueueMetrics("l1"))
         .thenReturn(queueMetrics1);
     when(csQueueMetrics.getPartitionQueueMetrics("l2"))
         .thenReturn(queueMetrics2);
-    when(queueMetrics1.getAvailableMB()).thenReturn(1000l);
-    when(queueMetrics2.getAvailableMB()).thenReturn(200l);
+    when(csQueueMetrics.getPartitionQueueMetrics(RMNodeLabelsManager.NO_LABEL))
+        .thenReturn(queueMetrics3);
+
+    when(queueMetrics1.getPendingMB()).thenReturn(0L);
+    when(queueMetrics2.getPendingMB()).thenReturn(0L);
+    when(queueMetrics3.getPendingMB()).thenReturn(0L);
+
+    when(queueMetrics1.getPendingVirtualCores()).thenReturn(0);
+    when(queueMetrics2.getPendingVirtualCores()).thenReturn(0);
+    when(queueMetrics3.getPendingVirtualCores()).thenReturn(0);
+
+    when(q1.getEffectiveCapacity(RMNodeLabelsManager.NO_LABEL))
+        .thenReturn(Resource.newInstance(0L, 0));
+    when(q1.getEffectiveCapacity("l1"))
+        .thenReturn(Resource.newInstance(100000L, 1000));
+    when(q1.getEffectiveCapacity("l2"))
+        .thenReturn(Resource.newInstance(100000L, 1000));
+
+    when(q1.getEffectiveMaxCapacity(RMNodeLabelsManager.NO_LABEL))
+        .thenReturn(Resource.newInstance(0L, 0));
+    when(q1.getEffectiveMaxCapacity("l1"))
+        .thenReturn(Resource.newInstance(200000L, 2000));
+    when(q1.getEffectiveMaxCapacity("l2"))
+        .thenReturn(Resource.newInstance(200000L, 2000));
+
+    ResourceUsage q1ResourceUsage = mock(ResourceUsage.class);
+    when(q1.getQueueResourceUsage()).thenReturn(q1ResourceUsage);
+
+    when(q1ResourceUsage.getUsed(RMNodeLabelsManager.NO_LABEL))
+        .thenReturn(Resource.newInstance(0L, 0));
+    when(q1ResourceUsage.getUsed("l1"))
+        .thenReturn(Resource.newInstance(50000L, 500));
+    when(q1ResourceUsage.getUsed("l2"))
+        .thenReturn(Resource.newInstance(50000L, 500));
+
     // mock q1 access time range
     Set<String> q1Set = new HashSet<>();
     q1Set.addAll(Arrays.asList("-11,-2,-3,-4,-5".split(",")));
@@ -1022,18 +1070,23 @@ public class TestAppManager extends AppManagerTestBase{
     appManager.assignNodeLabel(asc, "root.q1");
     assertNull(asc.getNodeLabelExpression());
 
-    // the queue can access multi label at whole day
-    q1Set = new HashSet<>();
-    q1Set.addAll(Arrays.asList(
-        "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23"
-            .split(",")));
-    when(q1.getAccessMultiLabelTimes()).thenReturn(q1Set);
+    // queue can access multi label l1 at whole day, so return l1
+    String accessHours =
+        "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23";
+    csConf.setMultiLabelAccessHoursPerQueueWithLabel("root.q1", "l1",
+        accessHours);
     appManager.assignNodeLabel(asc, "root.q1");
     assertEquals(asc.getNodeLabelExpression(), "l1");
 
-    //l2 avaMem is greate than l1
+    // queue can access multi label l1&l2 at whole day, but l2 usedMem is less than l1
+    csConf.setMultiLabelAccessHoursPerQueueWithLabel("root.q1", "l2",
+        accessHours);
     asc.setNodeLabelExpression(null);
-    when(queueMetrics2.getAvailableMB()).thenReturn(2000l);
+    when(q1ResourceUsage.getUsed("l1"))
+        .thenReturn(Resource.newInstance(200000L, 500));
+    when(q1ResourceUsage.getUsed("l2"))
+        .thenReturn(Resource.newInstance(50000L, 500));
+
     appManager.assignNodeLabel(asc, "root.q1");
     assertEquals(asc.getNodeLabelExpression(), "l2");
   }
