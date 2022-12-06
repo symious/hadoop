@@ -65,7 +65,7 @@ class FSDirXAttrOp {
    */
   static FileStatus setXAttr(
       FSDirectory fsd, BlockManager bm, String src, XAttr xAttr,
-      EnumSet<XAttrSetFlag> flag, boolean logRetryCache)
+      EnumSet<XAttrSetFlag> flag, long fileId, boolean logRetryCache)
       throws IOException {
     checkXAttrsConfigFlag(fsd);
     checkXAttrSize(fsd, xAttr);
@@ -79,7 +79,7 @@ class FSDirXAttrOp {
     List<XAttr> newXAttrs;
     fsd.writeLock();
     try {
-      iip = fsd.resolvePath(pc, src, DirOp.WRITE);
+      iip = fsd.resolvePath(pc, src, fileId, DirOp.WRITE);
       src = iip.getPath();
       checkXAttrChangeAccess(fsd, iip, xAttr, pc);
 
@@ -106,7 +106,7 @@ class FSDirXAttrOp {
     return fsd.getAuditFileInfo(iip);
   }
 
-  static List<XAttr> getXAttrs(FSDirectory fsd, final String srcArg,
+  static List<XAttr> getXAttrs(FSDirectory fsd, final String srcArg, long fileId,
                                List<XAttr> xAttrs)
       throws IOException {
     String src = srcArg;
@@ -117,7 +117,7 @@ class FSDirXAttrOp {
     if (!getAll) {
       XAttrPermissionFilter.checkPermissionForApi(pc, xAttrs, isRawPath);
     }
-    final INodesInPath iip = fsd.resolvePath(pc, src, DirOp.READ);
+    final INodesInPath iip = fsd.resolvePath(pc, src, fileId, DirOp.READ);
     if (fsd.isPermissionEnabled()) {
       fsd.checkPathAccess(pc, iip, FsAction.READ);
     }

@@ -111,7 +111,7 @@ class FSDirWriteFileOp {
   static void abandonBlock(
       FSDirectory fsd, FSPermissionChecker pc, ExtendedBlock b, long fileId,
       String src, String holder) throws IOException {
-    final INodesInPath iip = fsd.resolvePath(pc, src, fileId);
+    final INodesInPath iip = fsd.resolvePath(pc, src, fileId, DirOp.WRITE);
     src = iip.getPath();
     FSNamesystem fsn = fsd.getFSNamesystem();
     final INodeFile file = fsn.checkLease(iip, holder, fileId);
@@ -157,7 +157,7 @@ class FSDirWriteFileOp {
     final byte storagePolicyID;
     String clientMachine;
 
-    INodesInPath iip = fsn.dir.resolvePath(pc, src, fileId);
+    INodesInPath iip = fsn.dir.resolvePath(pc, src, fileId, DirOp.WRITE);
     FileState fileState = analyzeFileState(fsn, iip, fileId, clientName,
                                            previous, onRetryBlock);
     if (onRetryBlock[0] != null && onRetryBlock[0].getLocations().length > 0) {
@@ -208,7 +208,7 @@ class FSDirWriteFileOp {
     // Run the full analysis again, since things could have changed
     // while chooseTarget() was executing.
     LocatedBlock[] onRetryBlock = new LocatedBlock[1];
-    INodesInPath iip = fsn.dir.resolvePath(null, src, fileId);
+    INodesInPath iip = fsn.dir.resolvePath(null, src, fileId, DirOp.WRITE);
     FileState fileState = analyzeFileState(fsn, iip, fileId, clientName,
                                            previous, onRetryBlock);
     final INodeFile pendingFile = fileState.inode;
@@ -597,7 +597,7 @@ class FSDirWriteFileOp {
                                         src + " for " + holder);
     }
     checkBlock(fsn, last);
-    INodesInPath iip = fsn.dir.resolvePath(pc, src, fileId);
+    INodesInPath iip = fsn.dir.resolvePath(pc, src, fileId, DirOp.WRITE);
     boolean success = completeFileInternal(fsn, iip, holder,
                                            ExtendedBlock.getLocalBlock(last),
                                            fileId);

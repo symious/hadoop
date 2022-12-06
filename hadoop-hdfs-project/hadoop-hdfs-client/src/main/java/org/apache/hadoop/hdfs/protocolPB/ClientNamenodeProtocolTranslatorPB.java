@@ -63,6 +63,7 @@ import org.apache.hadoop.hdfs.protocol.ECBlockGroupStats;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.RollingUpgradeAction;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
@@ -1594,10 +1595,47 @@ public class ClientNamenodeProtocolTranslatorPB implements
   }
 
   @Override
+  public void setXAttr(String src, XAttr xAttr, long fileId, EnumSet<XAttrSetFlag> flag)
+      throws IOException {
+    SetXAttrRequestProto.Builder builder =
+        SetXAttrRequestProto.newBuilder()
+        .setSrc(src)
+        .setXAttr(PBHelperClient.convertXAttrProto(xAttr))
+        .setFlag(PBHelperClient.convert(flag));
+    if (fileId > HdfsConstants.INVALIDATE_INODE_ID) {
+      builder.setFileId(fileId);
+    }
+    try {
+      rpcProxy.setXAttr(null, builder.build());
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+  }
+
+  @Override
   public List<XAttr> getXAttrs(String src, List<XAttr> xAttrs)
       throws IOException {
     GetXAttrsRequestProto.Builder builder = GetXAttrsRequestProto.newBuilder();
     builder.setSrc(src);
+    if (xAttrs != null) {
+      builder.addAllXAttrs(PBHelperClient.convertXAttrProto(xAttrs));
+    }
+    GetXAttrsRequestProto req = builder.build();
+    try {
+      return PBHelperClient.convert(rpcProxy.getXAttrs(null, req));
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+  }
+
+  @Override
+  public List<XAttr> getXAttrs(String src, long fileId, List<XAttr> xAttrs)
+      throws IOException {
+    GetXAttrsRequestProto.Builder builder = GetXAttrsRequestProto.newBuilder();
+    builder.setSrc(src);
+    if (fileId > HdfsConstants.INVALIDATE_INODE_ID) {
+      builder.setFileId(fileId);
+    }
     if (xAttrs != null) {
       builder.addAllXAttrs(PBHelperClient.convertXAttrProto(xAttrs));
     }

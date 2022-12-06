@@ -2846,6 +2846,21 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     }
   }
 
+  public void setXAttr(String src, String name, byte[] value, long fileId,
+      EnumSet<XAttrSetFlag> flag) throws IOException {
+    checkOpen();
+    try (TraceScope ignored = newPathTraceScope("setXAttr", src)) {
+      namenode.setXAttr(src, XAttrHelper.buildXAttr(name, value), fileId, flag);
+    } catch (RemoteException re) {
+      throw re.unwrapRemoteException(AccessControlException.class,
+          FileNotFoundException.class,
+          NSQuotaExceededException.class,
+          SafeModeException.class,
+          SnapshotAccessControlException.class,
+          UnresolvedPathException.class);
+    }
+  }
+
   public byte[] getXAttr(String src, String name) throws IOException {
     checkOpen();
     try (TraceScope ignored = newPathTraceScope("getXAttr", src)) {
@@ -2858,6 +2873,20 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
           UnresolvedPathException.class);
     }
   }
+
+  public byte[] getXAttr(String src, long fileId, String name) throws IOException {
+    checkOpen();
+    try (TraceScope ignored = newPathTraceScope("getXAttr", src)) {
+      final List<XAttr> xAttrs = XAttrHelper.buildXAttrAsList(name);
+      final List<XAttr> result = namenode.getXAttrs(src, fileId, xAttrs);
+      return XAttrHelper.getFirstXAttrValue(result);
+    } catch (RemoteException re) {
+      throw re.unwrapRemoteException(AccessControlException.class,
+          FileNotFoundException.class,
+          UnresolvedPathException.class);
+    }
+  }
+
 
   public Map<String, byte[]> getXAttrs(String src) throws IOException {
     checkOpen();

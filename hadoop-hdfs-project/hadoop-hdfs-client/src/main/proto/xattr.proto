@@ -44,6 +44,7 @@ message SetXAttrRequestProto {
   required string src          = 1;
   optional XAttrProto xAttr    = 2;
   optional uint32 flag         = 3; //bits set using XAttrSetFlagProto
+  optional uint64 fileId       = 100;
 }
 
 message SetXAttrResponseProto {
@@ -52,6 +53,7 @@ message SetXAttrResponseProto {
 message GetXAttrsRequestProto {
   required string src = 1;
   repeated XAttrProto xAttrs = 2;
+  optional uint64 fileId = 100;
 }
 
 message GetXAttrsResponseProto {

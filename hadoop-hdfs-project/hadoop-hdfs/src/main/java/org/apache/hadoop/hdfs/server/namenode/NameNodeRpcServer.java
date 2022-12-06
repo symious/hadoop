@@ -110,6 +110,7 @@ import org.apache.hadoop.hdfs.protocol.EncryptionZone;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.FSLimitException;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.LastBlockWithStatus;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.DatanodeReportType;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.RollingUpgradeAction;
@@ -2339,6 +2340,12 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   @Override // ClientProtocol
   public void setXAttr(String src, XAttr xAttr, EnumSet<XAttrSetFlag> flag)
       throws IOException {
+    setXAttr(src, xAttr, HdfsConstants.INVALIDATE_INODE_ID, flag);
+  }
+
+  @Override // ClientProtocol
+  public void setXAttr(String src, XAttr xAttr, long fileId, EnumSet<XAttrSetFlag> flag)
+      throws IOException {
     checkNNStartup();
     namesystem.checkOperation(OperationCategory.WRITE);
     CacheEntry cacheEntry = getCacheEntry();
@@ -2347,18 +2354,23 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     }
     boolean success = false;
     try {
-      namesystem.setXAttr(src, xAttr, flag, cacheEntry != null);
+      namesystem.setXAttr(src, xAttr, flag, fileId, cacheEntry != null);
       success = true;
     } finally {
       RetryCache.setState(cacheEntry, success);
     }
   }
-  
+
   @Override // ClientProtocol
-  public List<XAttr> getXAttrs(String src, List<XAttr> xAttrs) 
+  public List<XAttr> getXAttrs(String src, List<XAttr> xAttrs)
+      throws IOException {
+    return getXAttrs(src, HdfsConstants.INVALIDATE_INODE_ID, xAttrs);
+  }
+
+  public List<XAttr> getXAttrs(String src, long fileId, List<XAttr> xAttrs)
       throws IOException {
     checkNNStartup();
-    return namesystem.getXAttrs(src, xAttrs);
+    return namesystem.getXAttrs(src, fileId, xAttrs);
   }
 
   @Override // ClientProtocol

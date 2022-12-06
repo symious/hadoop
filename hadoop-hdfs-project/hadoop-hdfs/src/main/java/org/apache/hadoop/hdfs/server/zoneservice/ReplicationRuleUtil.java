@@ -94,6 +94,30 @@ public class ReplicationRuleUtil {
   }
 
   /**
+   * Get the content of the rule key by file id without parsing it.
+   * @param src file or directory path, just used for getting ns
+   * @param fileId get xattr of the file with this file id
+   * @return the content of the key
+   * @throws IOException if the file/directory does not have content of the key or
+   *                     encounters other exceptions
+   */
+  public String getStringFromRuleKey(String src, long fileId) throws IOException {
+    return this.getStringFromRuleKey(new Path(src), fileId);
+  }
+
+  /**
+   * Get the content of the rule key by file id without parsing it.
+   * @param path file or directory path
+   * @return the content of the key
+   * @throws IOException if the file/directory does not have content of the key or
+   *                     encounters other exceptions
+   */
+  public String getStringFromRuleKey(Path path, long fileId) throws IOException {
+    byte[] bs = fs.getXAttr(path, fileId, ATTR_KEY);
+    return XAttrCodec.encodeValue(bs, XAttrCodec.TEXT);
+  }
+
+  /**
    * Check if the file/directory has ReplicationRule in its XAttr.
    * @param src file or directory path
    * @return yes or no
@@ -127,5 +151,15 @@ public class ReplicationRuleUtil {
    */
   public void setRuleToXAttr(Path path, ReplicationRule rule) throws IOException {
     fs.setXAttr(path, ATTR_KEY, XAttrCodec.decodeValue(rule.toString()));
+  }
+
+  /**
+   * Set the replicationRule to the file/directory's XAttr by file ID.
+   * @param pathName file or directory path, just used for getting ns
+   * @param rule replicationRule instance
+   * @param fileId set xattr on the file with this file id
+   */
+  public void setRuleToXAttr(String pathName, ReplicationRule rule, long fileId) throws IOException {
+    fs.setXAttr(new Path(pathName), ATTR_KEY, XAttrCodec.decodeValue(rule.toString()), fileId);
   }
 }

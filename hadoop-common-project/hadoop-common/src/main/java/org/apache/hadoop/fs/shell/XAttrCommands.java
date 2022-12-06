@@ -20,7 +20,6 @@ package org.apache.hadoop.fs.shell;
 import java.io.IOException;
 import java.util.Iterator;
 import java.util.LinkedList;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
 
@@ -42,6 +41,7 @@ import org.apache.hadoop.util.StringUtils;
 class XAttrCommands extends FsCommand {
   private static final String GET_FATTR = "getfattr";
   private static final String SET_FATTR = "setfattr";
+  private static final long INVALID_INODE_ID = -1;
 
   public static void registerCommands(CommandFactory factory) {
     factory.addClass(GetfattrCommand.class, "-" + GET_FATTR);
@@ -71,6 +71,7 @@ class XAttrCommands extends FsCommand {
 
     private String name = null;
     private boolean dump = false;
+    private long fileId = INVALID_INODE_ID;
     private XAttrCodec encoding = XAttrCodec.TEXT;
 
     @Override
@@ -91,6 +92,10 @@ class XAttrCommands extends FsCommand {
       boolean r = StringUtils.popOption("-R", args);
       setRecursive(r);
       dump = StringUtils.popOption("-d", args);
+      String fileIdStr = StringUtils.popOptionWithArgument("-i", args);
+      if (fileIdStr != null) {
+        fileId = Long.parseLong(fileIdStr);
+      }
 
       if (!dump && name == null) {
         throw new HadoopIllegalArgumentException(
@@ -118,7 +123,12 @@ class XAttrCommands extends FsCommand {
           }
         }
       } else {
-        byte[] value = item.fs.getXAttr(item.path, name);
+        byte[] value;
+        if (fileId > INVALID_INODE_ID) {
+          value = item.fs.getXAttr(item.path, fileId, name);
+        } else {
+          value = item.fs.getXAttr(item.path, name);
+        }
         printXAttr(name, value);
       }
     }
@@ -155,11 +165,16 @@ class XAttrCommands extends FsCommand {
     private String name = null;
     private byte[] value = null;
     private String xname = null;
+    private long fileId = INVALID_INODE_ID;
 
     @Override
     protected void processOptions(LinkedList<String> args) throws IOException {
       name = StringUtils.popOptionWithArgument("-n", args);
       String v = StringUtils.popOptionWithArgument("-v", args);
+      String fileIdStr = StringUtils.popOptionWithArgument("-i", args);
+      if (fileIdStr != null) {
+        fileId = Long.parseLong(fileIdStr);
+      }
       if (v != null) {
         value = XAttrCodec.decodeValue(v);
       }
@@ -185,7 +200,11 @@ class XAttrCommands extends FsCommand {
     @Override
     protected void processPath(PathData item) throws IOException {
       if (name != null) {
-        item.fs.setXAttr(item.path, name, value);
+        if (fileId > INVALID_INODE_ID) {
+          item.fs.setXAttr(item.path, name, value, fileId);
+        } else {
+          item.fs.setXAttr(item.path, name, value);
+        }
       } else if (xname != null) {
         item.fs.removeXAttr(item.path, xname);
       }

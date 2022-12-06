@@ -1089,9 +1089,21 @@ public class RouterRpcServer extends AbstractService
   }
 
   @Override // ClientProtocol
+  public void setXAttr(String src, XAttr xAttr, long fileId, EnumSet<XAttrSetFlag> flag)
+      throws IOException {
+    clientProto.setXAttr(src, xAttr, fileId, flag);
+  }
+
+  @Override // ClientProtocol
   public List<XAttr> getXAttrs(String src, List<XAttr> xAttrs)
       throws IOException {
     return clientProto.getXAttrs(src, xAttrs);
+  }
+
+  @Override // ClientProtocol
+  public List<XAttr> getXAttrs(String src, long fileId, List<XAttr> xAttrs)
+      throws IOException {
+    return clientProto.getXAttrs(src, fileId, xAttrs);
   }
 
   @Override // ClientProtocol

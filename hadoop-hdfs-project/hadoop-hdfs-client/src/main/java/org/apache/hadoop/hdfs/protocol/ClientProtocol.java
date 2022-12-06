@@ -1481,6 +1481,18 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * Set xattr of a file or directory by file ID.
+   * @param src file or directory
+   * @param xAttr <code>XAttr</code> to set
+   * @param fileId file ID
+   * @param flag set flag
+   * @throws IOException
+   */
+  @AtMostOnce
+  void setXAttr(String src, XAttr xAttr, long fileId, EnumSet<XAttrSetFlag> flag)
+      throws IOException;
+
+  /**
    * Get xattrs of a file or directory. Values in xAttrs parameter are ignored.
    * If xAttrs is null or empty, this is the same as getting all xattrs of the
    * file or directory.  Only those xattrs for which the logged-in user has
@@ -1496,6 +1508,25 @@ public interface ClientProtocol {
   @Idempotent
   @ReadOnly(isCoordinated = true)
   List<XAttr> getXAttrs(String src, List<XAttr> xAttrs)
+      throws IOException;
+
+  /**
+   * Get xattrs of a file or directory by file id. Values in xAttrs parameter are ignored.
+   * If xAttrs is null or empty, this is the same as getting all xattrs of the
+   * file or directory.  Only those xattrs for which the logged-in user has
+   * permissions to view are returned.
+   * <p/>
+   * Refer to the HDFS extended attributes user documentation for details.
+   *
+   * @param src file or directory
+   * @param fileId file ID
+   * @param xAttrs xAttrs to get
+   * @return List<XAttr> <code>XAttr</code> list
+   * @throws IOException
+   */
+  @Idempotent
+  @ReadOnly(isCoordinated = true)
+  List<XAttr> getXAttrs(String src, long fileId, List<XAttr> xAttrs)
       throws IOException;
 
   /**

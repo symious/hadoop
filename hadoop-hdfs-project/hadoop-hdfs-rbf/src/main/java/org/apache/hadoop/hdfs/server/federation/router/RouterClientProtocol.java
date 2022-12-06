@@ -1820,7 +1820,28 @@ public class RouterClientProtocol implements ClientProtocol {
     logAuditEvent(true, operationName, invokeType, src);
   }
 
-  @SuppressWarnings("unchecked")
+  @Override
+  public void setXAttr(String src, XAttr xAttr, long fileId, EnumSet<XAttrSetFlag> flag)
+      throws IOException {
+    rpcServer.checkOperation(OperationCategory.WRITE);
+
+    // TODO handle virtual directories
+    final List<RemoteLocation> locations =
+        rpcServer.getLocationsForPath(src, true);
+    RemoteMethod method = new RemoteMethod("setXAttr",
+        new Class<?>[] {String.class, XAttr.class, long.class, EnumSet.class},
+        new RemoteParam(), xAttr, fileId, flag);
+    String operationName = "setXAttr";
+    String invokeType = null;
+    try {
+      rpcClient.invokeSequential(locations, method);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
+  }
+
   @Override
   public List<XAttr> getXAttrs(String src, List<XAttr> xAttrs)
       throws IOException {
@@ -1831,6 +1852,32 @@ public class RouterClientProtocol implements ClientProtocol {
         rpcServer.getLocationsForPath(src, false);
     RemoteMethod method = new RemoteMethod("getXAttrs",
         new Class<?>[] {String.class, List.class}, new RemoteParam(), xAttrs);
+    String operationName = "getXAttrs";
+    String invokeType = null;
+    List<XAttr> result;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      result = (List<XAttr>) rpcClient.invokeSequential(
+          locations, method, List.class, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
+    return result;
+  }
+
+  @SuppressWarnings("unchecked")
+  @Override
+  public List<XAttr> getXAttrs(String src, long fileId, List<XAttr> xAttrs)
+      throws IOException {
+    rpcServer.checkOperation(OperationCategory.READ);
+
+    // TODO handle virtual directories
+    final List<RemoteLocation> locations =
+        rpcServer.getLocationsForPath(src, false);
+    RemoteMethod method = new RemoteMethod("getXAttrs",
+        new Class<?>[] {String.class, long.class, List.class}, new RemoteParam(), fileId, xAttrs);
     String operationName = "getXAttrs";
     String invokeType = null;
     List<XAttr> result;

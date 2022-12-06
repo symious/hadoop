@@ -2800,7 +2800,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       checkOperation(OperationCategory.WRITE);
       //check safe mode
       checkNameNodeSafeMode("Cannot add datanode; src=" + src + ", blk=" + blk);
-      final INodesInPath iip = dir.resolvePath(pc, src, fileId);
+      final INodesInPath iip = dir.resolvePath(pc, src, fileId, DirOp.WRITE);
       src = iip.getPath();
 
       //check lease
@@ -3313,7 +3313,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     try {
       checkOperation(OperationCategory.WRITE);
       checkNameNodeSafeMode("Cannot fsync file " + src);
-      INodesInPath iip = dir.resolvePath(pc, src, fileId);
+      INodesInPath iip = dir.resolvePath(pc, src, fileId, DirOp.WRITE);
       src = iip.getPath();
       final INodeFile pendingFile = checkLease(iip, clientName, fileId);
       if (lastBlockLength > 0) {
@@ -7109,7 +7109,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     }
   }
 
-  void setXAttr(String src, XAttr xAttr, EnumSet<XAttrSetFlag> flag,
+  void setXAttr(String src, XAttr xAttr, EnumSet<XAttrSetFlag> flag, long fileID,
                 boolean logRetryCache)
       throws IOException {
     final String operationName = "setXAttr";
@@ -7118,7 +7118,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     try {
       checkOperation(OperationCategory.WRITE);
       checkNameNodeSafeMode("Cannot set XAttr on " + src);
-      auditStat = FSDirXAttrOp.setXAttr(dir, blockManager, src, xAttr, flag, logRetryCache);
+      auditStat = FSDirXAttrOp.setXAttr(dir, blockManager, src, xAttr, flag, fileID, logRetryCache);
     } catch (AccessControlException e) {
       logAuditEvent(false, operationName, src);
       throw e;
@@ -7126,17 +7126,22 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       writeUnlock(operationName);
     }
     getEditLog().logSync();
-    logAuditEvent(true, operationName, src, null, auditStat);
+    if (auditStat.getPath() != null) {
+      logAuditEvent(true, operationName, auditStat.getPath().toUri().getPath(), null,
+          auditStat);
+    } else {
+      logAuditEvent(true, operationName, src, null, auditStat);
+    }
   }
 
-  List<XAttr> getXAttrs(final String src, List<XAttr> xAttrs)
+  List<XAttr> getXAttrs(final String src, final long fileId, List<XAttr> xAttrs)
       throws IOException {
     final String operationName = "getXAttrs";
     checkOperation(OperationCategory.READ);
     readLock(operationName);
     try {
       checkOperation(OperationCategory.READ);
-      return FSDirXAttrOp.getXAttrs(dir, src, xAttrs);
+      return FSDirXAttrOp.getXAttrs(dir, src, fileId, xAttrs);
     } catch (AccessControlException e) {
       logAuditEvent(false, operationName, src);
       throw e;

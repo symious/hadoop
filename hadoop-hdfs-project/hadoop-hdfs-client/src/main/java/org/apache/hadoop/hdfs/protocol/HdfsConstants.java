@@ -94,6 +94,8 @@ public class HdfsConstants {
   public static final String CLIENT_NAMENODE_MSYNC_PROTOCOL_NAME =
       "org.apache.hadoop.hdfs.protocol.ClientMsyncProtocol";
 
+  // Invalid inode id threshold, HDFS will ignore the inode id less than the threshold
+  public static final long INVALIDATE_INODE_ID = -1;
   // Timeouts for communicating with DataNode for streaming writes/reads
   public static final int READ_TIMEOUT = 60 * 1000;
   public static final int READ_TIMEOUT_EXTENSION = 5 * 1000;

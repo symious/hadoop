@@ -2528,6 +2528,28 @@ public class DistributedFileSystem extends FileSystem
   }
 
   @Override
+  public void setXAttr(Path path, final String name, final byte[] value, final long fileId,
+      final EnumSet<XAttrSetFlag> flag) throws IOException {
+    statistics.incrementWriteOps(1);
+    storageStatistics.incrementOpCounter(OpType.SET_XATTR);
+    Path absF = fixRelativePart(path);
+    new FileSystemLinkResolver<Void>() {
+
+      @Override
+      public Void doCall(final Path p) throws IOException {
+        dfs.setXAttr(getPathName(p), name, value, fileId, flag);
+        return null;
+      }
+
+      @Override
+      public Void next(final FileSystem fs, final Path p) throws IOException {
+        fs.setXAttr(p, name, value, fileId, flag);
+        return null;
+      }
+    }.resolve(this, absF);
+  }
+
+  @Override
   public byte[] getXAttr(Path path, final String name) throws IOException {
     statistics.incrementReadOps(1);
     storageStatistics.incrementOpCounter(OpType.GET_XATTR);
@@ -2540,6 +2562,23 @@ public class DistributedFileSystem extends FileSystem
       @Override
       public byte[] next(final FileSystem fs, final Path p) throws IOException {
         return fs.getXAttr(p, name);
+      }
+    }.resolve(this, absF);
+  }
+
+  @Override
+  public byte[] getXAttr(Path path, final long fileId, final String name) throws IOException {
+    statistics.incrementReadOps(1);
+    storageStatistics.incrementOpCounter(OpType.GET_XATTR);
+    final Path absF = fixRelativePart(path);
+    return new FileSystemLinkResolver<byte[]>() {
+      @Override
+      public byte[] doCall(final Path p) throws IOException {
+        return dfs.getXAttr(getPathName(p), fileId, name);
+      }
+      @Override
+      public byte[] next(final FileSystem fs, final Path p) throws IOException {
+        return fs.getXAttr(p, fileId, name);
       }
     }.resolve(this, absF);
   }

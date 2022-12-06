@@ -2919,7 +2919,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /**
-   * Set an xattr of a file or directory.
+   * Set a xattr of a file or directory.
    * The name must be prefixed with the namespace followed by ".". For example,
    * "user.attr".
    * <p>
@@ -2939,7 +2939,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /**
-   * Set an xattr of a file or directory.
+   * Set a xattr of a file or directory.
    * The name must be prefixed with the namespace followed by ".". For example,
    * "user.attr".
    * <p>
@@ -2960,7 +2960,50 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /**
-   * Get an xattr name and value for a file or directory.
+   * Set a xattr of a file or directory by file id.
+   * The name must be prefixed with the namespace followed by ".". For example,
+   * "user.attr".
+   * <p>
+   * Refer to the HDFS extended attributes user documentation for details.
+   *
+   * @param path Path to route
+   * @param name xattr name.
+   * @param value xattr value.
+   * @param fileId Path with given file id will be modified
+   * @throws IOException IO failure
+   * @throws UnsupportedOperationException if the operation is unsupported
+   *         (default outcome).
+   */
+  public void setXAttr(Path path, String name, byte[] value, long fileId)
+      throws IOException {
+    setXAttr(path, name, value, fileId, EnumSet.of(XAttrSetFlag.CREATE,
+        XAttrSetFlag.REPLACE));
+  }
+
+  /**
+   * Set a xattr of a file or directory by inode id.
+   * The name must be prefixed with the namespace followed by ".". For example,
+   * "user.attr".
+   * <p>
+   * Refer to the HDFS extended attributes user documentation for details.
+   *
+   * @param path Path to route
+   * @param name xattr name.
+   * @param value xattr value.
+   * @param fileId Path with given file id will be modified
+   * @param flag xattr set flag
+   * @throws IOException IO failure
+   * @throws UnsupportedOperationException if the operation is unsupported
+   *         (default outcome).
+   */
+  public void setXAttr(Path path, String name, byte[] value, long fileId,
+      EnumSet<XAttrSetFlag> flag) throws IOException {
+    throw new UnsupportedOperationException(getClass().getSimpleName()
+        + " doesn't support setXAttr");
+  }
+
+  /**
+   * Get a xattr name and value for a file or directory.
    * The name must be prefixed with the namespace followed by ".". For example,
    * "user.attr".
    * <p>
@@ -2979,7 +3022,27 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /**
-   * Get all of the xattr name/value pairs for a file or directory.
+   * Get a xattr name and value for a file or directory by file id.
+   * The name must be prefixed with the namespace followed by ".". For example,
+   * "user.attr".
+   * <p>
+   * Refer to the HDFS extended attributes user documentation for details.
+   *
+   * @param path Path to route
+   * @param fileId Path with given file id to get extended attribute
+   * @param name xattr name.
+   * @return byte[] xattr value.
+   * @throws IOException IO failure
+   * @throws UnsupportedOperationException if the operation is unsupported
+   *         (default outcome).
+   */
+  public byte[] getXAttr(Path path, long fileId, String name) throws IOException {
+    throw new UnsupportedOperationException(getClass().getSimpleName()
+        + " doesn't support getXAttr");
+  }
+
+  /**
+   * Get all the xattr name/value pairs for a file or directory.
    * Only those xattrs which the logged-in user has permissions to view
    * are returned.
    * <p>
@@ -2997,7 +3060,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /**
-   * Get all of the xattrs name/value pairs for a file or directory.
+   * Get all the xattrs name/value pairs for a file or directory.
    * Only those xattrs which the logged-in user has permissions to view
    * are returned.
    * <p>
@@ -3017,7 +3080,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /**
-   * Get all of the xattr names for a file or directory.
+   * Get all the xattr names for a file or directory.
    * Only those xattr names which the logged-in user has permissions to view
    * are returned.
    * <p>
