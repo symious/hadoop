@@ -1012,6 +1012,11 @@ public class NodeManager extends CompositeService
       this.shouldExitOnShutdownEvent = true;
       this.init(conf);
       this.start();
+      long now = System.currentTimeMillis();
+      long costTime = now - NodeManager.getNMStartupTime();
+      metrics.setTotalStartNMCostTime(costTime);
+      LOG.info("NodeManager start all service cost time: " + costTime +
+          " ms!");
     } catch (Throwable t) {
       LOG.error("Error starting NodeManager", t);
       System.exit(-1);

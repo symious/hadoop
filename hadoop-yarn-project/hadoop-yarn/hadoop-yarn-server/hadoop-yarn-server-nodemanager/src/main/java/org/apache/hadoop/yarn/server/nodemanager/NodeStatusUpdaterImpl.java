@@ -41,6 +41,7 @@ import java.util.concurrent.ConcurrentMap;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.fs.FileUtil;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.server.api.records.ApplicationLevel;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManagerImpl;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.dynamicresource.DynamicResourcePublisher;
@@ -434,6 +435,7 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
   @VisibleForTesting
   protected void registerWithRM()
       throws YarnException, IOException {
+    long registerStartTime = Time.monotonicNow();
     RegisterNodeManagerResponse regNMResponse;
     Set<NodeLabel> nodeLabels = nodeLabelsHandler.getNodeLabelsForRegistration();
     Set<NodeAttribute> nodeAttributes =
@@ -537,6 +539,8 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
         .verifyRMRegistrationResponseForNodeAttributes(regNMResponse));
 
     LOG.info(successfullRegistrationMsg.toString());
+    long registerCostTime = Time.monotonicNow() - registerStartTime;
+    LOG.info("registerWithRM cost time: " + registerCostTime + " ms!");
   }
 
   private List<ApplicationId> createKeepAliveApplicationList() {

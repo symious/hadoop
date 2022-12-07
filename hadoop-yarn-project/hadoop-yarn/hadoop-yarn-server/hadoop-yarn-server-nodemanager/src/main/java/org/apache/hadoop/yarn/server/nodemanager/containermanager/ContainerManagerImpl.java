@@ -21,6 +21,7 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.protobuf.ByteString;
 import org.apache.hadoop.util.ReflectionUtils;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.protocolrecords.GetLocalizationStatusesRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetLocalizationStatusesResponse;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.UpdateContainerTokenEvent;
@@ -371,6 +372,7 @@ public class ContainerManagerImpl extends CompositeService implements
 
   @SuppressWarnings("unchecked")
   private void recover() throws IOException, URISyntaxException {
+    long recoverStartTime = Time.monotonicNow();
     NMStateStoreService stateStore = context.getNMStateStore();
     if (stateStore.canRecover()) {
       rsrcLocalizationSrvc.recoverLocalizedResources(
@@ -409,6 +411,9 @@ public class ContainerManagerImpl extends CompositeService implements
     } else {
       LOG.info("Not a recoverable state store. Nothing to recover.");
     }
+    long recoverCostTime = Time.monotonicNow() - recoverStartTime;
+    LOG.info("Recover apps and containers state from stateStore cost time: " +
+        recoverCostTime + " ms!");
   }
 
   private void recoverApplication(ContainerManagerApplicationProto p)

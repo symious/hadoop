@@ -118,6 +118,9 @@ public class NodeManagerMetrics {
   @Metric("Container localization time in milliseconds")
       MutableRate localizationDurationMillis;
 
+  @Metric("Total start NM all services cost time")
+  MutableGaugeLong totalStartNMCostTime;
+
   // CHECKSTYLE:ON:VisibilityModifier
 
   private JvmMetrics jvmMetrics = null;
@@ -302,6 +305,10 @@ public class NodeManagerMetrics {
 
   public void setPrivateBytesDeleted(long privateBytesDeleted) {
     this.privateBytesDeleted.set(privateBytesDeleted);
+  }
+
+  public void setTotalStartNMCostTime(long totalStartNMCostTime) {
+    this.totalStartNMCostTime.set(totalStartNMCostTime);
   }
 
   public int getRunningContainers() {
