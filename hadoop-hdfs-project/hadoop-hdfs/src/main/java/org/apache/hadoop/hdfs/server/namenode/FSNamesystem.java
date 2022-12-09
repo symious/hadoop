@@ -2919,7 +2919,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       writeUnlock(operationName);
     }
     getEditLog().logSync();
-    logAuditEvent(success, "complete", src);
+    logAuditEvent(success, "complete", src, String.valueOf(fileId), null);
     return success;
   }
 
