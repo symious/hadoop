@@ -599,6 +599,24 @@ public class RouterClientProtocol implements ClientProtocol {
   }
 
   /**
+   * Try to get the remote location whose bpId is same with the input bpId from the input locations.
+   * @param locations the input RemoteLocations.
+   * @param bpId the input bpId.
+   * @return the remote location whose bpId is same with the input.
+   * @throws IOException
+   */
+  private RemoteLocation getLocationWithBPID(List<RemoteLocation> locations, String bpId)
+      throws IOException {
+    String nsId = rpcClient.getNameserviceForBlockPoolId(bpId);
+    for (RemoteLocation l : locations) {
+      if (l.getNameserviceId().equals(nsId)) {
+        return l;
+      }
+    }
+    throw new IOException("Can't found remote locations for the " + bpId);
+  }
+
+  /**
    * Excluded and favored nodes are not verified and will be ignored by
    * placement policy if they are not in the same nameservice as the file.
    */
@@ -616,12 +634,12 @@ public class RouterClientProtocol implements ClientProtocol {
         new RemoteParam(), clientName, previous, excludedNodes, fileId,
         favoredNodes, addBlockFlags);
 
+    final List<RemoteLocation> locations = rpcServer.getLocationsForPath(src, true);
     if (previous != null) {
-      return rpcClient.invokeSingle(previous, method, LocatedBlock.class);
+      RemoteLocation location = getLocationWithBPID(locations, previous.getBlockPoolId());
+      return rpcClient.invokeSingle(location, method, LocatedBlock.class);
     }
 
-    final List<RemoteLocation> locations =
-        rpcServer.getLocationsForPath(src, true);
     // TODO verify the excludedNodes and favoredNodes are acceptable to this NN
     return rpcClient.invokeSequential(
         locations, method, LocatedBlock.class, null);
@@ -646,12 +664,12 @@ public class RouterClientProtocol implements ClientProtocol {
         new RemoteParam(), fileId, blk, existings, existingStorageIDs, excludes,
         numAdditionalNodes, clientName);
 
+    final List<RemoteLocation> locations = rpcServer.getLocationsForPath(src, false);
     if (blk != null) {
-      return rpcClient.invokeSingle(blk, method, LocatedBlock.class);
+      RemoteLocation location = getLocationWithBPID(locations, blk.getBlockPoolId());
+      return rpcClient.invokeSingle(location, method, LocatedBlock.class);
     }
 
-    final List<RemoteLocation> locations =
-        rpcServer.getLocationsForPath(src, false);
     return rpcClient.invokeSequential(
         locations, method, LocatedBlock.class, null);
   }
@@ -665,7 +683,10 @@ public class RouterClientProtocol implements ClientProtocol {
         new Class<?>[] {ExtendedBlock.class, long.class, String.class,
             String.class},
         b, fileId, new RemoteParam(), holder);
-    rpcClient.invokeSingle(b, method);
+
+    final List<RemoteLocation> locations = rpcServer.getLocationsForPath(src, false);
+    RemoteLocation location = getLocationWithBPID(locations, b.getBlockPoolId());
+    rpcClient.invokeSingle(location, method, Void.class);
   }
 
   @Override
@@ -680,11 +701,11 @@ public class RouterClientProtocol implements ClientProtocol {
     boolean result;
 
     try {
+      final List<RemoteLocation> locations = rpcServer.getLocationsForPath(src, true);
       if (last != null) {
-        result = rpcClient.invokeSingle(last, method, Boolean.class);
+        RemoteLocation location = getLocationWithBPID(locations, last.getBlockPoolId());
+        return rpcClient.invokeSingle(location, method, Boolean.class);
       } else {
-        final List<RemoteLocation> locations =
-            rpcServer.getLocationsForPath(src, true);
         // Complete can return true/false, so don't expect a result
         result = rpcClient.invokeSequential(locations, method, Boolean.class, null);
       }
@@ -721,7 +742,7 @@ public class RouterClientProtocol implements ClientProtocol {
         new Class<?>[] {String.class, ExtendedBlock.class, ExtendedBlock.class,
             DatanodeID[].class, String[].class},
         clientName, oldBlock, newBlock, newNodes, newStorageIDs);
-    rpcClient.invokeSingle(oldBlock, method);
+    rpcClient.invokeSingleBlockPool(oldBlock.getBlockPoolId(), method);
   }
 
   @Override

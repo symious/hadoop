@@ -1119,7 +1119,10 @@ public class NameNodeRpcServer implements NamenodeProtocols {
                           ExtendedBlock last,  long fileId)
       throws IOException {
     checkNNStartup();
-    return namesystem.completeFile(src, clientName, last, fileId);
+    boolean result = namesystem.completeFile(src, clientName, last, fileId);
+    LOG.debug("complete: src={}, clientName={}, fileId={}, result={}.",
+        src, clientName, fileId, result);
+    return result;
   }
 
   /**
