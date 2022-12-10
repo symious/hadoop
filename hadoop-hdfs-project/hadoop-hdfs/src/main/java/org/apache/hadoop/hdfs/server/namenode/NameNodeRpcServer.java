@@ -930,7 +930,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
       String storagePolicy)
       throws IOException {
     checkNNStartup();
-    if (disableECFeature && ecPolicyName != null) {
+    if (disableECFeature && ecPolicyName != null && !ecPolicyName.isEmpty()) {
       throw new UnsupportedOperationException("Operation create ec file is not supported");
     }
     String clientMachine = getClientMachine();
@@ -2495,7 +2495,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public void setErasureCodingPolicy(String src, String ecPolicyName)
       throws IOException {
     checkNNStartup();
-    if (disableECFeature && ecPolicyName != null) {
+    if (disableECFeature && ecPolicyName != null && !ecPolicyName.isEmpty()) {
       throw new UnsupportedOperationException("Operation setErasureCodingPolicy not supported");
     }
     namesystem.checkOperation(OperationCategory.WRITE);
@@ -2822,7 +2822,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public void removeErasureCodingPolicy(String ecPolicyName)
       throws IOException {
     checkNNStartup();
-    if (disableECFeature && ecPolicyName != null) {
+    if (disableECFeature && ecPolicyName != null && !ecPolicyName.isEmpty()) {
       throw new UnsupportedOperationException("Operation removeErasureCodingPolicy not supported");
     }
     namesystem.checkOperation(OperationCategory.WRITE);
@@ -2844,7 +2844,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public void enableErasureCodingPolicy(String ecPolicyName)
       throws IOException {
     checkNNStartup();
-    if (disableECFeature && ecPolicyName != null) {
+    if (disableECFeature && ecPolicyName != null && !ecPolicyName.isEmpty()) {
       throw new UnsupportedOperationException("Operation enableErasureCodingPolicy not supported");
     }
     namesystem.checkOperation(OperationCategory.WRITE);
@@ -2866,7 +2866,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public void disableErasureCodingPolicy(String ecPolicyName)
       throws IOException {
     checkNNStartup();
-    if (disableECFeature && ecPolicyName != null) {
+    if (disableECFeature && ecPolicyName != null && !ecPolicyName.isEmpty()) {
       throw new UnsupportedOperationException("Operation disableErasureCodingPolicy not supported");
     }
     namesystem.checkOperation(OperationCategory.WRITE);
