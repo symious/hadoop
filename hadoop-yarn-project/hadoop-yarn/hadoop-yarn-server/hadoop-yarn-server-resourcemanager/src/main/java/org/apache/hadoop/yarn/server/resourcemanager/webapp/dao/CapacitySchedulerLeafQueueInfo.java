@@ -61,6 +61,7 @@ public class CapacitySchedulerLeafQueueInfo extends CapacitySchedulerQueueInfo {
   @XmlTransient
   protected String orderingPolicyDisplayName;
 
+  @XmlTransient
   protected String intraQueuePreemptionOrderPolicyDisplayName;
 
   CapacitySchedulerLeafQueueInfo() {
