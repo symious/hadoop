@@ -90,6 +90,12 @@ public class ContainerMetrics implements MetricsSource {
   public MutableGaugeInt pMemLimitMbs;
 
   @Metric
+  public MutableGaugeInt threadNumber;
+
+  @Metric
+  public MutableGaugeInt fdNumber;
+
+  @Metric
   public MutableGaugeInt vMemLimitMbs;
 
   @Metric
@@ -190,6 +196,8 @@ public class ContainerMetrics implements MetricsSource {
         LAUNCH_DURATION_METRIC_NAME, "Launch duration in MS", 0L);
     this.localizationDurationMs = registry.newGauge(
         LOCALIZATION_DURATION_METRIC_NAME, "Localization duration in MS", 0L);
+    this.threadNumber = registry.newGauge("threadNumber", "Thread number", 0);
+    this.fdNumber = registry.newGauge("fdNumber", "File descriptor number", 0);
   }
 
   ContainerMetrics tag(MetricsInfo info, ContainerId containerId) {
@@ -315,6 +323,14 @@ public class ContainerMetrics implements MetricsSource {
   public void recordFinishTimeAndExitCode(long finishTime, int exitCode) {
     this.finishTime.set(finishTime);
     this.exitCode.set(exitCode);
+  }
+
+  public void recordThreadNumber(int threadNumber) {
+    this.threadNumber.set(threadNumber);
+  }
+
+  public void recordFdNumber(int fdNumber) {
+    this.fdNumber.set(fdNumber);
   }
 
   private synchronized void scheduleTimerTaskIfRequired() {
