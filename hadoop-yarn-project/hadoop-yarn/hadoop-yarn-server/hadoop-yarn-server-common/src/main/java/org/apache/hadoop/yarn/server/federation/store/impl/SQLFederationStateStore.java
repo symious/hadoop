@@ -42,6 +42,8 @@ import org.apache.hadoop.yarn.server.federation.store.records.AddApplicationHome
 import org.apache.hadoop.yarn.server.federation.store.records.ApplicationHomeSubCluster;
 import org.apache.hadoop.yarn.server.federation.store.records.DeleteApplicationHomeSubClusterRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.DeleteApplicationHomeSubClusterResponse;
+import org.apache.hadoop.yarn.server.federation.store.records.DeleteSubClusterPolicyConfigurationRequest;
+import org.apache.hadoop.yarn.server.federation.store.records.DeleteSubClusterPolicyConfigurationResponse;
 import org.apache.hadoop.yarn.server.federation.store.records.GetApplicationHomeSubClusterRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.GetApplicationHomeSubClusterResponse;
 import org.apache.hadoop.yarn.server.federation.store.records.GetApplicationsHomeSubClusterRequest;
@@ -977,6 +979,12 @@ public class SQLFederationStateStore implements FederationStateStore {
 
     return GetSubClusterPoliciesConfigurationsResponse
         .newInstance(policyConfigurations);
+  }
+
+  @Override
+  public DeleteSubClusterPolicyConfigurationResponse deletePolicyConfiguration(
+      DeleteSubClusterPolicyConfigurationRequest request) {
+    throw new NotImplementedException("Code is not implemented");
   }
 
   @Override

@@ -39,6 +39,8 @@ import org.apache.hadoop.yarn.server.federation.store.records.AddApplicationHome
 import org.apache.hadoop.yarn.server.federation.store.records.ApplicationHomeSubCluster;
 import org.apache.hadoop.yarn.server.federation.store.records.DeleteApplicationHomeSubClusterRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.DeleteApplicationHomeSubClusterResponse;
+import org.apache.hadoop.yarn.server.federation.store.records.DeleteSubClusterPolicyConfigurationRequest;
+import org.apache.hadoop.yarn.server.federation.store.records.DeleteSubClusterPolicyConfigurationResponse;
 import org.apache.hadoop.yarn.server.federation.store.records.GetApplicationHomeSubClusterRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.GetApplicationHomeSubClusterResponse;
 import org.apache.hadoop.yarn.server.federation.store.records.GetApplicationsHomeSubClusterRequest;
@@ -433,6 +435,32 @@ public class ZookeeperFederationStateStore implements FederationStateStore {
       FederationStateStoreUtils.logAndThrowStoreException(LOG, errMsg);
     }
     return GetSubClusterPoliciesConfigurationsResponse.newInstance(result);
+  }
+
+  @Override
+  public DeleteSubClusterPolicyConfigurationResponse deletePolicyConfiguration(
+      DeleteSubClusterPolicyConfigurationRequest request) throws YarnException {
+    FederationPolicyStoreInputValidator.validate(request);
+    String queue = request.getQueue();
+    String policyZNode = getNodePath(policiesZNode, queue);
+    boolean exists = false;
+    try {
+      exists = zkManager.exists(policyZNode);
+    } catch (Exception e) {
+      String errMsg = "Cannot check queue policy: " + e.getMessage();
+      FederationStateStoreUtils.logAndThrowStoreException(LOG, errMsg);
+    }
+    if (!exists) {
+      String errMsg = "Queue policy for " + queue + " does not exist";
+      FederationStateStoreUtils.logAndThrowStoreException(LOG, errMsg);
+    }
+    try {
+      zkManager.delete(policyZNode);
+    } catch (Exception e) {
+      String errMsg = "Cannot delete queue: " + e.getMessage();
+      FederationStateStoreUtils.logAndThrowStoreException(LOG, errMsg);
+    }
+    return DeleteSubClusterPolicyConfigurationResponse.newInstance();
   }
 
   @Override

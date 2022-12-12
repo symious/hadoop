@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.globalpolicygenerator.webapp;
 
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.ClusterWeight;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.ClusterWeights;
+import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.PolicyDeleteRequestInfo;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.PolicyRequestInfo;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.PolicyRequestsInfo;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.PolicyUpdateRequestInfo;
@@ -45,6 +46,7 @@ public class TestGPGWebServices extends BaseGPGWebServicesTest {
   private String weight = "1.0";
 
   private int HttpOkCode = 200;
+  private int HttpErrorCode = 500;
 
   /**
    * Test that all requests in GPGWebService
@@ -76,6 +78,19 @@ public class TestGPGWebServices extends BaseGPGWebServicesTest {
     //test listPolicy
     Response response2 = listPolicy(queue,user);
     Assert.assertEquals(HttpOkCode, response2.getStatus());
+
+    //test deletePolicy fail
+    String queue1 = "queue2";
+    PolicyDeleteRequestInfo deletePolicy_1 = new PolicyDeleteRequestInfo();
+    deletePolicy_1.setQueueName(queue1);
+    Response deleteResponse_1 = deletePolicy(deletePolicy_1, user);
+    Assert.assertEquals(HttpErrorCode, deleteResponse_1.getStatus());
+
+    //test deletePolicy success
+    PolicyDeleteRequestInfo deletePolicy_2 = new PolicyDeleteRequestInfo();
+    deletePolicy_2.setQueueName(queue);
+    Response deleteResponse_2 = deletePolicy(deletePolicy_2, user);
+    Assert.assertEquals(HttpOkCode, deleteResponse_2.getStatus());
   }
 
 }

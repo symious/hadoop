@@ -35,6 +35,8 @@ import org.apache.hadoop.yarn.server.federation.store.records.AddApplicationHome
 import org.apache.hadoop.yarn.server.federation.store.records.AddApplicationHomeSubClusterResponse;
 import org.apache.hadoop.yarn.server.federation.store.records.DeleteApplicationHomeSubClusterRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.DeleteApplicationHomeSubClusterResponse;
+import org.apache.hadoop.yarn.server.federation.store.records.DeleteSubClusterPolicyConfigurationRequest;
+import org.apache.hadoop.yarn.server.federation.store.records.DeleteSubClusterPolicyConfigurationResponse;
 import org.apache.hadoop.yarn.server.federation.store.records.GetApplicationHomeSubClusterRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.GetApplicationHomeSubClusterResponse;
 import org.apache.hadoop.yarn.server.federation.store.records.GetApplicationsHomeSubClusterRequest;
@@ -237,6 +239,12 @@ public class FederationStateStoreService extends AbstractService
   public GetSubClusterPoliciesConfigurationsResponse getPoliciesConfigurations(
       GetSubClusterPoliciesConfigurationsRequest request) throws YarnException {
     return stateStoreClient.getPoliciesConfigurations(request);
+  }
+
+  @Override
+  public DeleteSubClusterPolicyConfigurationResponse deletePolicyConfiguration(
+      DeleteSubClusterPolicyConfigurationRequest request) throws YarnException {
+    return stateStoreClient.deletePolicyConfiguration(request);
   }
 
   @Override

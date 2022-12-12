@@ -34,6 +34,8 @@ import org.apache.hadoop.yarn.server.federation.store.records.AddApplicationHome
 import org.apache.hadoop.yarn.server.federation.store.records.ApplicationHomeSubCluster;
 import org.apache.hadoop.yarn.server.federation.store.records.DeleteApplicationHomeSubClusterRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.DeleteApplicationHomeSubClusterResponse;
+import org.apache.hadoop.yarn.server.federation.store.records.DeleteSubClusterPolicyConfigurationRequest;
+import org.apache.hadoop.yarn.server.federation.store.records.DeleteSubClusterPolicyConfigurationResponse;
 import org.apache.hadoop.yarn.server.federation.store.records.GetApplicationHomeSubClusterRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.GetApplicationHomeSubClusterResponse;
 import org.apache.hadoop.yarn.server.federation.store.records.GetApplicationsHomeSubClusterRequest;
@@ -312,6 +314,20 @@ public class MemoryFederationStateStore implements FederationStateStore {
       result.add(policy);
     }
     return GetSubClusterPoliciesConfigurationsResponse.newInstance(result);
+  }
+
+  @Override
+  public DeleteSubClusterPolicyConfigurationResponse deletePolicyConfiguration(
+      DeleteSubClusterPolicyConfigurationRequest request) throws YarnException {
+    FederationPolicyStoreInputValidator.validate(request);
+    String queue = request.getQueue();
+    if (!policies.containsKey(queue)) {
+      String errMsg = "Queue " + queue + " does not exist";
+      FederationStateStoreUtils.logAndThrowStoreException(LOG, errMsg);
+    }
+
+    policies.remove(queue);
+    return DeleteSubClusterPolicyConfigurationResponse.newInstance();
   }
 
   @Override

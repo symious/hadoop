@@ -31,6 +31,8 @@ public final class GPGWSConsts {
 
   public static final String POLICY_UPDATE = "/policy/update";
 
+  public static final String POLICY_DELETE = "/policy/delete";
+
   public static final String WEIGHTS_FIELD = "routerPolicyWeights";
 
   public static final String ENTRY_FIELD = "entry";

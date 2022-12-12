@@ -41,6 +41,8 @@ import org.apache.hadoop.yarn.server.globalpolicygenerator.GlobalPolicyGenerator
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.ClusterWeight;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.ClusterWeights;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.GPGInfo;
+import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.PolicyDeleteRequestInfo;
+import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.PolicyDeleteResponseInfo;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.PolicyListInfo;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.PolicyRequestsInfo;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.PolicyUpdateRequestInfo;
@@ -66,10 +68,8 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static javax.servlet.http.HttpServletResponse.SC_OK;
 import static org.apache.hadoop.yarn.webapp.util.WebAppUtils.getHttpSchemePrefix;
@@ -268,6 +268,29 @@ public class GPGWebServices{
         new PolicyUpdateResponseInfo("Update policy success!")).build();
   }
 
+  @POST
+  @Path(GPGWSConsts.POLICY_DELETE)
+  @Produces({MediaType.APPLICATION_JSON + "; " + JettyUtils.UTF_8,
+      MediaType.APPLICATION_XML + "; " + JettyUtils.UTF_8})
+  public Response deletePolicy(PolicyDeleteRequestInfo resContext,
+      @Context HttpServletRequest hsr) throws Exception {
+    init();
+    String requestHost = hsr.getRemoteHost();
+    String queueName = resContext.getQueueName();
+    LOG.info("Receive deletePolicy request from host: " + requestHost +
+        " ,delete policy for queue: " + queueName);
+    try {
+      federationFacade.deletePolicyConfiguration(queueName);
+    } catch (Exception e) {
+      LOG.error("Delete policy for queue: " + queueName + " failed!");
+      return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+          .entity(new PolicyDeleteResponseInfo(e.getMessage())).build();
+    }
+    String successMsg = "Delete policy for queue: " + queueName + " success!";
+    LOG.error(successMsg);
+    return Response.status(Response.Status.OK)
+        .entity(new PolicyDeleteResponseInfo(successMsg)).build();
+  }
 
   @POST
   @Path(GPGWSConsts.APP_HOME_IMPORT)

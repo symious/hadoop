@@ -19,6 +19,7 @@
 package org.apache.hadoop.yarn.server.federation.store.utils;
 
 import org.apache.hadoop.yarn.server.federation.store.exception.FederationStateStoreInvalidInputException;
+import org.apache.hadoop.yarn.server.federation.store.records.DeleteSubClusterPolicyConfigurationRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.GetSubClusterPolicyConfigurationRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.SetSubClusterPolicyConfigurationRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterPolicyConfiguration;
@@ -108,6 +109,20 @@ public final class FederationPolicyStoreInputValidator {
 
   }
 
+  public static void validate(DeleteSubClusterPolicyConfigurationRequest request)
+      throws FederationStateStoreInvalidInputException {
+
+    if (request == null) {
+      String message = "Missing DeleteSubClusterPolicyConfigurationRequest Request."
+          + " Please try again by specifying a policy selection information.";
+      LOG.warn(message);
+      throw new FederationStateStoreInvalidInputException(message);
+    }
+
+    // validate queue id
+    checkQueue(request.getQueue());
+  }
+
   /**
    * Validate if the queue id is a valid or not.
    *
@@ -119,6 +134,11 @@ public final class FederationPolicyStoreInputValidator {
       throws FederationStateStoreInvalidInputException {
     if (queue == null || queue.isEmpty()) {
       String message = "Missing Queue. Please try again by specifying a Queue.";
+      LOG.warn(message);
+      throw new FederationStateStoreInvalidInputException(message);
+    }
+    if (queue.contains(" ")) {
+      String message = "Queue name can't contain blank character.";
       LOG.warn(message);
       throw new FederationStateStoreInvalidInputException(message);
     }

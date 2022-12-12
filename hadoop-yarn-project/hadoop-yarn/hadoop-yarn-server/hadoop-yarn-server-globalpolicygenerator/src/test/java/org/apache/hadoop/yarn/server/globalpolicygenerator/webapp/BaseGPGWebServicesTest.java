@@ -21,6 +21,7 @@ package org.apache.hadoop.yarn.server.globalpolicygenerator.webapp;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.GlobalPolicyGenerator;
+import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.PolicyDeleteRequestInfo;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.webapp.dao.PolicyUpdateRequestInfo;
 import org.junit.After;
 import org.junit.Assert;
@@ -97,6 +98,12 @@ public abstract class BaseGPGWebServicesTest {
       throws Exception {
     // HSR is not used here
     return gpgWebService.updatePolicy(resContext, createHttpServletRequest(user));
+  }
+
+  protected Response deletePolicy(PolicyDeleteRequestInfo resContext,String user)
+      throws Exception {
+    // HSR is not used here
+    return gpgWebService.deletePolicy(resContext, createHttpServletRequest(user));
   }
 
   private HttpServletRequest createHttpServletRequest(String user) {

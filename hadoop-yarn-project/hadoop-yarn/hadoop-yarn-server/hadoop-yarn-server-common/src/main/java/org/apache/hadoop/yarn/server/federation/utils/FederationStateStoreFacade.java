@@ -53,6 +53,7 @@ import org.apache.hadoop.yarn.server.federation.store.records.AddApplicationHome
 import org.apache.hadoop.yarn.server.federation.store.records.AddApplicationHomeSubClusterResponse;
 import org.apache.hadoop.yarn.server.federation.store.records.ApplicationHomeSubCluster;
 import org.apache.hadoop.yarn.server.federation.store.records.DeleteApplicationHomeSubClusterRequest;
+import org.apache.hadoop.yarn.server.federation.store.records.DeleteSubClusterPolicyConfigurationRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.GetApplicationHomeSubClusterRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.GetApplicationHomeSubClusterResponse;
 import org.apache.hadoop.yarn.server.federation.store.records.GetApplicationsHomeSubClusterRequest;
@@ -386,6 +387,21 @@ public final class FederationStateStoreFacade {
       throws YarnException {
     stateStore.setPolicyConfiguration(
         SetSubClusterPolicyConfigurationRequest.newInstance(policyConf));
+  }
+
+  /**
+   * Delete the policy for a given queue
+   * Currently response is empty if the operation is successful,
+   * if not an exception reporting reason for a failure.
+   *
+   * @param queue the queue whose policy is required
+   * @throws YarnException if the call to the state store is unsuccessful
+   */
+  public void deletePolicyConfiguration(final String queue)
+      throws YarnException {
+    stateStore.deletePolicyConfiguration(
+        DeleteSubClusterPolicyConfigurationRequest.newInstance(queue));
+    return;
   }
 
   /**

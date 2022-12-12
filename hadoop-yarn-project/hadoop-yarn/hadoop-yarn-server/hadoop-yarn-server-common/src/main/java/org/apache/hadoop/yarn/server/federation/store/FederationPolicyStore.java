@@ -21,6 +21,8 @@ package org.apache.hadoop.yarn.server.federation.store;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.apache.hadoop.yarn.server.federation.store.records.DeleteSubClusterPolicyConfigurationRequest;
+import org.apache.hadoop.yarn.server.federation.store.records.DeleteSubClusterPolicyConfigurationResponse;
 import org.apache.hadoop.yarn.server.federation.store.records.GetSubClusterPoliciesConfigurationsRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.GetSubClusterPoliciesConfigurationsResponse;
 import org.apache.hadoop.yarn.server.federation.store.records.GetSubClusterPolicyConfigurationRequest;
@@ -73,5 +75,17 @@ public interface FederationPolicyStore {
    */
   GetSubClusterPoliciesConfigurationsResponse getPoliciesConfigurations(
       GetSubClusterPoliciesConfigurationsRequest request) throws YarnException;
+
+  /**
+   * Delete the policy configuration for a given queue.
+   *
+   * @param request the queue whose {@code SubClusterPolicyConfiguration} is
+   *          required
+   * @return the {@code SubClusterPolicyConfiguration} for the specified queue,
+   *         or {@code null} if there is no mapping for the queue
+   * @throws YarnException if the request is invalid/fails
+   */
+  DeleteSubClusterPolicyConfigurationResponse deletePolicyConfiguration(
+      DeleteSubClusterPolicyConfigurationRequest request) throws YarnException;
 
 }
