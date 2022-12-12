@@ -724,6 +724,13 @@ public class Balancer {
     }
   }
 
+  public static Path getBalancePathForMultiDC(String dataCenterConstraint) {
+    if (dataCenterConstraint != null && !dataCenterConstraint.isEmpty()) {
+      return new Path(BALANCER_ID_PATH, dataCenterConstraint.substring(1));
+    }
+    return BALANCER_ID_PATH;
+  }
+
   /**
    * Balance all namenodes.
    * For each iteration,
@@ -755,8 +762,8 @@ public class Balancer {
     List<NameNodeConnector> connectors = Collections.emptyList();
     try {
       connectors = NameNodeConnector.newNameNodeConnectors(namenodes, nsIds,
-          Balancer.class.getSimpleName(), BALANCER_ID_PATH, conf,
-          p.getMaxIdleIteration());
+          Balancer.class.getSimpleName(), getBalancePathForMultiDC(p.getDataCenterConstraint()),
+          conf, p.getMaxIdleIteration());
       boolean done = false;
       for(int iteration = 0; !done; iteration++) {
         done = true;
