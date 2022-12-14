@@ -572,7 +572,9 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
         ret = null;
       }
       File fdDir = new File(procfsDir + pinfo.getPid(), PROCFS_FD_DIR);
-      pinfo.updateFdNum(fdDir.list().length);
+      if (fdDir.list()!= null) {
+        pinfo.updateFdNum(fdDir.list().length);
+      }
     } catch (IOException io) {
       LOG.warn("Error reading the stream", io);
       ret = null;
