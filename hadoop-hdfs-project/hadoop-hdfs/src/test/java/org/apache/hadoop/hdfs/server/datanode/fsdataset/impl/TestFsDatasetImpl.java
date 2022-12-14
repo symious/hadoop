@@ -425,6 +425,10 @@ public class TestFsDatasetImpl {
 
   @Test(timeout = 30000)
   public void testConcurrentWriteAndDeleteBlock() throws Exception {
+    // Clean up
+    for (String bpid : dataset.volumeMap.getBlockPoolList()) {
+      dataset.volumeMap.cleanUpBlockPool(bpid);
+    }
     // Feed FsDataset with block metadata.
     final int numBlocks = 1000;
     final int threadCount = 10;
@@ -456,6 +460,9 @@ public class TestFsDatasetImpl {
     for (Future<?> f : futureList) {
       f.get();
     }
+    // Waiting for the async deletion task finish.
+    GenericTestUtils.waitFor(() -> dataset.asyncDiskService.countPendingDeletions() == 0,
+        100, 1000);
     for (String bpid : dataset.volumeMap.getBlockPoolList()) {
       assertEquals(numBlocks / 2, dataset.volumeMap.size(bpid));
     }
@@ -1207,7 +1214,7 @@ public class TestFsDatasetImpl {
       throws IOException, InterruptedException, TimeoutException {
     HdfsConfiguration config = new HdfsConfiguration();
     // Bump up replication interval.
-    config.setInt(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY, 10);
+    config.setInt(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY, 100);
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(config).numDataNodes(3).build();
     DistributedFileSystem fs = cluster.getFileSystem();
     String bpid = cluster.getNamesystem().getBlockPoolId();

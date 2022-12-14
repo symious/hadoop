@@ -59,6 +59,7 @@ public class TestBalancerService {
   }
 
   private void setupCluster(Configuration conf) throws Exception {
+    Balancer.checkDataCenter = false;
     MiniDFSNNTopology.NNConf nn1Conf = new MiniDFSNNTopology.NNConf("nn1");
     nn1Conf.setIpcPort(HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT);
     Configuration copiedConf = new Configuration(conf);

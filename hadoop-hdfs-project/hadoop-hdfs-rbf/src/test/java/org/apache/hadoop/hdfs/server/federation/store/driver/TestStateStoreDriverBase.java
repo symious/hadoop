@@ -123,13 +123,15 @@ public class TestStateStoreDriverBase {
       throws IllegalArgumentException, IllegalAccessException, IOException {
 
     if (recordClass == MembershipState.class) {
-      return (T) MembershipState.newInstance(generateRandomString(),
+      T result = (T) MembershipState.newInstance(generateRandomString(),
           generateRandomString(), generateRandomString(),
           generateRandomString(), generateRandomString(),
           generateRandomString(), generateRandomString(),
           generateRandomString(), "http", generateRandomString(),
           generateRandomEnum(FederationNamenodeServiceState.class),
           false);
+      ((MembershipState) result).setMsyncAddress(generateRandomString());
+      return result;
     } else if (recordClass == MountTable.class) {
       String src = "/" + generateRandomString();
       Map<String, String> destMap = Collections.singletonMap(

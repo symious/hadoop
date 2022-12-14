@@ -784,19 +784,18 @@
   </property>
 
   <property>
-    <name>dfs.federation.router.mount-table.cache.immediate.update</name>
-    <value>true</value>
+    <name>dfs.federation.router.observer.enable.new.msync.server</name>
+    <value>false</value>
     <description>
-      Refresh mount table cache immediately after adding,
-      modifying or deleting the mount table entries
+      Enable or disable proxy the msync rpc to the new msync rpc server.
     </description>
   </property>
 
   <property>
-    <name>dfs.federation.router.mount-table.cache.immediate.update.max.time</name>
-    <value>2</value>
+    <name>dfs.router.enable.audit.loggers</name>
+    <value>true</value>
     <description>
-      How long to wait for all the router admins to finish their cache update (Minutes)
+      Enable or disable audit loggers for RBF.
     </description>
   </property>
 

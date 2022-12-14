@@ -42,6 +42,7 @@ import org.apache.hadoop.net.unix.TemporarySocketDirectory;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Test;
 import org.slf4j.event.Level;
 
@@ -80,6 +81,7 @@ public class TestBlockTokenWithShortCircuitRead {
 
   @Test
   public void testShortCircuitReadWithInvalidToken() throws Exception {
+    Assume.assumeTrue(null == DomainSocket.getLoadingFailureReason());
     MiniDFSCluster cluster = null;
     short numDataNodes = 1;
     Configuration conf = new Configuration();

@@ -1264,8 +1264,8 @@ public class TestRouterAdminCLI {
   public void testUpdateErrorCase() throws Exception {
     // Add a mount table firstly
     String nsId = "ns0";
-    String src = "/mount";
-    String dest = "/dest";
+    String src = "/mount1";
+    String dest = "/dest1";
     String[] argv = new String[] {"-add", src, nsId, dest, "-readonly",
         "-order", "HASH_ALL"};
     assertEquals(0, ToolRunner.run(admin, argv));

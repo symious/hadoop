@@ -849,6 +849,9 @@ public class MiniRouterDFSCluster {
             .numDataNodes(numDNs)
             .nnTopology(topology)
             .dataNodeConfOverlays(dnConfs)
+            .checkExitOnShutdown(false)
+            .storageTypes(storageTypes)
+            .racks(racks)
             .build();
       }
       cluster.waitActive();

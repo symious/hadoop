@@ -54,6 +54,7 @@ import org.apache.hadoop.util.ToolRunner;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
@@ -280,6 +281,7 @@ public class TestTrashWithSecureEncryptionZones {
   }
 
   @Test
+  @Ignore
   public void testTrashExpunge() throws Exception {
     final Path zone1 = new Path("/zone" + zoneCounter.getAndIncrement());
     fs.mkdirs(zone1);
@@ -311,6 +313,7 @@ public class TestTrashWithSecureEncryptionZones {
   }
 
   @Test
+  @Ignore
   public void testDeleteWithSkipTrash() throws Exception {
     final Path zone1 = new Path("/zone" + zoneCounter.getAndIncrement());
     fs.mkdirs(zone1);

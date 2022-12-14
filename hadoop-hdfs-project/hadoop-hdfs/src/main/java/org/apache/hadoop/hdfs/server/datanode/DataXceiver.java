@@ -422,10 +422,7 @@ class DataXceiver extends Receiver implements Runnable {
         success = true;
         // update metrics
         datanode.metrics.addReadBlockOp(elapsed());
-        // Skip checksum size here as datanode does not split the block
-        // to chunks and do checksum for each chunk.
-        datanode.metrics.incrReadsFromClient(peer.getLocalHostAddress(),
-            peer.getRemoteHostAddress(), blk.getNumBytes());
+        datanode.metrics.incrReadsFromClient(true, blk.getNumBytes());
       }
     } finally {
       if ((!success) && (registeredSlotId != null)) {

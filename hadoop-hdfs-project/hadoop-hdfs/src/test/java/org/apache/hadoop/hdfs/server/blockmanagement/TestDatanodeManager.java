@@ -324,7 +324,7 @@ public class TestDatanodeManager {
   }
 
   @Test
-  public void testIsInterDCRead() throws IOException {
+  public void testIsInternalDCRead() throws IOException {
     // setup the cluster
     final String[] hosts = {"host0", "host1", "host2"};
     final String[] racks = {"/dc0/rack0", "/dc0/rack1", "/dc1/rack2"};
@@ -366,13 +366,6 @@ public class TestDatanodeManager {
     assertNotNull(overallSampleStat);
     assertEquals(1, overallSampleStat.numSamples());
     assertEquals(1024, overallSampleStat.total(), 0.1);
-
-    MutableStat detailDCMutableStat = NameNode.getNameNodeMetrics().getCrossDCTraffic("Dc0_dc2");
-    assertNotNull(detailDCMutableStat);
-    SampleStat detailDCSampleStat = detailDCMutableStat.lastStat();
-    assertNotNull(detailDCSampleStat);
-    assertEquals(1, detailDCSampleStat.numSamples());
-    assertEquals(1024, detailDCSampleStat.total(), 0.1);
 
     cluster.shutdown();
   }

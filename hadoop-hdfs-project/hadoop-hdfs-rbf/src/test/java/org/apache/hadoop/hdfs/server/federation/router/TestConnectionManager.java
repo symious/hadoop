@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_MAX_CONCURRENCY_PER_CONNECTION_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -209,9 +210,11 @@ public class TestConnectionManager {
     Map<ConnectionPoolId, ConnectionPool> poolMap = connManager.getPools();
     final int totalConns = 10;
     int activeConns = 5;
+    Configuration copyConf = new Configuration(conf);
+    copyConf.setInt(DFS_ROUTER_MAX_CONCURRENCY_PER_CONNECTION_KEY, 1);
 
     ConnectionPool pool = new ConnectionPool(
-        conf, TEST_NN_ADDRESS, TEST_USER1, 0, 10, 0.5f, ClientProtocol.class, null);
+        copyConf, TEST_NN_ADDRESS, TEST_USER1, 0, 10, 0.5f, ClientProtocol.class, null);
     addConnectionsToPool(pool, totalConns, activeConns);
     poolMap.put(
         new ConnectionPoolId(TEST_USER1, TEST_NN_ADDRESS, ClientProtocol.class),
@@ -250,9 +253,11 @@ public class TestConnectionManager {
     Map<ConnectionPoolId, ConnectionPool> poolMap = connManager.getPools();
     final int totalConns = 10;
     int activeConns = 5;
+    Configuration copyConf = new Configuration(conf);
+    copyConf.setInt(DFS_ROUTER_MAX_CONCURRENCY_PER_CONNECTION_KEY, 1);
 
     ConnectionPool pool = new ConnectionPool(
-        conf, TEST_NN_ADDRESS, TEST_USER1, 0, 10, 0.5f, NamenodeProtocol.class, null);
+        copyConf, TEST_NN_ADDRESS, TEST_USER1, 0, 10, 0.5f, NamenodeProtocol.class, null);
     addConnectionsToPool(pool, totalConns, activeConns);
     poolMap.put(
         new ConnectionPoolId(

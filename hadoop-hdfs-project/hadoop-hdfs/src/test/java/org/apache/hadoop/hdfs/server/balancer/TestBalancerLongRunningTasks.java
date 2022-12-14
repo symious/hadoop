@@ -281,6 +281,7 @@ public class TestBalancerLongRunningTasks {
    */
   @Test(timeout = 60000)
   public void testMinBlockSizeAndSourceNodes() throws Exception {
+    Balancer.checkDataCenter = false;
     final Configuration conf = new HdfsConfiguration();
     initConf(conf);
 
@@ -392,6 +393,7 @@ public class TestBalancerLongRunningTasks {
       final int r = Balancer.run(namenodes, p, conf);
       assertEquals(ExitStatus.SUCCESS.getExitCode(), r);
     }
+    Balancer.checkDataCenter = true;
   }
 
   /**

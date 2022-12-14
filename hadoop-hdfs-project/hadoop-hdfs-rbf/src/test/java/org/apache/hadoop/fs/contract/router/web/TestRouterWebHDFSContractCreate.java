@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.contract.AbstractContractCreateTest;
 import org.apache.hadoop.fs.contract.AbstractFSContract;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 
 import java.io.IOException;
 
@@ -45,5 +46,11 @@ public class TestRouterWebHDFSContractCreate
   @Override
   protected AbstractFSContract createContract(Configuration conf) {
     return new RouterWebHDFSContract(conf);
+  }
+
+  @Override
+  @Ignore
+  public void testSyncable() throws Throwable {
+    super.testSyncable();
   }
 }

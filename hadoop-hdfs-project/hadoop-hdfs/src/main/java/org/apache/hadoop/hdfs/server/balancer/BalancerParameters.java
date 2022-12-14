@@ -135,7 +135,7 @@ final class BalancerParameters {
     private Set<String> sourceNodes = Collections.<String> emptySet();
     private Set<String> blockpools = Collections.<String> emptySet();
     private boolean runDuringUpgrade = false;
-    private String dataCenterConstraint = "";
+    private String dataCenterConstraint = null;
     private boolean runAsService = false;
 
     Builder() {

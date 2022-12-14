@@ -290,6 +290,9 @@ public class RouterAdminServer extends AbstractService
     if (this.adminServer != null) {
       this.adminServer.stop();
     }
+    RefreshRegistry.defaultRegistry()
+        .unregisterAll(REFRESH_CONFIGURED_NAMENODES_HANDLER_IDENTIFIER);
+    RefreshRegistry.defaultRegistry().unregisterAll(HANDLER_IDENTIFIER);
     super.serviceStop();
   }
 

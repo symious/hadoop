@@ -1927,6 +1927,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     try {
       stopCommonServices();
     } finally {
+      RefreshRegistry.defaultRegistry().unregisterAll(FSN_LOCK_METRICS_REFRESH_HANDLER_IDENTIFIER);
       // using finally to ensure we also wait for lease daemon
       try {
         stopActiveServices();
@@ -5616,6 +5617,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         LOG.error("Failed to close provider.", e);
       }
     }
+    RefreshRegistry.defaultRegistry().unregisterAll(FSN_LOCK_METRICS_REFRESH_HANDLER_IDENTIFIER);
   }
 
   @Override // FSNamesystemMBean

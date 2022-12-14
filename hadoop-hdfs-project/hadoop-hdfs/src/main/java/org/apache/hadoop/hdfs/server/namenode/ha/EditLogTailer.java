@@ -176,10 +176,6 @@ public class EditLogTailer {
   private volatile boolean onlyDurableTxns =
       DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT;
 
-  public EditLogTailer(FSNamesystem namesystem, Configuration conf) {
-    this(namesystem, conf, null);
-  }
-
   public EditLogTailer(FSNamesystem namesystem, Configuration conf,
       HAServiceProtocol.HAServiceState hass) {
     this.tailerThread = new EditLogTailerThread();

@@ -1463,7 +1463,8 @@ public class Dispatcher {
   static class Util {
     /** @return true if data node is in constrained data center */
     static boolean isInDataCenter(String dataCenterConstraint, DatanodeInfo dn) {
-      return dn.getNetworkLocation().startsWith(dataCenterConstraint);
+      return dataCenterConstraint == null ||
+          dn.getNetworkLocation().startsWith(dataCenterConstraint);
     }
 
     /** @return true if data node is part of the excludedNodes. */

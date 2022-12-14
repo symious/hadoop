@@ -42,6 +42,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.PermissionStatus;
+import org.apache.hadoop.ha.HAServiceProtocol;
 import org.apache.hadoop.ha.ServiceFailedException;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.HAUtil;
@@ -175,7 +176,8 @@ public class TestEditLogTailer {
     final Queue<Long> sleepDurations = new ConcurrentLinkedQueue<>();
     final int zeroEditCount = 5;
     final AtomicInteger tailEditsCallCount = new AtomicInteger(0);
-    EditLogTailer tailer = new EditLogTailer(mockNamesystem, conf) {
+    EditLogTailer tailer = new EditLogTailer(mockNamesystem, conf,
+        HAServiceProtocol.HAServiceState.ACTIVE) {
       @Override
       void sleep(long sleepTimeMs) {
         if (sleepDurations.size() <= zeroEditCount) {
@@ -184,7 +186,7 @@ public class TestEditLogTailer {
       }
 
       @Override
-      public long doTailEdits() {
+      public long doTailEdits(boolean onlyDurableTxns) {
         return tailEditsCallCount.getAndIncrement() < zeroEditCount ? 0 : 1;
       }
     };

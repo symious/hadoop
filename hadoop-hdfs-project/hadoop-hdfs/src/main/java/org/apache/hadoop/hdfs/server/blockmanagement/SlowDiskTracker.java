@@ -198,10 +198,12 @@ public class SlowDiskTracker {
       return this.slowDiskID;
     }
 
+    @JsonIgnore
     public SlowDiskReports.DiskOpForJMX getLatency() {
       return new SlowDiskReports.DiskOpForJMX(this.latencyMap);
     }
 
+    @JsonIgnore
     public double getMaxLatency() {
       double maxLatency = 0;
       for (double latency : latencyMap.values()) {

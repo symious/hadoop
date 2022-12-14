@@ -6315,16 +6315,6 @@
   </property>
 
   <property>
-    <name>dfs.client.mark.slownode.as.badnode.threshold</name>
-    <value>10</value>
-    <description>
-      The threshold to mark a slownode as a badnode. If we get PipelineAck from
-      a slownode continuously for ${dfs.client.treat.slownode.as.badnode.threshold}
-      times, we should mark it as a badnode.
-    </description>
-  </property>
-
-  <property>
     <name>dfs.datanode.lockmanager.trace</name>
     <value>false</value>
     <description>

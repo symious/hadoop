@@ -142,11 +142,11 @@ public class FSDirAttrOp {
       isFile = blocks != null;
       if (isFile) {
         fsd.getEditLog().logSetReplication(iip.getPath(), replication);
-        ReplicationRule rule = ((INodeFile)iip.getLastINode())
-            .getReplicationRule(fsd);
-        if (rule != null && rule.getReplica() != replication) {
-          FSDirectory.LOG.warn("replication={} conflicts with rule='{}'",
-              replication, rule);
+        if (iip.getLastINode() instanceof  INodeFile) {
+          ReplicationRule rule = ((INodeFile)iip.getLastINode()).getReplicationRule(fsd);
+          if (rule != null && rule.getReplica() != replication) {
+            FSDirectory.LOG.warn("replication={} conflicts with rule='{}'", replication, rule);
+          }
         }
       }
     } finally {

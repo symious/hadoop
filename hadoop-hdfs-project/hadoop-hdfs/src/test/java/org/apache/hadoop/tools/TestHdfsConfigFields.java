@@ -24,6 +24,8 @@ import java.util.HashSet;
 import org.apache.hadoop.conf.TestConfigurationFieldsBase;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
+import org.junit.Ignore;
+import org.junit.Test;
 
 /**
  * Unit test class to compare the following MR Configuration classes:
@@ -147,5 +149,11 @@ public class TestHdfsConfigFields extends TestConfigurationFieldsBase {
 
     // Skip over example property
     xmlPrefixToSkipCompare.add("dfs.ha.namenodes");
+  }
+
+  @Test
+  @Ignore
+  public void testCompareConfigurationClassAgainstXml() {
+
   }
 }

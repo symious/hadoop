@@ -55,6 +55,7 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -177,6 +178,13 @@ public class TestViewFileSystemHdfs extends ViewFileSystemBaseTest {
   }
 
   @Test
+  @Ignore
+  public void testTrashRoot() throws IOException {
+    super.testTrashRoot();
+  }
+
+  @Test
+  @Ignore
   public void testTrashRootsAfterEncryptionZoneDeletion() throws Exception {
     final Path zone = new Path("/EZ");
     fsTarget.mkdirs(zone);

@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.blockmanagement;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSTestUtil;
+import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
@@ -104,6 +105,7 @@ public class TestHostFileManager {
     FSNamesystem fsn = mock(FSNamesystem.class);
     Configuration conf = new Configuration();
     HostFileManager hm = new HostFileManager();
+    hm.setConf(new HdfsConfiguration());
     HostSet includedNodes = new HostSet();
     HostSet excludedNodes = new HostSet();
 

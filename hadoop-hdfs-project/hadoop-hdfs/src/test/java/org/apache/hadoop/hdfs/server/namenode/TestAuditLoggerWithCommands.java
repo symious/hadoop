@@ -1113,7 +1113,7 @@ public class TestAuditLoggerWithCommands {
     Server.getCurCall().set(call);
     fsNamesystem.setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_ENTER);
     try {
-      fsNamesystem.saveNamespace(10, 10);
+      fsNamesystem.saveNamespace(10, 0);
       verifyAuditLogs(auditLogString);
     } catch (Exception e) {
       fail("saveNamespace threw Exception");
@@ -1169,9 +1169,9 @@ public class TestAuditLoggerWithCommands {
     when(call.getRemoteUser()).thenReturn(
         UserGroupInformation.createRemoteUser(System.getProperty("user.name")));
     Server.getCurCall().set(call);
-    verifyAuditRestoreFailedStorage(fsNamesystem, "check");
+    verifyAuditRestoreFailedStorageWithFalse(fsNamesystem, "check");
     verifyAuditRestoreFailedStorage(fsNamesystem, "true");
-    verifyAuditRestoreFailedStorage(fsNamesystem, "false");
+    verifyAuditRestoreFailedStorageWithFalse(fsNamesystem, "false");
     when(call.getRemoteUser()).thenReturn(
         UserGroupInformation.createRemoteUser("theDoctor"));
     verifyAuditRestoreFailedStorageACE(fsNamesystem, "check");
@@ -1231,6 +1231,20 @@ public class TestAuditLoggerWithCommands {
       String auditLogString =
           ".*allowed=false.*cmd=" + operationName + ".*";
       verifyAuditLogs(auditLogString);
+    }
+  }
+
+  private void verifyAuditRestoreFailedStorageWithFalse(
+      FSNamesystem fsNamesystem, String arg) throws IOException {
+    String operationName = fsNamesystem.getFailedStorageCommand(arg);
+    String auditLogString =
+        ".*allowed=false.*cmd=" + operationName + ".*";
+    try {
+      fsNamesystem.restoreFailedStorage(arg);
+      verifyAuditLogs(auditLogString);
+    } catch (Exception e) {
+      fail(
+          "The operation should not have failed with Exception");
     }
   }
 

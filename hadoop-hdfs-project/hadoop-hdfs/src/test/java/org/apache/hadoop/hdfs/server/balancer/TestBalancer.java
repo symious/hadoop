@@ -1562,16 +1562,16 @@ public class TestBalancer {
     // Case1: Simulate first balancer by creating 'balancer.id' file. It
     // will keep this file until the balancing operation is completed.
     FileSystem fs = cluster.getFileSystem(0);
+    String dc = "/defaultCenter";
     final FSDataOutputStream out = fs
-        .create(Balancer.BALANCER_ID_PATH, false);
+        .create(Balancer.getBalancePathForMultiDC(dc), false);
     out.writeBytes(InetAddress.getLocalHost().getHostName());
     out.hflush();
     assertTrue("'balancer.id' file doesn't exist!",
         fs.exists(Balancer.BALANCER_ID_PATH));
 
     // start second balancer
-    final String[] args = { "-policy", "datanode",
-        "-dataCenterConstraint", "/defaultCenter"};
+    final String[] args = { "-policy", "datanode", "-dataCenterConstraint", dc};
     final Tool tool = new Cli();
     tool.setConf(conf);
     int exitCode = tool.run(args); // start balancing
@@ -1582,7 +1582,7 @@ public class TestBalancer {
     // perform balancing.
     out.close();
     assertTrue("'balancer.id' file doesn't exist!",
-        fs.exists(Balancer.BALANCER_ID_PATH));
+        fs.exists(Balancer.getBalancePathForMultiDC(dc)));
     exitCode = tool.run(args); // start balancing
     assertEquals("Exit status code mismatches",
         ExitStatus.SUCCESS.getExitCode(), exitCode);

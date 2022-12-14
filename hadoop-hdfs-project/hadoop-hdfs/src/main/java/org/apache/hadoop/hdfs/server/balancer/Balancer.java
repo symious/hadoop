@@ -210,6 +210,7 @@ public class Balancer {
 
   private static volatile int exceptionsSinceLastBalance = 0;
   private static volatile int failedTimesSinceLastSuccessfulBalance = 0;
+  public static volatile boolean checkDataCenter = true;
 
   private final Dispatcher dispatcher;
   private final NameNodeConnector nnc;
@@ -1020,8 +1021,10 @@ public class Balancer {
                   + Arrays.toString(args));
             }
           }
-          checkArgument(isSetDataCenter,
+          if (checkDataCenter) {
+             checkArgument(isSetDataCenter,
               "Please set the data center constraint for balancer.");
+          }
           checkArgument(excludedNodes == null || includedNodes == null,
               "-exclude and -include options cannot be specified together.");
         } catch(RuntimeException e) {

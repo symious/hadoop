@@ -517,6 +517,8 @@ public class DatanodeManager {
     datanodeAdminManager.close();
     heartbeatManager.close();
     stopSlowPeerCollector();
+    RefreshRegistry.defaultRegistry().unregisterAll(
+        DatanodeManagerRefreshHandler.DATANODE_MANAGER_REFRESH_HANDLER_IDENTIFIER);
   }
 
   /** @return the network topology. */

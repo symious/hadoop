@@ -203,7 +203,7 @@ public class TestDelegationTokensWithHA {
   
   private class EditLogTailerForTest extends EditLogTailer {
     public EditLogTailerForTest(FSNamesystem namesystem, Configuration conf) {
-      super(namesystem, conf);
+      super(namesystem, conf, HAServiceState.ACTIVE);
     }
     
     public void catchupDuringFailover() throws IOException {

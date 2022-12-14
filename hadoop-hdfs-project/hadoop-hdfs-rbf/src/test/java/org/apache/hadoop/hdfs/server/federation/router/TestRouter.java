@@ -256,7 +256,8 @@ public class TestRouter {
     if (expectedNNHeartbeat) {
       assertNotNull(namenodeHeartbeatServices);
     } else {
-      assertNull(namenodeHeartbeatServices);
+      assertNotNull(namenodeHeartbeatServices);
+      assertEquals(0, namenodeHeartbeatServices.size());
     }
     router.close();
   }
@@ -291,7 +292,7 @@ public class TestRouter {
       if (enable) {
         assertNotNull(router.getNamenodeHeartbeatServices());
       } else {
-        assertNull(router.getNamenodeHeartbeatServices());
+        assertEquals(0, router.getNamenodeHeartbeatServices().size());
       }
     }
   }

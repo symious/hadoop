@@ -119,7 +119,9 @@ abstract public class BaseReplicationPolicyTest {
 
   @After
   public void tearDown() throws Exception {
-    namenode.stop();
+    if (namenode != null) {
+      namenode.stop();
+    }
   }
 
   boolean isOnSameRack(DatanodeStorageInfo left, DatanodeStorageInfo right) {
