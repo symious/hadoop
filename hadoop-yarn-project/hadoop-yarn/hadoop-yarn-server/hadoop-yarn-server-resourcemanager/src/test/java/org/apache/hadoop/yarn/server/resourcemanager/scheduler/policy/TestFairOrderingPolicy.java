@@ -432,6 +432,7 @@ public class TestFairOrderingPolicy {
     checkIds(iterator1, new String[]{"3", "2", "1"});
 
     //Change value with cache, should see no change for assignmentIterator
+    Thread.sleep(1000);
     msp2.setUsed(Resources.createResource(6));
     schedOrder.containerAllocated(msp2, null);
     long startTime2 = System.nanoTime();

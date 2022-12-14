@@ -241,7 +241,7 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
   @Override
   public Iterator<S> getAssignmentIterator(IteratorSelector sel) {
     long now = System.currentTimeMillis();
-    if(now - lastUpdateTime > cacheTime){
+    if (cacheTime <= 0 || (now - lastUpdateTime > cacheTime)) {
       if (LOG.isDebugEnabled()) {
         LOG.debug("queueName: " + this.queueName + " ,now: " + now +
             " ,lastUpdateTime: " + lastUpdateTime +
