@@ -97,6 +97,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.net.ConnectTimeoutException;
+import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.Time;
@@ -310,6 +311,26 @@ public class RouterClientProtocol implements ClientProtocol {
       throw e;
     }
     logAuditEvent(true, OperationName.OPEN, INVOKE_TYPE_SEQUENTIAL, src);
+    return blocks;
+  }
+
+  @Override
+  public LocatedBlocks getBlockLocationsWithFakeRack(String src,
+      long offset, long length, String fakeRack) throws IOException {
+    rpcServer.checkOperation(NameNode.OperationCategory.READ);
+    List<RemoteLocation> locations = rpcServer.getLocationsForPath(src, false);
+    RemoteMethod remoteMethod = new RemoteMethod("getBlockLocationsWithFakeRack",
+        new Class<?>[] {String.class, long.class, long.class, String.class},
+        new RemoteParam(), offset, length, fakeRack);
+    final String operationName = "open_with_fake_rack";
+    LocatedBlocks blocks;
+    try {
+      blocks = rpcClient.invokeSequential(locations, remoteMethod, LocatedBlocks.class, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, INVOKE_TYPE_SEQUENTIAL, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, INVOKE_TYPE_SEQUENTIAL, src);
     return blocks;
   }
 

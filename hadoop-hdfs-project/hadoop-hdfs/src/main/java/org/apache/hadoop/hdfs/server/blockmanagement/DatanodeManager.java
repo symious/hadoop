@@ -579,25 +579,33 @@ public class DatanodeManager {
   /** Check if the read traffic is inter-dc. */
   @VisibleForTesting
   public boolean checkInterDCRead(final String clientMachine,
-      final List<LocatedBlock> locatedblocks, final long fileLength) {
+      final List<LocatedBlock> locatedblocks, final long fileLength, String fakeRack) {
     if (locatedblocks.size() == 0) {
       return false;
     }
 
     String clientLocation;
-    Node client = getDatanodeByHost(clientMachine);
-    if (client != null) {
-      clientLocation = client.getNetworkLocation();
+    String validateFakeRack = this.networktopology.getValidFakeRack(fakeRack);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("The validateFakeRack is " + validateFakeRack + " for " + fakeRack);
+    }
+    if (validateFakeRack != null) {
+      clientLocation = validateFakeRack;
     } else {
-      List<String> hosts = new ArrayList<>(1);
-      hosts.add(clientMachine);
-      List<String> resolvedHosts = dnsToSwitchMappingForMetric.resolve(hosts);
-      if (resolvedHosts != null && !resolvedHosts.isEmpty()) {
-        clientLocation = resolvedHosts.get(0);
+      Node client = getDatanodeByHost(clientMachine);
+      if (client != null) {
+        clientLocation = client.getNetworkLocation();
       } else {
-        LOG.error("Node Resolution failed. Please make sure that rack " +
-            "awareness scripts are functional.");
-        return false;
+        List<String> hosts = new ArrayList<>(1);
+        hosts.add(clientMachine);
+        List<String> resolvedHosts = dnsToSwitchMappingForMetric.resolve(hosts);
+        if (resolvedHosts != null && !resolvedHosts.isEmpty()) {
+          clientLocation = resolvedHosts.get(0);
+        } else {
+          LOG.error("Node Resolution failed. Please make sure that rack " +
+              "awareness scripts are functional.");
+          return false;
+        }
       }
     }
     String clientDC = NetworkTopologyUtil.getDataCenter(clientLocation);
@@ -614,6 +622,9 @@ public class DatanodeManager {
       }
     }
 
+    if (firstDnDC == null) {
+      return false;
+    }
     NameNode.getNameNodeMetrics().incrCrossDCTraffic(clientDC, firstDnDC, true, fileLength);
 
     // for trafficInOrOut is referenced to DN, so set to true.
@@ -658,8 +669,12 @@ public class DatanodeManager {
    * After sorting locations, will update corresponding block indices
    * and block tokens.
    */
+  public void sortLocatedBlocks(final String targetHost, final List<LocatedBlock> locatedBlocks) {
+    sortLocatedBlocks(targetHost, locatedBlocks, null);
+  }
+
   public void sortLocatedBlocks(final String targetHost,
-      final List<LocatedBlock> locatedBlocks) {
+      final List<LocatedBlock> locatedBlocks, final String fakeRack) {
     Comparator<DatanodeInfo> comparator =
         avoidStaleDataNodesForRead || avoidSlowDataNodesForRead ?
             new DFSUtil.StaleAndSlowComparator(
@@ -671,7 +686,7 @@ public class DatanodeManager {
       if (lb.isStriped()) {
         sortLocatedStripedBlock(lb, comparator);
       } else {
-        sortLocatedBlock(lb, targetHost, comparator);
+        sortLocatedBlock(lb, targetHost, comparator, fakeRack);
       }
     }
   }
@@ -718,25 +733,34 @@ public class DatanodeManager {
    * @param comparator dn comparator
    */
   private void sortLocatedBlock(final LocatedBlock lb, String targetHost,
-      Comparator<DatanodeInfo> comparator) {
+      Comparator<DatanodeInfo> comparator, final String fakeRack) {
     // As it is possible for the separation of node manager and datanode, 
     // here we should get node but not datanode only .
     boolean nonDatanodeReader = false;
-    Node client = getDatanodeByHost(targetHost);
-    if (client == null) {
+    Node client = null;
+    String validateFakeRack = this.networktopology.getValidFakeRack(fakeRack);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("The validateFakeRack is " + validateFakeRack + " for " + fakeRack);
+    }
+    if (validateFakeRack != null) {
+      client = new NodeBase(validateFakeRack + NodeBase.PATH_SEPARATOR_STR + targetHost);
       nonDatanodeReader = true;
-      List<String> hosts = new ArrayList<>(1);
-      hosts.add(targetHost);
-      List<String> resolvedHosts = dnsToSwitchMapping.resolve(hosts);
-      if (resolvedHosts != null && !resolvedHosts.isEmpty()) {
-        String rName = resolvedHosts.get(0);
-        if (rName != null) {
-          client = new NodeBase(rName + NodeBase.PATH_SEPARATOR_STR +
-            targetHost);
+    } else {
+      client = getDatanodeByHost(targetHost);
+      if (client == null) {
+        nonDatanodeReader = true;
+        List<String> hosts = new ArrayList<>(1);
+        hosts.add(targetHost);
+        List<String> resolvedHosts = dnsToSwitchMapping.resolve(hosts);
+        if (resolvedHosts != null && !resolvedHosts.isEmpty()) {
+          String rName = resolvedHosts.get(0);
+          if (rName != null) {
+            client = new NodeBase(rName + NodeBase.PATH_SEPARATOR_STR + targetHost);
+          }
+        } else {
+          LOG.error("Node Resolution failed. Please make sure that rack " +
+              "awareness scripts are functional.");
         }
-      } else {
-        LOG.error("Node Resolution failed. Please make sure that rack " +
-          "awareness scripts are functional.");
       }
     }
 

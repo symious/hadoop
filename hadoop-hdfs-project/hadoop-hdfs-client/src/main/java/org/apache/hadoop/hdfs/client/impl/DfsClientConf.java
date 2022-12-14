@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.client.impl;
 
+import org.apache.hadoop.hdfs.client.HdfsUtils;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.HadoopIllegalArgumentException;
@@ -178,6 +179,8 @@ public class DfsClientConf {
   private final int slowNodeCacheSize;
   private final long slowNodeCacheThresholdMillis;
 
+  private final String fakeRack;
+
   private final boolean readUseCachePriority;
 
   private final boolean deadNodeDetectionEnabled;
@@ -329,6 +332,10 @@ public class DfsClientConf {
     leaseHardLimitPeriod =
         conf.getLong(HdfsClientConfigKeys.DFS_LEASE_HARDLIMIT_KEY,
             HdfsClientConfigKeys.DFS_LEASE_HARDLIMIT_DEFAULT) * 1000;
+
+    fakeRack = HdfsUtils.getValidFakeRack(
+        conf.get(HdfsClientConfigKeys.DFS_CLIENT_FAKE_RACK_KEY,
+            HdfsClientConfigKeys.DFS_CLIENT_FAKE_RACK_DEFAULT));
 
     shortCircuitConf = new ShortCircuitConf(conf);
     clientShortCircuitNum = conf.getInt(
@@ -737,6 +744,10 @@ public class DfsClientConf {
    */
   public long getleaseHardLimitPeriod() {
     return leaseHardLimitPeriod;
+  }
+
+  public String getFakeRack() {
+    return fakeRack;
   }
 
   /**

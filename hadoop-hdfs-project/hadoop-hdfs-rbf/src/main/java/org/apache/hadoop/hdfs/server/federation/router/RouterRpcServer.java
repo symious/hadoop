@@ -617,6 +617,12 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
     return clientProto.getBlockLocations(src, offset, length);
   }
 
+  @Override
+  public LocatedBlocks getBlockLocationsWithFakeRack(String src,
+      long offset, long length, String fakeRack) throws IOException {
+    return clientProto.getBlockLocationsWithFakeRack(src, offset, length, fakeRack);
+  }
+
   @Override // ClientProtocol
   public FsServerDefaults getServerDefaults() throws IOException {
     return clientProto.getServerDefaults();

@@ -914,8 +914,25 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   @VisibleForTesting
   public LocatedBlocks getLocatedBlocks(String src, long start, long length)
       throws IOException {
+    if (this.dfsClientConf.getFakeRack() != null) {
+      return callGetBlockLocationsWithFakeRack(namenode, src, start, length,
+          this.dfsClientConf.getFakeRack());
+    }
+
     try (TraceScope ignored = newPathTraceScope("getBlockLocations", src)) {
       return callGetBlockLocations(namenode, src, start, length);
+    }
+  }
+
+  /*
+   * This is just a wrapper around callGetBlockLocationsWithFakeRack, but non-static so that
+   * we can stub it out for tests.
+   */
+  @VisibleForTesting
+  public LocatedBlocks getLocatedBlocksWithFakeRack(String src,
+      long start, long length, String fakeRack) throws IOException {
+    try (TraceScope ignored = newPathTraceScope("getBlockLocationsWithFakeRack", src)) {
+      return callGetBlockLocationsWithFakeRack(namenode, src, start, length, fakeRack);
     }
   }
 
@@ -927,6 +944,21 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
       throws IOException {
     try {
       return namenode.getBlockLocations(src, start, length);
+    } catch(RemoteException re) {
+      throw re.unwrapRemoteException(AccessControlException.class,
+          FileNotFoundException.class,
+          UnresolvedPathException.class);
+    }
+  }
+
+  /**
+   * @see ClientProtocol#getBlockLocationsWithFakeRack(String, long, long, String)
+   */
+  static LocatedBlocks callGetBlockLocationsWithFakeRack(
+      ClientProtocol namenode, String src, long start, long length, String fakeRack)
+      throws IOException {
+    try {
+      return namenode.getBlockLocationsWithFakeRack(src, start, length, fakeRack);
     } catch(RemoteException re) {
       throw re.unwrapRemoteException(AccessControlException.class,
           FileNotFoundException.class,
@@ -1933,8 +1965,14 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   protected LocatedBlocks getBlockLocations(String src,
                                             long length) throws IOException {
     //get block locations for the file range
-    LocatedBlocks blockLocations = callGetBlockLocations(namenode,
-        src, 0, length);
+    String fakeRack = this.dfsClientConf.getFakeRack();
+    LocatedBlocks blockLocations;
+    if (fakeRack != null) {
+      blockLocations = callGetBlockLocationsWithFakeRack(namenode, src, 0, length, fakeRack);
+    } else {
+      //get block locations for the file range
+      blockLocations = callGetBlockLocations(namenode, src, 0, length);
+    }
     if (null == blockLocations) {
       throw new FileNotFoundException("File does not exist: " + src);
     }

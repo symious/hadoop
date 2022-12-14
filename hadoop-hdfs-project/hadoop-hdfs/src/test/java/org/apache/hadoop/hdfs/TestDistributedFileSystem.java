@@ -93,6 +93,7 @@ import org.apache.hadoop.hdfs.DFSOpsCountStatistics.OpType;
 import org.apache.hadoop.hdfs.net.Peer;
 import org.apache.hadoop.hdfs.protocol.CacheDirectiveInfo;
 import org.apache.hadoop.hdfs.protocol.CachePoolInfo;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ECTopologyVerifierResult;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
@@ -101,6 +102,7 @@ import org.apache.hadoop.hdfs.protocol.HdfsConstants.RollingUpgradeAction;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.StoragePolicySatisfierMode;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
 import org.apache.hadoop.hdfs.protocol.OpenFilesIterator;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
@@ -1361,6 +1363,50 @@ public class TestDistributedFileSystem {
       testFileChecksum();
     } finally {
      noXmlDefaults = false; 
+    }
+  }
+
+  @Test(timeout=120000)
+  public void testReadFileWithFakeRack() throws Exception {
+    final Configuration conf = getTestConfiguration();
+    final MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
+        .numDataNodes(3).racks(new String[]{"/rackClient1", "/rackClient2", "/rackClient3"})
+        .build();
+    try {
+      DataNode secondDataNode = cluster.getDataNodes().get(1);
+      final DistributedFileSystem fs = cluster.getFileSystem();
+      final Path testFile = new Path("/testReadFileWithFakeRack");
+      final int blockSize = 4096;
+      final int numBlocks = 1;
+      // Create a test file
+      final int repl = 3;
+      DFSTestUtil.createFile(fs, testFile, blockSize, numBlocks * blockSize,
+          blockSize, (short) repl, 0xADDED);
+      DFSTestUtil.waitForReplication(fs, testFile, (short) repl, 30000);
+
+      LocatedBlocks locatedBlocksWithOutFakeRack = fs.getClient()
+          .getLocatedBlocksWithFakeRack(
+              testFile.toUri().getPath(), 0, Long.MAX_VALUE, null);
+      assertEquals(repl, locatedBlocksWithOutFakeRack.getLocatedBlocks().get(0)
+          .getLocations().length);
+
+      LocatedBlocks locatedBlocksWithInvalidateFakeRack = fs.getClient()
+          .getLocatedBlocksWithFakeRack(
+              testFile.toUri().getPath(), 0, Long.MAX_VALUE, "helloWord");
+      assertEquals(repl, locatedBlocksWithInvalidateFakeRack.getLocatedBlocks().get(0)
+          .getLocations().length);
+
+      LocatedBlocks locatedBlocksWithValidateFakeRack = fs.getClient()
+          .getLocatedBlocksWithFakeRack(
+              testFile.toUri().getPath(), 0, Long.MAX_VALUE, "/rackClient2");
+      DatanodeInfo[] locations = locatedBlocksWithValidateFakeRack.get(0).getLocations();
+      assertEquals(repl, locations.length);
+
+      assertEquals(secondDataNode.getDatanodeUuid(), locations[0].getDatanodeUuid());
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
     }
   }
 

@@ -274,6 +274,9 @@ public interface HdfsClientConfigKeys {
   String DFS_LEASE_HARDLIMIT_KEY = "dfs.namenode.lease-hard-limit-sec";
   long DFS_LEASE_HARDLIMIT_DEFAULT = 20 * 60;
 
+  String DFS_CLIENT_FAKE_RACK_KEY = "dfs.client.fake.rack";
+  String DFS_CLIENT_FAKE_RACK_DEFAULT = null;
+
   String DFS_OUTPUT_STREAM_UNIQ_DEFAULT_KEY =
       "dfs.client.output.stream.uniq.default.key";
   String DFS_OUTPUT_STREAM_UNIQ_DEFAULT_KEY_DEFAULT = "DEFAULT";

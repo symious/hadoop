@@ -83,4 +83,19 @@ public class HdfsUtils {
       IOUtils.closeQuietly(fs);
     }
   }
+
+  /**
+   * Return a validate fake rack, like "/fake-dc/fake-rack".
+   * @param fakeRack input fake rack.
+   */
+  public static String getValidFakeRack(String fakeRack) {
+    if (fakeRack != null && fakeRack.startsWith("/")) {
+      if (fakeRack.endsWith("/")) {
+        return fakeRack.substring(0, fakeRack.length() - 1);
+      } else {
+        return fakeRack;
+      }
+    }
+    return null;
+  }
 }

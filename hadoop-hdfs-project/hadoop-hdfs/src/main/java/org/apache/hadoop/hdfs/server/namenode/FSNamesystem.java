@@ -2156,6 +2156,11 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    */
   LocatedBlocks getBlockLocations(String clientMachine, String srcArg,
       long offset, long length) throws IOException {
+    return getBlockLocations(clientMachine, srcArg, offset, length, null);
+  }
+
+  LocatedBlocks getBlockLocations(String clientMachine, String srcArg,
+      long offset, long length, String fakeRack) throws IOException {
     checkOperation(OperationCategory.READ);
     GetBlockLocationsResult res = null;
     final FSPermissionChecker pc = getPermissionChecker();
@@ -2223,31 +2228,29 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     }
 
     LocatedBlocks blocks = res.blocks;
-    sortLocatedBlocks(clientMachine, blocks);
+    sortLocatedBlocks(clientMachine, blocks, fakeRack);
     logAuditEvent(true, OperationName.OPEN, srcArg);
     return blocks;
   }
 
-  private void sortLocatedBlocks(String clientMachine, LocatedBlocks blocks) {
+  private void sortLocatedBlocks(String clientMachine, LocatedBlocks blocks, String fakeRack) {
     if (blocks != null) {
       List<LocatedBlock> blkList = blocks.getLocatedBlocks();
       if (blkList == null || blkList.size() == 0) {
         // simply return, block list is empty
         return;
       }
-      blockManager.getDatanodeManager().sortLocatedBlocks(clientMachine,
-          blkList);
+      blockManager.getDatanodeManager().sortLocatedBlocks(clientMachine, blkList, fakeRack);
       if (blockManager.getDataCenterAwareness()) {
         blockManager.getDatanodeManager().checkInterDCRead(clientMachine,
-            blocks.getLocatedBlocks(), blocks.getFileLength());
+            blocks.getLocatedBlocks(), blocks.getFileLength(), fakeRack);
       }
 
       // lastBlock is not part of getLocatedBlocks(), might need to sort it too
       LocatedBlock lastBlock = blocks.getLastLocatedBlock();
       if (lastBlock != null) {
         ArrayList<LocatedBlock> lastBlockList = Lists.newArrayList(lastBlock);
-        blockManager.getDatanodeManager().sortLocatedBlocks(clientMachine,
-            lastBlockList);
+        blockManager.getDatanodeManager().sortLocatedBlocks(clientMachine, lastBlockList, fakeRack);
       }
     }
   }
