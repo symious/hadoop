@@ -41,6 +41,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppTimeoutsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ApplicationStatisticsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ApplicationSubmissionContextInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppsInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.CapacitySchedulerLeafQueueInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ClusterInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ClusterMetricsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ClusterUserInfo;
@@ -98,6 +99,11 @@ public class MockRESTRequestInterceptor extends AbstractRESTRequestInterceptor {
   @Override
   public SchedulerTypeInfo getSchedulerInfo() {
     return new SchedulerTypeInfo();
+  }
+
+  @Override
+  public CapacitySchedulerLeafQueueInfo getSchedulerQueueInfo(String queue) {
+    return null;
   }
 
   @Override

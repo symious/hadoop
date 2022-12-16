@@ -44,6 +44,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppTimeoutsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ApplicationStatisticsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ApplicationSubmissionContextInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppsInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.CapacitySchedulerLeafQueueInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ClusterInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ClusterMetricsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ClusterUserInfo;
@@ -116,6 +117,14 @@ public interface RMWebServiceProtocol {
    * @return the current scheduler status
    */
   SchedulerTypeInfo getSchedulerInfo();
+
+  /**
+   * This method retrieves the current scheduler queue status, and it is reachable by
+   * using {@link RMWSConsts#SCHEDULER_QUEUE}.
+   *
+   * @return the current scheduler queue status
+   */
+  CapacitySchedulerLeafQueueInfo getSchedulerQueueInfo(String queue);
 
   /**
    * This method dumps the scheduler logs for the time got in input, and it is

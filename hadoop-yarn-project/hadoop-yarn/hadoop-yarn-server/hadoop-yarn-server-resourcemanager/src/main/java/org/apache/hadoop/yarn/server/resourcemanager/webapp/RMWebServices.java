@@ -150,6 +150,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CSQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfigValidator;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.LeafQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.conf.YarnConfigurationStore.LogMutation;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler;
@@ -168,6 +169,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ApplicationStati
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ApplicationSubmissionContextInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.CapacitySchedulerInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.CapacitySchedulerLeafQueueInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ClusterInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ClusterMetricsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ClusterUserInfo;
@@ -404,6 +406,24 @@ public class RMWebServices extends WebServices implements RMWebServiceProtocol {
       throw new NotFoundException("Unknown scheduler configured");
     }
     return new SchedulerTypeInfo(sinfo);
+  }
+
+  @GET
+  @Path(RMWSConsts.SCHEDULER_QUEUE)
+  @Produces({ MediaType.APPLICATION_JSON + "; " + JettyUtils.UTF_8,
+      MediaType.APPLICATION_XML + "; " + JettyUtils.UTF_8 })
+  @Override
+  public CapacitySchedulerLeafQueueInfo getSchedulerQueueInfo(@PathParam(RMWSConsts.QUEUE) String queue) {
+    initForReadableEndpoints();
+
+    ResourceScheduler rs = rm.getResourceScheduler();
+    if (rs instanceof CapacityScheduler) {
+      CapacityScheduler cs = (CapacityScheduler) rs;
+      CSQueue csQueue = cs.getQueue(queue);
+      return new CapacitySchedulerLeafQueueInfo(cs, (LeafQueue) csQueue);
+    } else {
+      throw new NotFoundException("Unknown scheduler queue configured");
+    }
   }
 
   @POST
