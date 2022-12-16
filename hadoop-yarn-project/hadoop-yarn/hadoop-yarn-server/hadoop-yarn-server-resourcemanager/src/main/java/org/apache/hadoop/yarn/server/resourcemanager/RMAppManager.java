@@ -25,6 +25,7 @@ import java.util.concurrent.FutureTask;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.yarn.api.records.Container;
+import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueMetrics;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
@@ -85,7 +86,7 @@ import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.SettableFu
 import org.apache.hadoop.yarn.util.StringHelper;
 
 import static org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager.NO_LABEL;
-import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.DEFAULT_MULTI_LABEL_ACCESS_APP_TYPE;
+import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.DEFAULT_MULTI_LABEL_ACCESS_CONFIG;
 import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.DEFAULT_MULTI_LABEL_RESOURCE_BUFFER_RATIO;
 
 /**
@@ -415,7 +416,8 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
       try {
         CapacityScheduler cs = (CapacityScheduler) this.scheduler;
         LeafQueue queue = (LeafQueue) cs.getQueue(queueName);
-        Set<String> labels = selectLabelsFromQueue(queue,cs.getConfiguration(), appPriority, submissionContext.getApplicationType());
+        Set<String> jobConfig = getJobConfig(submissionContext);
+        Set<String> labels = selectLabelsFromQueue(queue,cs.getConfiguration(), appPriority, jobConfig);
         if (labels.size()==0) {
           return;
         }
@@ -435,9 +437,23 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
     }
   }
 
+  Set<String> getJobConfig(ApplicationSubmissionContext submissionContext) {
+    Set<String> jobConfig = new HashSet<>();
+    ContainerLaunchContext containerLaunchContext = submissionContext.getAMContainerSpec();
+    if (null != containerLaunchContext) {
+      Map<String,String> env = containerLaunchContext.getEnvironment();
+      if (null != env && env.size()>0) {
+        for (String key: env.keySet()) {
+          jobConfig.add(key+"="+env.get(key));
+        }
+      }
+    }
+    return jobConfig;
+  }
+
   // select labels which will be used for multi labels
   private Set<String> selectLabelsFromQueue(LeafQueue queue,
-      CapacitySchedulerConfiguration csConfiguration, int appPriority, String appType) {
+      CapacitySchedulerConfiguration csConfiguration, int appPriority, Set<String> jobConfig) {
     // If out of the range of the access multi-label time will skip this part
     // like 1,2,3,4,5,6,10,20,21,23
     String currentHour =
@@ -454,15 +470,14 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
           }
           continue;
         }
-        Set<String> multiLabelAppTypes =
-            csConfiguration.getMultiLabelAccessAppTypePerLabel(labelName);
-        if (!multiLabelAppTypes.contains(DEFAULT_MULTI_LABEL_ACCESS_APP_TYPE) &&
-            !multiLabelAppTypes.contains(appType)) {
-          if (LOG.isDebugEnabled()) {
-            LOG.debug("Skip multi-label due to app type limitation, app type:" + appType);
-          }
+
+        // Check the job env config
+        Set<String> multiLabelAccessConfig =
+            csConfiguration.getMultiLabelAccessConfigPerLabel(labelName);
+        if (!isMatchLabelConfig(multiLabelAccessConfig, jobConfig)) {
           continue;
         }
+
         Set<String> hours =
             csConfiguration.getMultiLabelAccessHoursPerQueueWithLabel(queue.getQueuePath(),
                 labelName);
@@ -479,6 +494,21 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
           queue.getQueuePath());
     }
     return result;
+  }
+
+  boolean isMatchLabelConfig(Set<String> multiLabelAccessConfig, Set<String> jobConfig){
+    if (!multiLabelAccessConfig.contains(DEFAULT_MULTI_LABEL_ACCESS_CONFIG) &&
+        multiLabelAccessConfig.size() > 0) {
+      for (String config : multiLabelAccessConfig) {
+        if (!jobConfig.contains(config)) {
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Skip multi-label due to config limitation, config:" + config);
+          }
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   private String selectLabelFromQueue(LeafQueue queue, Set<String> labels) {
