@@ -21,12 +21,15 @@ import org.apache.hadoop.classification.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.server.federation.router.FederationUtil;
+import org.apache.hadoop.metrics2.lib.MutableCounterLong;
+import org.apache.hadoop.util.MutableMetricRegister;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 
 import static org.apache.hadoop.hdfs.server.federation.fairness.RouterRpcFairnessConstants.CONCURRENT_NS;
@@ -46,10 +49,12 @@ public class ElasticRouterRpcFairnessPolicyController
   private static final Logger LOG =
       LoggerFactory.getLogger(ElasticRouterRpcFairnessPolicyController.class);
   private Semaphore totalElasticPermits = null;
+  private final ConcurrentHashMap<String, MutableCounterLong> nsElasticPermitsAcquired;
 
   public ElasticRouterRpcFairnessPolicyController(Configuration conf, int version) {
     super(version, conf);
     init(conf);
+    nsElasticPermitsAcquired = new ConcurrentHashMap<>();
   }
 
   private void init(Configuration conf) {
@@ -123,5 +128,16 @@ public class ElasticRouterRpcFairnessPolicyController
       available = this.totalElasticPermits.availablePermits();
     }
     return available;
+  }
+
+  @Override
+  public Permit acquirePermit(String nsId) {
+    Permit result = super.acquirePermit(nsId);
+    if (result.getPermitType() == Permit.PermitType.SHARED) {
+      // Keep the elastic exclusive metrics copy over here
+      MutableMetricRegister.tryGetMetric(this.metrics.getRegistry(), nsId, nsElasticPermitsAcquired,
+          "ElasticPermitsAcquired_", MutableCounterLong.class).incr();
+    }
+    return result;
   }
 }

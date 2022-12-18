@@ -49,6 +49,7 @@ import org.apache.hadoop.ipc.DeepHandlerManager;
 import org.apache.hadoop.ipc.OverloadedNameserviceException;
 import org.apache.hadoop.ipc.ProcessingDetails;
 import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.ipc.metrics.DeepRpcMetrics;
 import org.apache.hadoop.ipc.metrics.RpcMetrics;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -62,6 +63,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.apache.hadoop.test.MetricsAsserts.getDoubleGauge;
+import static org.apache.hadoop.test.MetricsAsserts.getLongCounter;
 import static org.apache.hadoop.test.MetricsAsserts.getMetrics;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -71,22 +73,23 @@ import static org.junit.Assert.assertTrue;
  */
 public class TestRouterHandlerQueue {
 
-  private static final Logger LOG =
-      LoggerFactory.getLogger(TestRouterHandlerQueue.class);
-  private static final long LONG_RPC_TIME_MS = 2000;
-  private static final int SURFACE_HANDLERS = 3;
-  private static final int DEEP_HANDLERS = 10;
-  private static final int LONG_HANDLER_LIMIT = 5;
-  private static final int SHORT_HANDLER_LIMIT = 5;
+  private static final Logger LOG = LoggerFactory.getLogger(TestRouterHandlerQueue.class);
+  private static final long SLOW_RPC_TIME_MS = 2000;
+  private static final int N_NS = 4;
+  private static final int SURFACE_HANDLERS = 8;
+  private static final int DEEP_HANDLERS = 15;
+  private static final int MAX_DEEP_HANDLERS_PER_NAMESPACE = 10;
   private static final int DEEP_QUEUE_CAPACITY = 7;
-  private static final int LONG_RPC_CALLS = SURFACE_HANDLERS;
-  private static final int SHORT_RPC_CALLS = 5;
-  private static final int TOTAL_RPC = LONG_RPC_CALLS + SHORT_RPC_CALLS;
+  private static final int SLOW_RPC_CALLS = SURFACE_HANDLERS;
+  private static final int FAST_RPC_CALLS = 5;
+  private static final int TOTAL_RPC = SLOW_RPC_CALLS + FAST_RPC_CALLS;
 
   private StateStoreDFSCluster cluster;
   RouterContext routerContext;
   private AtomicInteger overloadedExceptionCaught;
   private RpcMetrics rpcMetrics;
+  private DeepRpcMetrics deepRpcMetrics;
+  private DeepHandlerManager deepHandlerManager;
 
   /**
    * Have to use a dummy spy class because of an issue in Mockito 1.8
@@ -94,20 +97,19 @@ public class TestRouterHandlerQueue {
    * testing parallel calls.
    */
   class RouterRpcClientDummy extends RouterRpcClient {
-    public RouterRpcClientDummy(Configuration conf, Router router,
-        ActiveNamenodeResolver resolver, RouterRpcMonitor monitor) {
+    public RouterRpcClientDummy(Configuration conf, Router router, ActiveNamenodeResolver resolver,
+        RouterRpcMonitor monitor) {
       super(conf, router, resolver, monitor);
     }
 
     @Override
     public Object invokeMethod(final UserGroupInformation ugi,
-        final List<? extends FederationNamenodeContext> namenodes,
-        final Class<?> protocol, final Method method, final Object... params)
-        throws IOException {
-      // Bias calls to ns1 always take at least 2 seconds
-      if (namenodes.get(0).getNameserviceId().equals("ns1")) {
+        final List<? extends FederationNamenodeContext> namenodes, final Class<?> protocol,
+        final Method method, final Object... params) throws IOException {
+      // Bias: calls not to ns0 always take at least SLOW_RPC_TIME_MS
+      if (!namenodes.get(0).getNameserviceId().equals("ns0")) {
         try {
-          Thread.sleep(LONG_RPC_TIME_MS);
+          Thread.sleep(SLOW_RPC_TIME_MS);
         } catch (InterruptedException e) {
           throw new RuntimeException(e);
         }
@@ -120,10 +122,8 @@ public class TestRouterHandlerQueue {
   public static void initialize() {
     LogManager.getLogger(ProcessingDetails.LOG.getName()).setLevel(Level.DEBUG);
     LogManager.getLogger(DeepHandlerManager.LOG.getName()).setLevel(Level.DEBUG);
-    LogManager.getLogger(FSNamesystem.class.getName() + ".audit")
-        .setLevel(Level.WARN);
-    LogManager.getLogger(RouterRpcServer.class.getName() + ".audit")
-        .setLevel(Level.WARN);
+    LogManager.getLogger(FSNamesystem.class.getName() + ".audit").setLevel(Level.WARN);
+    LogManager.getLogger(RouterRpcServer.class.getName() + ".audit").setLevel(Level.WARN);
   }
 
   @After
@@ -134,34 +134,29 @@ public class TestRouterHandlerQueue {
     }
   }
 
-  private void setupCluster(boolean useDeepHandlers, int permitWaitTimeMs)
-      throws Exception {
+  private void setupCluster(boolean useDeepHandlers, int permitWaitTimeMs) throws Exception {
     // Build and start a federated cluster
-    cluster = new StateStoreDFSCluster(false, 2,
-        MultipleDestinationMountTableResolver.class);
-    Configuration conf =
-        new RouterConfigBuilder().stateStore().admin().rpc().build();
+    cluster = new StateStoreDFSCluster(false, N_NS, MultipleDestinationMountTableResolver.class);
+    Configuration conf = new RouterConfigBuilder().stateStore().admin().rpc().build();
     conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY, true);
     Configuration routerConf = new Configuration(conf);
-    routerConf.setInt(
-        RBFConfigKeys.DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_KEY,
+    routerConf.setInt(RBFConfigKeys.DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_KEY,
         permitWaitTimeMs);
-    routerConf.setClass(
-        RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
-        StaticRouterRpcFairnessPolicyController.class,
-        RouterRpcFairnessPolicyController.class);
-    routerConf.setInt(RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_KEY,
-        SURFACE_HANDLERS);
+    routerConf.setClass(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
+        StaticRouterRpcFairnessPolicyController.class, RouterRpcFairnessPolicyController.class);
+    routerConf.setInt(RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_KEY, SURFACE_HANDLERS);
+    // Allow surface handlers to accept at most 1 call per namespace at a time for easier testing
+    for (int i = 0; i < N_NS; i++) {
+      routerConf.setInt(RBFConfigKeys.DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX + "ns" + i, 1);
+    }
     if (useDeepHandlers) {
-      routerConf.setBoolean(RBFConfigKeys.DFS_ROUTER_DEEP_HANDLER_ENABLED_KEY,
-          true);
-      routerConf.setInt(CommonConfigurationKeys.DFS_ROUTER_DEEP_HANDLER_COUNT_KEY,
-          DEEP_HANDLERS);
+      routerConf.setBoolean(RBFConfigKeys.DFS_ROUTER_DEEP_HANDLER_ENABLED_KEY, true);
+      routerConf.setInt(CommonConfigurationKeys.DFS_ROUTER_DEEP_HANDLER_COUNT_KEY, DEEP_HANDLERS);
       routerConf.setInt(CommonConfigurationKeys.DFS_ROUTER_DEEP_QUEUE_CAPACITY_KEY,
           DEEP_QUEUE_CAPACITY);
       routerConf.setDouble(
           CommonConfigurationKeys.DFS_ROUTER_DEEP_HANDLER_MAX_UTILIZATION_PERCENTAGE_KEY,
-          (double) SHORT_HANDLER_LIMIT / DEEP_HANDLERS);
+          (double) MAX_DEEP_HANDLERS_PER_NAMESPACE / DEEP_HANDLERS);
     }
 
     // Datanodes not needed for this test.
@@ -173,13 +168,18 @@ public class TestRouterHandlerQueue {
     cluster.registerNamenodes();
     cluster.waitNamenodeRegistration();
     routerContext = cluster.getRandomRouter();
-    createMountTableEntry("/test", new String[] { "ns0", "ns1" });
-    createMountTableEntry("/testns0", new String[] { "ns0" });
-    createMountTableEntry("/testns1", new String[] { "ns1" });
+    String[] nss = new String[N_NS];
+    for (int i = 0; i < N_NS; i++) {
+      createMountTableEntry("/test" + "ns" + i, new String[] { "ns" + i });
+      nss[i] = "ns" + i;
+    }
+    createMountTableEntry("/test", nss);
 
     setupMocks();
 
     rpcMetrics = routerContext.getRouterRpcServer().getServer().getRpcMetrics();
+    deepHandlerManager = routerContext.getRouterRpcServer().getServer().getDeepHandlerManager();
+    deepRpcMetrics = deepHandlerManager == null ? null : deepHandlerManager.getMetrics();
   }
 
   private void setupMocks() {
@@ -189,79 +189,91 @@ public class TestRouterHandlerQueue {
       RouterRpcClientDummy dummyClient =
           new RouterRpcClientDummy(server.getConfig(), router.getRouter(),
               server.getNamenodeResolver(), server.getRPCMonitor());
-      Whitebox.setInternalState(router.getRouterRpcServer(), "rpcClient",
+      Whitebox.setInternalState(router.getRouterRpcServer(), "rpcClient", dummyClient);
+      Whitebox.setInternalState(router.getRouterRpcServer().getClientProto(), "rpcClient",
           dummyClient);
-      Whitebox.setInternalState(router.getRouterRpcServer().getClientProto(),
-          "rpcClient", dummyClient);
     }
   }
 
   @Test
-  public void testDeepHandlersEnabledAllCallsToDeepQueue() throws Exception {
+  public void testDeepHandlersEnabled() throws Exception {
     int permitWaitTimeMs = 300;
     setupCluster(true, permitWaitTimeMs);
-    runTest(50);
+    runTest(permitWaitTimeMs * 2, false);
     assertEquals(0, overloadedExceptionCaught.get());
     MetricsRecordBuilder builder = getMetrics(rpcMetrics.name());
-    double queueTimeAvg = getDoubleGauge("RpcQueueTimeAvgTime", builder);
-    double queueTimeMax = getDoubleGauge("RpcQueueTimeIMaxTime", builder);
-    double processingTimeAvg = getDoubleGauge("RpcProcessingTimeAvgTime", builder);
-    double processingTimeMax = getDoubleGauge("RpcProcessingTimeIMaxTime", builder);
-
-    // Because all ns0 calls are spawned shortly after ns1 calls start,
-    // all ns1 calls are still occupying the handlers.
-    // Thus, all ns0 calls should timeout after permitWaitTimeMs
-    // then go to the deep queue.
-
-    // All ns0 calls have permitWaitTimeMs queue time, very short processing time
-    // All ns1 calls have LONG_RPC_CALLS processing time, none throws overloaded exception
-    // First ns1 call has short queue time, subsequent calls have permitWaitTimeMs queue time
-    assertApproximate((long) queueTimeAvg,
-        (SHORT_RPC_CALLS + LONG_RPC_CALLS - 1) * permitWaitTimeMs / TOTAL_RPC,
-        (float) 0.15);
-    assertApproximate((long) processingTimeAvg,
-        LONG_RPC_TIME_MS * LONG_RPC_CALLS / TOTAL_RPC, (float) 0.05);
-    assertApproximate((long) queueTimeMax, permitWaitTimeMs, (float) 0.05);
-    assertApproximate((long) processingTimeMax, LONG_RPC_TIME_MS, (float) 0.05);
-  }
-
-  @Test
-  public void testDeepHandlersEnabledOnlyNs1ToDeepQueue() throws Exception {
-    int permitWaitTimeMs = 300;
-    setupCluster(true, permitWaitTimeMs);
-    runTest(1000);
-    assertEquals(0, overloadedExceptionCaught.get());
-    MetricsRecordBuilder builder = getMetrics(rpcMetrics.name());
+    MetricsRecordBuilder deepBuilder = getMetrics(deepRpcMetrics.getName());
     double queueTimeAvg = getDoubleGauge("RpcQueueTimeAvgTime", builder);
     double queueTimeMax = getDoubleGauge("RpcQueueTimeIMaxTime", builder);
     double processingTimeAvg = getDoubleGauge("RpcProcessingTimeAvgTime", builder);
     double processingTimeMax = getDoubleGauge("RpcProcessingTimeIMaxTime", builder);
 
     // Because all ns0 calls are spawned a while after ns1 calls start,
-    // only the first ns1 stays in the original handler layer, the others already
+    // only the first ns1 call stays in the original handler layer, the others already
     // went to the deep queue.
     // Thus, all ns0 calls should finish on the first layer as well without
     // going into the deep queue.
 
     // All ns0 calls have negligible processing time and queue time
-    // All ns1 calls have LONG_RPC_CALLS processing time, none throws overloaded exception
+    // All ns1 calls have SLOW_RPC_CALLS processing time, none throws overloaded exception
     // First ns1 call has short queue time, subsequent calls have permitWaitTimeMs queue time
-    assertApproximate((long) queueTimeAvg,
-        (LONG_RPC_CALLS - 1) * permitWaitTimeMs / TOTAL_RPC,
+    int deepCalls = SLOW_RPC_CALLS - 1;
+    assertApproximate((long) queueTimeAvg, deepCalls * permitWaitTimeMs / TOTAL_RPC, (float) 0.1);
+    assertApproximate((long) processingTimeAvg, SLOW_RPC_TIME_MS * SLOW_RPC_CALLS / TOTAL_RPC,
         (float) 0.1);
-    assertApproximate((long) processingTimeAvg,
-        LONG_RPC_TIME_MS * LONG_RPC_CALLS / TOTAL_RPC, (float) 0.05);
-    assertApproximate((long) queueTimeMax, permitWaitTimeMs, (float) 0.05);
-    assertApproximate((long) processingTimeMax, LONG_RPC_TIME_MS, (float) 0.05);
+    assertApproximate((long) queueTimeMax, permitWaitTimeMs, (float) 0.1);
+    assertApproximate((long) processingTimeMax, SLOW_RPC_TIME_MS, (float) 0.1);
+
+    long ns1DeepCalls = getLongCounter("DeepCallAttempts_ns1", deepBuilder);
+    assertEquals(deepCalls, ns1DeepCalls);
+  }
+
+  @Test
+  public void testDeepHandlersEnabledAllNssQueued() throws Exception {
+    int permitWaitTimeMs = 300;
+    setupCluster(true, permitWaitTimeMs);
+    runTest(permitWaitTimeMs * 2, true);
+    assertEquals(0, overloadedExceptionCaught.get());
+    MetricsRecordBuilder builder = getMetrics(rpcMetrics.name());
+    MetricsRecordBuilder deepBuilder = getMetrics(deepRpcMetrics.getName());
+    double queueTimeAvg = getDoubleGauge("RpcQueueTimeAvgTime", builder);
+    double queueTimeMax = getDoubleGauge("RpcQueueTimeIMaxTime", builder);
+    double processingTimeAvg = getDoubleGauge("RpcProcessingTimeAvgTime", builder);
+    double processingTimeMax = getDoubleGauge("RpcProcessingTimeIMaxTime", builder);
+
+    // Slow calls are spawned first, then all fast calls to ns0 are spawned
+    // The wait between these 2 steps are long enough for the slow calls to be put into deep queues
+    // Only the first slow calls to each namespace stay in the original handler layer
+    // Thus, all ns0 calls should finish on the first layer as well without
+    // going into the deep queue.
+
+    // All fast calls have negligible processing time and queue time
+    // All slow calls have SLOW_RPC_CALLS processing time, none throws overloaded exception
+    // First ns1/ns2 calls have short queue time, subsequent calls have permitWaitTimeMs queue time
+    int deepCalls = SLOW_RPC_CALLS - (N_NS - 1);
+    assertApproximate((long) queueTimeAvg, deepCalls * permitWaitTimeMs / TOTAL_RPC, (float) 0.1);
+    assertApproximate((long) processingTimeAvg, SLOW_RPC_TIME_MS * SLOW_RPC_CALLS / TOTAL_RPC,
+        (float) 0.1);
+    assertApproximate((long) queueTimeMax, permitWaitTimeMs, (float) 0.1);
+    assertApproximate((long) processingTimeMax, SLOW_RPC_TIME_MS, (float) 0.1);
+
+    for (int i = 1; i < N_NS; i++) {
+      int nCall = SLOW_RPC_CALLS / (N_NS - 1);
+      if (i == N_NS - 1) {
+        nCall = SLOW_RPC_CALLS - nCall * (N_NS - 2);
+      }
+      long realNsDeepCalls = getLongCounter("DeepCallAttempts_ns" + i, deepBuilder);
+      // nCall - 1 because one call finishes in the surface layer
+      assertEquals(nCall - 1, realNsDeepCalls);
+    }
   }
 
   @Test
   public void testDefaultHandlersWithTimeout() throws Exception {
     int permitWaitTimeMs = 1000;
     setupCluster(false, permitWaitTimeMs);
-    runTest(50);
-    // Should get 2 overloaded exceptions
-    assertEquals(2, overloadedExceptionCaught.get());
+    runTest(50, false);
+    assertEquals(SLOW_RPC_CALLS - 1, overloadedExceptionCaught.get());
     // All ns0 calls have short processing time but 1s queue time
     // 2 out of 3 ns1 calls have short queue time but 1s processing time then timeout
     // The other ns1 call has short queue time and 2s processing time
@@ -271,19 +283,18 @@ public class TestRouterHandlerQueue {
     double processingTimeAvg = getDoubleGauge("RpcProcessingTimeAvgTime", builder);
     double processingTimeMax = getDoubleGauge("RpcProcessingTimeIMaxTime", builder);
 
-    assertApproximate((long) queueTimeAvg,
-        SHORT_RPC_CALLS * permitWaitTimeMs / TOTAL_RPC, (float) 0.05);
+    assertApproximate((long) queueTimeAvg, FAST_RPC_CALLS * permitWaitTimeMs / TOTAL_RPC,
+        (float) 0.05);
     assertApproximate((long) processingTimeAvg,
-        (LONG_RPC_TIME_MS + (LONG_RPC_CALLS - 1) * permitWaitTimeMs)
-            / TOTAL_RPC, (float) 0.05);
+        (SLOW_RPC_TIME_MS + (SLOW_RPC_CALLS - 1) * permitWaitTimeMs) / TOTAL_RPC, (float) 0.05);
     assertApproximate((long) queueTimeMax, permitWaitTimeMs, (float) 0.05);
-    assertApproximate((long) processingTimeMax, LONG_RPC_TIME_MS, (float) 0.05);
+    assertApproximate((long) processingTimeMax, SLOW_RPC_TIME_MS, (float) 0.05);
   }
 
   @Test(timeout = 40000)
   public void testDefaultHandlersWithoutTimeout() throws Exception {
     setupCluster(false, 100000000);
-    runTest(50);
+    runTest(50, false);
     // Should get no overloaded exceptions
     assertEquals(0, overloadedExceptionCaught.get());
 
@@ -295,18 +306,16 @@ public class TestRouterHandlerQueue {
     double processingTimeAvg = getDoubleGauge("RpcProcessingTimeAvgTime", builder);
     double processingTimeMax = getDoubleGauge("RpcProcessingTimeIMaxTime", builder);
 
-    // First ns1 call has negligible queue time, LONG_RPC_TIME_MS processing time
-    // All ns0 calls have LONG_RPC_TIME_MS queue time and negligible processing time
-    // 2nd ns1 call takes 2*LONG_RPC_TIME_MS processing time
-    // 3rd ns1 call takes 3*LONG_RPC_TIME_MS processing time
-    assertApproximate((long) queueTimeAvg,
-        SHORT_RPC_CALLS * LONG_RPC_TIME_MS / TOTAL_RPC, (float) 0.05);
+    // First ns1 call has negligible queue time, SLOW_RPC_TIME_MS processing time
+    // All ns0 calls have SLOW_RPC_TIME_MS queue time and negligible processing time
+    // 2nd ns1 call takes 2*SLOW_RPC_TIME_MS processing time
+    // 3rd ns1 call takes 3*SLOW_RPC_TIME_MS processing time
+    assertApproximate((long) queueTimeAvg, FAST_RPC_CALLS * SLOW_RPC_TIME_MS / TOTAL_RPC,
+        (float) 0.05);
     assertApproximate((long) processingTimeAvg,
-        LONG_RPC_CALLS * (LONG_RPC_CALLS + 1) / 2 * LONG_RPC_TIME_MS
-            / TOTAL_RPC, (float) 0.05);
-    assertApproximate((long) queueTimeMax, LONG_RPC_TIME_MS, (float) 0.05);
-    assertApproximate((long) processingTimeMax,
-        LONG_RPC_TIME_MS * LONG_RPC_CALLS, (float) 0.05);
+        SLOW_RPC_CALLS * (SLOW_RPC_CALLS + 1) / 2 * SLOW_RPC_TIME_MS / TOTAL_RPC, (float) 0.05);
+    assertApproximate((long) queueTimeMax, SLOW_RPC_TIME_MS, (float) 0.05);
+    assertApproximate((long) processingTimeMax, SLOW_RPC_TIME_MS * SLOW_RPC_CALLS, (float) 0.05);
   }
 
   @Test
@@ -315,69 +324,87 @@ public class TestRouterHandlerQueue {
     overloadedExceptionCaught = new AtomicInteger(0);
     setupCluster(true, permitWaitTimeMs);
 
-    List<Thread> longThreads = new ArrayList<>();
+    List<Thread> slowThreads = new ArrayList<>();
 
-    DFSClient routerClient = new DFSClient(routerContext.getFileSystemURI(),
-        new HdfsConfiguration());
+    DFSClient routerClient =
+        new DFSClient(routerContext.getFileSystemURI(), new HdfsConfiguration());
     // 1 executed by a dedicated surface handler
     // All calls in the queue can stay in the queue
-    // All calls in can be handled by LONG_HANDLER_LIMIT are handled by deep handlers
+    // All calls in can be handled by MAX_DEEP_HANDLERS_PER_NAMESPACE are handled by deep handlers
     // 1 more call is held and blocked by DeepQueueWatcher
-    // Hence the "1 + DEEP_QUEUE_CAPACITY + LONG_HANDLER_LIMIT + 1" part
+    // Hence the "1 + DEEP_QUEUE_CAPACITY + MAX_DEEP_HANDLERS_PER_NAMESPACE + 1" part
     // Any calls after this are discarded and thrown back to client
     int expectedFailedCalls = 5;
+    int totalCalls =
+        1 + DEEP_QUEUE_CAPACITY + MAX_DEEP_HANDLERS_PER_NAMESPACE + 1 + expectedFailedCalls;
 
-    queueThread("ns1", routerClient,
-        1 + DEEP_QUEUE_CAPACITY + LONG_HANDLER_LIMIT + 1 + expectedFailedCalls,
-        longThreads);
+    queueThread("ns1", routerClient, totalCalls, slowThreads);
 
-    for (Thread thread : longThreads) {
+    for (Thread thread : slowThreads) {
       thread.start();
     }
 
-    for (Thread thread : longThreads) {
+    for (Thread thread : slowThreads) {
       thread.join();
     }
 
     assertEquals(expectedFailedCalls, overloadedExceptionCaught.get());
+
+    MetricsRecordBuilder deepBuilder = getMetrics(deepRpcMetrics.getName());
+    long realDeepCalls = getLongCounter("DeepCallAttempts_ns1", deepBuilder);
+    assertEquals(totalCalls - 1, realDeepCalls);
   }
 
   /**
    * Executes test then parses log for rpc details
    */
-  private void runTest(long delay) throws IOException, InterruptedException {
+  private void runTest(long delay, boolean queueAllNss) throws IOException, InterruptedException {
     overloadedExceptionCaught = new AtomicInteger(0);
 
-    List<Thread> longThreads = new ArrayList<>();
-    List<Thread> shortThreads = new ArrayList<>();
+    List<Thread> slowThreads = new ArrayList<>();
+    List<Thread> fastThreads = new ArrayList<>();
 
-    DFSClient routerClient = new DFSClient(routerContext.getFileSystemURI(),
-        new HdfsConfiguration());
-    queueThread("ns1", routerClient, LONG_RPC_CALLS, longThreads);
-    queueThread("ns0", routerClient, SHORT_RPC_CALLS, shortThreads);
+    DFSClient routerClient =
+        new DFSClient(routerContext.getFileSystemURI(), new HdfsConfiguration());
+    for (int i = 0; i < N_NS; i++) {
+      if (!queueAllNss && i > 1) {
+        break;
+      }
+      if (i == 0) {
+        queueThread("ns" + i, routerClient, FAST_RPC_CALLS, fastThreads);
+      } else {
+        int nCall = SLOW_RPC_CALLS / (N_NS - 1);
+        if (!queueAllNss) {
+          nCall = SLOW_RPC_CALLS;
+        } else if (i == N_NS - 1) {
+          nCall = SLOW_RPC_CALLS - nCall * (N_NS - 2);
+        }
+        queueThread("ns" + i, routerClient, nCall, slowThreads);
+      }
+    }
 
     // Start 3 long blocking ns1 threads that hog up all handlers
-    for (Thread thread : longThreads) {
+    for (Thread thread : slowThreads) {
       thread.start();
     }
     // Sleep a bit to make sure all ns1 call threads are up and running
     Thread.sleep(delay);
 
     // Start all normal threads for calls to ns0.
-    for (Thread thread : shortThreads) {
+    for (Thread thread : fastThreads) {
       thread.start();
     }
 
-    for (Thread thread : longThreads) {
+    for (Thread thread : slowThreads) {
       thread.join();
     }
-    for (Thread thread : shortThreads) {
+    for (Thread thread : fastThreads) {
       thread.join();
     }
   }
 
-  private void queueThread(final String dest, final DFSClient routerClient,
-      int numOps, List<Thread> threads) {
+  private void queueThread(final String dest, final DFSClient routerClient, int numOps,
+      List<Thread> threads) {
     for (int i = 0; i < numOps; i++) {
       Thread thread = new Thread(new Runnable() {
         @Override
@@ -400,25 +427,23 @@ public class TestRouterHandlerQueue {
           }
         }
       });
-      Thread.UncaughtExceptionHandler h =
-          new Thread.UncaughtExceptionHandler() {
-            @Override
-            public void uncaughtException(Thread th, Throwable ex) {
-              if (ex instanceof RuntimeException
-                  && ex.getCause() instanceof RemoteException
-                  && ((RemoteException) ex.getCause()).getClassName().equals(
-                  OverloadedNameserviceException.class.getCanonicalName())) {
-                overloadedExceptionCaught.incrementAndGet();
-              }
-            }
-          };
+      Thread.UncaughtExceptionHandler h = new Thread.UncaughtExceptionHandler() {
+        @Override
+        public void uncaughtException(Thread th, Throwable ex) {
+          if (ex instanceof RuntimeException && ex.getCause() instanceof RemoteException
+              && ((RemoteException) ex.getCause()).getClassName()
+              .equals(OverloadedNameserviceException.class.getCanonicalName())) {
+            overloadedExceptionCaught.incrementAndGet();
+          }
+        }
+      };
       thread.setUncaughtExceptionHandler(h);
       threads.add(thread);
     }
   }
 
-  private void createMountTableEntry(final String mountPoint,
-      final String[] targets) throws Exception {
+  private void createMountTableEntry(final String mountPoint, final String[] targets)
+      throws Exception {
 
     RouterClient admin = routerContext.getAdminClient();
     MountTableManager mountTable = admin.getMountTableManager();
@@ -428,10 +453,8 @@ public class TestRouterHandlerQueue {
     }
     MountTable newEntry = MountTable.newInstance(mountPoint, destMap);
     newEntry.setDestOrder(DestinationOrder.HASH);
-    AddMountTableEntryRequest addRequest =
-        AddMountTableEntryRequest.newInstance(newEntry);
-    AddMountTableEntryResponse addResponse =
-        mountTable.addMountTableEntry(addRequest);
+    AddMountTableEntryRequest addRequest = AddMountTableEntryRequest.newInstance(newEntry);
+    AddMountTableEntryResponse addResponse = mountTable.addMountTableEntry(addRequest);
     boolean created = addResponse.getStatus();
     assertTrue(created);
 
@@ -443,8 +466,8 @@ public class TestRouterHandlerQueue {
 
   private void assertApproximate(long tester, long target, float epsilon) {
     float ratio = (float) tester / target;
-    assertTrue(String.format(
-        "Value %s is outside expected range: target=%s, epsilon=%s", tester,
-        target, epsilon), 1 - epsilon < ratio && ratio < 1 + epsilon);
+    assertTrue(
+        String.format("Value %s is outside expected range: target=%s, epsilon=%s", tester, target,
+            epsilon), 1 - epsilon < ratio && ratio < 1 + epsilon);
   }
 }

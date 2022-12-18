@@ -21,6 +21,7 @@ package org.apache.hadoop.hdfs.server.federation.fairness;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
+import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.junit.Test;
 
 import static org.apache.hadoop.hdfs.server.federation.fairness.RouterRpcFairnessConstants.CONCURRENT_NS;
@@ -29,6 +30,8 @@ import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_MONITOR_NAMENODE;
+import static org.apache.hadoop.test.MetricsAsserts.getLongCounter;
+import static org.apache.hadoop.test.MetricsAsserts.getMetrics;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
@@ -43,6 +46,7 @@ public class TestElasticRouterRpcFairnessPolicyController {
 
   private void verifyAcquirePermit(RouterRpcFairnessPolicyController controller,
                                    String nsId, int dedicatedPermit, int elasticPermit) {
+    ((AbstractRouterRpcFairnessPolicyController) controller).resetMetrics();
     for (int i = 0; i < dedicatedPermit; i++) {
       assertEquals(controller.acquirePermit(nsId)
           .getPermitType(), PermitType.DEDICATED);
@@ -53,6 +57,13 @@ public class TestElasticRouterRpcFairnessPolicyController {
     }
     assertEquals(controller.acquirePermit(nsId)
         .getPermitType(), PermitType.NO_PERMIT);
+
+    MetricsRecordBuilder builder = getMetrics(FairnessPolicyControllerMetrics.class.getName());
+    if (elasticPermit > 0) {
+      assertEquals(elasticPermit, getLongCounter("ElasticPermitsAcquired_" + nsId, builder));
+    }
+    assertEquals(dedicatedPermit + elasticPermit + 1,
+        getLongCounter("PermitAttempts_" + nsId, builder));
   }
 
   @Test
