@@ -2147,9 +2147,11 @@ public class CapacityScheduler extends
             List<FiCaSchedulerNode> nodesOldDefaultPartition =
                 nodeTracker.getNodesPerPartition(RMNodeLabelsManager.NO_LABEL);
             Set<NodeId> nodesNewDefaultPartition = new HashSet<>();
-            for (FiCaSchedulerNode sn : nodesOldDefaultPartition) {
-              if (sn.getNodeID() != node.getNodeID()) {
-                nodesNewDefaultPartition.add(sn.getNodeID());
+            if (nodesOldDefaultPartition != null) {
+              for (FiCaSchedulerNode sn : nodesOldDefaultPartition) {
+                if (sn.getNodeID() != node.getNodeID()) {
+                  nodesNewDefaultPartition.add(sn.getNodeID());
+                }
               }
             }
             nodeTracker.updateNodesPerPartition(RMNodeLabelsManager.NO_LABEL,
@@ -2166,8 +2168,10 @@ public class CapacityScheduler extends
             List<FiCaSchedulerNode> nodesOldDefaultPartition =
                 nodeTracker.getNodesPerPartition(RMNodeLabelsManager.NO_LABEL);
             Set<NodeId> nodesNewDefaultPartition = new HashSet<>();
-            for (FiCaSchedulerNode sn : nodesOldDefaultPartition) {
-              nodesNewDefaultPartition.add(sn.getNodeID());
+            if (nodesOldDefaultPartition != null) {
+              for (FiCaSchedulerNode sn : nodesOldDefaultPartition) {
+                nodesNewDefaultPartition.add(sn.getNodeID());
+              }
             }
             nodesNewDefaultPartition.add(node.getNodeID());
             nodeTracker.updateNodesPerPartition(RMNodeLabelsManager.NO_LABEL,
