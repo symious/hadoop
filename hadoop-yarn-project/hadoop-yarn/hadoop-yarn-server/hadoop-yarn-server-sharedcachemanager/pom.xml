@@ -17,10 +17,10 @@
   <parent>
     <artifactId>hadoop-yarn-server</artifactId>
     <groupId>org.apache.hadoop</groupId>
-    <version>3.3.sdi-050</version>
+    <version>3.3.sdi-051-SNAPSHOT</version>
   </parent>
   <artifactId>hadoop-yarn-server-sharedcachemanager</artifactId>
-  <version>3.3.sdi-050</version>
+  <version>3.3.sdi-051-SNAPSHOT</version>
   <name>Apache Hadoop YARN SharedCacheManager</name>
 
   <properties>
