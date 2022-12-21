@@ -98,6 +98,10 @@ public class IpRangeScriptBasedMapping extends ScriptBasedMapping {
     @Override
     public List<String> resolve(List<String> names) {
       List<String> superResult = super.resolve(names);
+      if (superResult == null) {
+        LOG.warn("Fail to resolve the topology for {}.", names);
+        return null;
+      }
       for (int index = 0; index < names.size(); index++) {
         String network = superResult.get(index);
         // Can not get the actual network.
