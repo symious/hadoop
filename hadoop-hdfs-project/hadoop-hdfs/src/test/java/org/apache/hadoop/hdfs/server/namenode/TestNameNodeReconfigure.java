@@ -19,6 +19,7 @@
 package org.apache.hadoop.hdfs.server.namenode;
 
 import java.io.IOException;
+import java.util.SortedSet;
 
 import org.apache.hadoop.hdfs.MiniDFSNNTopology;
 import org.apache.hadoop.hdfs.protocol.BlockType;
@@ -31,6 +32,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_PEER_STATS_ENABL
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_ALLOW_USERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_KEY;
@@ -558,5 +561,33 @@ public class TestNameNodeReconfigure {
 
     nameNode.reconfigureProperty(DFS_NAMENODE_DISABLE_EC_KEY, "false");
     assertFalse(rpcServer.isDisableECFeature());
+  }
+
+  @Test
+  public void testReconfigureAclVerifyParameters()
+      throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode(0);
+    FSNamesystem fsNamesystem = nameNode.getNamesystem();
+    assertFalse(fsNamesystem.isEnableAclConstraints());
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY, "true");
+    assertTrue(fsNamesystem.isEnableAclConstraints());
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY, "false");
+    assertFalse(fsNamesystem.isEnableAclConstraints());
+
+    SortedSet<String> aclAllowUsers = fsNamesystem.getAclAllowUsers();
+    assertEquals(0, aclAllowUsers.size());
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_ACL_ALLOW_USERS, "user1,user2");
+    aclAllowUsers = fsNamesystem.getAclAllowUsers();
+    assertEquals(2, aclAllowUsers.size());
+    assertTrue(aclAllowUsers.contains("user1"));
+    assertTrue(aclAllowUsers.contains("user2"));
+    assertFalse(aclAllowUsers.contains("user3"));
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_ACL_ALLOW_USERS, "");
+    aclAllowUsers = fsNamesystem.getAclAllowUsers();
+    assertEquals(0, aclAllowUsers.size());
   }
 }

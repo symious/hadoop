@@ -142,6 +142,9 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_ALLOW_USERS;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_DEFAULT;
@@ -379,6 +382,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY,
           DFS_IMAGE_PARALLEL_LOAD_KEY,
           DFS_NAMENODE_DISABLE_EC_KEY,
+          DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY,
+          DFS_NAMENODE_ACL_ALLOW_USERS,
           DFS_DATANODE_PEER_STATS_ENABLED_KEY,
           DFS_DATANODE_MAX_NODES_TO_REPORT_KEY,
           DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY,
@@ -2423,6 +2428,9 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigureParallelLoad(newVal);
     } else if (property.equals(DFS_NAMENODE_DISABLE_EC_KEY)) {
       return reconfigureDisableECFeature(newVal);
+    } else if (property.equals(DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY) ||
+        (property.equals(DFS_NAMENODE_ACL_ALLOW_USERS))) {
+      return reconfigureAclConstraintsParameters(property, newVal);
     } else if (property.equals(DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY) ||
         (property.equals(DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY)) ||
         (property.equals(DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY)) ||
@@ -2694,6 +2702,28 @@ public class NameNode extends ReconfigurableBase implements
     }
     this.rpcServer.resetDisableECFeature(disableECFeature);
     return Boolean.toString(disableECFeature);
+  }
+
+  String reconfigureAclConstraintsParameters(String property, String newVal) {
+    String newSetting;
+    if (property.equals(DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY)) {
+      boolean enableAclVerify;
+      if (newVal == null) {
+        enableAclVerify = DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_DEFAULT;
+      } else {
+        enableAclVerify = Boolean.parseBoolean(newVal);
+      }
+      namesystem.refreshEnableAclConstraints(enableAclVerify);
+      newSetting = Boolean.toString(enableAclVerify);
+    } else if (property.equals(DFS_NAMENODE_ACL_ALLOW_USERS)) {
+      namesystem.refreshAclAllowUsers(newVal);
+      newSetting = newVal;
+    } else {
+      throw new IllegalArgumentException("Unexpected property " +
+          property + " in reconfigureAclConstraintsParameters");
+    }
+    LOG.info("RECONFIGURE* changed {} to {}", property, newSetting);
+    return String.valueOf(newSetting);
   }
 
   private String reconfConsiderLoadFactor(String property, String newVal)

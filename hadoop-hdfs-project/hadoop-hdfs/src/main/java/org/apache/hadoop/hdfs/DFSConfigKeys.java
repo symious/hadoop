@@ -1101,6 +1101,12 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       = 1000;
   public static final String  DFS_NAMENODE_DISABLE_EC_KEY = "dfs.namenode.disable.ec";
   public static final boolean DFS_NAMENODE_DISABLE_EC_DEFAULT = false;
+
+  public static final String  DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY =
+      "dfs.namenode.acl.constraints.enabled";
+  public static final boolean DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_DEFAULT = false;
+  public static final String  DFS_NAMENODE_ACL_ALLOW_USERS = "dfs.namenode.acl.allow.users";
+
   public static final String  DFS_NAMENODE_ENABLE_SPECIAL_TRASH_KEY =
       "dfs.namenode.enable.special.trash";
   public static final boolean DFS_NAMENODE_ENABLE_SPECIAL_TRASH_DEFAULT = false;

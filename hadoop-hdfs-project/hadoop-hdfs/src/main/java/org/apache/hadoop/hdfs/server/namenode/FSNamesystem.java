@@ -32,6 +32,9 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_SIZE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_ALLOW_USERS;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_ENABLED_DEFAULT;
@@ -98,6 +101,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SNAPSHOT_DIFF_LI
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SNAPSHOT_DIFF_LISTING_LIMIT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSUtil.isParentEntry;
 
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.text.CaseUtils;
@@ -498,6 +503,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   private final boolean standbyShouldCheckpoint;
   private final int snapshotDiffReportLimit;
   private volatile int blockDeletionIncrement;
+
+  private volatile boolean enableAclConstraints = false;
+  private volatile SortedSet<String> aclAllowUsers;
 
   /** Interval between each check of lease to release. */
   private final long leaseRecheckIntervalMs;
@@ -1048,6 +1056,12 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       Preconditions.checkArgument(blockDeletionIncrement > 0,
           DFSConfigKeys.DFS_NAMENODE_BLOCK_DELETION_INCREMENT_KEY +
               " must be a positive integer.");
+
+      this.enableAclConstraints = conf.getBoolean(
+          DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY,
+          DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_DEFAULT);
+      refreshAclAllowUsers(conf.get(DFS_NAMENODE_ACL_ALLOW_USERS));
+
       RefreshRegistry.defaultRegistry().register(FSN_LOCK_METRICS_REFRESH_HANDLER_IDENTIFIER,
           new FSNamesystemLockMetricsRefreshHandler(this));
     } catch(IOException e) {
@@ -1071,6 +1085,24 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
   public void setBlockDeletionIncrement(int blockDeletionIncrement) {
     this.blockDeletionIncrement = blockDeletionIncrement;
+  }
+
+  public void refreshEnableAclConstraints(boolean enableAclConstraints) {
+    this.enableAclConstraints = enableAclConstraints;
+  }
+
+  public void refreshAclAllowUsers(String valueString) {
+    this.aclAllowUsers = new TreeSet<>(StringUtils.getTrimmedStringCollection(valueString));
+  }
+
+  @VisibleForTesting
+  public boolean isEnableAclConstraints() {
+    return this.enableAclConstraints;
+  }
+
+  @VisibleForTesting
+  public SortedSet<String> getAclAllowUsers() {
+    return aclAllowUsers;
   }
 
   @VisibleForTesting
@@ -7710,6 +7742,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     FileStatus auditStat = null;
     checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
+    if (!allowAclOperation(pc)) {
+      throw new UnsupportedOperationException("Operation modifyAclEntries not supported");
+    }
     FSPermissionChecker.setOperationType(OperationName.MODIFY_ACL_ENTRIES);
     try {
       writeLock(OperationName.MODIFY_ACL_ENTRIES);
@@ -7733,6 +7768,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     checkOperation(OperationCategory.WRITE);
     FileStatus auditStat = null;
     final FSPermissionChecker pc = getPermissionChecker();
+    if (!allowAclOperation(pc)) {
+      throw new UnsupportedOperationException("Operation removeAclEntries not supported");
+    }
     FSPermissionChecker.setOperationType(OperationName.REMOVE_ACL_ENTRIES);
     try {
       writeLock(OperationName.REMOVE_ACL_ENTRIES);
@@ -7755,6 +7793,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     FileStatus auditStat = null;
     checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
+    if (!allowAclOperation(pc)) {
+      throw new UnsupportedOperationException("Operation removeDefaultAcl not supported");
+    }
     FSPermissionChecker.setOperationType(OperationName.REMOVE_DEFAULT_ACL);
     try {
       writeLock(OperationName.REMOVE_DEFAULT_ACL);
@@ -7777,6 +7818,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     FileStatus auditStat = null;
     checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
+    if (!allowAclOperation(pc)) {
+      throw new UnsupportedOperationException("Operation removeAcl not supported");
+    }
     FSPermissionChecker.setOperationType(OperationName.REMOVE_ACL);
     try {
       writeLock(OperationName.REMOVE_ACL);
@@ -7799,6 +7843,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     FileStatus auditStat = null;
     checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
+    if (!allowAclOperation(pc)) {
+      throw new UnsupportedOperationException("Operation setAcl not supported");
+    }
     FSPermissionChecker.setOperationType(OperationName.SET_ACL);
     try {
       writeLock(OperationName.SET_ACL);
@@ -7815,6 +7862,23 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     }
     getEditLog().logSync();
     logAuditEvent(true, OperationName.SET_ACL, src, null, auditStat);
+  }
+
+  private boolean allowAclOperation(FSPermissionChecker pc) {
+    if (!enableAclConstraints) return true;
+
+    // admin user allow to perform acl operations
+    if (pc.isSuperUser()) return true;
+
+    // if aclAllowUsers is null, no users may be allow to perform acl operations.
+    if (aclAllowUsers == null || aclAllowUsers.size() == 0) return false;
+
+    UserGroupInformation ugi = Server.getRemoteUser();
+    String userName = ugi.getUserName();
+    if (aclAllowUsers.contains(userName)) {
+      return true;
+    }
+    return false;
   }
 
   AclStatus getAclStatus(String src) throws IOException {
