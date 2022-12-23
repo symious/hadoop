@@ -147,21 +147,21 @@ class Delete {
     }
 
     private boolean moveToTrash(PathData item) throws IOException {
-      boolean success = false;
-      if (!skipTrash) {
-        try {
-          success = Trash.moveToAppropriateTrash(item.fs, item.path, getConf());
-        } catch(FileNotFoundException fnfe) {
-          throw fnfe;
-        } catch (IOException ioe) {
-          String msg = ioe.getMessage();
-          if (ioe.getCause() != null) {
-            msg += ": " + ioe.getCause().getMessage();
-          }
-          throw new IOException(msg + ". Consider using -skipTrash option", ioe);
-        }
+      if (skipTrash) {
+        System.err.println("The `-skipTrash` option is disabled. " +
+            "Please remove -skipTrash option");
       }
-      return success;
+      try {
+        return Trash.moveToAppropriateTrash(item.fs, item.path, getConf());
+      } catch(FileNotFoundException fnfe) {
+        throw fnfe;
+      } catch (IOException ioe) {
+        String msg = ioe.getMessage();
+        if (ioe.getCause() != null) {
+          msg += ": " + ioe.getCause().getMessage();
+        }
+        throw new IOException(msg + ". Consider using -skipTrash option", ioe);
+      }
     }
   }
   
