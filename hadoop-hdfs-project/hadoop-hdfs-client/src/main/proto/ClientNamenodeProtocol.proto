@@ -51,6 +51,7 @@ message GetBlockLocationsRequestProto {
   required uint64 offset = 2;  // range start offset
   required uint64 length = 3;  // range length
   optional string fakeRack = 100;// fake rack
+  optional uint64 fileId = 101;
 }
 
 message GetBlockLocationsResponseProto {

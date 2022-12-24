@@ -855,6 +855,18 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /**
+   * Get block locations of the file given by file Id
+   * @param p path is used to route only
+   * @param fileId the path with the given file id will be used to get block locations
+   */
+  public BlockLocation[] getFileBlockLocationsByFileId(Path p, long fileId) throws IOException {
+    if (p == null) {
+      throw new NullPointerException();
+    }
+    throw new IOException("Unsupported method that get file block location by file Id!");
+  }
+
+  /**
    * Return a set of server default configuration values.
    * @return server default configuration values
    * @throws IOException IO failure

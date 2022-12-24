@@ -311,6 +311,27 @@ public class ClientNamenodeProtocolTranslatorPB implements
   }
 
   @Override
+  public LocatedBlocks getBlockLocations(String src, long fileId, long offset, long length)
+      throws IOException {
+    GetBlockLocationsRequestProto.Builder builder = GetBlockLocationsRequestProto.newBuilder()
+        .setSrc(src)
+        .setOffset(offset)
+        .setLength(length);
+
+    if (fileId > 0) {
+      builder.setFileId(fileId);
+    }
+    try {
+      GetBlockLocationsResponseProto resp = rpcProxy.getBlockLocations(null,
+         builder.build());
+      return resp.hasLocations() ?
+          PBHelperClient.convert(resp.getLocations()) : null;
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+  }
+
+  @Override
   public FsServerDefaults getServerDefaults() throws IOException {
     GetServerDefaultsRequestProto req = VOID_GET_SERVER_DEFAULT_REQUEST;
     try {

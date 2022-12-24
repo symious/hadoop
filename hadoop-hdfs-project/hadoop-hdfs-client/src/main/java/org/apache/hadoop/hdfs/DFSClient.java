@@ -881,6 +881,13 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     return getLocatedBlocks(src, start, dfsClientConf.getPrefetchSize());
   }
 
+  public LocatedBlocks getLocatedBlocksByFileId(String src, long fileId)
+      throws IOException {
+    try (TraceScope ignored = newPathTraceScope("getBlockLocations", src)) {
+      return callGetBlockLocations(namenode, src, fileId, 0, dfsClientConf.getPrefetchSize());
+    }
+  }
+
   /*
    * This is just a wrapper around callGetBlockLocations, but non-static so that
    * we can stub it out for tests.
@@ -909,6 +916,13 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     }
   }
 
+  public LocatedBlocks getLocatedBlocks(String src, long fileId, long start, long length)
+      throws IOException {
+    try (TraceScope ignored = newPathTraceScope("getBlockLocations", src)) {
+      return callGetBlockLocations(namenode, src, fileId, start, length);
+    }
+  }
+
   /**
    * @see ClientProtocol#getBlockLocations(String, long, long)
    */
@@ -917,6 +931,18 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
       throws IOException {
     try {
       return namenode.getBlockLocations(src, start, length);
+    } catch(RemoteException re) {
+      throw re.unwrapRemoteException(AccessControlException.class,
+          FileNotFoundException.class,
+          UnresolvedPathException.class);
+    }
+  }
+
+  static LocatedBlocks callGetBlockLocations(ClientProtocol namenode,
+      String src, long fileId, long start, long length)
+      throws IOException {
+    try {
+      return namenode.getBlockLocations(src, fileId, start, length);
     } catch(RemoteException re) {
       throw re.unwrapRemoteException(AccessControlException.class,
           FileNotFoundException.class,
@@ -973,6 +999,19 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
       long length) throws IOException {
     try (TraceScope ignored = newPathTraceScope("getBlockLocations", src)) {
       LocatedBlocks blocks = getLocatedBlocks(src, start, length);
+      BlockLocation[] locations = DFSUtilClient.locatedBlocks2Locations(blocks);
+      HdfsBlockLocation[] hdfsLocations =
+          new HdfsBlockLocation[locations.length];
+      for (int i = 0; i < locations.length; i++) {
+        hdfsLocations[i] = new HdfsBlockLocation(locations[i], blocks.get(i));
+      }
+      return hdfsLocations;
+    }
+  }
+
+  public BlockLocation[] getBlockLocationsByFileId(String src, long fileId) throws IOException {
+    try (TraceScope ignored = newPathTraceScope("getBlockLocations", src)) {
+      LocatedBlocks blocks = getLocatedBlocksByFileId(src, fileId);
       BlockLocation[] locations = DFSUtilClient.locatedBlocks2Locations(blocks);
       HdfsBlockLocation[] hdfsLocations =
           new HdfsBlockLocation[locations.length];

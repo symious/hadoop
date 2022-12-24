@@ -399,8 +399,14 @@ public class ClientNamenodeProtocolServerSideTranslatorPB implements
       RpcController controller, GetBlockLocationsRequestProto req)
       throws ServiceException {
     try {
-      LocatedBlocks b = server.getBlockLocations(req.getSrc(), req.getOffset(),
-          req.getLength());
+      LocatedBlocks b;
+      if (req.hasFileId()) {
+        b = server.getBlockLocations(req.getSrc(), req.getFileId(), req.getOffset(),
+            req.getLength());
+      } else {
+        b = server.getBlockLocations(req.getSrc(), req.getOffset(),
+            req.getLength());
+      }
       Builder builder = GetBlockLocationsResponseProto
           .newBuilder();
       if (b != null) {

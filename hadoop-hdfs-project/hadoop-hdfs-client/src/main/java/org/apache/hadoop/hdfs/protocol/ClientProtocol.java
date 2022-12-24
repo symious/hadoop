@@ -138,6 +138,20 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * Get locations of the blocks of the specified file
+   * within the specified range by file id.
+   * @param src file name only used for route
+   * @param fileId file id
+   * @param offset range start offset
+   * @param length range length
+   * @return file length and array of blocks with their locations
+   */
+  @Idempotent
+  @ReadOnly(atimeAffected = true, isCoordinated = true)
+  LocatedBlocks getBlockLocations(String src, long fileId, long offset, long length)
+      throws IOException;
+
+  /**
    * Get server default values for a number of configuration params.
    * @return a set of server default configuration values
    * @throws IOException

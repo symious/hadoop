@@ -34,7 +34,7 @@ public class ReplicationRule {
   // Characters to strip
   private final static String[] STRIP_CHARACTERS = {" "};
   // "," is the separator of pattern "/dc1:replica1,/dc2:replica2"
-  private final static String SECTION_SEPARATOR = ",";
+  public final static String SECTION_SEPARATOR = ",";
   private final static Logger LOG = LoggerFactory.getLogger(ReplicationRule.class);
 
   ReplicationRule() {

@@ -292,6 +292,30 @@ public class RouterClientProtocol implements ClientProtocol {
   }
 
   @Override
+  public LocatedBlocks getBlockLocations(String src, long fileId, final long offset,
+      final long length) throws IOException {
+    rpcServer.checkOperation(OperationCategory.READ);
+
+    List<RemoteLocation> locations = rpcServer.getLocationsForPath(src, false);
+    RemoteMethod remoteMethod = new RemoteMethod("getBlockLocations",
+        new Class<?>[] {String.class, long.class, long.class, long.class},
+        new RemoteParam(), fileId, offset, length);
+    final String operationName = "open";
+    String invokeType = null;
+    LocatedBlocks blocks;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      blocks = rpcClient.invokeSequential(locations, remoteMethod,
+          LocatedBlocks.class, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
+    return blocks;
+  }
+
+  @Override
   public FsServerDefaults getServerDefaults() throws IOException {
     rpcServer.checkOperation(OperationCategory.READ);
 

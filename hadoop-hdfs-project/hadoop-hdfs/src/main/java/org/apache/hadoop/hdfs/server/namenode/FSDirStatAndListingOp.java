@@ -138,6 +138,13 @@ class FSDirStatAndListingOp {
   static GetBlockLocationsResult getBlockLocations(
       FSDirectory fsd, FSPermissionChecker pc, String src, long offset,
       long length, boolean needBlockToken) throws IOException {
+    return getBlockLocations(fsd, pc, src, HdfsConstants.INVALIDATE_INODE_ID,
+        offset, length, needBlockToken);
+  }
+
+  static GetBlockLocationsResult getBlockLocations(
+      FSDirectory fsd, FSPermissionChecker pc, String src, long fileId, long offset,
+      long length, boolean needBlockToken) throws IOException {
     Preconditions.checkArgument(offset >= 0,
         "Negative offset is not supported. File: " + src);
     Preconditions.checkArgument(length >= 0,
@@ -145,7 +152,13 @@ class FSDirStatAndListingOp {
     BlockManager bm = fsd.getBlockManager();
     fsd.readLock();
     try {
-      final INodesInPath iip = fsd.resolvePath(pc, src, DirOp.READ);
+      final INodesInPath iip;
+      if (fileId == HdfsConstants.INVALIDATE_INODE_ID ||
+          fileId == HdfsConstants.GRANDFATHER_INODE_ID) {
+        iip = fsd.resolvePath(pc, src, DirOp.READ);
+      } else {
+        iip = fsd.resolvePath(pc, src, fileId, DirOp.READ);
+      }
       src = iip.getPath();
       final INodeFile inode = INodeFile.valueOf(iip.getLastINode(), src);
       if (fsd.isPermissionEnabled()) {

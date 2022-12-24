@@ -872,7 +872,16 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     metrics.incrGetBlockLocations();
     return namesystem.getBlockLocations(getClientMachine(), src, offset, length, fakeRack);
   }
-  
+
+  @Override
+  public LocatedBlocks getBlockLocations(String src, long fileId, long offset, long length)
+      throws IOException {
+    checkNNStartup();
+    metrics.incrGetBlockLocations();
+    return
+        namesystem.getBlockLocations(getClientMachine(), src, fileId, offset, length);
+  }
+
   @Override // ClientProtocol
   public FsServerDefaults getServerDefaults() throws IOException {
     checkNNStartup();

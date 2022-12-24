@@ -726,6 +726,7 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   // datacenter values separated by comma
   public static final String  DFS_ZONEMOVER_VALID_DATACENTERS_KEY = "dfs.zonemover.valid.datacenters";
   public static final String  DFS_ZONEMOVER_VALID_DATACENTERS_DEFAULT = "";
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_DATACENTERS_KEY = "dfs.zoneservice.auto.balancer.datacenters";
   //ZoneService related keys
   public static final String  DFS_ZONESERVICE_STORE_DRIVER_CLASS = "dfs.zoneservice.store.driver.class";
   public static final Class<? extends StoreDriver> DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT = StoreDriverZooKeeperImpl.class;

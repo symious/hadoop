@@ -265,6 +265,24 @@ public class DistributedFileSystem extends FileSystem
     }.resolve(this, absF);
   }
 
+  @Override
+  public BlockLocation[] getFileBlockLocationsByFileId(Path p, final long fileId) throws IOException {
+    statistics.incrementReadOps(1);
+    storageStatistics.incrementOpCounter(OpType.GET_FILE_BLOCK_LOCATIONS);
+    final Path absF = fixRelativePart(p);
+    return new FileSystemLinkResolver<BlockLocation[]>() {
+      @Override
+      public BlockLocation[] doCall(final Path p) throws IOException {
+        return dfs.getBlockLocationsByFileId(getPathName(p), fileId);
+      }
+      @Override
+      public BlockLocation[] next(final FileSystem fs, final Path p)
+          throws IOException {
+        return fs.getFileBlockLocationsByFileId(p, fileId);
+      }
+    }.resolve(this, absF);
+  }
+
   /**
    * This API has been deprecated since the NameNode now tracks datanode
    * storages separately. Storage IDs can be gotten from {@link

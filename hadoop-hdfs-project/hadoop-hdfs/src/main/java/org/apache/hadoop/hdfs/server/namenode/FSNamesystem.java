@@ -102,6 +102,7 @@ import static org.apache.hadoop.ha.HAServiceProtocol.HAServiceState.ACTIVE;
 import static org.apache.hadoop.ha.HAServiceProtocol.HAServiceState.OBSERVER;
 
 import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAState;
 import org.apache.hadoop.hdfs.server.namenode.handler.FSNamesystemLockMetricsRefreshHandler;
@@ -2003,7 +2004,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
   LocatedBlocks getBlockLocations(String clientMachine, String srcArg,
       long offset, long length) throws IOException {
-    return getBlockLocations(clientMachine, srcArg, offset, length, null);
+    return getBlockLocations(clientMachine, srcArg, HdfsConstants.INVALIDATE_INODE_ID,
+        offset, length, null);
   }
 
   /**
@@ -2011,6 +2013,17 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * @see ClientProtocol#getBlockLocations(String, long, long)
    */
   LocatedBlocks getBlockLocations(String clientMachine, String srcArg,
+      long offset, long length, String fakeRack) throws IOException {
+    return getBlockLocations(clientMachine, srcArg, HdfsConstants.INVALIDATE_INODE_ID,
+        offset, length, fakeRack);
+  }
+
+  LocatedBlocks getBlockLocations(String clientMachine, String srcArg, long fileId,
+      long offset, long length) throws IOException {
+    return getBlockLocations(clientMachine, srcArg, fileId, offset, length, null);
+  }
+
+  LocatedBlocks getBlockLocations(String clientMachine, String srcArg, long fileId,
       long offset, long length, String fakeRack) throws IOException {
     final String operationName = "open";
     checkOperation(OperationCategory.READ);
@@ -2021,7 +2034,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     try {
       checkOperation(OperationCategory.READ);
       res = FSDirStatAndListingOp.getBlockLocations(
-          dir, pc, srcArg, offset, length, true);
+          dir, pc, srcArg, fileId, offset, length, true);
       inode = res.getIIp().getLastINode();
       if (isInSafeMode()) {
         for (LocatedBlock b : res.blocks.getLocatedBlocks()) {
@@ -2219,7 +2232,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     if (success) {
       getEditLog().logSync();
     }
-    logAuditEvent(success, operationName, src);
+    logAuditEvent(success, operationName, src, String.valueOf(replication), null);
     return success;
   }
 
