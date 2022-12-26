@@ -186,7 +186,7 @@ public class TestEditLogTailer {
       }
 
       @Override
-      public long doTailEdits(boolean onlyDurableTxns) {
+      public long doTailEdits(boolean onlyDurableTxns, boolean enableInProgressOk) {
         return tailEditsCallCount.getAndIncrement() < zeroEditCount ? 0 : 1;
       }
     };
