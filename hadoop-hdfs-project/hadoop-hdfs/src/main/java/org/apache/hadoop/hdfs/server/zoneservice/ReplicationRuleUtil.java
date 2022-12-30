@@ -175,23 +175,20 @@ public class ReplicationRuleUtil {
     fs.setXAttr(new Path(pathName), ATTR_KEY, XAttrCodec.decodeValue(rule.toString()), fileId);
   }
 
-  public void autoSetReplicaRule(String pathName, long fileId) throws IOException {
-    autoSetReplicaRule(pathName, fileId, -1);
-  }
-
   /**
    * Auto generate replica rule to make replicas of a file saved in two DCs
    * then set rule into file Xattr
    * The file will be recognized by file id not path name
    */
-  public void autoSetReplicaRule(String pathName, long fileId, int replicaNum) throws IOException {
+  public void autoSetReplicaRule(String pathName, long fileId) throws IOException {
     BlockLocation[] blockLocations = fs.getFileBlockLocationsByFileId(new Path(pathName), fileId);
 
     if (blockLocations.length == 0) {
       throw new IOException("Get block location failed for " + pathName + " (" + fileId + ")");
     }
+    int replicaNum = fs.listStatusById(new Path(pathName), fileId)[0].getReplication();
     ReplicationRule rule = generateRule(blockLocations, replicaNum);
-    LOG.info("Set rule {} on path with id {}", rule, fileId);
+    LOG.info("Set rule {} on path {} with id {}", rule, pathName, fileId);
     setRuleToXAttr(pathName, rule, fileId);
   }
 

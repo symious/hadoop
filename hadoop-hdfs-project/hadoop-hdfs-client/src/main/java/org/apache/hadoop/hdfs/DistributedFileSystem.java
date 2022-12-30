@@ -1022,11 +1022,20 @@ public class DistributedFileSystem extends FileSystem
   }
 
   private FileStatus[] listStatusInternal(Path p) throws IOException {
-    String src = getPathName(p);
+    return listStatusInternal(p, HdfsConstants.INVALIDATE_INODE_ID);
+  }
 
+
+  private FileStatus[] listStatusInternal(Path p, long fileId) throws IOException {
+    String src = getPathName(p);
+    DirectoryListing thisListing;
     // fetch the first batch of entries in the directory
-    DirectoryListing thisListing = dfs.listPaths(
-        src, HdfsFileStatus.EMPTY_NAME);
+    if (fileId > HdfsConstants.INVALIDATE_INODE_ID) {
+      thisListing = dfs.listPaths(
+          src, fileId, HdfsFileStatus.EMPTY_NAME, false);
+    } else {
+      thisListing = dfs.listPaths(src, HdfsFileStatus.EMPTY_NAME);
+    }
 
     if (thisListing == null) { // the directory does not exist
       throw new FileNotFoundException("File " + p + " does not exist.");
@@ -1058,7 +1067,11 @@ public class DistributedFileSystem extends FileSystem
 
     // now fetch more entries
     do {
-      thisListing = dfs.listPaths(src, thisListing.getLastName());
+      if (fileId > HdfsConstants.INVALIDATE_INODE_ID) {
+        thisListing = dfs.listPaths(src, fileId, thisListing.getLastName(), false);
+      } else {
+        thisListing = dfs.listPaths(src, thisListing.getLastName());
+      }
 
       if (thisListing == null) { // the directory is deleted
         throw new FileNotFoundException("File " + p + " does not exist.");
@@ -1095,6 +1108,22 @@ public class DistributedFileSystem extends FileSystem
       public FileStatus[] next(final FileSystem fs, final Path p)
           throws IOException {
         return fs.listStatus(p);
+      }
+    }.resolve(this, absF);
+  }
+
+  @Override
+  public FileStatus[] listStatusById(Path p, final long fileId) throws IOException {
+    Path absF = fixRelativePart(p);
+    return new FileSystemLinkResolver<FileStatus[]>() {
+      @Override
+      public FileStatus[] doCall(final Path p) throws IOException {
+        return listStatusInternal(p, fileId);
+      }
+      @Override
+      public FileStatus[] next(final FileSystem fs, final Path p)
+          throws IOException {
+        return fs.listStatusById(p, fileId);
       }
     }.resolve(this, absF);
   }

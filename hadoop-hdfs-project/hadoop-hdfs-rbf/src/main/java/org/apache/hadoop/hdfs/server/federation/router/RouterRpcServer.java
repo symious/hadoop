@@ -780,6 +780,12 @@ public class RouterRpcServer extends AbstractService
   }
 
   @Override // ClientProtocol
+  public DirectoryListing getListing(String src, long fileId, byte[] startAfter,
+      boolean needLocation) throws IOException {
+    return clientProto.getListing(src, fileId, startAfter, needLocation);
+  }
+
+  @Override // ClientProtocol
   public HdfsFileStatus getFileInfo(String src) throws IOException {
     return clientProto.getFileInfo(src);
   }

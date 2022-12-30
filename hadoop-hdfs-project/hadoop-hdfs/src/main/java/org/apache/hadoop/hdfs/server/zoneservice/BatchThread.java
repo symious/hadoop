@@ -34,7 +34,6 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.Semaphore;
 
 public class BatchThread extends Thread {
@@ -125,27 +124,7 @@ public class BatchThread extends Thread {
     final List<Path> paths = new ArrayList<>();
     paths.add(new org.apache.hadoop.fs.Path(path));
 
-    switch (Objects.requireNonNull(ExitStatus.getExitStatusByCode(
-        ZoneMover.run(conf, namenode, paths, replicationRule)))) {
-      case SUCCESS:
-        return ResultCode.SUCCESS;
-      case IN_PROGRESS:
-        return ResultCode.IN_PROGRESS;
-      case ALREADY_RUNNING:
-        return ResultCode.ALREADY_RUNNING;
-      case NO_MOVE_BLOCK:
-        return ResultCode.NO_MOVE_BLOCK;
-      case NO_MOVE_PROGRESS:
-        return ResultCode.NO_MOVE_PROGRESS;
-      case IO_EXCEPTION:
-        return ResultCode.IO_EXCEPTION;
-      case ILLEGAL_ARGUMENTS:
-        return ResultCode.ILLEGAL_ARGUMENTS;
-      case INTERRUPTED:
-        return ResultCode.INTERRUPTED;
-      case UNFINALIZED_UPGRADE:
-        return ResultCode.UNFINALIZED_UPGRADE;
-    }
-    return ResultCode.UNKNOWNERROR;
+    return ZoneServiceUtil.convertExitStatus2ResultCode(ExitStatus.getExitStatusByCode(
+        ZoneMover.run(conf, namenode, paths, replicationRule)));
   }
 }

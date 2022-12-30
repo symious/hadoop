@@ -1037,6 +1037,95 @@ public class RouterClientProtocol implements ClientProtocol {
   }
 
   @Override
+  public DirectoryListing getListing(String src, long fileId, byte[] startAfter,
+      boolean needLocation) throws IOException {
+    rpcServer.checkOperation(OperationCategory.READ);
+
+    Map<RemoteLocation, DirectoryListing> listings =
+        getListingInt(src, fileId, startAfter, needLocation);
+    Map<String, HdfsFileStatus> nnListing = new TreeMap<>();
+    int totalRemainingEntries = 0;
+    int remainingEntries = 0;
+    boolean namenodeListingExists = false;
+    if (listings != null) {
+      // Check the subcluster listing with the smallest name
+      String lastName = null;
+      for (Map.Entry<RemoteLocation, DirectoryListing> entry :
+          listings.entrySet()) {
+        RemoteLocation location = entry.getKey();
+        DirectoryListing listing = entry.getValue();
+        if (listing == null) {
+          LOG.debug("Cannot get listing from {}", location);
+        } else {
+          totalRemainingEntries += listing.getRemainingEntries();
+          HdfsFileStatus[] partialListing = listing.getPartialListing();
+          int length = partialListing.length;
+          if (length > 0) {
+            HdfsFileStatus lastLocalEntry = partialListing[length-1];
+            String lastLocalName = lastLocalEntry.getLocalName();
+            if (lastName == null || lastName.compareTo(lastLocalName) > 0) {
+              lastName = lastLocalName;
+            }
+          }
+        }
+      }
+
+      // Add existing entries
+      for (Object value : listings.values()) {
+        DirectoryListing listing = (DirectoryListing) value;
+        if (listing != null) {
+          namenodeListingExists = true;
+          for (HdfsFileStatus file : listing.getPartialListing()) {
+            String filename = file.getLocalName();
+            if (totalRemainingEntries > 0 && filename.compareTo(lastName) > 0) {
+              // Discarding entries further than the lastName
+              remainingEntries++;
+            } else {
+              nnListing.put(filename, file);
+            }
+          }
+          remainingEntries += listing.getRemainingEntries();
+        }
+      }
+    }
+
+    // Add mount points at this level in the tree
+    final List<String> children = subclusterResolver.getMountPoints(src);
+    if (children != null) {
+      // Get the dates for each mount point
+      Map<String, Long> dates = getMountPointDates(src);
+
+      // Create virtual folder with the mount name
+      for (String child : children) {
+        long date = 0;
+        if (dates != null && dates.containsKey(child)) {
+          date = dates.get(child);
+        }
+        // TODO add number of children
+        Path childPath = new Path(src, child);
+        HdfsFileStatus dirStatus =
+            getMountPointStatus(childPath.toString(), 0, date);
+
+        // This may overwrite existing listing entries with the mount point
+        // TODO don't add if already there?
+        nnListing.put(child, dirStatus);
+      }
+    }
+
+    if (!namenodeListingExists && nnListing.size() == 0) {
+      // NN returns a null object if the directory cannot be found and has no
+      // listing. If we didn't retrieve any NN listing data, and there are no
+      // mount points here, return null.
+      return null;
+    }
+
+    // Generate combined listing
+    HdfsFileStatus[] combinedData = new HdfsFileStatus[nnListing.size()];
+    combinedData = nnListing.values().toArray(combinedData);
+    return new DirectoryListing(combinedData, remainingEntries);
+  }
+
+  @Override
   public HdfsFileStatus getFileInfo(String src) throws IOException {
     rpcServer.checkOperation(OperationCategory.READ);
 
@@ -2481,6 +2570,39 @@ public class RouterClientProtocol implements ClientProtocol {
       RemoteMethod method = new RemoteMethod("getListing",
         new Class<?>[]{String.class, startAfter.getClass(), boolean.class},
         new RemoteParam(), startAfter, needLocation);
+      listings = rpcClient.invokeConcurrent(
+          locations, method, false, false, DirectoryListing.class);
+      logAuditEvent(true, operationName, invokeType, src);
+      return listings;
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    } catch (RouterResolveException e) {
+      LOG.debug("Cannot get locations for {}, {}.", src, e.getMessage());
+      logAuditEvent(false, operationName, invokeType, src);
+      return listings;
+    }
+  }
+
+  private Map<RemoteLocation, DirectoryListing> getListingInt(
+      String src, long fileId, byte[] startAfter, boolean needLocation) throws IOException {
+    String operationName = "getListing";
+    String invokeType = null;
+    invokeType = INVOKE_TYPE_CONCURRENT;
+    Map<RemoteLocation, DirectoryListing> listings = null;
+    try {
+      // Locate the dir and fetch the listing.
+      List<RemoteLocation> locations =
+          rpcServer.getLocationsForPath(src, false, false);
+      if (locations.isEmpty()){
+        return listings;
+      }
+      if (locations.size() == 1) {
+        invokeType = INVOKE_TYPE_SEQUENTIAL;
+      }
+      RemoteMethod method = new RemoteMethod("getListing",
+          new Class<?>[]{String.class, long.class, startAfter.getClass(), boolean.class},
+          new RemoteParam(), fileId, startAfter, needLocation);
       listings = rpcClient.invokeConcurrent(
           locations, method, false, false, DirectoryListing.class);
       logAuditEvent(true, operationName, invokeType, src);

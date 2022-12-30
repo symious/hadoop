@@ -582,6 +582,12 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONESERVICE_HTTPS_ADDRESS_DEFAULT = "0.0.0.0:50480";
   public static final String  DFS_ZONESERVICE_HTTP_BIND_HOST_KEY = "dfs.zoneservice.http-bind-host";
   public static final String  DFS_ZONESERVICE_HTTPS_BIND_HOST_KEY = "dfs.zoneservice.https-bind-host";
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTP_ADDRESS_KEY = "dfs.zoneservice.http-address";
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTP_ADDRESS_DEFAULT = "0.0.0.0:50090";
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTPS_ADDRESS_KEY = "dfs.zoneservice.https-address";
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTPS_ADDRESS_DEFAULT = "0.0.0.0:50490";
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTP_BIND_HOST_KEY = "dfs.zoneservice.http-bind-host";
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTPS_BIND_HOST_KEY = "dfs.zoneservice.https-bind-host";
 
   public static final String  DFS_ZONESERVICE_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY = "dfs.zoneservice.kerberos.internal.spnego.principal";
   public static final String  DFS_ZONESERVICE_KEYTAB_FILE_KEY = "dfs.zoneservice.keytab.file";
@@ -592,6 +598,16 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
 
   public static final String  DFS_ZONESERVICE_THREADS_KEY = "dfs.zoneservice.threads";
   public static final int     DFS_ZONESERVICE_THREADS_DEFAULT = 50;
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_QUEUE_SIZE_KEY = "dfs.zoneservice.auto.balancer.queue.size";
+  public static final int     DFS_ZONESERVICE_AUTO_BALANCER_QUEUE_SIZE_DEFAULT = 1000;
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_EXECUTOR_THREAD_CONSTRAINT_KEY = "dfs.zoneservice.auto.balancer.mover.thread.constraint";
+  public static final int     DFS_ZONESERVICE_AUTO_BALANCER_EXECUTOR_THREAD_CONSTRAINT_DEFAULT = 10000;
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_SET_OFFSET_INTERVAL_KEY = "dfs.zoneservice.auto.balancer.set.offset.interval";
+  public static final long    DFS_ZONESERVICE_AUTO_BALANCER_SET_OFFSET_INTERVAL_DEFAULT = 10000;
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_AUDIT_LOG_KEY = "dfs.zoneservice.auto.balancer.audit.log";
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_AUDIT_LOG_DEFAULT = "/var/log/hadoop/hdfs/zone-service-audit.log";
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_FAIL_RETRY_INTERVAL_KEY = "dfs.zoneservice.auto.balancer.fail.retry.interval";
+  public static final int     DFS_ZONESERVICE_AUTO_BALANCER_FAIL_RETRY_INTERVAL_DEFAULT = 12;
 
   //ZoneService Generte ReplicationRule kafka trigger related keys
   public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_BOOTSTRAP_SERVERS =

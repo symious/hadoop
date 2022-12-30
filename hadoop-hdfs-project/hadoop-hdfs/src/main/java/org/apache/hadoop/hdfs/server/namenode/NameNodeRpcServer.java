@@ -1361,6 +1361,19 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   }
 
   @Override // ClientProtocol
+  public DirectoryListing getListing(String src, long fileId, byte[] startAfter,
+      boolean needLocation) throws IOException {
+    checkNNStartup();
+    DirectoryListing files = namesystem.getListing(
+        src, fileId, startAfter, needLocation);
+    if (files != null) {
+      metrics.incrGetListingOps();
+      metrics.incrFilesInGetListingOps(files.getPartialListing().length);
+    }
+    return files;
+  }
+
+  @Override // ClientProtocol
   public HdfsFileStatus getFileInfo(String src)  throws IOException {
     checkNNStartup();
     metrics.incrFileInfoOps();

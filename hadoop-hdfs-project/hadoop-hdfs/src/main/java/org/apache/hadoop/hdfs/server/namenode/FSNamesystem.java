@@ -2217,6 +2217,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       throws IOException {
     final String operationName = "setReplication";
     boolean success = false;
+    long fileId = -1;
     checkOperation(OperationCategory.WRITE);
     writeLock(operationName);
     try {
@@ -2231,8 +2232,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     }
     if (success) {
       getEditLog().logSync();
+      fileId = FSDirStatAndListingOp.getFileInfo(dir, src, false).getFileId();
     }
-    logAuditEvent(success, operationName, src, String.valueOf(replication), null);
+    logAuditEvent(success, operationName, src, String.valueOf(fileId), null);
     return success;
   }
 
@@ -3850,6 +3852,29 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     try {
       checkOperation(NameNode.OperationCategory.READ);
       dl = getListingInt(dir, src, startAfter, needLocation);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, src);
+      throw e;
+    } finally {
+      readUnlock(operationName);
+    }
+    logAuditEvent(true, operationName, src);
+    return dl;
+  }
+
+  /**
+   * Get a partial listing of the indicated file by file id
+   */
+  DirectoryListing getListing(String src, long fileId, byte[] startAfter,
+      boolean needLocation)
+      throws IOException {
+    checkOperation(OperationCategory.READ);
+    final String operationName = "listStatus";
+    DirectoryListing dl = null;
+    readLock(operationName);
+    try {
+      checkOperation(NameNode.OperationCategory.READ);
+      dl = getListingInt(dir, src, fileId, startAfter, needLocation);
     } catch (AccessControlException e) {
       logAuditEvent(false, operationName, src);
       throw e;

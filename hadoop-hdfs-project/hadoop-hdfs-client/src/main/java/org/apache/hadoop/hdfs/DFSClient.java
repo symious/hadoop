@@ -1801,6 +1801,18 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     }
   }
 
+  public DirectoryListing listPaths(String src, long fileId, byte[] startAfter,
+      boolean needLocation) throws IOException {
+    checkOpen();
+    try (TraceScope ignored = newPathTraceScope("listPaths", src)) {
+      return namenode.getListing(src, fileId, startAfter, needLocation);
+    } catch (RemoteException re) {
+      throw re.unwrapRemoteException(AccessControlException.class,
+          FileNotFoundException.class,
+          UnresolvedPathException.class);
+    }
+  }
+
   /**
    * Get the file info for a specific file or directory.
    * @param src The string representation of the path to the file

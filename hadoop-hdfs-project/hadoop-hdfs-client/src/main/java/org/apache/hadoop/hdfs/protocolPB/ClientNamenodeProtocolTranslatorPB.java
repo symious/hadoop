@@ -677,6 +677,28 @@ public class ClientNamenodeProtocolTranslatorPB implements
   }
 
   @Override
+  public DirectoryListing getListing(String src, long fileId, byte[] startAfter,
+      boolean needLocation) throws IOException {
+    GetListingRequestProto.Builder req = GetListingRequestProto.newBuilder()
+        .setSrc(src)
+        .setStartAfter(ByteString.copyFrom(startAfter))
+        .setNeedLocation(needLocation);
+    if (fileId > HdfsConstants.INVALIDATE_INODE_ID) {
+      req.setFileId(fileId);
+    }
+    try {
+      GetListingResponseProto result = rpcProxy.getListing(null, req.build());
+
+      if (result.hasDirList()) {
+        return PBHelperClient.convert(result.getDirList());
+      }
+      return null;
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+  }
+
+  @Override
   public void renewLease(String clientName, List<String> namespaces)
       throws IOException {
     RenewLeaseRequestProto.Builder builder = RenewLeaseRequestProto

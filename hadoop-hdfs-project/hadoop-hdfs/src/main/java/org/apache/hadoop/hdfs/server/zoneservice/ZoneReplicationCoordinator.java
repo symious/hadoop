@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
@@ -83,6 +84,11 @@ public class ZoneReplicationCoordinator {
    */
   public void addFile(String filePath, ReplicationRule rule,
       int blockReplicaDelta, int blockNum) {
+    addFile(filePath, HdfsConstants.INVALIDATE_INODE_ID, rule, blockReplicaDelta, blockNum);
+  }
+
+  public void addFile(String filePath, long fileId, ReplicationRule rule,
+      int blockReplicaDelta, int blockNum) {
     if (isWaitingCompletion.get()) {
       throw new UnsupportedOperationException(
           "Cannot add new files while waiting completion!");
@@ -111,7 +117,7 @@ public class ZoneReplicationCoordinator {
       int n = runningReplications.addAndGet(replicaDelta);
       LOG.debug("Added {} replicas, now runningReplications is: {}", replicaDelta, n);
     }
-    this.waitFiles.add(new FileState(filePath, rule, maxCheckTimes, replicaDelta));
+    this.waitFiles.add(new FileState(filePath, fileId, rule, maxCheckTimes, replicaDelta));
   }
 
   /**
@@ -248,8 +254,14 @@ public class ZoneReplicationCoordinator {
           return null;
         }
 
-        HdfsFileStatus[] statuses = dfs.listPaths(
-            fileState.filePath, HdfsFileStatus.EMPTY_NAME, true).getPartialListing();
+        HdfsFileStatus[] statuses;
+        if (fileState.fileId == HdfsConstants.INVALIDATE_INODE_ID) {
+          statuses = dfs.listPaths(
+              fileState.filePath, HdfsFileStatus.EMPTY_NAME, true).getPartialListing();
+        } else {
+          statuses = dfs.listPaths(fileState.filePath, fileState.fileId,
+              HdfsFileStatus.EMPTY_NAME, true).getPartialListing();
+        }
         if (statuses[0].isDir()) {
           LOG.info("Skip directory: " + fileState.filePath);
           return null;
@@ -289,6 +301,7 @@ public class ZoneReplicationCoordinator {
   static class FileState {
 
     private final String filePath;
+    private final long fileId;
     private long lastCheckTime = 0L;
     private int leftCheckTimes;
     // the number of replicas to add for the file
@@ -296,8 +309,15 @@ public class ZoneReplicationCoordinator {
     private HdfsLocatedFileStatus fileStatus;
     private ReplicationRule rule;
 
-    FileState(String filePath, ReplicationRule rule, int checkTimes, int replicaDelta) {
+    FileState(String filePath, ReplicationRule rule,
+        int checkTimes, int replicaDelta) {
+      this(filePath, HdfsConstants.INVALIDATE_INODE_ID, rule, checkTimes, replicaDelta);
+    }
+
+    FileState(String filePath, long fileId, ReplicationRule rule,
+        int checkTimes, int replicaDelta) {
       this.filePath = filePath;
+      this.fileId = fileId;
       this.rule = rule;
       this.leftCheckTimes = checkTimes;
       this.replicaDelta = replicaDelta;
@@ -338,6 +358,10 @@ public class ZoneReplicationCoordinator {
     public ReplicationRule getRule() {
       return rule;
     }
+
+    public long getFileId() { return fileId; }
+
+    public void setRule(ReplicationRule rule) { this.rule = rule; }
 
     @Override
     public String toString() {

@@ -1749,6 +1749,10 @@ public abstract class FileSystem extends Configured implements Closeable {
   public abstract FileStatus[] listStatus(Path f) throws FileNotFoundException,
                                                          IOException;
 
+  public FileStatus[] listStatusById(Path f, long fileId) throws IOException {
+    throw new IOException("Method is not supported in this class");
+  }
+
   /**
    * Represents a batch of directory entries when iteratively listing a
    * directory. This is a private API not meant for use by end users.

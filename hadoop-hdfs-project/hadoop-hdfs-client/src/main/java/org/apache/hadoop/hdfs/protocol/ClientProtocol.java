@@ -705,6 +705,14 @@ public interface ClientProtocol {
       boolean needLocation) throws IOException;
 
   /**
+   * Get a partial listing of the indicated file by file id.
+   */
+  @Idempotent
+  @ReadOnly(isCoordinated = true)
+  DirectoryListing getListing(String src, long fileId, byte[] startAfter,
+      boolean needLocation) throws IOException;
+
+  /**
    * Get listing of all the snapshottable directories.
    *
    * @return Information about all the current snapshottable directory

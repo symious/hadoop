@@ -51,8 +51,19 @@ import static org.apache.hadoop.util.Time.now;
 class FSDirStatAndListingOp {
   static DirectoryListing getListingInt(FSDirectory fsd, final String srcArg,
       byte[] startAfter, boolean needLocation) throws IOException {
+    return getListingInt(fsd, srcArg, HdfsConstants.INVALIDATE_INODE_ID, startAfter, needLocation);
+  }
+
+  static DirectoryListing getListingInt(FSDirectory fsd, final String srcArg, long fileId,
+      byte[] startAfter, boolean needLocation) throws IOException {
     final FSPermissionChecker pc = fsd.getPermissionChecker();
-    final INodesInPath iip = fsd.resolvePath(pc, srcArg, DirOp.READ);
+    final INodesInPath iip;
+    if (fileId == HdfsConstants.INVALIDATE_INODE_ID ||
+        fileId == HdfsConstants.GRANDFATHER_INODE_ID) {
+      iip = fsd.resolvePath(pc, srcArg, DirOp.READ);
+    } else {
+      iip = fsd.resolvePath(pc, srcArg, fileId, DirOp.READ);
+    }
 
     // Get file name when startAfter is an INodePath.  This is not the
     // common case so avoid any unnecessary processing unless required.

@@ -70,7 +70,6 @@ import static org.apache.hadoop.util.ExitUtil.terminate;
 public class ZoneService extends ReconfigurableBase  {
   public static final Logger LOG =
       LoggerFactory.getLogger(ZoneService.class);
-  /** Metrics to track shadow file activity */
   static ZoneServiceMetrics metrics = ZoneServiceMetrics.create();
 
   // A list of property that are reconfigurable at runtime.
