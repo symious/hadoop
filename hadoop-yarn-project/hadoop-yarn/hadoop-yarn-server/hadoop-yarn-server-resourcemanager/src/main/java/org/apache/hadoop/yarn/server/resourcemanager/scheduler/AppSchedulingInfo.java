@@ -573,10 +573,16 @@ public class AppSchedulingInfo {
   public ContainerRequest allocate(NodeType type,
       SchedulerNode node, SchedulerRequestKey schedulerKey,
       RMContainer containerAllocated) {
+    return allocate(type, node, schedulerKey, containerAllocated, false);
+  }
+
+  public ContainerRequest allocate(NodeType type,
+      SchedulerNode node, SchedulerRequestKey schedulerKey,
+      RMContainer containerAllocated, boolean isDummyAllocated) {
     writeLock.lock();
     try {
       if (null != containerAllocated) {
-        updateMetricsForAllocatedContainer(type, node, containerAllocated);
+        updateMetricsForAllocatedContainer(type, node, containerAllocated, isDummyAllocated);
       }
 
       return schedulerKeyToAppPlacementAllocator.get(schedulerKey).allocate(
@@ -730,7 +736,7 @@ public class AppSchedulingInfo {
   }
 
   private void updateMetricsForAllocatedContainer(NodeType type,
-      SchedulerNode node, RMContainer containerAllocated) {
+      SchedulerNode node, RMContainer containerAllocated, boolean isDummyAllocated) {
     QueueMetrics metrics = queue.getMetrics();
     if (pending) {
       // once an allocation is done we assume the application is
@@ -739,12 +745,12 @@ public class AppSchedulingInfo {
       metrics.runAppAttempt(applicationId, user);
     }
 
-    updateMetrics(applicationId, type, node, containerAllocated, user, queue);
+    updateMetrics(applicationId, type, node, containerAllocated, user, queue, isDummyAllocated);
   }
 
   public static void updateMetrics(ApplicationId applicationId, NodeType type,
       SchedulerNode node, RMContainer containerAllocated, String user,
-      Queue queue) {
+      Queue queue, boolean isDummyAllocated) {
     LOG.debug("allocate: applicationId={} container={} host={} user={}"
         + " resource={} type={}", applicationId,
         containerAllocated.getContainer().getId(),
@@ -752,8 +758,10 @@ public class AppSchedulingInfo {
         containerAllocated.getContainer().getResource(),
         type);
     if(node != null) {
-      queue.getMetrics().allocateResources(node.getPartition(), user, 1,
-          containerAllocated.getContainer().getResource(), false);
+      if (!isDummyAllocated) {
+        queue.getMetrics().allocateResources(node.getPartition(), user, 1,
+            containerAllocated.getContainer().getResource(), false);
+      }
       queue.getMetrics().decrPendingResources(
           containerAllocated.getNodeLabelExpression(), user, 1,
           containerAllocated.getContainer().getResource());

@@ -171,7 +171,7 @@ public class ContainerUpdateContext {
                 appSchedulingInfo.getApplicationAttemptId(),
                 schedulerNode.getNodeID(), appSchedulingInfo.getUser(),
                 appSchedulingInfo.getRMContext(),
-                appPlacementAllocator.getPrimaryRequestedNodePartition()));
+                appPlacementAllocator.getPrimaryRequestedNodePartition()), true);
       }
     }
   }

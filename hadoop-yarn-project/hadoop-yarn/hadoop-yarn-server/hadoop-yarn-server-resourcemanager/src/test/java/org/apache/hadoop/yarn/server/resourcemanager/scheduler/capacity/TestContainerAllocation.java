@@ -22,21 +22,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
+import org.apache.hadoop.yarn.api.records.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.security.SecurityUtilTestHelper;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse;
-import org.apache.hadoop.yarn.api.records.Container;
-import org.apache.hadoop.yarn.api.records.ContainerId;
-import org.apache.hadoop.yarn.api.records.ExecutionType;
-import org.apache.hadoop.yarn.api.records.LogAggregationContext;
-import org.apache.hadoop.yarn.api.records.NodeId;
-import org.apache.hadoop.yarn.api.records.Priority;
-import org.apache.hadoop.yarn.api.records.Resource;
-import org.apache.hadoop.yarn.api.records.ResourceRequest;
-import org.apache.hadoop.yarn.api.records.Token;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.InvalidResourceRequestException;
 import org.apache.hadoop.yarn.security.ContainerTokenIdentifier;
@@ -663,6 +656,69 @@ public class TestContainerAllocation {
         .getMemorySize());
 
     rm1.close();
+  }
+
+  @Test(timeout = 60000)
+  public void testDynamicResourceAdjust() throws Exception {
+    MockRM rm1 = new MockRM(conf);
+    rm1.getRMContext().setNodeLabelManager(mgr);
+    rm1.start();
+    MockNM nm1 = rm1.registerNode("h1:1234", 10 * GB);
+    MockRMAppSubmissionData data =
+        MockRMAppSubmissionData.Builder.createWithMemory(1 * GB, rm1)
+            .withAppName("app")
+            .withUser("user")
+            .withAcls(null)
+            .withQueue("default")
+            .withUnmanagedAM(false)
+            .build();
+    RMApp app1 = MockRMAppSubmitter.submit(rm1, data);
+    MockAM am1 = MockRM.launchAndRegisterAM(app1, rm1, nm1);
+
+    am1.allocate("*", 1 * GB, 2, new ArrayList<ContainerId>());
+
+    CapacityScheduler cs = (CapacityScheduler) rm1.getResourceScheduler();
+
+    CapacitySchedulerConfiguration newCSConf = new CapacitySchedulerConfiguration();
+    newCSConf.setInt(
+        CapacitySchedulerConfiguration.OFFSWITCH_PER_HEARTBEAT_LIMIT, 1);
+    cs.reinitialize(newCSConf, rm1.getRMContext());
+
+    RMNode rmNode1 = rm1.getRMContext().getRMNodes().get(nm1.getNodeId());
+    Assert.assertEquals(1, cs.getNode(nm1.getNodeId()).getNumContainers());
+    Assert.assertEquals(1024, cs.getNode(nm1.getNodeId()).getAllocatedResource().getMemorySize());
+    cs.handle(new NodeUpdateSchedulerEvent(rmNode1));
+    Assert.assertEquals(2, cs.getNode(nm1.getNodeId()).getNumContainers());
+    Assert.assertEquals(2048, cs.getNode(nm1.getNodeId()).getAllocatedResource().getMemorySize());
+    Assert.assertEquals(2, cs.getNode(nm1.getNodeId()).getCopiedListOfRunningContainers().size());
+    Assert.assertEquals(2, cs.getApplicationAttempt(am1.getApplicationAttemptId()).getLiveContainersMap().keySet().size());
+    
+    ContainerId containerId2 =
+        ContainerId.newContainerId(am1.getApplicationAttemptId(), 2);
+    rm1.getResourceScheduler().getRMContainer(containerId2).getContainer().getVersion();
+
+    List<UpdateContainerRequest> update = new ArrayList<>();
+    update.add(UpdateContainerRequest.newInstance(
+        rm1.getResourceScheduler().getRMContainer(containerId2).getContainer()
+            .getVersion(), containerId2, ContainerUpdateType.INCREASE_RESOURCE,
+        Resource.newInstance(3072, 1), ExecutionType.GUARANTEED));
+    AllocateRequest allocateRequest = AllocateRequest.newInstance(0, 0, new ArrayList<ResourceRequest>(),
+        new ArrayList<ContainerId>(), update, null);
+
+    am1.allocate(allocateRequest);
+    am1.allocate(allocateRequest);
+    newCSConf.setInt(
+        CapacitySchedulerConfiguration.OFFSWITCH_PER_HEARTBEAT_LIMIT, 2);
+    cs.reinitialize(newCSConf, rm1.getRMContext());
+    cs.handle(new NodeUpdateSchedulerEvent(rmNode1));
+
+    Assert.assertEquals(5120, cs.getNode(nm1.getNodeId()).getAllocatedResource().getMemorySize());
+    Assert.assertEquals(3, cs.getNode(nm1.getNodeId()).getAllocatedResource().getVirtualCores());
+    Assert.assertEquals(5120, cs.getNode(nm1.getNodeId()).getUnallocatedResource().getMemorySize());
+
+    Thread.sleep(2000);
+    Assert.assertEquals(5120, cs.getQueue("default").getMetrics().getAvailableMB());
+    Assert.assertEquals(5120, cs.getQueue("default").getMetrics().getAllocatedMB());
   }
 
   @Test(timeout = 60000)

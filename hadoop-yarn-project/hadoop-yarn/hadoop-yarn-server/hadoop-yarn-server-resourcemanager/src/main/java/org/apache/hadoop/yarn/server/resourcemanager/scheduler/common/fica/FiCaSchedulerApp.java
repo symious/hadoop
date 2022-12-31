@@ -629,7 +629,7 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
                 allocation.getAllocationLocalityType(),
                 schedulerContainer.getSchedulerNode(),
                 schedulerContainer.getRmContainer(), getUser(),
-                getQueue());
+                getQueue(), false);
           }
 
           attemptResourceUsage.incUsed(schedulerContainer.getNodePartition(),
