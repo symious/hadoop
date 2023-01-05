@@ -277,7 +277,7 @@ message GetListingRequestProto {
   required string src = 1;
   required bytes startAfter = 2;
   required bool needLocation = 3;
-  required uint64 fileId = 100;
+  optional uint64 fileId = 100;
 }
 message GetListingResponseProto {
   optional DirectoryListingProto dirList = 1;

@@ -57,6 +57,7 @@ public class ZoneAutoBalancerTrigger {
 
   private long timestamp;
   private final long setOffsetInterval;
+  private final List<String> nsWhiteList;
 
   public ZoneAutoBalancerTrigger(Configuration conf) throws IOException {
     replicationRuleUtil = new ReplicationRuleUtil(FileSystem.get(conf));
@@ -67,6 +68,16 @@ public class ZoneAutoBalancerTrigger {
     setOffsetInterval = conf.getLong(
         DFSConfigKeys.DFS_ZONESERVICE_AUTO_BALANCER_SET_OFFSET_INTERVAL_KEY,
         DFSConfigKeys.DFS_ZONESERVICE_AUTO_BALANCER_SET_OFFSET_INTERVAL_DEFAULT);
+    String whiteListString = conf.get(
+        DFSConfigKeys.DFS_ZONESERVICE_AUTO_BALANCER_NS_WHITE_LIST_KEY,
+        DFSConfigKeys.DFS_ZONESERVICE_AUTO_BALANCER_NS_WHITE_LIST_DEFAULT);
+    if (whiteListString.trim().isEmpty()) {
+      nsWhiteList = new ArrayList<>();
+      LOG.info("No namespace white list is found, all the namespaces will be processed!");
+    } else {
+      nsWhiteList = Arrays.asList(whiteListString.trim().split(","));
+      LOG.info("Namespace white list is {}", nsWhiteList);
+    }
     timestamp = System.currentTimeMillis();
 
     final String username =
@@ -87,7 +98,7 @@ public class ZoneAutoBalancerTrigger {
         StringDeserializer.class.getName());
     properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
         StringDeserializer.class.getName());
-    properties.put("group.id", groupId);
+    properties.put("group.id", groupId + "_zab");
 
     properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
 
@@ -135,13 +146,19 @@ public class ZoneAutoBalancerTrigger {
         for (ConsumerRecord<String, String> record : records) {
           String rawMessage = record.value();
           JSONObject jsonObject = new JSONObject(rawMessage);
+          String ns = jsonObject.get("ns").toString();
+          // Filter namespace according to white list
+          if (!nsWhiteList.isEmpty() && !nsWhiteList.contains(ns)) {
+            LOG.debug("Message is skipped by namespace white list.\n {}", rawMessage);
+            continue;
+          }
+
           String message = jsonObject.get("message").toString();
           JSONObject jsonAuditLog = processMessage(message);
 
           if (jsonAuditLog != null) {
             String validPath = jsonAuditLog.get("src").toString();
             long dst;
-            String ns = jsonObject.get("ns").toString();
             dst = Long.parseLong(jsonAuditLog.get("dst").toString());
 
             int par = record.partition();

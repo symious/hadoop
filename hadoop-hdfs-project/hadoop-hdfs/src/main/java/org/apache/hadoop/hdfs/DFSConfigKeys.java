@@ -604,6 +604,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final int     DFS_ZONESERVICE_AUTO_BALANCER_EXECUTOR_THREAD_CONSTRAINT_DEFAULT = 10000;
   public static final String  DFS_ZONESERVICE_AUTO_BALANCER_SET_OFFSET_INTERVAL_KEY = "dfs.zoneservice.auto.balancer.set.offset.interval";
   public static final long    DFS_ZONESERVICE_AUTO_BALANCER_SET_OFFSET_INTERVAL_DEFAULT = 10000;
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_NS_WHITE_LIST_KEY = "dfs.zoneservice.auto.balancer.ns.white.list";
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_NS_WHITE_LIST_DEFAULT = "";
   public static final String  DFS_ZONESERVICE_AUTO_BALANCER_AUDIT_LOG_KEY = "dfs.zoneservice.auto.balancer.audit.log";
   public static final String  DFS_ZONESERVICE_AUTO_BALANCER_AUDIT_LOG_DEFAULT = "/var/log/hadoop/hdfs/zone-service-audit.log";
   public static final String  DFS_ZONESERVICE_AUTO_BALANCER_FAIL_RETRY_INTERVAL_KEY = "dfs.zoneservice.auto.balancer.fail.retry.interval";
