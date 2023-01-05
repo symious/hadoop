@@ -3,6 +3,7 @@ package org.apache.hadoop.yarn.server.nodemanager.containermanager.dynamicresour
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.thirdparty.com.google.common.cache.Cache;
 import org.apache.hadoop.thirdparty.com.google.common.cache.CacheBuilder;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerUpdateType;
 import org.apache.hadoop.yarn.api.records.Resource;
@@ -30,8 +31,10 @@ public class DefaultPolicy implements Policy {
     ContainerId containerId = container.getContainerId();
     ContainerMetrics containerMetrics =
         ContainerMetrics.getContainerMetrics(containerId);
-    if (containerMetrics == null)
+    if (containerMetrics == null || (
+        Time.monotonicNow() - container.getContainerLaunchTime() < 30000)) {
       return null;
+    }
 
     long max = (long) containerMetrics.minMax.max();
     long latest = containerMetrics.latestMemoryMbs;
