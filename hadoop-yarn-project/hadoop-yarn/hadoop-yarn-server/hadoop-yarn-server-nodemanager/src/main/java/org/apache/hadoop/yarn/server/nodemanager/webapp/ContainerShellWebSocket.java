@@ -81,6 +81,7 @@ public class ContainerShellWebSocket {
   private PtyProcess process;
   private String[] termCommand;
   private File commandFile;
+  private File profileFile;
   private Thread inThread;
   private Thread errThread;
 
@@ -144,7 +145,6 @@ public class ContainerShellWebSocket {
               .build();
 
       String commandFilePath = writeCommandToTempFile(execContext);
-      String userHome = System.getProperty("user.home");
       this.termCommand = (PrivilegedOperationExecutor
           .getContainerExecutorExecutablePath(nmContext.getConf())
           + " --exec-container " + commandFilePath).split("\\s+");
@@ -201,6 +201,9 @@ public class ContainerShellWebSocket {
         }
       };
       errThread.start();
+
+      pair.out.write(("source " + profileFile.getName() + "\n").getBytes());
+
     } catch (Exception e) {
       LOG.error("Failed to establish WebSocket connection with Client", e);
     }
@@ -217,6 +220,7 @@ public class ContainerShellWebSocket {
       pair.in.close();
       pair.out.close();
       commandFile.delete();
+      profileFile.delete();
       inThread.interrupt();
       errThread.interrupt();
     } catch (IOException e) {
@@ -287,6 +291,21 @@ public class ContainerShellWebSocket {
         throw new IOException("Cannot create container private directory "
             + cmdDir);
       }
+      profileFile = File.createTempFile(".webterminal", ".profile", cmdDir);
+      Writer profileWriter = new OutputStreamWriter(
+          new FileOutputStream(profileFile.toString()), "UTF-8");
+      PrintWriter pw = new PrintWriter(profileWriter);
+      pw.println("alias kill=\"printf 'command not supported\\n'\"");
+      pw.println("alias rm=\"printf 'command not supported\\n'\"");
+      pw.println("alias rmdir=\"printf 'command not supported\\n'\"");
+      pw.println("alias mkdir=\"printf 'command not supported\\n'\"");
+      pw.println("alias touch=\"printf 'command not supported\\n'\"");
+      pw.println("alias yum=\"printf 'command not supported\\n'\"");
+      pw.println("alias vim=\"vim -M\"");
+      pw.println("alias vi=\"vi -M\"");
+      pw.println("alias alias=\"printf ''\"");
+      pw.flush();
+
       commandFile = File.createTempFile("yarn.",
           ".cmd", cmdDir);
       try (
@@ -301,7 +320,7 @@ public class ContainerShellWebSocket {
         cmd.put("command", exec);
         // user = foobar
         List<String> user = new ArrayList<String>();
-        user.add("yarn-guest");
+        user.add("yarn");
         cmd.put("user", user);
         // launch-command = bash,-i
         List<String> commands = new ArrayList<String>();
@@ -318,6 +337,9 @@ public class ContainerShellWebSocket {
         List<String> pty = new ArrayList<String>();
         pty.add("true");
         cmd.put("use-pty", pty);
+        List<String> pathEnv = new ArrayList<>();
+        pathEnv.add(cmdDirPath + ":" + ":/usr/bin:/usr/local/bin");
+        cmd.put("pathenv", pathEnv);
         // generate cmd file
         printWriter.println("[command-execution]");
         for (Map.Entry<String, List<String>> entry :
@@ -332,6 +354,7 @@ public class ContainerShellWebSocket {
                 "'\\n' found in entry for docker command file, key = " + entry
                     .getKey() + "; value = " + entry.getValue());
           }
+          LOG.info("key: " + entry.getKey() + " value: " + entry.getValue());
           printWriter.println("  " + entry.getKey() + "=" + StringUtils
               .join(",", entry.getValue()));
         }

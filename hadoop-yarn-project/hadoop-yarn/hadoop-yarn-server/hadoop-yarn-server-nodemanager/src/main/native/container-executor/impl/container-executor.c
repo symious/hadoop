@@ -1410,6 +1410,7 @@ int exec_container(const char *command_file) {
   int docker = 0;
   char *user = NULL;
   char *usePty = NULL;
+  char *pathEnv = NULL;
 
   int ret = read_config(command_file, &command_config);
   if (ret != 0) {
@@ -1435,11 +1436,21 @@ int exec_container(const char *command_file) {
       workdir = get_configuration_value("workdir", COMMAND_FILE_SECTION, &command_config);
       if (workdir == NULL) {
         goto cleanup;
+
       }
-      env = (char **) alloc_and_clear_memory(3, sizeof(char *));
-      env[0] = make_string("PWD=%s", workdir);
-      env[1] = make_string("TERM=%s", "xterm-256color");
-      env[2] = NULL;
+      pathEnv = get_configuration_value("pathenv", COMMAND_FILE_SECTION, &command_config);
+      if (pathEnv == NULL) {
+        env = (char **) alloc_and_clear_memory(3, sizeof(char *));
+	    env[0] = make_string("PWD=%s", workdir);
+        env[1] = make_string("TERM=%s", "xterm-256color");
+	    env[2] = NULL;
+      } else {
+        env = (char **) alloc_and_clear_memory(4, sizeof(char *));
+        env[0] = make_string("PWD=%s", workdir);
+        env[1] = make_string("TERM=%s", "xterm-256color");
+        env[2] = make_string("PATH=%s", pathEnv);
+        env[3] = NULL;
+      }
       user = get_configuration_value("user", COMMAND_FILE_SECTION, &command_config);
       if (user == NULL) {
         goto cleanup;
