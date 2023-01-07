@@ -23,6 +23,10 @@ import java.security.PrivilegedExceptionAction;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerKillEvent;
@@ -90,14 +94,17 @@ public class NMTimelinePublisher extends CompositeService {
 
   private UserGroupInformation nmLoginUGI;
 
-  private final Map<ApplicationId, TimelineV2Client> appToClientMap;
-
   private boolean publishNMContainerEvents = true;
+
+  private final Map<ApplicationId, Future<TimelineV2Client>> appToFutureMap;
+
+  private ExecutorService executor;
 
   public NMTimelinePublisher(Context context) {
     super(NMTimelinePublisher.class.getName());
     this.context = context;
-    appToClientMap = new ConcurrentHashMap<>();
+    appToFutureMap = new ConcurrentHashMap<>();
+    executor = Executors.newFixedThreadPool(5);
   }
 
   @Override
@@ -138,15 +145,10 @@ public class NMTimelinePublisher extends CompositeService {
 
   @Override
   protected void serviceStop() throws Exception {
-    for(ApplicationId app : appToClientMap.keySet()) {
+    for (ApplicationId app : appToFutureMap.keySet()) {
       stopTimelineClient(app);
     }
     super.serviceStop();
-  }
-
-  @VisibleForTesting
-  Map<ApplicationId, TimelineV2Client> getAppToClientMap() {
-    return appToClientMap;
   }
 
   protected void handleNMTimelineEvent(NMTimelineEvent event) {
@@ -194,7 +196,7 @@ public class NMTimelinePublisher extends CompositeService {
         try {
           // no need to put it as part of publisher as timeline client
           // already has Queuing concept
-          TimelineV2Client timelineClient = getTimelineClient(appId);
+          TimelineV2Client timelineClient = getTimelineClientSync(appId);
           if (timelineClient != null) {
             timelineClient.putEntitiesAsync(entity);
           } else {
@@ -377,7 +379,7 @@ public class NMTimelinePublisher extends CompositeService {
       try {
         // no need to put it as part of publisher as timeline client already has
         // Queuing concept
-        TimelineV2Client timelineClient = getTimelineClient(appId);
+        TimelineV2Client timelineClient = getTimelineClientSync(appId);
         if (timelineClient != null) {
           timelineClient.putEntitiesAsync(entity);
         } else {
@@ -418,7 +420,7 @@ public class NMTimelinePublisher extends CompositeService {
         LOG.debug("Publishing the entity {} JSON-style content: {}",
             entity, TimelineUtils.dumpTimelineRecordtoJSON(entity));
       }
-      TimelineV2Client timelineClient = getTimelineClient(appId);
+      TimelineV2Client timelineClient = getTimelineClientSync(appId);
       if (timelineClient != null) {
         timelineClient.putEntities(entity);
       } else {
@@ -526,8 +528,12 @@ public class NMTimelinePublisher extends CompositeService {
   }
 
   public void createTimelineClient(ApplicationId appId) {
-    if (!appToClientMap.containsKey(appId)) {
-      try {
+    createTimelineClientAsync(appId);
+  }
+
+  public void createTimelineClientAsync(ApplicationId appId) {
+    if (!appToFutureMap.containsKey(appId)) {
+      Future<TimelineV2Client> future = executor.submit(() -> {
         TimelineV2Client timelineClient =
             nmLoginUGI.doAs(new PrivilegedExceptionAction<TimelineV2Client>() {
               @Override
@@ -539,11 +545,9 @@ public class NMTimelinePublisher extends CompositeService {
                 return timelineClient;
               }
             });
-        appToClientMap.put(appId, timelineClient);
-      } catch (IOException | InterruptedException | RuntimeException |
-          Error e) {
-        LOG.warn("Unable to create timeline client for app " + appId, e);
-      }
+        return timelineClient;
+      });
+      appToFutureMap.put(appId, future);
     }
   }
 
@@ -553,22 +557,38 @@ public class NMTimelinePublisher extends CompositeService {
   }
 
   private void removeAndStopTimelineClient(ApplicationId appId) {
-    TimelineV2Client client = appToClientMap.remove(appId);
-    if (client != null) {
-      client.stop();
+    Future<TimelineV2Client> f = appToFutureMap.remove(appId);
+    if (f != null) {
+      if (f.isDone()) {
+        try {
+          f.get().stop();
+        } catch (InterruptedException | ExecutionException e) {
+        }
+      } else {
+        f.cancel(true);
+      }
     }
   }
 
   public void setTimelineServiceAddress(ApplicationId appId,
       String collectorAddr) {
-    TimelineV2Client client = appToClientMap.get(appId);
+    TimelineV2Client client = getTimelineClientSync(appId);
     if (client != null) {
       client.setTimelineCollectorInfo(CollectorInfo.newInstance(collectorAddr));
     }
   }
 
-  private TimelineV2Client getTimelineClient(ApplicationId appId) {
-    return appToClientMap.get(appId);
+  private TimelineV2Client getTimelineClientSync(ApplicationId appId) {
+    TimelineV2Client client = null;
+    if (appToFutureMap.containsKey(appId)) {
+      Future<TimelineV2Client> f = appToFutureMap.get(appId);
+      try {
+        client = f.get();
+      } catch (InterruptedException | ExecutionException e) {
+
+      }
+    }
+    return client;
   }
 
   public AsyncDispatcher getDispatcher() {

@@ -84,13 +84,13 @@ public class TestNMTimelinePublisher {
     dispatcher = new DrainDispatcher();
 
     publisher = new NMTimelinePublisher(context) {
-      public void createTimelineClient(ApplicationId appId) {
-        if (!getAppToClientMap().containsKey(appId)) {
-          timelineClient.init(getConfig());
-          timelineClient.start();
-          getAppToClientMap().put(appId, timelineClient);
-        }
-      }
+//      public void createTimelineClient(ApplicationId appId) {
+//        if (!getAppToClientMap().containsKey(appId)) {
+//          timelineClient.init(getConfig());
+//          timelineClient.start();
+//          getAppToClientMap().put(appId, timelineClient);
+//        }
+//      }
 
       @Override protected AsyncDispatcher createDispatcher() {
         return dispatcher;
