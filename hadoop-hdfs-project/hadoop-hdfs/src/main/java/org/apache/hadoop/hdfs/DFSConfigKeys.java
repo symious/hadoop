@@ -582,12 +582,12 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONESERVICE_HTTPS_ADDRESS_DEFAULT = "0.0.0.0:50480";
   public static final String  DFS_ZONESERVICE_HTTP_BIND_HOST_KEY = "dfs.zoneservice.http-bind-host";
   public static final String  DFS_ZONESERVICE_HTTPS_BIND_HOST_KEY = "dfs.zoneservice.https-bind-host";
-  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTP_ADDRESS_KEY = "dfs.zoneservice.http-address";
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTP_ADDRESS_KEY = "dfs.zoneservice.auto.balancer.http-address";
   public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTP_ADDRESS_DEFAULT = "0.0.0.0:50090";
-  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTPS_ADDRESS_KEY = "dfs.zoneservice.https-address";
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTPS_ADDRESS_KEY = "dfs.zoneservice.auto.balancer.https-address";
   public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTPS_ADDRESS_DEFAULT = "0.0.0.0:50490";
-  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTP_BIND_HOST_KEY = "dfs.zoneservice.http-bind-host";
-  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTPS_BIND_HOST_KEY = "dfs.zoneservice.https-bind-host";
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTP_BIND_HOST_KEY = "dfs.zoneservice.auto.balancer.http-bind-host";
+  public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTPS_BIND_HOST_KEY = "dfs.zoneservice.auto.balancer.https-bind-host";
 
   public static final String  DFS_ZONESERVICE_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY = "dfs.zoneservice.kerberos.internal.spnego.principal";
   public static final String  DFS_ZONESERVICE_KEYTAB_FILE_KEY = "dfs.zoneservice.keytab.file";
