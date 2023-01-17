@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.ipc.metrics;
 
+import java.util.Collections;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.hadoop.ipc.DeepHandlerManager;
@@ -28,10 +30,15 @@ import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.util.MutableMetricRegister;
+import javax.management.openmbean.CompositeData;
+import javax.management.openmbean.CompositeDataSupport;
+import javax.management.openmbean.CompositeType;
+import javax.management.openmbean.OpenDataException;
+import javax.management.openmbean.OpenType;
+import javax.management.openmbean.SimpleType;
 
 @Metrics(about = "Deep layer RPC metrics", context = "rpc")
-public class DeepRpcMetrics {
-
+public class DeepRpcMetrics implements DeepRpcMetricsMBean {
   private final DeepHandlerManager manager;
   private final MetricsRegistry registry;
   private final String name;
@@ -69,24 +76,46 @@ public class DeepRpcMetrics {
   private final ConcurrentHashMap<String, MutableRate> nsDeepHandlerProcessingTime;
   private final ConcurrentHashMap<String, MutableRate> nsLatencies;
 
-  @Metric("Current deep queue size per namespace")
-  public String getCurrentDeepQueueSizes() {
-    return manager.getCurrentDeepQueueSizes();
-  }
-
-  @Metric("Number of deep calls requested per namespace")
-  public String getDeepCallsByNamespace() {
-    return manager.getDeepCallsByNamespace();
-  }
-
-  @Metric("Current utilized deep handler count per namespace")
-  public String getCurrentDeepHandlerUtilization() {
-    return manager.getCurrentDeepHandlerUtilization();
-  }
-
-  @Metric("Current free deep handler count")
+  @Override
   public int getCurrentFreeDeepHandlerCount() {
     return manager.getCurrentFreeDeepHandlerCount();
+  }
+
+  @Override
+  public CompositeData getCurrentDeepQueueSizes() {
+    return convertStringIntMapToCompositeData(manager.getCurrentDeepQueueSizes());
+  }
+
+  @Override
+  public CompositeData getDeepCallsByNamespace() {
+    return convertStringIntMapToCompositeData(manager.getDeepCallsByNamespace());
+  }
+
+  @Override
+  public CompositeData getCurrentDeepHandlerUtilization() {
+    return convertStringIntMapToCompositeData(manager.getCurrentDeepHandlerUtilization());
+  }
+
+  private CompositeData convertStringIntMapToCompositeData(Map<String, Integer> input) {
+    if (input.isEmpty()) {
+      return null;
+    }
+
+    try {
+      int size = input.size();
+      String[] fields = input.keySet().toArray(new String[0]);
+      OpenType[] types = Collections.nCopies(size, SimpleType.INTEGER).toArray(new OpenType[0]);
+      Integer[] values = new Integer[size];
+      for (int i = 0; i < size; i++) {
+        values[i] = input.get(fields[i]);
+      }
+
+      CompositeType type = new CompositeType(this.getClass().getName(),
+          this.getClass().getName(), fields, fields, types);
+      return new CompositeDataSupport(type, fields, values);
+    } catch (OpenDataException e) {
+      return null;
+    }
   }
 
   public void incrDeepCalls(String nsId) {
