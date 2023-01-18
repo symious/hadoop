@@ -278,6 +278,25 @@ public class DistributedFileSystem extends FileSystem
     return getFileBlockLocations(file.getPath(), start, len);
   }
 
+  @Override
+  public BlockLocation[] getFileBlockLocationsByFileId(Path p, final long fileId)
+      throws IOException {
+    statistics.incrementReadOps(1);
+    storageStatistics.incrementOpCounter(OpType.GET_FILE_BLOCK_LOCATIONS);
+    final Path absF = fixRelativePart(p);
+    return new FileSystemLinkResolver<BlockLocation[]>() {
+      @Override
+      public BlockLocation[] doCall(final Path p) throws IOException {
+        return dfs.getBlockLocationsByFileId(getPathName(p), fileId);
+      }
+      @Override
+      public BlockLocation[] next(final FileSystem fs, final Path p)
+          throws IOException {
+        return fs.getFileBlockLocationsByFileId(p, fileId);
+      }
+    }.resolve(this, absF);
+  }
+
   /**
    * The returned BlockLocation will have different formats for replicated
    * and erasure coded file.
@@ -1103,11 +1122,19 @@ public class DistributedFileSystem extends FileSystem
   }
 
   private FileStatus[] listStatusInternal(Path p) throws IOException {
-    String src = getPathName(p);
+    return listStatusInternal(p, HdfsConstants.INVALIDATE_INODE_ID);
+  }
 
+
+  private FileStatus[] listStatusInternal(Path p, long fileId) throws IOException {
+    String src = getPathName(p);
+    DirectoryListing thisListing;
     // fetch the first batch of entries in the directory
-    DirectoryListing thisListing = dfs.listPaths(
-        src, HdfsFileStatus.EMPTY_NAME);
+    if (fileId > HdfsConstants.INVALIDATE_INODE_ID) {
+      thisListing = dfs.listPaths(src, fileId, HdfsFileStatus.EMPTY_NAME, false);
+    } else {
+      thisListing = dfs.listPaths(src, HdfsFileStatus.EMPTY_NAME);
+    }
 
     if (thisListing == null) { // the directory does not exist
       throw new FileNotFoundException("File " + p + " does not exist.");
@@ -1139,7 +1166,11 @@ public class DistributedFileSystem extends FileSystem
 
     // now fetch more entries
     do {
-      thisListing = dfs.listPaths(src, thisListing.getLastName());
+      if (fileId > HdfsConstants.INVALIDATE_INODE_ID) {
+        thisListing = dfs.listPaths(src, fileId, thisListing.getLastName(), false);
+      } else {
+        thisListing = dfs.listPaths(src, thisListing.getLastName());
+      }
 
       if (thisListing == null) { // the directory is deleted
         throw new FileNotFoundException("File " + p + " does not exist.");
@@ -1187,6 +1218,22 @@ public class DistributedFileSystem extends FileSystem
       public FileStatus[] next(final FileSystem fs, final Path p)
           throws IOException {
         return fs.listStatus(p);
+      }
+    }.resolve(this, absF);
+  }
+
+  @Override
+  public FileStatus[] listStatusById(Path p, final long fileId) throws IOException {
+    Path absF = fixRelativePart(p);
+    return new FileSystemLinkResolver<FileStatus[]>() {
+      @Override
+      public FileStatus[] doCall(final Path p) throws IOException {
+        return listStatusInternal(p, fileId);
+      }
+      @Override
+      public FileStatus[] next(final FileSystem fs, final Path p)
+          throws IOException {
+        return fs.listStatusById(p, fileId);
       }
     }.resolve(this, absF);
   }
@@ -2937,6 +2984,28 @@ public class DistributedFileSystem extends FileSystem
   }
 
   @Override
+  public void setXAttr(Path path, final String name, final byte[] value, final long fileId,
+      final EnumSet<XAttrSetFlag> flag) throws IOException {
+    statistics.incrementWriteOps(1);
+    storageStatistics.incrementOpCounter(OpType.SET_XATTR);
+    Path absF = fixRelativePart(path);
+    new FileSystemLinkResolver<Void>() {
+
+      @Override
+      public Void doCall(final Path p) throws IOException {
+        dfs.setXAttr(getPathName(p), name, value, fileId, flag);
+        return null;
+      }
+
+      @Override
+      public Void next(final FileSystem fs, final Path p) throws IOException {
+        fs.setXAttr(p, name, value, fileId, flag);
+        return null;
+      }
+    }.resolve(this, absF);
+  }
+
+  @Override
   public byte[] getXAttr(Path path, final String name) throws IOException {
     statistics.incrementReadOps(1);
     storageStatistics.incrementOpCounter(OpType.GET_XATTR);
@@ -2949,6 +3018,23 @@ public class DistributedFileSystem extends FileSystem
       @Override
       public byte[] next(final FileSystem fs, final Path p) throws IOException {
         return fs.getXAttr(p, name);
+      }
+    }.resolve(this, absF);
+  }
+
+  @Override
+  public byte[] getXAttr(Path path, final long fileId, final String name) throws IOException {
+    statistics.incrementReadOps(1);
+    storageStatistics.incrementOpCounter(OpType.GET_XATTR);
+    final Path absF = fixRelativePart(path);
+    return new FileSystemLinkResolver<byte[]>() {
+      @Override
+      public byte[] doCall(final Path p) throws IOException {
+        return dfs.getXAttr(getPathName(p), fileId, name);
+      }
+      @Override
+      public byte[] next(final FileSystem fs, final Path p) throws IOException {
+        return fs.getXAttr(p, fileId, name);
       }
     }.resolve(this, absF);
   }

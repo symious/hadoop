@@ -100,6 +100,9 @@ public final class HdfsConstants {
   public static final String CLIENT_NAMENODE_MSYNC_PROTOCOL_NAME =
       "org.apache.hadoop.hdfs.protocol.ClientMsyncProtocol";
 
+  // Invalid inode id threshold, HDFS will ignore the inode id less than the threshold
+  public static final long INVALIDATE_INODE_ID = -1;
+
   /**
    * Router admin Protocol Names.
    */

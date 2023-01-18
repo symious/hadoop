@@ -31,6 +31,7 @@ import org.junit.Test;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -48,7 +49,7 @@ public class TestZoneChecker {
   @Test
   public void testGetReplicaInfo() throws Exception {
     final String[] hosts1 = {"host0", "host1", "host2"};
-    final String[] racks1 = {"/dc0/rack0", "/dc0/rack0", "/dc0/rack1"};
+    final String[] racks1 = {"/dc1/rack0", "/dc0/rack0", "/dc0/rack1"};
 
     Configuration conf = new HdfsConfiguration();
     conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY, true);
@@ -76,19 +77,34 @@ public class TestZoneChecker {
 
     //Check the zone check for file
     Map<String, Short> replicaInfoMap = new HashMap<>();
-    replicaInfoMap.put("/dc0", (short) 3);
+    replicaInfoMap.put("/dc0", (short) 2);
+    replicaInfoMap.put("/dc1", (short) 1);
     ReplicationRule replicationRule =
         ReplicationRule.parseFromMap(replicaInfoMap);
     Map<ReplicationRule, Set<String>> replicationRuleListMap =
         new HashMap<>();
     replicationRuleListMap.put(replicationRule, new HashSet<>(
         Collections.singletonList(pathName)));
-    assertEquals(replicationRuleListMap, zch.getReplicaInfo(pathName));
+
+    Map<ReplicationRule, Set<String>> rulePathMap = new HashMap<>();
+    Map<String, List<Long>> dcStatMap = new HashMap<>();
+    zch.getReplicaInfo(pathName, rulePathMap, dcStatMap, false);
+    assertEquals(replicationRuleListMap, rulePathMap);
 
     //Check the zone check for dir
     replicationRuleListMap.clear();
     replicationRuleListMap.put(replicationRule, new HashSet<>(
         Collections.singletonList(dirName)));
-    assertEquals(replicationRuleListMap, zch.getReplicaInfo(dirName));
+    Map<ReplicationRule, Set<String>> rulePathMap1 = new HashMap<>();
+    zch.getReplicaInfo(dirName, rulePathMap1, dcStatMap, false);
+    assertEquals(replicationRuleListMap, rulePathMap1);
+
+    //Check the block summary
+    Map<String, List<Long>> blockSummaryResult = new HashMap<>();
+    blockSummaryResult.put("/dc0", Arrays.asList(4L, 4096L));
+    blockSummaryResult.put("/dc1", Arrays.asList(2L, 2048L));
+    Map<String, List<Long>> blockSummary = new HashMap<>();
+    zch.getReplicaInfo(dirName, rulePathMap1, blockSummary, true);
+    assertEquals(blockSummaryResult, blockSummary);
   }
 }

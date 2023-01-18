@@ -35,6 +35,7 @@ public class TestReadOnly {
   private static final Set<String> READONLY_METHOD_NAMES = new HashSet<>(
       Arrays.asList(
           "getBlockLocations",
+          "getBlockLocationsWithFakeRack",
           "getServerDefaults",
           "getStoragePolicies",
           "getStoragePolicy",

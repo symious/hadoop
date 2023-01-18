@@ -63,6 +63,8 @@ public class ZoneChecker {
   private final DFSClient dfs;
   private float ratio;
   private static final int MIN_FILE_NUM = 1;
+  private static final String BLOCK_SUMMARY_FORMAT = "DC:%-15sBlocks Number:%-20d" +
+      "Data Size:%-20d";
 
   public ZoneChecker(NameNodeConnector nnc, Configuration conf) {
     Dispatcher dispatcher = new ZoneDispatcher(
@@ -79,8 +81,8 @@ public class ZoneChecker {
    * @param conf configuration
    * @param path the path to be checked
    */
-  private static int run(Configuration conf,
-      URI nameNode, String path, Float ratio) {
+  private static int run(Configuration conf, URI nameNode,
+      String path, Float ratio, boolean blockSummary) {
     LOG.info("Start to check path: " + path);
     NameNodeConnector nnc;
     try {
@@ -89,14 +91,24 @@ public class ZoneChecker {
           conf, 1);
       final ZoneChecker zch = new ZoneChecker(nnc, conf);
       //if ratio is inputted by user, set it
-      if (ratio <= 0.0f) {
-        LOG.info("Start to check path: " + path + " with default ratio.");
+      if (blockSummary) {
+        LOG.info("Start to summary the blocks of {}", path);
       } else {
-        LOG.info("Start to check path: " + path + " with ratio " + ratio);
-        zch.setRatio(ratio);
+        if (ratio <= 0.0f) {
+          LOG.info("Start to check path: " + path + " with default ratio.");
+        } else {
+          LOG.info("Start to check path: " + path + " with ratio " + ratio);
+          zch.setRatio(ratio);
+        }
       }
-      Map<ReplicationRule, Set<String>> result = zch.getReplicaInfo(path);
-      printResult(result);
+      Map<ReplicationRule, Set<String>> rulePathMap = new HashMap<>();
+      Map<String, List<Long>> dcStatMap = new HashMap<>();
+      zch.getReplicaInfo(path, rulePathMap, dcStatMap, blockSummary);
+      if (blockSummary) {
+        printBlockSummary(dcStatMap);
+      } else {
+        printResult(rulePathMap);
+      }
       return 0;
     } catch (IOException e) {
       LOG.warn("ZoneChecker failed check {} from {}", path, nameNode, e);
@@ -117,7 +129,27 @@ public class ZoneChecker {
       if (ratio > 0.0f) {
         zch.setRatio(ratio);
       }
-      return zch.getReplicaInfo(path);
+      Map<ReplicationRule, Set<String>> rulePathMap = new HashMap<>();
+      zch.getReplicaInfo(path, rulePathMap, new HashMap<String, List<Long>>(), false);
+      return rulePathMap;
+    } catch (IOException e) {
+      e.printStackTrace();
+      return null;
+    }
+  }
+
+  public static Map<String, List<Long>> getBlockSummary(
+      Configuration conf, URI namenode, String path) {
+    LOG.info("Start to get block summary of path: " + path);
+    NameNodeConnector nnc;
+    try {
+      // Clear up the map
+      Map<String, List<Long>> dcBlockStat = new HashMap<>();
+      nnc = new NameNodeConnector(namenode,
+          Collections.singletonList(new Path(path)), conf, 1);
+      final ZoneChecker zch = new ZoneChecker(nnc, conf);
+      zch.getReplicaInfo(path, new HashMap<ReplicationRule, Set<String>>(), dcBlockStat, true);
+      return dcBlockStat;
     } catch (IOException e) {
       e.printStackTrace();
       return null;
@@ -129,7 +161,8 @@ public class ZoneChecker {
         + "\n\t[-namespace <namespace>]\tthe namespace to be checked."
         + "\n\t-path <path>\tthe path to be checked."
         + "\n\t[-ratio <ratio>]\tif the path is a directory, the ratio of "
-        + "files will be checked";
+        + "files will be checked"
+        + "\n\t[-blockSummary]\tCheck data size and blocks number of DCs";
 
     private static Options buildCliOptions() {
       Options options = new Options();
@@ -146,6 +179,11 @@ public class ZoneChecker {
       option = new Option(
           null, "ratio", true,
           "the ratio of files will be checked");
+      options.addOption(option);
+
+      option = new Option(
+          null, "blockSummary", false,
+          "check data size and blocks number of DCs");
       options.addOption(option);
       return options;
     }
@@ -206,6 +244,13 @@ public class ZoneChecker {
       return ratio;
     }
 
+    /**
+     * Get block summary from args
+     */
+    private static boolean getBlockSummary(CommandLine line) {
+      return line.hasOption("blockSummary");
+    }
+
     @Override
     public int run(String[] args) {
       long startTime = Time.monotonicNow();
@@ -216,13 +261,13 @@ public class ZoneChecker {
       try {
         commandLine = parser.parse(options, args, true);
         return run(conf, getNamespaceUri(commandLine, conf),
-            getPath(commandLine), getRatio(commandLine));
+            getPath(commandLine), getRatio(commandLine), getBlockSummary(commandLine));
       } catch (ParseException | IllegalArgumentException e) {
         System.out.println(e + ".  Exiting ...");
         return ExitStatus.ILLEGAL_ARGUMENTS.getExitCode();
       } finally {
         System.out.format("ZoneChecker took "
-            + StringUtils.formatTime(Time.monotonicNow() - startTime));
+            + StringUtils.formatTime(Time.monotonicNow() - startTime) + '\n');
       }
     }
 
@@ -230,36 +275,40 @@ public class ZoneChecker {
      * Run with given ratio.
      */
     int run(Configuration conf, URI namenodeURI,
-        String path, Float ratio) {
-      return ZoneChecker.run(conf, namenodeURI, path, ratio);
+        String path, Float ratio, boolean blockSummary) {
+      return ZoneChecker.run(conf, namenodeURI, path, ratio, blockSummary);
     }
   }
 
-  public Map<ReplicationRule, Set<String>> getReplicaInfo(String fullPath) {
-    Map<ReplicationRule, Set<String>> resultMap = new HashMap<>();
-    byte[] lastReturnedName = HdfsFileStatus.EMPTY_NAME;
-    while (true) {
+  public void getReplicaInfo(
+      String fullPath, Map<ReplicationRule, Set<String>> rulePathMap,
+      Map<String, List<Long>> dcBlockStat, boolean blockSummaryFlag) {
+    for (byte[] lastReturnedName = HdfsFileStatus.EMPTY_NAME;;) {
       final DirectoryListing children;
       try {
         children = dfs.listPaths(fullPath, lastReturnedName, true);
       } catch(IOException e) {
         LOG.warn("Failed to list directory " + fullPath
             + ". Ignore the directory and continue.", e);
-        return resultMap;
+        return;
       }
       if (children == null) {
-        return resultMap;
+        return;
       }
       HdfsFileStatus[] partialList = children.getPartialListing();
       int threshold = Math.max(MIN_FILE_NUM,
           Math.round(partialList.length * ratio));
       for (HdfsFileStatus child : getRandomList(partialList, threshold)) {
-        resultMap = mergeRules(resultMap,
-            getReplicaInfoRecursively(fullPath, child));
+        // To make sure when the sub-dir is merged in rulePathMap, sub result is fully merged
+        Map<ReplicationRule, Set<String>> subRulePathMap = new HashMap<>();
+        getReplicaInfoRecursively(fullPath, child, subRulePathMap, dcBlockStat, blockSummaryFlag);
+        if (!blockSummaryFlag) {
+          mergeRules(rulePathMap, subRulePathMap);
+        }
       }
 
-      if (resultMap.keySet().size() == 1) {
-        resultMap.put(resultMap.keySet().iterator().next(),
+      if (!blockSummaryFlag && rulePathMap.keySet().size() == 1) {
+        rulePathMap.put(rulePathMap.keySet().iterator().next(),
             new HashSet<>(Collections.singletonList(fullPath)));
       }
 
@@ -269,20 +318,19 @@ public class ZoneChecker {
         break;
       }
     }
-    return resultMap;
   }
 
   /** @return whether the check requires next round */
-  private Map<ReplicationRule, Set<String>> getReplicaInfoRecursively(
-      String parent, HdfsFileStatus status) {
-    Map<ReplicationRule, Set<String>> resultMap = new HashMap<>();
+  private void getReplicaInfoRecursively(
+      String parent, HdfsFileStatus status, Map<ReplicationRule, Set<String>> rulePathMap,
+      Map<String, List<Long>> dcBlockStat, boolean blockSummaryFlag) {
     String fullPath = status.getFullName(parent);
     if (status.isDir()) {
       if (!fullPath.endsWith(Path.SEPARATOR)) {
         fullPath = fullPath + Path.SEPARATOR;
       }
 
-      resultMap = getReplicaInfo(fullPath);
+      getReplicaInfo(fullPath, rulePathMap, dcBlockStat, blockSummaryFlag);
     } else if (!status.isSymlink()) { // file
       try {
         HdfsLocatedFileStatus locStatus = (HdfsLocatedFileStatus) status;
@@ -295,22 +343,35 @@ public class ZoneChecker {
             continue;
           }
           LocatedBlock lb = lbs.get(i);
-          Map<String, Short> MapDCReplica = ZoneMover.getBlockDistribution(lb);
-          ReplicationRule replicationRule =
-              ReplicationRule.parseFromMap(MapDCReplica);
-          if (resultMap.containsKey(replicationRule)) {
-            resultMap.get(replicationRule).add(fullPath);
+          Map<String, Short> mapDCReplica = ZoneMover.getBlockDistribution(lb);
+          if (blockSummaryFlag) {
+            for (String dc : mapDCReplica.keySet()) {
+              if (dcBlockStat.containsKey(dc)) {
+                dcBlockStat.get(dc).set(0, dcBlockStat.get(dc).get(0) + mapDCReplica.get(dc));
+                dcBlockStat.get(dc).set(1, dcBlockStat.get(dc).get(1) +
+                    lb.getBlockSize() * mapDCReplica.get(dc));
+              } else {
+                dcBlockStat.put(dc,
+                    Arrays.asList(new Long(mapDCReplica.get(dc)),
+                        lb.getBlockSize() * mapDCReplica.get(dc)));
+              }
+            }
           } else {
-            resultMap.put(replicationRule,
-                new HashSet<>(Collections.singletonList(fullPath)));
+            ReplicationRule replicationRule =
+                ReplicationRule.parseFromMap(mapDCReplica);
+            if (rulePathMap.containsKey(replicationRule)) {
+              rulePathMap.get(replicationRule).add(fullPath);
+            } else {
+              rulePathMap.put(replicationRule,
+                  new HashSet<>(Collections.singletonList(fullPath)));
+            }
           }
         }
+
       } catch (Exception e) {
-        LOG.warn("Failed to check the status of " + parent
-            + ". Ignore it and continue.", e);
+        LOG.warn("Failed to check the status of " + parent + ". Ignore it and continue.", e);
       }
     }
-    return resultMap;
   }
 
   /**
@@ -324,10 +385,9 @@ public class ZoneChecker {
     return fileStatusList.subList(0, threshold);
   }
 
-  private Map<ReplicationRule, Set<String>> mergeRules(
+  private void mergeRules(
       Map<ReplicationRule, Set<String>> rule1,
       Map<ReplicationRule, Set<String>> rule2) {
-    if (rule1.isEmpty()) { return rule2; }
     for (Map.Entry<ReplicationRule, Set<String>> entry:rule2.entrySet()) {
       ReplicationRule key = entry.getKey();
       List<ReplicationRule> keyList = new ArrayList<>(rule1.keySet());
@@ -337,7 +397,14 @@ public class ZoneChecker {
         rule1.put(key, entry.getValue());
       }
     }
-    return rule1;
+  }
+
+  private static void printBlockSummary(Map<String, List<Long>> dcBlockStat) {
+    for (String dc: dcBlockStat.keySet()) {
+      System.out.println("Block summary:");
+      System.out.printf(
+          (BLOCK_SUMMARY_FORMAT) + "%n", dc, dcBlockStat.get(dc).get(0), dcBlockStat.get(dc).get(1));
+    }
   }
 
   private static void printResult(Map<ReplicationRule, Set<String>> map) {

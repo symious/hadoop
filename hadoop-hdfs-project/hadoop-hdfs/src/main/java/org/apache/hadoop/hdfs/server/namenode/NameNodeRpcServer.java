@@ -60,6 +60,7 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 
 import org.apache.hadoop.HadoopIllegalArgumentException;
@@ -924,7 +925,16 @@ public class NameNodeRpcServer implements NamenodeProtocols {
       long offset, long length, String fakeRack) throws IOException {
     checkNNStartup();
     metrics.incrGetBlockLocations();
-    return namesystem.getBlockLocations(getClientMachine(), src, offset, length, fakeRack);
+    return namesystem.getBlockLocations(getClientMachine(), src, HdfsConstants.INVALIDATE_INODE_ID,
+        offset, length, fakeRack);
+  }
+
+  @Override
+  public LocatedBlocks getBlockLocations(String src, long fileId, long offset, long length)
+      throws IOException {
+    checkNNStartup();
+    metrics.incrGetBlockLocations();
+    return namesystem.getBlockLocations(getClientMachine(), src, fileId, offset, length, null);
   }
   
   @Override // ClientProtocol
@@ -1409,7 +1419,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
       boolean needLocation) throws IOException {
     checkNNStartup();
     DirectoryListing files = namesystem.getListing(
-        src, startAfter, needLocation);
+        src, HdfsConstants.INVALIDATE_INODE_ID, startAfter, needLocation);
     if (files != null) {
       metrics.incrGetListingOps();
       metrics.incrFilesInGetListingOps(files.getPartialListing().length);
@@ -1436,6 +1446,19 @@ public class NameNodeRpcServer implements NamenodeProtocols {
       metrics.incrFilesInGetListingOps(numEntries);
     }
     return batchedListing;
+  }
+
+  @Override // ClientProtocol
+  public DirectoryListing getListing(String src, long fileId, byte[] startAfter,
+      boolean needLocation) throws IOException {
+    checkNNStartup();
+    DirectoryListing files = namesystem.getListing(
+        src, fileId, startAfter, needLocation);
+    if (files != null) {
+      metrics.incrGetListingOps();
+      metrics.incrFilesInGetListingOps(files.getPartialListing().length);
+    }
+    return files;
   }
 
   @Override // ClientProtocol
@@ -2535,6 +2558,12 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   @Override // ClientProtocol
   public void setXAttr(String src, XAttr xAttr, EnumSet<XAttrSetFlag> flag)
       throws IOException {
+    setXAttr(src, xAttr, HdfsConstants.INVALIDATE_INODE_ID, flag);
+  }
+
+  @Override // ClientProtocol
+  public void setXAttr(String src, XAttr xAttr, long fileId, EnumSet<XAttrSetFlag> flag)
+      throws IOException {
     checkNNStartup();
     namesystem.checkOperation(OperationCategory.WRITE);
     CacheEntry cacheEntry = getCacheEntry();
@@ -2543,18 +2572,24 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     }
     boolean success = false;
     try {
-      namesystem.setXAttr(src, xAttr, flag, cacheEntry != null);
+      namesystem.setXAttr(src, xAttr, flag, fileId, cacheEntry != null);
       success = true;
     } finally {
       RetryCache.setState(cacheEntry, success);
     }
   }
-  
+
   @Override // ClientProtocol
-  public List<XAttr> getXAttrs(String src, List<XAttr> xAttrs) 
+  public List<XAttr> getXAttrs(String src, List<XAttr> xAttrs)
+      throws IOException {
+    return getXAttrs(src, HdfsConstants.INVALIDATE_INODE_ID, xAttrs);
+  }
+
+  @Override
+  public List<XAttr> getXAttrs(String src, long fileId, List<XAttr> xAttrs)
       throws IOException {
     checkNNStartup();
-    return namesystem.getXAttrs(src, xAttrs);
+    return namesystem.getXAttrs(src, fileId, xAttrs);
   }
 
   @Override // ClientProtocol

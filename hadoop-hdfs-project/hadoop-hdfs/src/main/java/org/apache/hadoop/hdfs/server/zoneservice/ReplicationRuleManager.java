@@ -34,6 +34,7 @@ import java.net.URI;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -82,6 +83,18 @@ public class ReplicationRuleManager {
     URI namenode = ZoneServiceUtil.getNamespaceUri(nameSpace, conf);
     return ZoneChecker.getReplicaRule(conf, namenode, path,
         Float.parseFloat(ratio));
+  }
+
+  /**
+   * get block summary of given path by data center
+   * @param nameSpace URI of the NameNode
+   * @param path      the path to be checked
+   * @return block summary of the given path
+   */
+  public Map<String, List<Long>> summaryBlocks(String nameSpace, String path) {
+    Configuration conf = new Configuration();
+    URI namenode = ZoneServiceUtil.getNamespaceUri(nameSpace, conf);
+    return ZoneChecker.getBlockSummary(conf, namenode, path);
   }
 
   /**

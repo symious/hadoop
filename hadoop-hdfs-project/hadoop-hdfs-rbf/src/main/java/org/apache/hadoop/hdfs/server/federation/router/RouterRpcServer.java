@@ -624,6 +624,12 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
   }
 
   @Override // ClientProtocol
+  public LocatedBlocks getBlockLocations(String src, long fileId, final long offset,
+      final long length) throws IOException {
+    return clientProto.getBlockLocations(src, fileId, offset, length);
+  }
+
+  @Override // ClientProtocol
   public FsServerDefaults getServerDefaults() throws IOException {
     return clientProto.getServerDefaults();
   }
@@ -855,6 +861,12 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
   public DirectoryListing getListing(String src, byte[] startAfter,
       boolean needLocation) throws IOException {
     return clientProto.getListing(src, startAfter, needLocation);
+  }
+
+  @Override // ClientProtocol
+  public DirectoryListing getListing(String src, long fileId, byte[] startAfter,
+      boolean needLocation) throws IOException {
+    return clientProto.getListing(src, fileId, startAfter, needLocation);
   }
 
   @Override
@@ -1212,9 +1224,21 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
   }
 
   @Override // ClientProtocol
+  public void setXAttr(String src, XAttr xAttr, long fileId, EnumSet<XAttrSetFlag> flag)
+      throws IOException {
+    clientProto.setXAttr(src, xAttr, fileId, flag);
+  }
+
+  @Override // ClientProtocol
   public List<XAttr> getXAttrs(String src, List<XAttr> xAttrs)
       throws IOException {
     return clientProto.getXAttrs(src, xAttrs);
+  }
+
+  @Override // ClientProtocol
+  public List<XAttr> getXAttrs(String src, long fileId, List<XAttr> xAttrs)
+      throws IOException {
+    return clientProto.getXAttrs(src, fileId, xAttrs);
   }
 
   @Override // ClientProtocol

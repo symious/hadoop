@@ -32,7 +32,7 @@ public class ReplicationRuleSection {
   private final short replica;
   // Characters to strip
   private final static String[] STRIP_CHARACTERS = {" "};
-  private final static String FIELD_SEPARATOR = ":";
+  public final static String FIELD_SEPARATOR = ":";
   private static final String ROOT = "/";
   private final static Logger LOG =
       LoggerFactory.getLogger(ReplicationRuleSection.class);

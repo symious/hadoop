@@ -140,6 +140,20 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * Get locations of the blocks of the specified file
+   * within the specified range by file id.
+   * @param src file name only used for route
+   * @param fileId file id
+   * @param offset range start offset
+   * @param length range length
+   * @return file length and array of blocks with their locations
+   */
+  @Idempotent
+  @ReadOnly(atimeAffected = true, isCoordinated = true)
+  LocatedBlocks getBlockLocations(String src, long fileId, long offset, long length)
+      throws IOException;
+
+  /**
    * Get server default values for a number of configuration params.
    * @return a set of server default configuration values
    * @throws IOException
@@ -700,6 +714,14 @@ public interface ClientProtocol {
   @Idempotent
   @ReadOnly(isCoordinated = true)
   DirectoryListing getListing(String src, byte[] startAfter,
+      boolean needLocation) throws IOException;
+
+  /**
+   * Get a partial listing of the indicated file by file id.
+   */
+  @Idempotent
+  @ReadOnly(isCoordinated = true)
+  DirectoryListing getListing(String src, long fileId, byte[] startAfter,
       boolean needLocation) throws IOException;
 
   /**
@@ -1613,6 +1635,18 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * Set xattr of a file or directory by file ID.
+   * @param src file or directory
+   * @param xAttr <code>XAttr</code> to set
+   * @param fileId file ID
+   * @param flag set flag
+   * @throws IOException
+   */
+  @AtMostOnce
+  void setXAttr(String src, XAttr xAttr, long fileId, EnumSet<XAttrSetFlag> flag)
+      throws IOException;
+
+  /**
    * Get xattrs of a file or directory. Values in xAttrs parameter are ignored.
    * If xAttrs is null or empty, this is the same as getting all xattrs of the
    * file or directory.  Only those xattrs for which the logged-in user has
@@ -1628,6 +1662,25 @@ public interface ClientProtocol {
   @Idempotent
   @ReadOnly(isCoordinated = true)
   List<XAttr> getXAttrs(String src, List<XAttr> xAttrs)
+      throws IOException;
+
+  /**
+   * Get xattrs of a file or directory by file id. Values in xAttrs parameter are ignored.
+   * If xAttrs is null or empty, this is the same as getting all xattrs of the
+   * file or directory.  Only those xattrs for which the logged-in user has
+   * permissions to view are returned.
+   * <p/>
+   * Refer to the HDFS extended attributes user documentation for details.
+   *
+   * @param src file or directory
+   * @param fileId file ID
+   * @param xAttrs xAttrs to get
+   * @return List<XAttr> <code>XAttr</code> list
+   * @throws IOException
+   */
+  @Idempotent
+  @ReadOnly(isCoordinated = true)
+  List<XAttr> getXAttrs(String src, long fileId, List<XAttr> xAttrs)
       throws IOException;
 
   /**

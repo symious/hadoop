@@ -27,15 +27,20 @@ import java.util.Map;
 
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.crypto.CryptoProtocolVersion;
+import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.XAttrSetFlag;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
+import org.apache.hadoop.io.EnumSetWritable;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -259,6 +264,39 @@ public class FSXAttrBaseTest {
     
     fs.removeXAttr(path, name1);
     fs.removeXAttr(path, name2);
+  }
+
+  /**
+   * Tests for xattr operation by inode id
+   * 1. set xattr by inode id with a wrong file name
+   * 2. get xattr by inode id with a wrong file name
+   */
+  @Test(timeout = 120000)
+  public void testSetAndGetXattrById() throws Exception {
+    String pathName = filePath.toString();
+    System.out.println(pathName);
+    String newPathName = pathName + "_new";
+    Path newFilePath = new Path(newPathName);
+    try (DFSClient client = new DFSClient(dfsCluster.getNameNode().getServiceRpcAddress(), conf)) {
+      HdfsFileStatus stat = client.getNamenode()
+          .create(pathName, new FsPermission("777"), "XATTR_test_client",
+              new EnumSetWritable<>(EnumSet.of(CreateFlag.CREATE)),
+              true, (short) 1, 1024 * 1024 * 128L,
+              new CryptoProtocolVersion[0], null,null);
+
+      // Test set XAttr by file id with wrong file name
+      long fileId = stat.getFileId();
+      fs.rename(filePath, newFilePath);
+      fs.setXAttr(filePath, name1, value1, fileId);
+      Map<String, byte[]> xattrs = fs.getXAttrs(newFilePath);
+      Assert.assertEquals(xattrs.size(), 1);
+      Assert.assertArrayEquals(value1, xattrs.get(name1));
+
+      // Test get XAttr by file id with wrong file name
+      fs.setXAttr(newFilePath, name2, value2);
+      byte[] xattr = fs.getXAttr(filePath, fileId, name2);
+      Assert.assertArrayEquals(value2, xattr);
+    }
   }
   
   /**

@@ -924,6 +924,85 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     }
   }
 
+
+  public LocatedBlocks getLocatedBlocksByFileId(String src, long fileId)
+      throws IOException {
+    try (TraceScope ignored = newPathTraceScope("getBlockLocations", src)) {
+      return callGetBlockLocations(namenode, src, fileId, 0, dfsClientConf.getPrefetchSize());
+    }
+  }
+
+  public LocatedBlocks getLocatedBlocks(String src, long fileId, long start, long length)
+      throws IOException {
+    try (TraceScope ignored = newPathTraceScope("getBlockLocations", src)) {
+      return callGetBlockLocations(namenode, src, fileId, start, length);
+    }
+  }
+
+  static LocatedBlocks callGetBlockLocations(ClientProtocol namenode,
+      String src, long fileId, long start, long length) throws IOException {
+    try {
+      return namenode.getBlockLocations(src, fileId, start, length);
+    } catch(RemoteException re) {
+      throw re.unwrapRemoteException(AccessControlException.class,
+          FileNotFoundException.class,
+          UnresolvedPathException.class);
+    }
+  }
+
+  public BlockLocation[] getBlockLocationsByFileId(String src, long fileId) throws IOException {
+    try (TraceScope ignored = newPathTraceScope("getBlockLocations", src)) {
+      LocatedBlocks blocks = getLocatedBlocksByFileId(src, fileId);
+      BlockLocation[] locations = DFSUtilClient.locatedBlocks2Locations(blocks);
+      HdfsBlockLocation[] hdfsLocations =
+          new HdfsBlockLocation[locations.length];
+      for (int i = 0; i < locations.length; i++) {
+        hdfsLocations[i] = new HdfsBlockLocation(locations[i], blocks.get(i));
+      }
+      return hdfsLocations;
+    }
+  }
+
+  public DirectoryListing listPaths(String src, long fileId,
+      byte[] startAfter, boolean needLocation) throws IOException {
+    checkOpen();
+    try (TraceScope ignored = newPathTraceScope("listPaths", src)) {
+      return namenode.getListing(src, fileId, startAfter, needLocation);
+    } catch (RemoteException re) {
+      throw re.unwrapRemoteException(AccessControlException.class,
+          FileNotFoundException.class,
+          UnresolvedPathException.class);
+    }
+  }
+
+  public void setXAttr(String src, String name, byte[] value,
+      long fileId, EnumSet<XAttrSetFlag> flag) throws IOException {
+    checkOpen();
+    try (TraceScope ignored = newPathTraceScope("setXAttr", src)) {
+      namenode.setXAttr(src, XAttrHelper.buildXAttr(name, value), fileId, flag);
+    } catch (RemoteException re) {
+      throw re.unwrapRemoteException(AccessControlException.class,
+          FileNotFoundException.class,
+          NSQuotaExceededException.class,
+          SafeModeException.class,
+          SnapshotAccessControlException.class,
+          UnresolvedPathException.class);
+    }
+  }
+
+  public byte[] getXAttr(String src, long fileId, String name) throws IOException {
+    checkOpen();
+    try (TraceScope ignored = newPathTraceScope("getXAttr", src)) {
+      final List<XAttr> xAttrs = XAttrHelper.buildXAttrAsList(name);
+      final List<XAttr> result = namenode.getXAttrs(src, fileId, xAttrs);
+      return XAttrHelper.getFirstXAttrValue(result);
+    } catch (RemoteException re) {
+      throw re.unwrapRemoteException(AccessControlException.class,
+          FileNotFoundException.class,
+          UnresolvedPathException.class);
+    }
+  }
+
   /*
    * This is just a wrapper around callGetBlockLocationsWithFakeRack, but non-static so that
    * we can stub it out for tests.

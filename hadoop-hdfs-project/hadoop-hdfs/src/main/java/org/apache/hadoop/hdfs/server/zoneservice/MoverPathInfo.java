@@ -15,27 +15,35 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hdfs.web;
 
-import org.apache.hadoop.hdfs.server.namenode.FSXAttrBaseTest;
+package org.apache.hadoop.hdfs.server.zoneservice;
 
-/**
- * Tests XAttr APIs via WebHDFS.
- */
-public class TestWebHDFSXAttr extends FSXAttrBaseTest {
-  /**
-   * Overridden to provide a WebHdfsFileSystem wrapper for the super-user.
-   *
-   * @return WebHdfsFileSystem for super-user
-   * @throws Exception if creation fails
-   */
-  @Override
-  protected WebHdfsFileSystem createFileSystem() throws Exception {
-    return WebHdfsTestUtil.getWebHdfsFileSystem(conf, WebHdfsConstants.WEBHDFS_SCHEME);
+public class MoverPathInfo  {
+  private final int partition;
+  private final long recordOffset;
+  private final String fullPath;
+  private final long fileId;
+
+  public MoverPathInfo(int partition, long recordOffset, String fullPath, long fileId) {
+    this.partition = partition;
+    this.recordOffset = recordOffset;
+    this.fullPath = fullPath;
+    this.fileId = fileId;
   }
 
-  @Override
-  public void testSetAndGetXattrById() {
-    // do nothing.
+  public int getPartition() {
+    return partition;
+  }
+
+  public long getRecordOffset() {
+    return recordOffset;
+  }
+
+  public String getFullPath() {
+    return fullPath;
+  }
+
+  public long getFileId() {
+    return fileId;
   }
 }

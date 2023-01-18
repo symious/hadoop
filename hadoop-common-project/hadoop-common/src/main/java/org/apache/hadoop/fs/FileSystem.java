@@ -912,6 +912,18 @@ public abstract class FileSystem extends Configured
   }
 
   /**
+   * Get block locations of the file given by file Id
+   * @param p path is used to route only
+   * @param fileId the path with the given file id will be used to get block locations
+   */
+  public BlockLocation[] getFileBlockLocationsByFileId(Path p, long fileId) throws IOException {
+    if (p == null) {
+      throw new NullPointerException();
+    }
+    throw new IOException("Unsupported method that get file block location by file Id!");
+  }
+
+  /**
    * Return a set of server default configuration values.
    * @return server default configuration values
    * @throws IOException IO failure
@@ -1899,6 +1911,10 @@ public abstract class FileSystem extends Configured
    */
   public abstract FileStatus[] listStatus(Path f) throws FileNotFoundException,
                                                          IOException;
+
+  public FileStatus[] listStatusById(Path f, long fileId) throws IOException {
+    throw new IOException("Method is not supported in this class");
+  }
 
   /**
    * Represents a batch of directory entries when iteratively listing a
@@ -3106,7 +3122,7 @@ public abstract class FileSystem extends Configured
   }
 
   /**
-   * Set an xattr of a file or directory.
+   * Set a xattr of a file or directory.
    * The name must be prefixed with the namespace followed by ".". For example,
    * "user.attr".
    * <p>
@@ -3127,7 +3143,50 @@ public abstract class FileSystem extends Configured
   }
 
   /**
-   * Get an xattr name and value for a file or directory.
+   * Set a xattr of a file or directory by file id.
+   * The name must be prefixed with the namespace followed by ".". For example,
+   * "user.attr".
+   * <p>
+   * Refer to the HDFS extended attributes user documentation for details.
+   *
+   * @param path Path to route
+   * @param name xattr name.
+   * @param value xattr value.
+   * @param fileId Path with given file id will be modified
+   * @throws IOException IO failure
+   * @throws UnsupportedOperationException if the operation is unsupported
+   *         (default outcome).
+   */
+  public void setXAttr(Path path, String name, byte[] value, long fileId)
+      throws IOException {
+    setXAttr(path, name, value, fileId, EnumSet.of(XAttrSetFlag.CREATE,
+        XAttrSetFlag.REPLACE));
+  }
+
+  /**
+   * Set a xattr of a file or directory by inode id.
+   * The name must be prefixed with the namespace followed by ".". For example,
+   * "user.attr".
+   * <p>
+   * Refer to the HDFS extended attributes user documentation for details.
+   *
+   * @param path Path to route
+   * @param name xattr name.
+   * @param value xattr value.
+   * @param fileId Path with given file id will be modified
+   * @param flag xattr set flag
+   * @throws IOException IO failure
+   * @throws UnsupportedOperationException if the operation is unsupported
+   *         (default outcome).
+   */
+  public void setXAttr(Path path, String name, byte[] value, long fileId,
+      EnumSet<XAttrSetFlag> flag) throws IOException {
+    throw new UnsupportedOperationException(getClass().getSimpleName()
+        + " doesn't support setXAttr");
+  }
+
+  /**
+   * Get a xattr name and value for a file or directory.
    * The name must be prefixed with the namespace followed by ".". For example,
    * "user.attr".
    * <p>
@@ -3141,6 +3200,26 @@ public abstract class FileSystem extends Configured
    *         (default outcome).
    */
   public byte[] getXAttr(Path path, String name) throws IOException {
+    throw new UnsupportedOperationException(getClass().getSimpleName()
+        + " doesn't support getXAttr");
+  }
+
+  /**
+   * Get a xattr name and value for a file or directory by file id.
+   * The name must be prefixed with the namespace followed by ".". For example,
+   * "user.attr".
+   * <p>
+   * Refer to the HDFS extended attributes user documentation for details.
+   *
+   * @param path Path to route
+   * @param fileId Path with given file id to get extended attribute
+   * @param name xattr name.
+   * @return byte[] xattr value.
+   * @throws IOException IO failure
+   * @throws UnsupportedOperationException if the operation is unsupported
+   *         (default outcome).
+   */
+  public byte[] getXAttr(Path path, long fileId, String name) throws IOException {
     throw new UnsupportedOperationException(getClass().getSimpleName()
         + " doesn't support getXAttr");
   }

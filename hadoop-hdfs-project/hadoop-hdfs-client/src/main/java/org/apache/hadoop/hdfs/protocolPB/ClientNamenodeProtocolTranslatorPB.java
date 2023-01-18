@@ -24,6 +24,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 
 import java.util.Map;
@@ -355,6 +356,27 @@ public class ClientNamenodeProtocolTranslatorPB implements
     try {
       GetBlockLocationsResponseProto resp = rpcProxy.getBlockLocationsWithFakeRack(null, req);
       return resp.hasLocations() ? PBHelperClient.convert(resp.getLocations()) : null;
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+  }
+
+  @Override
+  public LocatedBlocks getBlockLocations(String src, long fileId, long offset, long length)
+      throws IOException {
+    GetBlockLocationsRequestProto.Builder builder = GetBlockLocationsRequestProto.newBuilder()
+        .setSrc(src)
+        .setOffset(offset)
+        .setLength(length);
+
+    if (fileId > HdfsConstants.INVALIDATE_INODE_ID) {
+      builder.setFileId(fileId);
+    }
+    try {
+      GetBlockLocationsResponseProto resp = rpcProxy.getBlockLocations(null,
+          builder.build());
+      return resp.hasLocations() ?
+          PBHelperClient.convert(resp.getLocations()) : null;
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
     }
@@ -753,6 +775,29 @@ public class ClientNamenodeProtocolTranslatorPB implements
             new BatchedDirectoryListing(listingArray, result.getHasMore(),
                 result.getStartAfter().toByteArray());
         return batchedListing;
+      }
+      return null;
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+  }
+
+  @Override
+  public DirectoryListing getListing(
+      String src, long fileId, byte[] startAfter,
+      boolean needLocation) throws IOException {
+    GetListingRequestProto.Builder req = GetListingRequestProto.newBuilder()
+        .setSrc(src)
+        .setStartAfter(ByteString.copyFrom(startAfter))
+        .setNeedLocation(needLocation);
+    if (fileId > HdfsConstants.INVALIDATE_INODE_ID) {
+      req.setFileId(fileId);
+    }
+    try {
+      GetListingResponseProto result = rpcProxy.getListing(null, req.build());
+
+      if (result.hasDirList()) {
+        return PBHelperClient.convert(result.getDirList());
       }
       return null;
     } catch (ServiceException e) {
@@ -1785,6 +1830,24 @@ public class ClientNamenodeProtocolTranslatorPB implements
   }
 
   @Override
+  public void setXAttr(String src, XAttr xAttr, long fileId, EnumSet<XAttrSetFlag> flag)
+      throws IOException {
+    SetXAttrRequestProto.Builder builder =
+        SetXAttrRequestProto.newBuilder()
+            .setSrc(src)
+            .setXAttr(PBHelperClient.convertXAttrProto(xAttr))
+            .setFlag(PBHelperClient.convert(flag));
+    if (fileId > HdfsConstants.INVALIDATE_INODE_ID) {
+      builder.setFileId(fileId);
+    }
+    try {
+      rpcProxy.setXAttr(null, builder.build());
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+  }
+
+  @Override
   public List<XAttr> getXAttrs(String src, List<XAttr> xAttrs)
       throws IOException {
     GetXAttrsRequestProto.Builder builder = GetXAttrsRequestProto.newBuilder();
@@ -1808,6 +1871,25 @@ public class ClientNamenodeProtocolTranslatorPB implements
     ListXAttrsRequestProto req = builder.build();
     try {
       return PBHelperClient.convert(rpcProxy.listXAttrs(null, req));
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+  }
+
+  @Override
+  public List<XAttr> getXAttrs(String src, long fileId, List<XAttr> xAttrs)
+      throws IOException {
+    GetXAttrsRequestProto.Builder builder = GetXAttrsRequestProto.newBuilder();
+    builder.setSrc(src);
+    if (fileId > HdfsConstants.INVALIDATE_INODE_ID) {
+      builder.setFileId(fileId);
+    }
+    if (xAttrs != null) {
+      builder.addAllXAttrs(PBHelperClient.convertXAttrProto(xAttrs));
+    }
+    GetXAttrsRequestProto req = builder.build();
+    try {
+      return PBHelperClient.convert(rpcProxy.getXAttrs(null, req));
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
     }

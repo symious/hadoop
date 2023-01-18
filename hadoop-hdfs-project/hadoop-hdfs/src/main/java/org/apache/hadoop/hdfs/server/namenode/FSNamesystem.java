@@ -2189,10 +2189,11 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    */
   LocatedBlocks getBlockLocations(String clientMachine, String srcArg,
       long offset, long length) throws IOException {
-    return getBlockLocations(clientMachine, srcArg, offset, length, null);
+    return getBlockLocations(clientMachine, srcArg, HdfsConstants.INVALIDATE_INODE_ID,
+        offset, length, null);
   }
 
-  LocatedBlocks getBlockLocations(String clientMachine, String srcArg,
+  LocatedBlocks getBlockLocations(String clientMachine, String srcArg, long fileId,
       long offset, long length, String fakeRack) throws IOException {
     checkOperation(OperationCategory.READ);
     GetBlockLocationsResult res = null;
@@ -2204,7 +2205,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       try {
         checkOperation(OperationCategory.READ);
         res = FSDirStatAndListingOp.getBlockLocations(
-            dir, pc, srcArg, offset, length, true);
+            dir, pc, srcArg, fileId, offset, length, true);
         inode = res.getIIp().getLastINode();
         if (isInSafeMode()) {
           for (LocatedBlock b : res.blocks.getLocatedBlocks()) {
@@ -2444,6 +2445,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   boolean setReplication(final String src, final short replication)
       throws IOException {
     boolean success = false;
+    long fileId = -1;
     checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(OperationName.SET_REPLICATION);
@@ -2463,8 +2465,19 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     }
     if (success) {
       getEditLog().logSync();
+      readLock(OperationName.SET_REPLICATION);
+      try {
+        INodesInPath iNodesInPath = dir.resolvePath(pc, src, DirOp.READ);
+        HdfsFileStatus fileStatus = FSDirStatAndListingOp.getFileInfo(
+            dir, iNodesInPath, false, false);
+        if (fileStatus != null) {
+          fileId = fileStatus.getFileId();
+        }
+      } finally {
+        readUnlock(OperationName.SET_REPLICATION);
+      }
     }
-    logAuditEvent(success, OperationName.SET_REPLICATION, src);
+    logAuditEvent(success, OperationName.SET_REPLICATION, src, String.valueOf(fileId), null);
     return success;
   }
 
@@ -3100,7 +3113,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       checkOperation(OperationCategory.WRITE);
       //check safe mode
       checkNameNodeSafeMode("Cannot add datanode; src=" + src + ", blk=" + blk);
-      final INodesInPath iip = dir.resolvePath(pc, src, fileId);
+      final INodesInPath iip = dir.resolvePath(pc, src, fileId, DirOp.WRITE);
       src = iip.getPath();
 
       //check lease
@@ -3224,7 +3237,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       NameNode.stateChangeLog.info("DIR* completeFile: " + src
           + " is closed by " + holder);
     }
-    logAuditEvent(success, OperationName.COMPLETE, src);
+    logAuditEvent(success, OperationName.COMPLETE, src, String.valueOf(fileId), null);
     return success;
   }
 
@@ -3668,7 +3681,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     try {
       checkOperation(OperationCategory.WRITE);
       checkNameNodeSafeMode("Cannot fsync file " + src);
-      INodesInPath iip = dir.resolvePath(pc, src, fileId);
+      INodesInPath iip = dir.resolvePath(pc, src, fileId, DirOp.WRITE);
       src = iip.getPath();
       final INodeFile pendingFile = checkLease(iip, clientName, fileId);
       if (lastBlockLength > 0) {
@@ -4160,9 +4173,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * @throws UnresolvedLinkException if symbolic link is encountered
    * @throws IOException if other I/O error occurred
    */
-  DirectoryListing getListing(String src, byte[] startAfter,
-      boolean needLocation) 
-      throws IOException {
+  DirectoryListing getListing(String src, long fileId, byte[] startAfter,
+      boolean needLocation) throws IOException {
     checkOperation(OperationCategory.READ);
     DirectoryListing dl = null;
     final FSPermissionChecker pc = getPermissionChecker();
@@ -4171,7 +4183,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       readLock(OperationName.LIST_STATUS);
       try {
         checkOperation(NameNode.OperationCategory.READ);
-        dl = getListingInt(dir, pc, src, startAfter, needLocation);
+        dl = getListingInt(dir, pc, src, fileId, startAfter, needLocation);
       } finally {
         readUnlock(OperationName.LIST_STATUS);
       }
@@ -4254,8 +4266,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         String src = srcs[srcsIndex];
         HdfsPartialListing listing;
         try {
-          DirectoryListing dirListing =
-              getListingInt(dir, pc, src, indexStartAfter, needLocation);
+          DirectoryListing dirListing = getListingInt(dir, pc, src,
+              HdfsConstants.INVALIDATE_INODE_ID, indexStartAfter, needLocation);
           if (dirListing == null) {
             throw new FileNotFoundException("Path " + src + " does not exist");
           }
@@ -8388,8 +8400,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   }
 
   void setXAttr(String src, XAttr xAttr, EnumSet<XAttrSetFlag> flag,
-                boolean logRetryCache)
-      throws IOException {
+      long fileID, boolean logRetryCache) throws IOException {
     FileStatus auditStat = null;
     checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
@@ -8400,7 +8411,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot set XAttr on " + src);
         auditStat = FSDirXAttrOp.setXAttr(dir, blockManager, pc, src,
-            xAttr, flag, logRetryCache);
+            xAttr, flag, fileID, logRetryCache);
       } finally {
         writeUnlock(OperationName.SET_XATTR);
       }
@@ -8409,10 +8420,15 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       throw e;
     }
     getEditLog().logSync();
-    logAuditEvent(true, OperationName.SET_XATTR, src, null, auditStat);
+    if (auditStat.getPath() != null) {
+      logAuditEvent(true, OperationName.SET_XATTR, auditStat.getPath().toUri().getPath(),
+          null, auditStat);
+    } else {
+      logAuditEvent(true, OperationName.SET_XATTR, src, null, auditStat);
+    }
   }
 
-  List<XAttr> getXAttrs(final String src, List<XAttr> xAttrs)
+  List<XAttr> getXAttrs(final String src, final long fileId, List<XAttr> xAttrs)
       throws IOException {
     checkOperation(OperationCategory.READ);
     List<XAttr> fsXattrs;
@@ -8422,7 +8438,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       readLock(OperationName.GET_XATTRS);
       try {
         checkOperation(OperationCategory.READ);
-        fsXattrs = FSDirXAttrOp.getXAttrs(dir, pc, src, xAttrs);
+        fsXattrs = FSDirXAttrOp.getXAttrs(dir, pc, src, fileId, xAttrs);
       } finally {
         readUnlock(OperationName.GET_XATTRS);
       }

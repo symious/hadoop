@@ -577,8 +577,8 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
     fsn.readLock(OperationName.FSCK_GET_BLOCK_LOCATIONS);
     try {
       blocks = FSDirStatAndListingOp.getBlockLocations(
-          fsn.getFSDirectory(), pc,
-          path, 0, fileLen, false)
+          fsn.getFSDirectory(), pc, path, HdfsConstants.INVALIDATE_INODE_ID,
+          0, fileLen, false)
           .blocks;
     } catch (FileNotFoundException fnfe) {
       blocks = null;

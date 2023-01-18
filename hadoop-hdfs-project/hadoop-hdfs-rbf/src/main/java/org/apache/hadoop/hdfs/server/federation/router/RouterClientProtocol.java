@@ -334,6 +334,31 @@ public class RouterClientProtocol implements ClientProtocol {
     return blocks;
   }
 
+
+  @Override
+  public LocatedBlocks getBlockLocations(String src, long fileId, final long offset,
+      final long length) throws IOException {
+    rpcServer.checkOperation(NameNode.OperationCategory.READ);
+
+    List<RemoteLocation> locations = rpcServer.getLocationsForPath(src, false);
+    RemoteMethod remoteMethod = new RemoteMethod("getBlockLocations",
+        new Class<?>[] {String.class, long.class, long.class, long.class},
+        new RemoteParam(), fileId, offset, length);
+    final String operationName = "open";
+    String invokeType = null;
+    LocatedBlocks blocks;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      blocks = rpcClient.invokeSequential(locations, remoteMethod,
+          LocatedBlocks.class, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
+    return blocks;
+  }
+
   @Override
   public FsServerDefaults getServerDefaults() throws IOException {
     rpcServer.checkOperation(NameNode.OperationCategory.READ);
@@ -1048,10 +1073,16 @@ public class RouterClientProtocol implements ClientProtocol {
   @Override
   public DirectoryListing getListing(String src, byte[] startAfter,
       boolean needLocation) throws IOException {
+   return getListing(src, HdfsConstants.INVALIDATE_INODE_ID, startAfter, needLocation);
+  }
+
+  @Override
+  public DirectoryListing getListing(String src, long fileId, byte[] startAfter,
+      boolean needLocation) throws IOException {
     rpcServer.checkOperation(NameNode.OperationCategory.READ);
 
     List<RemoteResult<RemoteLocation, DirectoryListing>> listings =
-        getListingInt(src, startAfter, needLocation);
+        getListingInt(src, fileId, startAfter, needLocation);
     TreeMap<String, HdfsFileStatus> nnListing = new TreeMap<>();
     int totalRemainingEntries = 0;
     int remainingEntries = 0;
@@ -2020,6 +2051,28 @@ public class RouterClientProtocol implements ClientProtocol {
     logAuditEvent(true, OperationName.SET_XATTR, invokeType, src);
   }
 
+  @Override
+  public void setXAttr(String src, XAttr xAttr, long fileId, EnumSet<XAttrSetFlag> flag)
+      throws IOException {
+    rpcServer.checkOperation(NameNode.OperationCategory.WRITE);
+
+    // TODO handle virtual directories
+    final List<RemoteLocation> locations =
+        rpcServer.getLocationsForPath(src, true);
+    RemoteMethod method = new RemoteMethod("setXAttr",
+        new Class<?>[] {String.class, XAttr.class, long.class, EnumSet.class},
+        new RemoteParam(), xAttr, fileId, flag);
+    String operationName = "setXAttr";
+    String invokeType = null;
+    try {
+      rpcClient.invokeSequential(locations, method);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
+  }
+
   @SuppressWarnings("unchecked")
   @Override
   public List<XAttr> getXAttrs(String src, List<XAttr> xAttrs)
@@ -2040,6 +2093,32 @@ public class RouterClientProtocol implements ClientProtocol {
       throw e;
     }
     logAuditEvent(true, OperationName.GET_XATTRS, INVOKE_TYPE_SEQUENTIAL, src);
+    return result;
+  }
+
+  @SuppressWarnings("unchecked")
+  @Override
+  public List<XAttr> getXAttrs(String src, long fileId, List<XAttr> xAttrs)
+      throws IOException {
+    rpcServer.checkOperation(NameNode.OperationCategory.READ);
+
+    // TODO handle virtual directories
+    final List<RemoteLocation> locations =
+        rpcServer.getLocationsForPath(src, false);
+    RemoteMethod method = new RemoteMethod("getXAttrs",
+        new Class<?>[] {String.class, long.class, List.class}, new RemoteParam(), fileId, xAttrs);
+    String operationName = "getXAttrs";
+    String invokeType = null;
+    List<XAttr> result;
+    try {
+      invokeType = INVOKE_TYPE_SEQUENTIAL;
+      result = (List<XAttr>) rpcClient.invokeSequential(
+          locations, method, List.class, null);
+    } catch (AccessControlException e) {
+      logAuditEvent(false, operationName, invokeType, src);
+      throw e;
+    }
+    logAuditEvent(true, operationName, invokeType, src);
     return result;
   }
 
@@ -2644,7 +2723,7 @@ public class RouterClientProtocol implements ClientProtocol {
    * Get listing on remote locations.
    */
   private List<RemoteResult<RemoteLocation, DirectoryListing>> getListingInt(
-      String src, byte[] startAfter, boolean needLocation) throws IOException {
+      String src, long fileId, byte[] startAfter, boolean needLocation) throws IOException {
     try {
       List<RemoteLocation> locations =
           rpcServer.getLocationsForPath(src, false, false);
@@ -2657,8 +2736,8 @@ public class RouterClientProtocol implements ClientProtocol {
         invokeType = INVOKE_TYPE_SEQUENTIAL;
       }
       RemoteMethod method = new RemoteMethod("getListing",
-          new Class<?>[] {String.class, startAfter.getClass(), boolean.class},
-          new RemoteParam(), startAfter, needLocation);
+          new Class<?>[]{String.class, long.class, startAfter.getClass(), boolean.class},
+          new RemoteParam(), fileId, startAfter, needLocation);
       List<RemoteResult<RemoteLocation, DirectoryListing>> listings;
       try {
         listings = rpcClient.invokeConcurrent(locations, method, false, -1,

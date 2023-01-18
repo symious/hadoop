@@ -41,6 +41,7 @@ import org.json.JSONObject;
 
 import java.util.Arrays;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Semaphore;
@@ -87,6 +88,58 @@ public class ZoneServiceWebRuleManagementMethods {
         defaultNull, defaultNull, startTime, new Date(),
         ResultCode.SUCCESS.getMsg(), defaultNull);
     return new ZoneServiceHttpResponse(result.toString()).toString();
+  }
+
+  /**
+   * Summary blocks of the given path by data center
+   * @param hsr       http servlet request
+   * @param nameSpace URI of the NameNode
+   * @param path      the path to be checked
+   * @return block summary of the given path
+   */
+  @GET
+  @Path("blocksummary/{path:.*}")
+  @Consumes()
+  @Produces()
+  public String blockSummary(@Context HttpServletRequest hsr,
+                             @QueryParam("namespace") String nameSpace,
+                             @PathParam("path") String path) {
+    Date startTime = new Date();
+    //Check if there is any available thread
+    if (semaphore.availablePermits() == 0) {
+      AuditLogger.logRuleProcess(
+          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+          path, defaultNull, startTime, new Date(),
+          ResultCode.THREAD_FULL.getMsg(), defaultNull);
+      return new ZoneServiceHttpResponse(ResultCode.THREAD_FULL).toString();
+    }
+
+    try {
+      semaphore.acquire();
+      Map<String, List<Long>> hashMap = replicationRuleManager.summaryBlocks(nameSpace, path);
+      semaphore.release();
+      AuditLogger.logRuleProcess(
+          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+          path, defaultNull, startTime, new Date(),
+          ResultCode.SUCCESS.getMsg(), defaultNull);
+      if (hashMap.isEmpty()) {
+        AuditLogger.logRuleProcess(
+            Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+            path, defaultNull, startTime, new Date(),
+            ResultCode.NO_DISTRIBUTION.getMsg(), defaultNull);
+        return
+            new ZoneServiceHttpResponse(ResultCode.NO_DISTRIBUTION).toString();
+      }
+      JSONObject json = new JSONObject(hashMap);
+      return new ZoneServiceHttpResponse(json.toString()).toString();
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+      AuditLogger.logRuleProcess(
+          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+          path, defaultNull, startTime, new Date(),
+          ResultCode.INTERRUPTED.getMsg(), defaultNull);
+      return new ZoneServiceHttpResponse(ResultCode.INTERRUPTED).toString();
+    }
   }
 
   /**

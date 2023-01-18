@@ -784,15 +784,16 @@ public class FSDirectory implements Closeable {
     return INodesInPath.resolve(rootDir, components, isRaw);
   }
 
-  INodesInPath resolvePath(FSPermissionChecker pc, String src, long fileId)
+  INodesInPath resolvePath(FSPermissionChecker pc, String src, long fileId, DirOp dirOp)
       throws UnresolvedLinkException, FileNotFoundException,
       AccessControlException, ParentNotDirectoryException {
     // Older clients may not have given us an inode ID to work with.
     // In this case, we have to try to resolve the path and hope it
     // hasn't changed or been deleted since the file was opened for write.
     INodesInPath iip;
-    if (fileId == HdfsConstants.GRANDFATHER_INODE_ID) {
-      iip = resolvePath(pc, src, DirOp.WRITE);
+    if (fileId == HdfsConstants.GRANDFATHER_INODE_ID ||
+        fileId == HdfsConstants.INVALIDATE_INODE_ID) {
+      iip = resolvePath(pc, src, dirOp);
     } else {
       INode inode = getInode(fileId);
       if (inode == null) {

@@ -19,9 +19,14 @@ package org.apache.hadoop.hdfs.server.zoneservice.utils;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSUtil;
+import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
+import org.apache.hadoop.hdfs.server.zoneservice.web.resources.ResultCode;
 
 import java.net.URI;
 import java.util.Collection;
+import java.util.Objects;
+
+import static org.apache.hadoop.hdfs.server.balancer.ExitStatus.UNFINALIZED_UPGRADE;
 
 public class ZoneServiceUtil {
   public static URI getNamespaceUri(String namespace, Configuration conf)
@@ -34,5 +39,29 @@ public class ZoneServiceUtil {
     }
     throw new IllegalArgumentException(
         "Cannot find the NameNode for namespace: " + namespace);
+  }
+
+  public static ResultCode convertExitStatus2ResultCode(ExitStatus exitStatus) {
+    switch (Objects.requireNonNull(exitStatus)) {
+    case SUCCESS:
+      return ResultCode.SUCCESS;
+    case IN_PROGRESS:
+      return ResultCode.IN_PROGRESS;
+    case ALREADY_RUNNING:
+      return ResultCode.ALREADY_RUNNING;
+    case NO_MOVE_BLOCK:
+      return ResultCode.NO_MOVE_BLOCK;
+    case NO_MOVE_PROGRESS:
+      return ResultCode.NO_MOVE_PROGRESS;
+    case IO_EXCEPTION:
+      return ResultCode.IO_EXCEPTION;
+    case ILLEGAL_ARGUMENTS:
+      return ResultCode.ILLEGAL_ARGUMENTS;
+    case INTERRUPTED:
+      return ResultCode.INTERRUPTED;
+    case UNFINALIZED_UPGRADE:
+      return ResultCode.UNFINALIZED_UPGRADE;
+    }
+    return ResultCode.UNKNOWNERROR;
   }
 }

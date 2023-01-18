@@ -54,6 +54,7 @@ import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
+import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
@@ -110,7 +111,7 @@ public class ZoneMover {
   private final DFSClient dfs;
   private static final long DELAY_AFTER_CHOOSE_FAIL = 2 * 1000;
   private final Processor processor = new Processor();
-  private final ReplicationRuleUtil ruleUtil;
+  public final ReplicationRuleUtil ruleUtil;
   private final boolean xattrSetEnable;
   private final ZoneReplicationCoordinator coordinator;
   private Result result;
@@ -235,6 +236,19 @@ public class ZoneMover {
       processor.processPath(path, getPathRule(path), result);
     }
 
+    return result.getExitStatus();
+  }
+
+
+  ExitStatus run(String path, long fileId) throws IllegalArgumentException {
+    Result result = new Result();
+    this.result = result;
+    try {
+      processor.processFileById(path, fileId, result);
+    } catch (Throwable e) {
+      LOG.error("Process file by id fail", e);
+      return ExitStatus.IO_EXCEPTION;
+    }
     return result.getExitStatus();
   }
 
@@ -530,7 +544,7 @@ public class ZoneMover {
     return ExitStatus.SUCCESS.getExitCode();
   }
 
-  private static Path getIdPath(RunMode mode) {
+  static Path getIdPath(RunMode mode) {
     return new Path(String.format("%s.%s.%s.%s",
         ZONEMOVER_ID_PATH,
         mode.toString().toLowerCase(),
@@ -863,6 +877,39 @@ public class ZoneMover {
       } else if (!status.isSymlink()) { // file
         processFile(fullPath, (HdfsLocatedFileStatus) status, rule, result);
       }
+    }
+
+    private void processFileById(String fullPath, long fileId, Result result) throws IOException {
+      HdfsFileStatus[] statuses = dfs.listPaths(fullPath, fileId,
+          HdfsFileStatus.EMPTY_NAME, true).getPartialListing();
+
+      if (statuses[0].isDir()) {
+        LOG.info("Skip directory: " + fullPath);
+        return;
+      }
+      Preconditions.checkArgument(statuses[0] instanceof HdfsLocatedFileStatus);
+      HdfsLocatedFileStatus status = (HdfsLocatedFileStatus) statuses[0];
+      final LocatedBlocks locatedBlocks = status.getLocatedBlocks();
+      if (status.getLen() == 0) {
+        LOG.info("Skip empty file: " + fullPath);
+        return;
+      }
+
+      if (!locatedBlocks.isLastBlockComplete()) {
+        LOG.info("Skip uncompleted file: " + fullPath);
+        return;
+      }
+
+      ReplicationRule rule = ReplicationRule.parseFromString(
+          ruleUtil.getStringFromRuleKey(fullPath, fileId).replace("\"", ""));
+
+      try {
+        if (status.getReplication() != rule.getReplica()) {
+          Thread.sleep(2000);
+        }
+      } catch (InterruptedException ignored) {
+      }
+      processFileBlocks(fullPath, status, rule, result);
     }
 
     private void processFile(String fullPath,

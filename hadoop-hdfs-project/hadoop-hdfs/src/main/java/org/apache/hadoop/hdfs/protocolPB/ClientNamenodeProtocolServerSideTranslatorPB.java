@@ -457,8 +457,14 @@ public class ClientNamenodeProtocolServerSideTranslatorPB implements
       RpcController controller, GetBlockLocationsRequestProto req)
       throws ServiceException {
     try {
-      LocatedBlocks b = server.getBlockLocations(req.getSrc(), req.getOffset(),
-          req.getLength());
+      LocatedBlocks b;
+      if (req.hasFileId()) {
+        b = server.getBlockLocations(req.getSrc(), req.getFileId(), req.getOffset(),
+            req.getLength());
+      } else {
+        b = server.getBlockLocations(req.getSrc(), req.getOffset(),
+            req.getLength());
+      }
       Builder builder = GetBlockLocationsResponseProto
           .newBuilder();
       if (b != null) {
@@ -769,9 +775,14 @@ public class ClientNamenodeProtocolServerSideTranslatorPB implements
   public GetListingResponseProto getListing(RpcController controller,
       GetListingRequestProto req) throws ServiceException {
     try {
-      DirectoryListing result = server.getListing(
-          req.getSrc(), req.getStartAfter().toByteArray(),
-          req.getNeedLocation());
+      DirectoryListing result;
+      if (req.hasFileId()) {
+        result = server.getListing(req.getSrc(), req.getFileId(),
+            req.getStartAfter().toByteArray(), req.getNeedLocation());
+      } else {
+        result = server.getListing(req.getSrc(), req.getStartAfter().toByteArray(),
+            req.getNeedLocation());
+      }
       if (result !=null) {
         return GetListingResponseProto.newBuilder().setDirList(
           PBHelperClient.convert(result)).build();
@@ -1737,8 +1748,13 @@ public class ClientNamenodeProtocolServerSideTranslatorPB implements
   public SetXAttrResponseProto setXAttr(RpcController controller,
       SetXAttrRequestProto req) throws ServiceException {
     try {
-      server.setXAttr(req.getSrc(), PBHelperClient.convertXAttr(req.getXAttr()),
-          PBHelperClient.convert(req.getFlag()));
+      if (req.hasFileId()) {
+        server.setXAttr(req.getSrc(), PBHelperClient.convertXAttr(req.getXAttr()),
+            req.getFileId(), PBHelperClient.convert(req.getFlag()));
+      } else {
+        server.setXAttr(req.getSrc(), PBHelperClient.convertXAttr(req.getXAttr()),
+            PBHelperClient.convert(req.getFlag()));
+      }
     } catch (IOException e) {
       throw new ServiceException(e);
     }
@@ -1749,8 +1765,14 @@ public class ClientNamenodeProtocolServerSideTranslatorPB implements
   public GetXAttrsResponseProto getXAttrs(RpcController controller,
       GetXAttrsRequestProto req) throws ServiceException {
     try {
-      return PBHelperClient.convertXAttrsResponse(server.getXAttrs(req.getSrc(),
-          PBHelperClient.convertXAttrs(req.getXAttrsList())));
+      if (req.hasFileId()) {
+        return PBHelperClient.convertXAttrsResponse(
+            server.getXAttrs(req.getSrc(), req.getFileId(),
+                PBHelperClient.convertXAttrs(req.getXAttrsList())));
+      } else {
+        return PBHelperClient.convertXAttrsResponse(server.getXAttrs(req.getSrc(),
+            PBHelperClient.convertXAttrs(req.getXAttrsList())));
+      }
     } catch (IOException e) {
       throw new ServiceException(e);
     }

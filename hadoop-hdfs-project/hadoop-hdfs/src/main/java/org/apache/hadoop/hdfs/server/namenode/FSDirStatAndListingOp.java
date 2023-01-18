@@ -51,10 +51,17 @@ import java.util.EnumSet;
 import static org.apache.hadoop.util.Time.now;
 
 class FSDirStatAndListingOp {
+
   static DirectoryListing getListingInt(FSDirectory fsd, FSPermissionChecker pc,
-      final String srcArg, byte[] startAfter, boolean needLocation)
+      final String srcArg, long fileId, byte[] startAfter, boolean needLocation)
       throws IOException {
-    final INodesInPath iip = fsd.resolvePath(pc, srcArg, DirOp.READ);
+    final INodesInPath iip;
+    if (fileId == HdfsConstants.INVALIDATE_INODE_ID ||
+        fileId == HdfsConstants.GRANDFATHER_INODE_ID) {
+      iip = fsd.resolvePath(pc, srcArg, DirOp.READ);
+    } else {
+      iip = fsd.resolvePath(pc, srcArg, fileId, DirOp.READ);
+    }
 
     // Get file name when startAfter is an INodePath.  This is not the
     // common case so avoid any unnecessary processing unless required.
@@ -142,7 +149,7 @@ class FSDirStatAndListingOp {
    * @throws IOException
    */
   static GetBlockLocationsResult getBlockLocations(
-      FSDirectory fsd, FSPermissionChecker pc, String src, long offset,
+      FSDirectory fsd, FSPermissionChecker pc, String src, long fileId, long offset,
       long length, boolean needBlockToken) throws IOException {
     Preconditions.checkArgument(offset >= 0,
         "Negative offset is not supported. File: " + src);
@@ -151,7 +158,13 @@ class FSDirStatAndListingOp {
     BlockManager bm = fsd.getBlockManager();
     fsd.readLock();
     try {
-      final INodesInPath iip = fsd.resolvePath(pc, src, DirOp.READ);
+      final INodesInPath iip;
+      if (fileId == HdfsConstants.INVALIDATE_INODE_ID ||
+          fileId == HdfsConstants.GRANDFATHER_INODE_ID) {
+        iip = fsd.resolvePath(pc, src, DirOp.READ);
+      } else {
+        iip = fsd.resolvePath(pc, src, fileId, DirOp.READ);
+      }
       src = iip.getPath();
       final INodeFile inode = INodeFile.valueOf(iip.getLastINode(), src);
       if (fsd.isPermissionEnabled()) {
