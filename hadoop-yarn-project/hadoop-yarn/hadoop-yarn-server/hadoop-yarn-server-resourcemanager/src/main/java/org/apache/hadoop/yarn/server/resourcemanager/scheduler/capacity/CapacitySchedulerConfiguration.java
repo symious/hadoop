@@ -442,6 +442,8 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
 
   public static final int DEFAULT_MAX_PARALLEL_APPLICATIONS = Integer.MAX_VALUE;
 
+  public static final String DYNAMIC_ADJUSTMENT = "dynamic-adjustment";
+
   /**
    * Different resource types supported.
    */
@@ -584,6 +586,13 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   public boolean getOpportunisticEnabled(String queue) {
     return getBoolean(getQueuePrefix(queue) + OPPORTUNISTIC_ENABLED,
             DEFAULT_OPPORTUNISTIC_ENABLED);
+  }
+
+  public boolean getFeatureEnabled(String queue, String feature,
+      boolean defaultVal) {
+    boolean enabled =
+        getBoolean(getQueuePrefix(queue) + feature + ".enabled", defaultVal);
+    return enabled;
   }
 
   /**

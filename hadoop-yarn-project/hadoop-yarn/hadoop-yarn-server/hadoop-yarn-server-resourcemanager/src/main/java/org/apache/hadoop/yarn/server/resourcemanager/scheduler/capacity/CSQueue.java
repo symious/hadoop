@@ -484,4 +484,6 @@ public interface CSQueue extends SchedulerQueue<CSQueue> {
    * @return indicator whether set or calculated
    */
   boolean getDefaultAppLifetimeWasSpecifiedInConfig();
+
+  boolean getFeatureEnabled(String feature);
 }

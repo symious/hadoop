@@ -108,6 +108,8 @@ public abstract class AbstractCSQueue implements CSQueue {
   String defaultLabelExpression;
   private String multiNodeSortingPolicyName = null;
 
+  private Map<String, Boolean> featureEnabledMap;
+
   Map<AccessType, AccessControlList> acls =
       new HashMap<AccessType, AccessControlList>();
   volatile boolean reservationsContinueLooking;
@@ -191,6 +193,8 @@ public abstract class AbstractCSQueue implements CSQueue {
 
     // initialize queueResourceQuotas
     queueResourceQuotas = new QueueResourceQuotas();
+
+    featureEnabledMap = new HashMap<>();
 
     ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     readLock = lock.readLock();
@@ -336,6 +340,15 @@ public abstract class AbstractCSQueue implements CSQueue {
   }
 
   @Override
+  public boolean getFeatureEnabled(String feature) {
+    if (featureEnabledMap.containsKey(feature)) {
+      return featureEnabledMap.get(feature);
+    } else {
+      return false;
+    }
+  }
+
+  @Override
   public boolean hasAccess(QueueACL acl, UserGroupInformation user) {
     return authorizer.checkPermission(
         new AccessRequest(queueEntity, user, SchedulerUtils.toAccessType(acl),
@@ -397,6 +410,18 @@ public abstract class AbstractCSQueue implements CSQueue {
     setupQueueConfigs(clusterResource, csContext.getConfiguration());
   }
 
+  protected void setupFeatureConfigs(
+      CapacitySchedulerConfiguration configuration, String feature) {
+    boolean enabled;
+    if (parent == null) {
+      enabled = configuration.getFeatureEnabled(getQueuePath(), feature, false);
+    } else {
+      enabled = configuration.getFeatureEnabled(getQueuePath(), feature,
+          parent.getFeatureEnabled(feature));
+    }
+    this.featureEnabledMap.put(feature, enabled);
+  }
+
   protected void setupQueueConfigs(Resource clusterResource,
       CapacitySchedulerConfiguration configuration) throws
       IOException {
@@ -422,6 +447,9 @@ public abstract class AbstractCSQueue implements CSQueue {
           configuration.getEnableCheckAppMaxResources(getQueuePath());
       this.intraQueuePreemptionOrderPolicy = configuration
           .getIntraQueuePreemptionOrderPolicyPerQueue(getQueuePath());
+
+      setupFeatureConfigs(configuration, CapacitySchedulerConfiguration.DYNAMIC_ADJUSTMENT);
+
       this.defaultLabelExpression =
           configuration.getDefaultNodeLabelExpression(
               getQueuePath());

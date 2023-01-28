@@ -244,6 +244,17 @@ public class TestCapacityScheduler extends CapacitySchedulerTestBase {
     }
   }
 
+  @Test
+  public void testDynamicAdjustmentConf() {
+    CapacityScheduler scheduler = new CapacityScheduler();
+    scheduler.setRMContext(resourceManager.getRMContext());
+    resourceManager.getConfig().set("yarn.scheduler.capacity.root.dynamic-adjustment.enabled", "false");
+    resourceManager.getConfig().set("yarn.scheduler.capacity.root.a.dynamic-adjustment.enabled", "true");
+    scheduler.init(resourceManager.getConfig());
+    assertEquals(false, scheduler.getRootQueue().getFeatureEnabled("dynamic-adjustment"));
+    assertEquals(true, scheduler.getQueue("a").getFeatureEnabled("dynamic-adjustment"));
+  }
+
   private NodeManager registerNode(ResourceManager rm, String hostName,
       int containerManagerPort, int httpPort, String rackName,
       Resource capability, NodeStatus nodeStatus)
