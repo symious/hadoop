@@ -364,6 +364,9 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
       FEDERATION_ROUTER_PREFIX + "quota-cache.update.interval";
   public static final long DFS_ROUTER_QUOTA_CACHE_UPATE_INTERVAL_DEFAULT =
       60000;
+  public static final String  DFS_ROUTER_ENABLE_QUOTA_FOR_MOUNT_TABLE =
+      FEDERATION_ROUTER_PREFIX + "enable.quota.for.mount-table";
+  public static final boolean DFS_ROUTER_ENABLE_QUOTA_FOR_MOUNT_TABLE_DEFAULT = true;
 
   // HDFS Router security
   public static final String DFS_ROUTER_KEYTAB_FILE_KEY =

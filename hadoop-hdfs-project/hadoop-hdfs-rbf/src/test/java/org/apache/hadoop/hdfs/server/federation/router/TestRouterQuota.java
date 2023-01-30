@@ -100,6 +100,7 @@ public class TestRouterQuota {
         .rpc()
         .build();
     routerConf.set(RBFConfigKeys.DFS_ROUTER_QUOTA_CACHE_UPATE_INTERVAL, "2s");
+    routerConf.setBoolean(RBFConfigKeys.DFS_ROUTER_ENABLE_QUOTA_FOR_MOUNT_TABLE, false);
 
     // override some hdfs settings that used in testing space quota
     Configuration hdfsConf = new Configuration(false);

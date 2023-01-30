@@ -277,6 +277,7 @@ public class TestRouterRpc {
   @Test
   public void testRpcService() throws IOException {
     Router testRouter = new Router();
+    testRouter.init(new Configuration());
     List<String> nss = cluster.getNameservices();
     String ns0 = nss.get(0);
     Configuration routerConfig = cluster.generateRouterConfiguration(ns0, null);

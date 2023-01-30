@@ -62,10 +62,15 @@ public class Quota {
   /** Router used in RouterRpcServer. */
   private final Router router;
 
+  private final boolean enableQuotaForMountTable;
+
   public Quota(Router router, RouterRpcServer server) {
     this.router = router;
     this.rpcServer = server;
     this.rpcClient = server.getRPCClient();
+    this.enableQuotaForMountTable = router.getConfig().getBoolean(
+        RBFConfigKeys.DFS_ROUTER_ENABLE_QUOTA_FOR_MOUNT_TABLE,
+        RBFConfigKeys.DFS_ROUTER_ENABLE_QUOTA_FOR_MOUNT_TABLE_DEFAULT);
   }
 
   /**
@@ -83,7 +88,7 @@ public class Quota {
     if (!router.isQuotaEnabled()) {
       throw new IOException("The quota system is disabled in Router.");
     }
-    if (checkMountEntry && isMountEntry(path)) {
+    if (checkMountEntry && isMountEntry(path) && !enableQuotaForMountTable) {
       throw new AccessControlException(
           "Permission denied: " + RouterRpcServer.getRemoteUser()
               + " is not allowed to change quota of " + path);

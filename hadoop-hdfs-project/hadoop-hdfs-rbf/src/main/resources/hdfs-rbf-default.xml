@@ -546,6 +546,14 @@
   </property>
 
   <property>
+    <name>dfs.federation.router.enable.quota.for.mount-table</name>
+    <value>true</value>
+    <description>
+      True means that RBF allows set or update quota for the mount table path.
+    </description>
+  </property>
+
+  <property>
     <name>dfs.federation.router.client.thread-size</name>
     <value>32</value>
     <description>
