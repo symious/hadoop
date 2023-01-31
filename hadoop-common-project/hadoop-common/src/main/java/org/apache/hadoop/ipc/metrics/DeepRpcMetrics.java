@@ -126,7 +126,7 @@ public class DeepRpcMetrics implements DeepRpcMetricsMBean {
 
   public void incrRejectedDeepCalls(String nsId) {
     rejectedDeepCalls.incr();
-    MutableMetricRegister.tryGetMetric(registry, nsId, nsDeepCalls, "DeepCallsRejected_",
+    MutableMetricRegister.tryGetMetric(registry, nsId, nsRejectedDeepCalls, "DeepCallsRejected_",
         MutableCounterLong.class).incr();
   }
 
