@@ -231,6 +231,7 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
     comparators.add(new InitUsedResourcesComparator());
     comparators.add(new WeightComparator());
     comparators.add(new StartTimeComparator());
+    comparators.add(new FifoComparator());
     weightComparator = new CompoundComparator(
       comparators
       );

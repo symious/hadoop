@@ -392,12 +392,95 @@ public class TestCompositeWeightOrderingPolicy {
 
   }
 
+  @Test
+  public void testSameWeightIterators() {
+    CompositeWeightOrderingPolicy<MockSchedulableEntity> schedOrder =
+        new CompositeWeightOrderingPolicy<MockSchedulableEntity>();
+
+    long cacheTime = 3000;
+    double highFlagPriority = 60;
+    double pendingFlagMemory = 100 * 1024 * 1024;
+    double pendingFlagTime = 120 * 60 * 1000;
+    double priorityWeight = 0.6;
+    double pendingResourcesWeight = 0.2;
+    double pendingTimeWeight = 0.2;
+    schedOrder.setCacheTime(cacheTime);
+    schedOrder.setHighFlagPriority(highFlagPriority);
+    schedOrder.setPendingFlagMemory(pendingFlagMemory);
+    schedOrder.setPendingFlagTime(pendingFlagTime);
+    schedOrder.setPriorityWeightFactor(priorityWeight);
+    schedOrder.setPendingMemoryWeightFactor(pendingResourcesWeight);
+    schedOrder.setPendingTimeWeightFactor(pendingTimeWeight);
+
+    /*
+    r1,r2,r3 with same weight, r2,r3 with same serial number, will miss r3
+     */
+    MockSchedulableEntity r1 = new MockSchedulableEntity();
+    MockSchedulableEntity r2 = new MockSchedulableEntity();
+    MockSchedulableEntity r3 = new MockSchedulableEntity();
+
+    r1.setId("1");
+    r1.setSerial(1);
+
+    r2.setId("2");
+    r2.setSerial(2);
+
+    r3.setId("3");
+    r3.setSerial(2);
+
+    //Set priority
+    Priority p1 = Priority.newInstance(30);
+    Priority p2 = Priority.newInstance(30);
+    Priority p3 = Priority.newInstance(30);
+    r1.setApplicationPriority(p1);
+    r2.setApplicationPriority(p2);
+    r3.setApplicationPriority(p3);
+
+    //Set start time, r1 pending 10 minutes, r2 pending 10minutes
+    long currentTime = System.currentTimeMillis();
+    r1.setStartTime(currentTime - 10 * 60 * 1000);
+    r2.setStartTime(currentTime - 10 * 60 * 1000);
+    r3.setStartTime(currentTime - 10 * 60 * 1000);
+
+    //Set used resources, r1 used 10TB, r2 used 10TB
+    r1.setUsed(Resources.createResource(10 * 1024 * GB));
+    r2.setUsed(Resources.createResource(10 * 1024 * GB));
+    r3.setUsed(Resources.createResource(10 * 1024 * GB));
+    AbstractComparatorOrderingPolicy
+        .updateSchedulingResourceUsage(r1.getSchedulingResourceUsage());
+    AbstractComparatorOrderingPolicy
+        .updateSchedulingResourceUsage(r2.getSchedulingResourceUsage());
+    AbstractComparatorOrderingPolicy
+        .updateSchedulingResourceUsage(r3.getSchedulingResourceUsage());
+
+    schedOrder.addSchedulableEntity(r1);
+    schedOrder.addSchedulableEntity(r2);
+    schedOrder.addSchedulableEntity(r3);
+
+    //Assignment, old jobs to new jobs
+    checkIds(schedOrder.getAssignmentIterator(
+        IteratorSelector.EMPTY_ITERATOR_SELECTOR),
+        new String[]{"1", "2"});
+
+    checkSize(schedOrder
+        .getAssignmentIterator(IteratorSelector.EMPTY_ITERATOR_SELECTOR), 2);
+  }
+
   public void checkIds(Iterator<MockSchedulableEntity> si,
       String[] ids) {
     for (int i = 0;i < ids.length;i++) {
       Assert.assertEquals(si.next().getId(),
         ids[i]);
     }
+  }
+
+  public void checkSize(Iterator<MockSchedulableEntity> si, int size) {
+    int i = 0;
+    while (si.hasNext()) {
+      i++;
+      si.next();
+    }
+    Assert.assertEquals(i, size);
   }
 
 }
