@@ -186,6 +186,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodeToLabelsEntr
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodeToLabelsEntryList;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodeToLabelsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodesInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.QueueCapacitiesInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.RMQueueAclInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ReservationDefinitionInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ReservationDeleteRequestInfo;
@@ -421,6 +422,25 @@ public class RMWebServices extends WebServices implements RMWebServiceProtocol {
       CapacityScheduler cs = (CapacityScheduler) rs;
       CSQueue csQueue = cs.getQueue(queue);
       return new CapacitySchedulerLeafQueueInfo(cs, (LeafQueue) csQueue);
+    } else {
+      throw new NotFoundException("Unknown scheduler queue configured");
+    }
+  }
+
+  @GET
+  @Path(RMWSConsts.SCHEDULER_CAPACITY)
+  @Produces({ MediaType.APPLICATION_JSON + "; " + JettyUtils.UTF_8,
+      MediaType.APPLICATION_XML + "; " + JettyUtils.UTF_8 })
+  @Override
+  public QueueCapacitiesInfo getSchedulerCapacityInfo() {
+    initForReadableEndpoints();
+
+    ResourceScheduler rs = rm.getResourceScheduler();
+    if (rs instanceof CapacityScheduler) {
+      CapacityScheduler cs = (CapacityScheduler) rs;
+      CSQueue root = cs.getRootQueue();
+      return new QueueCapacitiesInfo(root.getQueueCapacities(), root.getQueueResourceQuotas(),
+          false);
     } else {
       throw new NotFoundException("Unknown scheduler queue configured");
     }

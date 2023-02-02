@@ -78,6 +78,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodeLabelsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodeToLabelsEntryList;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodeToLabelsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodesInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.QueueCapacitiesInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.RMQueueAclInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ReservationDeleteRequestInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ReservationSubmissionRequestInfo;
@@ -415,6 +416,11 @@ public class RouterWebServices implements RMWebServiceProtocol {
 
   @Override
   public CapacitySchedulerLeafQueueInfo getSchedulerQueueInfo(String queue) {
+    return null;
+  }
+
+  @Override
+  public QueueCapacitiesInfo getSchedulerCapacityInfo() {
     return null;
   }
 

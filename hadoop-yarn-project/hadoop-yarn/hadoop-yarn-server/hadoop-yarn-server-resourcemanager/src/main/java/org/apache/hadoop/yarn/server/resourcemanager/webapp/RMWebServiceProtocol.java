@@ -55,6 +55,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodeLabelsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodeToLabelsEntryList;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodeToLabelsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NodesInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.QueueCapacitiesInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.RMQueueAclInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ReservationDeleteRequestInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ReservationSubmissionRequestInfo;
@@ -125,6 +126,14 @@ public interface RMWebServiceProtocol {
    * @return the current scheduler queue status
    */
   CapacitySchedulerLeafQueueInfo getSchedulerQueueInfo(String queue);
+
+  /**
+   * This method retrieves the current scheduler capacity status, and it is reachable by
+   * using {@link RMWSConsts#SCHEDULER_CAPACITY}.
+   *
+   * @return the current scheduler capacity
+   */
+  QueueCapacitiesInfo getSchedulerCapacityInfo();
 
   /**
    * This method dumps the scheduler logs for the time got in input, and it is
