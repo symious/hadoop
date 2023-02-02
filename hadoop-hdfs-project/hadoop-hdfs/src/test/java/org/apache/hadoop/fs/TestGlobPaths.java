@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Ordering;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -68,6 +69,7 @@ public class TestGlobPaths {
   @BeforeClass
   public static void setUp() throws Exception {
     final Configuration conf = new HdfsConfiguration();
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY, true);
     dfsCluster = new MiniDFSCluster.Builder(conf).build();
 
     privilegedFs = FileSystem.get(conf);

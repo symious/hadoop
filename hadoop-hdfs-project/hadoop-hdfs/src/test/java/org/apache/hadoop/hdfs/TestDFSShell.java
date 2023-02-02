@@ -118,6 +118,7 @@ public class TestDFSShell {
     conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_XATTRS_ENABLED_KEY, true);
     conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_ACLS_ENABLED_KEY, true);
     conf.setLong(DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY, 1000);
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY, true);
 
     miniCluster = new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
     miniCluster.waitActive();
@@ -3638,6 +3639,119 @@ public class TestDFSShell {
       fail("Can't create snapshot on /.reserved");
     } catch (FileNotFoundException e) {
       assertTrue(e.getMessage().contains("Directory/File does not exist"));
+    }
+  }
+
+  private static String runCommand(FsShell shell, String... args) {
+    int val = -1;
+    PrintStream stdoutPrev = System.out, stderrPrev = System.err;
+    ByteArrayOutputStream stdout = null;
+    ByteArrayOutputStream stderr = null;
+    try {
+      stdout = new ByteArrayOutputStream();
+      System.setOut(new PrintStream(stdout));
+      stderr = new ByteArrayOutputStream();
+      System.setErr(new PrintStream(stderr));
+      val = shell.run(args);
+    } catch (Exception e) {
+      return e.getLocalizedMessage();
+    } finally {
+      System.setOut(stdoutPrev);
+      System.setErr(stderrPrev);
+    }
+    StringBuilder bld = new StringBuilder();
+    bld.append("ret:").append(val).append(", ").
+        append("stdout:").append(stdout.toString()).append(", ").
+        append("stderr:").append(stderr.toString());
+    return bld.toString();
+  }
+
+  private static void validateSymlinkLsOutput(String lsOutput, String targetName,
+      String linkName, boolean isDisplayedLink) {
+    final String SUCCESS_PREFIX = "ret:0, stdout:";
+    Assert.assertTrue("The ls output did not start as expected.  " +
+        "lsOutput= " + lsOutput, lsOutput.startsWith(SUCCESS_PREFIX));
+    lsOutput = lsOutput.substring(lsOutput.indexOf(SUCCESS_PREFIX) + SUCCESS_PREFIX.length());
+    String lsOutputLines[] = lsOutput.split("[\\r\\n]+");
+    assertTrue("lsOutput lines is too short (lsOutput='" + lsOutput + "')",
+        lsOutputLines.length > 1);
+    String tempOutput ;
+    if (lsOutput.contains("Found")) {
+      tempOutput = lsOutputLines[1];
+    } else {
+      tempOutput = lsOutputLines[0];
+    }
+    String words[] = tempOutput.split("[\\ ]+");
+    assertEquals("wrong number of words found in the ls output '" +
+        tempOutput + "'", isDisplayedLink ? 10 : 8, words.length);
+    if (isDisplayedLink) {
+      assertEquals("lrwxrwxrwx", words[0]);
+      assertEquals(linkName, words[7]);
+      assertEquals("->", words[8]);
+      assertTrue("the displayed link target didn't begin with hdfs://",
+          words[9].startsWith("hdfs://"));
+      assertTrue("the displayed link target didn't end with the target path",
+          words[9].endsWith(targetName));
+    } else {
+      assertEquals("-rw-r--r--", words[0]);
+      assertEquals(targetName, words[7]);
+    }
+  }
+
+  @Test
+  public void testLn() throws Exception {
+    HdfsConfiguration conf = new HdfsConfiguration();
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY, true);
+    MiniDFSCluster cluster = null;
+
+    try {
+      cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+      FileSystem fs = cluster.getFileSystem();
+      assertTrue("Not an instance of HDFS: " + fs.getUri(),
+          fs instanceof DistributedFileSystem);
+      FsShell shell = new FsShell(conf);
+      // try creating a link without -s.  It should fail.
+      assertEquals("ret:1, stdout:, stderr:ln: Hardlinks are " +
+              "not supported. Use -s to create a symbolic link.\n",
+          runCommand(shell, "-ln", "/a", "/b"));
+      // create a symlink to a nonexistent path
+      assertEquals("ret:1, stdout:, stderr:ln: `/a': No such file or directory\n",
+          runCommand(shell, "-ln", "-s", "/a", "/b"));
+      // can't overwrite an existing path
+      writeFile(fs, new Path("/a"));
+      writeFile(fs, new Path("/b"));
+      assertEquals("ret:1, stdout:, stderr:ln: `/b': File exists\n",
+          runCommand(shell, "-ln", "-s", "/a", "/b"));
+      // create test file
+      assertEquals("ret:0, stdout:, stderr:", runCommand(shell, "-mkdir", "/dir"));
+      writeFile(fs, new Path("/c"));
+      // create a symlink to that file
+      assertEquals("ret:0, stdout:, stderr:",
+          runCommand(shell, "-ln", "-s", "/c", "/dir/d"));
+      // test that using the wrong number of arguments fails
+      String ret = runCommand(shell, "-ln");
+      assertTrue("incorrect return from 'not enough arguments' test " +
+          "case.  ret = " + ret, ret.startsWith("ret:-1, stdout:, " +
+          "stderr:-ln: Not enough arguments: expected 2 but got 0\n"));
+      ret = runCommand(shell, "-ln", "/a");
+      assertTrue("incorrect return from 'not enough arguments' test " +
+          "case.  ret = " + ret, ret.startsWith("ret:-1, stdout:, " +
+          "stderr:-ln: Not enough arguments: expected 2 but got 1\n"));
+      // test ls command on a directory containing a symlink
+      ret = runCommand(shell, "-ls", "/dir");
+      validateSymlinkLsOutput(ret, "/c", "/dir/d", true);
+      // test ls command on a symlink itself
+      ret = runCommand(shell, "-ls", "/dir/d");
+      validateSymlinkLsOutput(ret, "/c", "/dir/d", false);
+      // test ls command on a link to a directory
+      assertEquals("ret:0, stdout:, stderr:",
+          runCommand(shell, "-ln", "-s", "/dir", "/dirLink"));
+      ret = runCommand(shell, "-ls", "/dirLink");
+      validateSymlinkLsOutput(ret, "/c", "/dir/d", true);
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
     }
   }
 }

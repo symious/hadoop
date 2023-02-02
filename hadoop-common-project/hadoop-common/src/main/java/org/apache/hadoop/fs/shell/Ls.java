@@ -305,8 +305,17 @@ class Ls extends FsCommand {
           isHideNonPrintable() ? new PrintableString(item.toString()) : item);
       out.println(line);
     } else {
+      String type;
+      if (stat.isDirectory()) {
+        type = "d";
+      } else if (stat.isSymlink()) {
+        type = "l";
+      } else {
+        type = "-";
+      }
+
       String line = String.format(lineFormat,
-          (stat.isDirectory() ? "d" : "-"),
+          type,
           stat.getPermission() + (stat.hasAcl() ? "+" : " "),
           (stat.isFile() ? stat.getReplication() : "-"),
           stat.getOwner(),
@@ -315,7 +324,8 @@ class Ls extends FsCommand {
           dateFormat.format(new Date(isUseAtime()
               ? stat.getAccessTime()
               : stat.getModificationTime())),
-          isHideNonPrintable() ? new PrintableString(item.toString()) : item);
+          isHideNonPrintable() ? new PrintableString(item.toString()) : item +
+          (stat.isSymlink() ? " -> " + stat.getSymlink() : ""));
       out.println(line);
     }
   }
