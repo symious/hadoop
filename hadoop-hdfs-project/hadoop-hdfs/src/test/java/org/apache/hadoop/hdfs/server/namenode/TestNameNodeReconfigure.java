@@ -39,6 +39,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPO
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY;
 import static org.junit.Assert.*;
 
 import org.slf4j.Logger;
@@ -589,5 +590,18 @@ public class TestNameNodeReconfigure {
     nameNode.reconfigureProperty(DFS_NAMENODE_ACL_ALLOW_USERS, "");
     aclAllowUsers = fsNamesystem.getAclAllowUsers();
     assertEquals(0, aclAllowUsers.size());
+  }
+
+  @Test
+  public void testReconfigureDisableSymlinksFeature() throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode(0);
+    FSNamesystem fsNamesystem = nameNode.getNamesystem();
+    assertFalse(fsNamesystem.isEnableSymlinks());
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_SYMLINKS_ENABLED_KEY, "true");
+    assertTrue(fsNamesystem.isEnableSymlinks());
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_SYMLINKS_ENABLED_KEY, "false");
+    assertFalse(fsNamesystem.isEnableSymlinks());
   }
 }

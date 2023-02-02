@@ -88,6 +88,7 @@ public abstract class FSAclBaseTest {
 
   protected static void startCluster() throws IOException {
     conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_ACLS_ENABLED_KEY, true);
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY, true);
     cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
     cluster.waitActive();
   }

@@ -360,6 +360,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.namenode.posix.acl.inheritance.enabled";
   public static final boolean
       DFS_NAMENODE_POSIX_ACL_INHERITANCE_ENABLED_DEFAULT = true;
+  public static final String  DFS_NAMENODE_SYMLINKS_ENABLED_KEY = "dfs.namenode.symlinks.enabled";
+  public static final boolean DFS_NAMENODE_SYMLINKS_ENABLED_DEFAULT = false;
+
   public static final String DFS_REFORMAT_DISABLED = "dfs.reformat.disabled";
   public static final boolean DFS_REFORMAT_DISABLED_DEFAULT = false;
 

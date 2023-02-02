@@ -171,6 +171,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RECONSTRUCTION_P
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_ENABLED_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_ENABLED_DEFAULT;
@@ -384,6 +386,7 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_DISABLE_EC_KEY,
           DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY,
           DFS_NAMENODE_ACL_ALLOW_USERS,
+          DFS_NAMENODE_SYMLINKS_ENABLED_KEY,
           DFS_DATANODE_PEER_STATS_ENABLED_KEY,
           DFS_DATANODE_MAX_NODES_TO_REPORT_KEY,
           DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY,
@@ -2431,6 +2434,8 @@ public class NameNode extends ReconfigurableBase implements
     } else if (property.equals(DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY) ||
         (property.equals(DFS_NAMENODE_ACL_ALLOW_USERS))) {
       return reconfigureAclConstraintsParameters(property, newVal);
+    } else if (property.equals(DFS_NAMENODE_SYMLINKS_ENABLED_KEY)) {
+      return reconfigureDisableSymlinksFeature(newVal);
     } else if (property.equals(DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY) ||
         (property.equals(DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY)) ||
         (property.equals(DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY)) ||
@@ -2724,6 +2729,19 @@ public class NameNode extends ReconfigurableBase implements
     }
     LOG.info("RECONFIGURE* changed {} to {}", property, newSetting);
     return String.valueOf(newSetting);
+  }
+
+  String reconfigureDisableSymlinksFeature(String newVal) {
+    boolean enableAclVerify;
+    if (newVal == null) {
+      enableAclVerify = DFS_NAMENODE_SYMLINKS_ENABLED_DEFAULT;
+    } else {
+      enableAclVerify = Boolean.parseBoolean(newVal);
+    }
+    namesystem.setEnableSymlinks(enableAclVerify);
+    String newSetting = Boolean.toString(enableAclVerify);
+    LOG.info("RECONFIGURE* changed enableSymlinks to {}", newSetting);
+    return newSetting;
   }
 
   private String reconfConsiderLoadFactor(String property, String newVal)

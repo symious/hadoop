@@ -99,6 +99,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SNAPSHOT_DIFF_LISTING_LIMIT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SNAPSHOT_DIFF_LISTING_LIMIT_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSUtil.isParentEntry;
 
 import java.util.SortedSet;
@@ -506,6 +508,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
   private volatile boolean enableAclConstraints = false;
   private volatile SortedSet<String> aclAllowUsers;
+
+  private volatile boolean enableSymlinks;
 
   /** Interval between each check of lease to release. */
   private final long leaseRecheckIntervalMs;
@@ -1061,6 +1065,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
           DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY,
           DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_DEFAULT);
       refreshAclAllowUsers(conf.get(DFS_NAMENODE_ACL_ALLOW_USERS));
+
+      this.enableSymlinks = conf.getBoolean(
+          DFS_NAMENODE_SYMLINKS_ENABLED_KEY, DFS_NAMENODE_SYMLINKS_ENABLED_DEFAULT);
 
       RefreshRegistry.defaultRegistry().register(FSN_LOCK_METRICS_REFRESH_HANDLER_IDENTIFIER,
           new FSNamesystemLockMetricsRefreshHandler(this));
@@ -2404,9 +2411,6 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   void createSymlink(String target, String link,
       PermissionStatus dirPerms, boolean createParent, boolean logRetryCache)
       throws IOException {
-    if (!FileSystem.areSymlinksEnabled()) {
-      throw new UnsupportedOperationException("Symlinks not supported");
-    }
     FileStatus auditStat = null;
     checkOperation(OperationCategory.WRITE);
     FSPermissionChecker.setOperationType(OperationName.CREATE_SYMLINK);
@@ -8836,6 +8840,15 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         }
       }
     }
+  }
+
+  @VisibleForTesting
+  public boolean isEnableSymlinks() {
+    return this.enableSymlinks;
+  }
+
+  public void setEnableSymlinks(boolean enableSymlinks) {
+    this.enableSymlinks = enableSymlinks;
   }
 }
 

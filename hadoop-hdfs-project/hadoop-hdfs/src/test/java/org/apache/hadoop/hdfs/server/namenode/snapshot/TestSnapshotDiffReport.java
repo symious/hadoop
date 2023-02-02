@@ -98,6 +98,7 @@ public class TestSnapshotDiffReport {
         DFSConfigKeys.DFS_NAMENODE_SNAPSHOT_DIFF_ALLOW_SNAP_ROOT_DESCENDANT,
         true);
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_SNAPSHOT_DIFF_LISTING_LIMIT, 3);
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY, true);
     cluster = new MiniDFSCluster.Builder(conf).numDataNodes(REPLICATION)
         .format(true).build();
     cluster.waitActive();

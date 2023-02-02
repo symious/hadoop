@@ -1238,7 +1238,8 @@ abstract public class ViewFileSystemBaseTest {
         mountTargetSymLinkPath);
 
     assertEquals("Resolved link target path not matching!",
-        expectedMountLinkTarget, actualMountLinkTarget);
+        Path.getPathWithoutSchemeAndAuthority(expectedMountLinkTarget),
+        Path.getPathWithoutSchemeAndAuthority(actualMountLinkTarget));
 
     // Relative symbolic link
     final String relativeFileName = "dir2/../" + targetFileName;
@@ -1255,7 +1256,8 @@ abstract public class ViewFileSystemBaseTest {
         mountTargetRelativeSymLinkPath);
 
     assertEquals("Resolved relative link target path not matching!",
-        expectedMountRelLinkTarget, actualMountRelLinkTarget);
+        Path.getPathWithoutSchemeAndAuthority(expectedMountRelLinkTarget),
+        Path.getPathWithoutSchemeAndAuthority(actualMountRelLinkTarget));
 
     try {
       fsView.getLinkTarget(new Path("/linkToAFile"));
@@ -1282,7 +1284,7 @@ abstract public class ViewFileSystemBaseTest {
     } catch (Exception e) {
       LOG.info("Expected exception: " + e);
       assertThat(e.getMessage(),
-          containsString("File does not exist:"));
+          containsString("does not exist"));
     }
   }
 

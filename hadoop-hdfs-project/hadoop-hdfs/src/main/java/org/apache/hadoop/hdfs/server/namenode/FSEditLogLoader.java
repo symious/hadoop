@@ -714,9 +714,6 @@ public class FSEditLogLoader {
       break;
     }
     case OP_SYMLINK: {
-      if (!FileSystem.areSymlinksEnabled()) {
-        throw new IOException("Symlinks not supported - please remove symlink before upgrading to this version of HDFS");
-      }
       SymlinkOp symlinkOp = (SymlinkOp)op;
       inodeId = getAndUpdateLastInodeId(symlinkOp.inodeId, logVersion,
           lastInodeId);

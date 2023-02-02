@@ -841,11 +841,6 @@ public class FSImageFormat {
       }
       return dir;
     } else if (numBlocks == -2) {
-      //symlink
-      if (!FileSystem.areSymlinksEnabled()) {
-        throw new IOException("Symlinks not supported - please remove symlink before upgrading to this version of HDFS");
-      }
-
       final String symlink = Text.readString(in);
       final PermissionStatus permissions = PermissionStatus.read(in);
       if (counter != null) {

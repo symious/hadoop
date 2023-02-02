@@ -54,7 +54,8 @@ public class TestViewFileSystemAtHdfsRoot extends ViewFileSystemBaseTest {
     SupportsBlocks = true;
     CONF.setBoolean(
         DFSConfigKeys.DFS_NAMENODE_DELEGATION_TOKEN_ALWAYS_USE_KEY, true);
-    
+    CONF.setBoolean(DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY, true);
+
     cluster = new MiniDFSCluster.Builder(CONF)
       .numDataNodes(2)
       .build();

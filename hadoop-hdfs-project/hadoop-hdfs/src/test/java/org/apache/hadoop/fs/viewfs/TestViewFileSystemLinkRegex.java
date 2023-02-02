@@ -80,6 +80,7 @@ public class TestViewFileSystemLinkRegex extends ViewFileSystemBaseTest {
     clusterConfig.setBoolean(
         DFSConfigKeys.DFS_NAMENODE_DELEGATION_TOKEN_ALWAYS_USE_KEY,
         true);
+    clusterConfig.setBoolean(DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY, true);
     cluster = new MiniDFSCluster.Builder(clusterConfig).nnTopology(
         MiniDFSNNTopology.simpleFederatedTopology(NAME_SPACES_COUNT))
         .numDataNodes(DATA_NODES_COUNT).build();
