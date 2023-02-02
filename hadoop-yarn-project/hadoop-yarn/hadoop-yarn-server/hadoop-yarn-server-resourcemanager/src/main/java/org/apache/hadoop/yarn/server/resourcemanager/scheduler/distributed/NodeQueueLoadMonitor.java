@@ -21,6 +21,7 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler.distributed;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.yarn.api.records.NodeState;
+import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.yarn.api.records.NodeId;
@@ -224,10 +225,12 @@ public class NodeQueueLoadMonitor implements ClusterMonitor {
   @Override
   public void addNode(List<NMContainerStatus> containerStatuses,
       RMNode rmNode) {
-    this.nodeByHostName.put(rmNode.getHostName(), rmNode);
-    addIntoNodeIdsByRack(rmNode);
-    // Ignoring this currently : at least one NODE_UPDATE heartbeat is
-    // required to ensure node eligibility.
+    if (isUnderDefaultPartition(rmNode)) {
+      this.nodeByHostName.put(rmNode.getHostName(), rmNode);
+      addIntoNodeIdsByRack(rmNode);
+      // Ignoring this currently : at least one NODE_UPDATE heartbeat is
+      // required to ensure node eligibility.
+    }
   }
 
   @Override
@@ -272,45 +275,69 @@ public class NodeQueueLoadMonitor implements ClusterMonitor {
     writeLock.lock();
     try {
       ClusterNode currentNode = this.clusterNodes.get(rmNode.getNodeID());
-      if (currentNode == null) {
-        if (rmNode.getState() != NodeState.DECOMMISSIONING &&
-            (estimatedQueueWaitTime != -1 ||
-                comparator == LoadComparator.QUEUE_LENGTH)) {
-          this.clusterNodes.put(rmNode.getNodeID(),
-              new ClusterNode(rmNode.getNodeID())
-                  .setQueueWaitTime(estimatedQueueWaitTime)
-                  .setQueueLength(waitQueueLength)
-                  .setQueueCapacity(opportQueueCapacity));
-          LOG.info("Inserting ClusterNode [" + rmNode.getNodeID() + "] " +
-              "with queue wait time [" + estimatedQueueWaitTime + "] and " +
-              "wait queue length [" + waitQueueLength + "]");
+      if (isUnderDefaultPartition(rmNode)) {
+        if (currentNode == null) {
+          if (rmNode.getState() != NodeState.DECOMMISSIONING &&
+              (estimatedQueueWaitTime != -1 ||
+                  comparator == LoadComparator.QUEUE_LENGTH)) {
+            this.clusterNodes.put(rmNode.getNodeID(),
+                new ClusterNode(rmNode.getNodeID())
+                    .setQueueWaitTime(estimatedQueueWaitTime)
+                    .setQueueLength(waitQueueLength)
+                    .setQueueCapacity(opportQueueCapacity));
+            LOG.info("Inserting ClusterNode [" + rmNode.getNodeID() + "] " +
+                "with queue wait time [" + estimatedQueueWaitTime + "] and " +
+                "wait queue length [" + waitQueueLength + "]");
+          } else {
+            LOG.warn("IGNORING ClusterNode [" + rmNode.getNodeID() + "] " +
+                "with queue wait time [" + estimatedQueueWaitTime + "] and " +
+                "wait queue length [" + waitQueueLength + "]");
+          }
         } else {
-          LOG.warn("IGNORING ClusterNode [" + rmNode.getNodeID() + "] " +
-              "with queue wait time [" + estimatedQueueWaitTime + "] and " +
-              "wait queue length [" + waitQueueLength + "]");
+          if (rmNode.getState() != NodeState.DECOMMISSIONING &&
+              (estimatedQueueWaitTime != -1 ||
+                  comparator == LoadComparator.QUEUE_LENGTH)) {
+            currentNode
+                .setQueueWaitTime(estimatedQueueWaitTime)
+                .setQueueLength(waitQueueLength)
+                .updateTimestamp();
+            LOG.debug("Updating ClusterNode [{}] with queue wait time [{}] and"
+                    + " wait queue length [{}]", rmNode.getNodeID(),
+                estimatedQueueWaitTime, waitQueueLength);
+
+          } else {
+            this.clusterNodes.remove(rmNode.getNodeID());
+            LOG.info("Deleting ClusterNode [" + rmNode.getNodeID() + "] " +
+                "with queue wait time [" + currentNode.queueWaitTime + "] and " +
+                "wait queue length [" + currentNode.queueLength + "]");
+          }
         }
       } else {
-        if (rmNode.getState() != NodeState.DECOMMISSIONING &&
-            (estimatedQueueWaitTime != -1 ||
-                comparator == LoadComparator.QUEUE_LENGTH)) {
-          currentNode
-              .setQueueWaitTime(estimatedQueueWaitTime)
-              .setQueueLength(waitQueueLength)
-              .updateTimestamp();
-          LOG.debug("Updating ClusterNode [{}] with queue wait time [{}] and"
-              + " wait queue length [{}]", rmNode.getNodeID(),
-              estimatedQueueWaitTime, waitQueueLength);
-
-        } else {
-          this.clusterNodes.remove(rmNode.getNodeID());
-          LOG.info("Deleting ClusterNode [" + rmNode.getNodeID() + "] " +
-              "with queue wait time [" + currentNode.queueWaitTime + "] and " +
-              "wait queue length [" + currentNode.queueLength + "]");
-        }
+        // Remove if node is not under default partition
+        this.nodeByHostName.remove(rmNode.getHostName());
+        removeFromNodeIdsByRack(rmNode);
+        this.clusterNodes.remove(rmNode.getNodeID());
       }
     } finally {
       writeLock.unlock();
     }
+  }
+
+  boolean isUnderDefaultPartition(RMNode rmNode) {
+    if (CollectionUtils.isEmpty(rmNode.getNodeLabels())) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Current Node is " + rmNode.getNodeID().toString() + ", the label is NULL");
+      }
+      return true;
+    }
+    if (rmNode.getNodeLabels().contains(CommonNodeLabelsManager.NO_LABEL)) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Current Node is " + rmNode.getNodeID().toString() +
+            ", the label is default partition");
+      }
+      return true;
+    }
+    return false;
   }
 
   @Override
