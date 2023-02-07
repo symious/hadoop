@@ -190,11 +190,11 @@ public class TestCGroupsCpuResourceHandlerImpl {
             CGroupsHandler.CGROUP_CPU_SHARES,
             String.valueOf(CGroupsCpuResourceHandlerImpl.CPU_DEFAULT_WEIGHT));
     // set quota and period
-    verify(mockCGroupsHandler, times(1))
+    verify(mockCGroupsHandler, times(2))
         .updateCGroupParam(CGroupsHandler.CGroupController.CPU, id,
             CGroupsHandler.CGROUP_CPU_PERIOD_US,
             String.valueOf(CGroupsCpuResourceHandlerImpl.MAX_QUOTA_US));
-    verify(mockCGroupsHandler, times(1))
+    verify(mockCGroupsHandler, times(2))
         .updateCGroupParam(CGroupsHandler.CGroupController.CPU, id,
             CGroupsHandler.CGROUP_CPU_QUOTA_US, String.valueOf(
                 (int) (CGroupsCpuResourceHandlerImpl.MAX_QUOTA_US * share)));
