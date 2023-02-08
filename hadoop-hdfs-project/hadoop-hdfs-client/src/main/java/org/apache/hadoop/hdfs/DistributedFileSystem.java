@@ -1646,7 +1646,7 @@ public class DistributedFileSystem extends FileSystem
     new FileSystemLinkResolver<Void>() {
       @Override
       public Void doCall(final Path p) throws IOException {
-        dfs.createSymlink(target.toString(), getPathName(p), createParent);
+        dfs.createSymlink(getPathName(target), getPathName(p), createParent);
         return null;
       }
       @Override
