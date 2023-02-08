@@ -30,6 +30,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.yarn.server.webapp.RequestLimitFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -110,6 +112,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.security.authorize.RMPolicy
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.protobuf.BlockingService;
 
+import static org.apache.hadoop.http.HttpServer2.FILTER_INITIALIZER_PROPERTY;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.*;
 
 public class AdminService extends CompositeService implements
@@ -657,6 +660,15 @@ public class AdminService extends CompositeService implements
 
     // Update CoLocate Hosts
     rm.getRMContext().getNodesListManager().loadCoLocate();
+
+    String webFilterClass = rmConf.get(FILTER_INITIALIZER_PROPERTY, "");
+    if (!StringUtils.isNullOrEmpty(webFilterClass)) {
+      Set<String> filters = new HashSet<>(Arrays.asList(webFilterClass.split(",")));
+      // To check if enabled http request limit
+      if (filters.contains("org.apache.hadoop.yarn.server.webapp.RequestLimitFilterInitializer")) {
+        RequestLimitFilter.updateDisabledSchedulerRestAPIs(newConf);
+      }
+    }
 
     // Update Application Level Define Config
     rm.getRMContext().getResourceTrackerService().updateAppLevelDefineConfiguration(newConf);

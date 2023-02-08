@@ -1,6 +1,8 @@
 package org.apache.hadoop.yarn.server.webapp;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,6 +22,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static org.apache.hadoop.yarn.server.webapp.RequestLimitFilterInitializer.prefix;
 
 public class RequestLimitFilter implements Filter {
 
@@ -51,6 +55,9 @@ public class RequestLimitFilter implements Filter {
   private Set<String> users;
 
   private Set<String> generalSkipIPs;
+
+  public static String YARN_SCHEDULER_DISABLED_REST_APIS = "disabled.rest.apis";
+  public static final Set<String> disabledRestAPISet = new HashSet<>();
 
   private static int ONE_MINUTE = 60 * 1000;
 
@@ -84,6 +91,11 @@ public class RequestLimitFilter implements Filter {
       generalSkipIPs.addAll(Arrays.asList(skipIPs.split(",")));
     }
     requestsQueue = new ArrayBlockingQueue<>(maxRequestsPerMinute);
+
+    String disabledAPIs = filterConfig.getInitParameter(YARN_SCHEDULER_DISABLED_REST_APIS);
+    if (!StringUtils.isNullOrEmpty(disabledAPIs)) {
+      disabledRestAPISet.addAll(Arrays.asList(disabledAPIs.split(",")));
+    }
   }
 
   @Override
@@ -94,6 +106,13 @@ public class RequestLimitFilter implements Filter {
       HttpServletResponse response = (HttpServletResponse) servletResponse;
       boolean isSpecifiedUser = isSpecifiedUser(request.getParameter(WHITE_USER_FROM_REQUEST));
       String requestPath = request.getRequestURI();
+
+      if (disabledRestAPISet.contains(requestPath)) {
+        response.getWriter()
+            .write("Current request " + requestPath + " is Disabled by YARN");
+        return;
+      }
+
       boolean ignoreReqPath = ignoreRequestPath(requestPath);
       if (!isSpecifiedUser && !ignoreReqPath) {
         synchronized (RequestLimitFilter.class) {
@@ -262,6 +281,18 @@ public class RequestLimitFilter implements Filter {
   @Override
   public void destroy() {
 
+  }
+
+
+  public static void updateDisabledSchedulerRestAPIs(Configuration conf) {
+    String disabledAPIs = conf.get(prefix + YARN_SCHEDULER_DISABLED_REST_APIS, null);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Disabled Rest APIs:" + disabledAPIs);
+    }
+    disabledRestAPISet.clear();
+    if (!StringUtils.isNullOrEmpty(disabledAPIs)) {
+      disabledRestAPISet.addAll(Arrays.asList(disabledAPIs.split(",")));
+    }
   }
 
   class RequestLimit {

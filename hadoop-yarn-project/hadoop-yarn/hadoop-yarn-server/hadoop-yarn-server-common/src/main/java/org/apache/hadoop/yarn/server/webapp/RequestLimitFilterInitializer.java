@@ -9,10 +9,9 @@ import java.util.Map;
 
 public class RequestLimitFilterInitializer extends FilterInitializer {
 
-  private String prefix;
+  public static String prefix = "yarn.http.request.";
 
   public RequestLimitFilterInitializer() {
-    this.prefix = "yarn.http.request.";
   }
 
   protected Map<String, String> createFilterConfig(Configuration conf) {
