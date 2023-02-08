@@ -542,9 +542,8 @@ public class RouterRpcClient {
         final Object proxy = client.getProxy();
 
         ret = invoke(nsId, 0, method, proxy, params);
-        if (failover & !isRead(method)) {
-          // Success on WRITE, update
-          // Don't update on READ because maybe it is an Observer. Let HeartbeatService update it in this case.
+        if (failover) {
+          // Success on alternate server, update
           namenodeResolver.updateActiveNamenode(nsId, client.getAddress());
         }
         if (this.rpcMonitor != null) {
