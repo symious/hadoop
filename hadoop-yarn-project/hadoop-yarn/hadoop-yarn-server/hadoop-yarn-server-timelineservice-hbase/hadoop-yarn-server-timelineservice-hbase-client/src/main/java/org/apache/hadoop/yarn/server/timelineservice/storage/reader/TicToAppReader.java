@@ -72,7 +72,7 @@ public class TicToAppReader extends TimelineEntityReader {
         .getColumnCells(TicToAppColumn.ID.getColumnFamilyBytes(),
             TicToAppColumn.ID.getColumnQualifierBytes());
     TimelineEntity entity = new TimelineEntity();
-    entity.setId(Bytes.toString(list.get(0).getValueArray()));
+    entity.setId(Bytes.toString(list.get(0).getValue()));
     return entity;
   }
 }
