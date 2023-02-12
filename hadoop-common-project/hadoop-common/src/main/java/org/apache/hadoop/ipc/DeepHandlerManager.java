@@ -296,13 +296,11 @@ public class DeepHandlerManager {
                 Thread.currentThread().getName(), e.getNameservice(), call);
             passedToDeepHandlers = true;
           } catch (CallQueueManager.CallQueueOverflowException cqoe) {
-            // Throw an OverloadedNameserviceException
-            // back to client if failed from full queue
+            // Throw a StandbyException back to client if failed from full queue
             metrics.incrRejectedDeepCalls(e.getNameservice());
             String msg =
                 "Router " + e.getRouterId() + " is overloaded for NS: " + e.getNameservice();
-            OverloadedNameserviceException resException =
-                new OverloadedNameserviceException(msg, e.getRouterId(), e.getNameservice());
+            StandbyException resException = new StandbyException(msg);
             try {
               ((Server.RpcCall) call).sendOnlyException(resException, startProcessingNanos);
             } catch (IOException ex) {
