@@ -80,6 +80,7 @@ public class ContainerShellWebSocket {
 
   private PtyProcess process;
   private String[] termCommand;
+  private String shellPath;
   private File commandFile;
   private File profileFile;
   private Thread inThread;
@@ -143,6 +144,10 @@ public class ContainerShellWebSocket {
           new ContainerExecContext.Builder().setContainer(container)
               .setNMLocalPath(nmContext.getLocalDirsHandler()).setShell(command)
               .build();
+
+      this.shellPath = nmContext.getConf()
+          .get(YarnConfiguration.NM_WEB_TERMINAL_SHELL_PATH,
+              "/usr/bin:/usr/local/bin:/etc/alternatives/bin");
 
       String commandFilePath = writeCommandToTempFile(execContext);
       this.termCommand = (PrivilegedOperationExecutor
@@ -338,7 +343,7 @@ public class ContainerShellWebSocket {
         pty.add("true");
         cmd.put("use-pty", pty);
         List<String> pathEnv = new ArrayList<>();
-        pathEnv.add(cmdDirPath + ":" + ":/usr/bin:/usr/local/bin");
+        pathEnv.add(cmdDirPath + ":" + shellPath);
         cmd.put("pathenv", pathEnv);
         // generate cmd file
         printWriter.println("[command-execution]");
@@ -354,7 +359,7 @@ public class ContainerShellWebSocket {
                 "'\\n' found in entry for docker command file, key = " + entry
                     .getKey() + "; value = " + entry.getValue());
           }
-          LOG.info("key: " + entry.getKey() + " value: " + entry.getValue());
+          LOG.debug("key: " + entry.getKey() + " value: " + entry.getValue());
           printWriter.println("  " + entry.getKey() + "=" + StringUtils
               .join(",", entry.getValue()));
         }

@@ -2813,6 +2813,10 @@ public class YarnConfiguration extends Configuration {
   public static final String NM_LINUX_CONTAINER_EXECUTOR_PATH =
     NM_PREFIX + "linux-container-executor.path";
 
+  /** The shell path to the web terminal. */
+  public static final String NM_WEB_TERMINAL_SHELL_PATH =
+    NM_PREFIX + "web-terminal.shell-path";
+
   /**
    * True if linux-container-executor should limit itself to one user
    * when running in non-secure mode.
