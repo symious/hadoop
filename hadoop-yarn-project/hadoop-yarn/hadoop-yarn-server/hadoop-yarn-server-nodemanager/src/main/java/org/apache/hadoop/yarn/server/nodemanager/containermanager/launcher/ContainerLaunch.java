@@ -1801,9 +1801,7 @@ public class ContainerLaunch implements Callable<Integer> {
   private void recordContainerLogDir(ContainerId containerId,
       String logDir) throws IOException{
     container.setLogDir(logDir);
-    if (container.isRetryContextSet()) {
-      context.getNMStateStore().storeContainerLogDir(containerId, logDir);
-    }
+    context.getNMStateStore().storeContainerLogDir(containerId, logDir);
   }
 
   private void recordContainerWorkDir(ContainerId containerId,
