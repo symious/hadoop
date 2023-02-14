@@ -468,6 +468,21 @@ class FSDirStatAndListingOp {
     EnumSet<HdfsFileStatus.Flags> flags =
         DFSUtil.getFlags(isEncrypted, isErasureCoded, isSnapShottable, hasAcl);
 
+    if (node.isSymlink()) {
+      // if the inode is a symlink, it will be compatible here,
+      // get the FileStatus attribute of the target path,
+      // and set the symlink path and path attributes of the current FileStatus.
+      final String targetPath = node.asSymlink().getSymlinkString();
+      HdfsFileStatus targetPathStatus = getFileInfo(fsd, fsd.getPermissionChecker(),
+          new Path(targetPath).toUri().getPath(), false, needLocation, needBlockToken);
+      // if the target path does not exist, return the fileStatus of the symlink path.
+      if (targetPathStatus != null) {
+        targetPathStatus.setSymlink(new Path(targetPath));
+        targetPathStatus.setPath(new Path(node.getFullPathName()));
+        return targetPathStatus;
+      }
+    }
+
     return createFileStatus(
         size,
         node.isDirectory(),

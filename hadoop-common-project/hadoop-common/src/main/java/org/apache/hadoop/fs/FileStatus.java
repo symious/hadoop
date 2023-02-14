@@ -206,7 +206,7 @@ public class FileStatus implements Writable, Comparable<Object>,
    * @return true if this is a file
    */
   public boolean isFile() {
-    return !isDirectory() && !isSymlink();
+    return (!isDirectory() && !isSymlink() || getLen() > 0);
   }
 
   /**

@@ -127,6 +127,11 @@ public class HdfsNamedFileStatus extends FileStatus implements HdfsFileStatus {
     uSymlink = DFSUtilClient.string2Bytes(sym.toString());
   }
 
+  public void setPath(Path p) {
+    super.setPath(p);
+    uPath = DFSUtilClient.string2Bytes(p.toString());
+  }
+
   /**
    * Opaque referant for the symlink, to be resolved at the client.
    */

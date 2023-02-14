@@ -762,7 +762,143 @@ public class TestINodeFile {
       }
     }
   }
-  
+
+  /**
+   * Tests for symbolic link in file system operations.
+   */
+  @Test
+  public void testInodeSymbolicLinkPaths() throws Exception {
+    Configuration conf = new Configuration();
+    conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,
+        DFSConfigKeys.DFS_BYTES_PER_CHECKSUM_DEFAULT);
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_ACLS_ENABLED_KEY, true);
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY, true);
+    MiniDFSCluster cluster = null;
+    try {
+      cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+      cluster.waitActive();
+      DistributedFileSystem fs = cluster.getFileSystem();
+      final int testFileBlockSize = 1024;
+
+      //create symlink dir.
+      String linkTarget = "/targetDir";
+      fs.mkdirs(new Path(linkTarget));
+      Path dir = new Path(new Path(linkTarget), "dir");
+      fs.mkdirs(dir);
+      Path targetFile = new Path(linkTarget, "targetFile");
+      FileSystemTestHelper.createFile(fs, targetFile, 1, testFileBlockSize);
+
+      String linkDir = "/linkDir";
+      fs.mkdirs(new Path(linkDir));
+      fs.mkdirs(new Path(new Path(linkDir), "dir1"));
+      Path linkSubDir1 = new Path(new Path(linkDir), "linkSubDir1");
+      //create symlink path.
+      fs.createSymlink(new Path(linkTarget), linkSubDir1,false);
+
+      //validate symlink.
+      assertEquals(linkTarget, fs.getLinkTarget(linkSubDir1).toUri().getPath());
+      assertTrue(fs.getFileLinkStatus(linkSubDir1).isSymlink());
+
+      //FileSystem#listStatus(symlink parent dir).
+      FileStatus[] fileStatuses = fs.listStatus(new Path(linkDir));
+      assertEquals(2, fileStatuses.length);
+      assertEquals("/linkDir/dir1", fileStatuses[0].getPath().toUri().getPath());
+      assertFalse(fileStatuses[0].isSymlink());
+      assertTrue(fileStatuses[0].isDirectory());
+      assertEquals("/linkDir/linkSubDir1", fileStatuses[1].getPath().toUri().getPath());
+      assertTrue(fileStatuses[1].isSymlink());
+      assertTrue(fileStatuses[1].isDirectory());
+      assertEquals("/targetDir", fileStatuses[1].getSymlink().toUri().getPath());
+
+      //FileSystem#globStatus(symlink parent path).
+      fileStatuses = fs.globStatus(new Path(linkDir, "*"));
+      assertEquals(2, fileStatuses.length);
+      assertEquals("/linkDir/dir1", fileStatuses[0].getPath().toUri().getPath());
+      assertFalse(fileStatuses[0].isSymlink());
+      assertTrue(fileStatuses[0].isDirectory());
+      assertEquals("/linkDir/linkSubDir1", fileStatuses[1].getPath().toUri().getPath());
+      assertTrue(fileStatuses[1].isSymlink());
+      assertTrue(fileStatuses[1].isDirectory());
+      assertEquals("/targetDir", fileStatuses[1].getSymlink().toUri().getPath());
+
+      //FileSystem#getFileStatus("linkDir/targetFile").
+      Path file1 = new Path(linkSubDir1, "targetFile");
+      FileStatus fileStatus = fs.getFileStatus(file1);
+      assertEquals(targetFile.toString(), fileStatus.getPath().toUri().getPath());
+      assertEquals(testFileBlockSize, fileStatus.getLen());
+
+      //FileSystem#getFileStatus("symlink path") and return the fileStatus of the target path.
+      FileStatus linkStatus = fs.getFileStatus(new Path("/linkDir/linkSubDir1"));
+      assertEquals("/targetDir", linkStatus.getPath().toUri().getPath());
+      assertFalse(linkStatus.isSymlink());
+
+      //FileSystem#getFileLinkStatus("symlink path") and return the fileStatus of the symlink path.
+      FileStatus fileLinkStatus = fs.getFileLinkStatus(new Path("/linkDir/linkSubDir1"));
+      assertTrue(fileLinkStatus.isSymlink());
+      assertEquals("/linkDir/linkSubDir1", fileLinkStatus.getPath().toUri().getPath());
+      assertEquals("/targetDir", fileLinkStatus.getSymlink().toUri().getPath());
+
+      //FileSystem#getContentSummary("symlink parent path") and file count=symlink count.
+      ContentSummary contentSummary = fs.getContentSummary(new Path(linkDir));
+      assertEquals(1, contentSummary.getFileCount());
+      assertEquals(2, contentSummary.getDirectoryCount());
+
+      //FileSystem#getContentSummary("symlink path") and file count=symlink count.
+      contentSummary = fs.getContentSummary(linkSubDir1);
+      assertEquals(1, contentSummary.getFileCount());
+      assertEquals(0, contentSummary.getDirectoryCount());
+
+      //symlink rename.
+      Path linkSubDir2 = new Path(new Path(linkDir), "linkSubDir2");
+      fs.rename(linkSubDir1, linkSubDir2);
+      Assert.assertFalse(fs.exists(linkSubDir1));
+      Assert.assertTrue(fs.exists(linkSubDir2));
+      Assert.assertTrue(fs.exists(new Path(linkTarget)));
+
+      //FileSystem#getFileLinkStatus("new symlink path").
+      fileLinkStatus = fs.getFileLinkStatus(linkSubDir2);
+      assertTrue(fileLinkStatus.isSymlink());
+      assertEquals("/targetDir", fileLinkStatus.getSymlink().toUri().getPath());
+
+      //symlink delete.
+      fs.delete(linkSubDir2);
+      Assert.assertFalse(fs.exists(linkSubDir2));
+      Assert.assertTrue(fs.exists(new Path(linkTarget)));
+
+      //create symlink file.
+      String linkTarget1 = "/targetDir1";
+      fs.mkdirs(new Path(linkTarget1));
+      Path testFile1 = new Path(linkTarget1, "file1");
+      FileSystemTestHelper.createFile(fs, testFile1, 1, testFileBlockSize);
+      Path testFile2 = new Path(linkTarget1, "file2");
+      FileSystemTestHelper.createFile(fs, testFile2, 1, testFileBlockSize);
+
+      String linkDir1 = "/linkDir1";
+      fs.mkdirs(new Path(linkDir1));
+      Path file_link1 = new Path(new Path(linkDir1), "file_link1");
+      fs.createSymlink(testFile1, file_link1,false);
+      Path file_link2 = new Path(new Path(linkDir1), "file_link2");
+      fs.createSymlink(testFile2, file_link2,false);
+
+      //diff symlink file and target file.
+      FileStatus[] linkTarget1Statuses = fs.listStatus(new Path(linkTarget1));
+      FileStatus[] linkDir1Statuses = fs.listStatus(new Path(linkDir1));
+      assertEquals(linkTarget1Statuses.length, linkDir1Statuses.length);
+      for (int i = 0; i < linkTarget1Statuses.length; i++) {
+        FileStatus fileStatuses1 = linkTarget1Statuses[0];
+        FileStatus fileStatuses2 = linkDir1Statuses[0];
+        assertFalse(fileStatuses1.isSymlink());
+        assertTrue(fileStatuses2.isSymlink());
+        assertEquals(fileStatuses1.isFile(), fileStatuses2.isFile());
+        assertEquals(fileStatuses1.getLen(), fileStatuses2.getLen());
+      }
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
+
   private void testInvalidSymlinkTarget(NamenodeProtocols nnRpc,
       String invalidTarget, String link) throws IOException {
     try {
