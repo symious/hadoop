@@ -20,7 +20,9 @@ package org.apache.hadoop.hdfs.server.federation.router;
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.NAMENODES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertTrue;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.List;
 
@@ -33,6 +35,7 @@ import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster.RouterConte
 import org.apache.hadoop.hdfs.server.federation.metrics.FederationRPCMetrics;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeContext;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState;
+import org.apache.hadoop.test.LambdaTestUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -128,6 +131,13 @@ public class TestObserverWithRouter {
     long rpcCountForObserver = rpcMetrics.getProxyOpObserverCommunicate();
     // getBlockLocations should send to observer
     assertEquals("One call should send to observer", 1, rpcCountForObserver);
+
+    fileSystem.create(new Path("/dir1/dir2/testFile")).close();
+
+    assertTrue(fileSystem.delete(new Path("/dir1/dir2"), true));
+
+    LambdaTestUtils.intercept(FileNotFoundException.class,
+        () -> fileSystem.listLocatedStatus(new Path("/dir1/dir2")));
     fileSystem.close();
   }
 
