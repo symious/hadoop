@@ -128,6 +128,9 @@ public class DeepHandlerManager {
     }
 
     deepCallsByNamespace = new ConcurrentHashMap<>();
+    LOG.info(
+        "Initialized DeepHandlerManager with {} deep handlers, {} queue capacity, {} max utilization",
+        deepHandlerCount, deepQueueCapacity, deepHandlerUtilization);
   }
 
   private void initializeMetrics() {
@@ -335,7 +338,7 @@ public class DeepHandlerManager {
           }
         }
       }
-      LOG.debug(Thread.currentThread().getName() + ": exiting");
+      LOG.warn(Thread.currentThread().getName() + ": exiting");
     }
 
     /**
@@ -411,15 +414,26 @@ public class DeepHandlerManager {
     @Override
     public void run() {
       while (running) {
+        Server.Call call = null;
         try {
           // Try to acquire a call from the deep queue, will block until possible
-          Server.Call call = callQueue.take();
+          call = callQueue.take();
           this.freeHandler.acquire();
           DeepHandler handler = deepHandlers.take();
           handler.handleCall(this, callQueue, call);
-        } catch (InterruptedException e) {
-          if (running) {
-            LOG.info(Thread.currentThread().getName() + " unexpectedly interrupted", e);
+        } catch (Throwable e) {
+          LOG.warn(Thread.currentThread().getName() + " caught an error", e);
+          metrics.incrDeepWatcherExceptions();
+
+          // Put call back if one is taken from the queue
+          if (call != null) {
+            try {
+              callQueue.put(call);
+            } catch (InterruptedException ex) {
+              LOG.warn(Thread.currentThread().getName() + " caught an error", e);
+              metrics.incrDeepWatcherExceptions();
+              throw new RuntimeException(ex);
+            }
           }
         }
       }
@@ -449,7 +463,7 @@ public class DeepHandlerManager {
 
     @Override
     public void run() {
-      LOG.debug(Thread.currentThread().getName() + ": starting");
+      LOG.info(Thread.currentThread().getName() + ": starting");
       while (running) {
         TraceScope traceScope = null;
         Server.Call call = null;
@@ -482,47 +496,46 @@ public class DeepHandlerManager {
           } else {
             call.run();
           }
-        } catch (InterruptedException e) {
-          if (running) {                          // unexpected -- log it
-            LOG.info(Thread.currentThread().getName() + " unexpectedly interrupted", e);
-            if (traceScope != null) {
-              traceScope.getSpan().addTimelineAnnotation(
-                  "unexpectedly interrupted: " + StringUtils.stringifyException(e));
-            }
-          }
-        } catch (Exception e) {
+        } catch (Throwable e) {
           LOG.info(Thread.currentThread().getName() + " caught an exception", e);
+          metrics.incrDeepHandlerExceptions();
           if (traceScope != null) {
             traceScope.getSpan()
                 .addTimelineAnnotation("Exception: " + StringUtils.stringifyException(e));
           }
         } finally {
-          Server.getCurCall().set(null);
-          IOUtils.cleanupWithLogger(LOG, traceScope);
-          if (call != null) {
-            if (currentCallQueue != null) {
-              server.updateMetricsInternal(call, startTimeNanos, connDropped, id, currentCallQueue);
-              metrics.addDeepHandlerProcessingTime(
-                  (Time.monotonicNowNanos() - startTimeNanos) / 1000000,
-                  this.currentWatcher.getNameservice());
-              metrics.addDeepLatency(
-                  (Time.monotonicNowNanos() - ((Server.RpcCall) call).getDeepQueueStartTime())
-                      / 1000000, this.currentWatcher.getNameservice());
-              currentCallQueue = null;
+          try {
+            Server.getCurCall().set(null);
+            IOUtils.cleanupWithLogger(LOG, traceScope);
+            if (call != null) {
+              if (currentCallQueue != null) {
+                server.updateMetricsInternal(call, startTimeNanos, connDropped, id,
+                    currentCallQueue);
+                metrics.addDeepHandlerProcessingTime(
+                    (Time.monotonicNowNanos() - startTimeNanos) / 1000000,
+                    this.currentWatcher.getNameservice());
+                metrics.addDeepLatency(
+                    (Time.monotonicNowNanos() - ((Server.RpcCall) call).getDeepQueueStartTime())
+                        / 1000000, this.currentWatcher.getNameservice());
+                currentCallQueue = null;
+              }
+              if (currentWatcher != null) {
+                currentWatcher.releaseHandler();
+              }
+              ProcessingDetails.LOG.debug("Served: [{}]{} name={} user={} details={}", call,
+                  (call.isResponseDeferred() ? ", deferred" : ""), call.getDetailedMetricsName(),
+                  call.getRemoteUser(), call.getProcessingDetails());
+              // Plug current handler back into the queue of available handlers
+              // after dealing with the call
+              deepHandlers.add(this);
             }
-            if (currentWatcher != null) {
-              currentWatcher.releaseHandler();
-            }
-            ProcessingDetails.LOG.debug("Served: [{}]{} name={} user={} details={}", call,
-                (call.isResponseDeferred() ? ", deferred" : ""), call.getDetailedMetricsName(),
-                call.getRemoteUser(), call.getProcessingDetails());
-            // Plug current handler back into the queue of available handlers
-            // after dealing with the call
-            deepHandlers.add(this);
+          } catch (Throwable e) {
+            LOG.warn(Thread.currentThread().getName() + " caught an error", e);
+            metrics.incrDeepHandlerExceptions();
           }
         }
       }
-      LOG.debug(Thread.currentThread().getName() + ": exiting");
+      LOG.warn(Thread.currentThread().getName() + ": exiting");
     }
   }
 

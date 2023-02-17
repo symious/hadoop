@@ -66,6 +66,10 @@ public class DeepRpcMetrics implements DeepRpcMetricsMBean {
   MutableCounterLong deepCalls;
   @Metric("Number of calls that got rejected by deep handlers")
   MutableCounterLong rejectedDeepCalls;
+  @Metric("Number of times a deep handler encountered an exception")
+  MutableCounterLong deepHandlerExceptions;
+  @Metric("Number of times a deep watcher encountered an exception")
+  MutableCounterLong deepWatcherExceptions;
   @Metric("Processing time in deep handlers")
   MutableRate deepHandlerProcessingTime;
   @Metric("Latency compared to calls directly handled in the shallow layer")
@@ -140,5 +144,13 @@ public class DeepRpcMetrics implements DeepRpcMetricsMBean {
     deepLatency.add(latency);
     MutableMetricRegister.tryGetMetric(registry, nsId, nsLatencies, "DeepCallLatency_",
         MutableRate.class).add(latency);
+  }
+
+  public void incrDeepHandlerExceptions() {
+    deepHandlerExceptions.incr();
+  }
+
+  public void incrDeepWatcherExceptions() {
+    deepWatcherExceptions.incr();
   }
 }
