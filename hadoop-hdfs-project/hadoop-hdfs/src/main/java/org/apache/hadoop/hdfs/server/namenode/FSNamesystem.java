@@ -2780,8 +2780,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
             + "): " + blockSize + " < " + minBlockSize);
       }
 
+      short replicationWithConstraint = replication;
       if (shouldReplicate) {
-        blockManager.verifyReplication(src, replication, clientMachine);
+        replicationWithConstraint = blockManager.verifyReplication(src, replication, clientMachine);
       } else {
         final ErasureCodingPolicy ecPolicy = FSDirErasureCodingOp
             .getErasureCodingPolicy(this, ecPolicyName, iip);
@@ -2793,7 +2794,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
                 +") of the erasure coding policy (" + ecPolicy + ").");
           }
         } else {
-          blockManager.verifyReplication(src, replication, clientMachine);
+          replicationWithConstraint = blockManager.verifyReplication(src, replication, clientMachine);
         }
       }
 
@@ -2818,7 +2819,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       dir.writeLock();
       try {
         stat = FSDirWriteFileOp.startFile(this, iip, permissions, holder,
-            clientMachine, flag, createParent, replication, blockSize, feInfo,
+            clientMachine, flag, createParent, replicationWithConstraint, blockSize, feInfo,
             toRemoveBlocks, shouldReplicate, ecPolicyName, storagePolicy,
             logRetryCache);
       } catch (IOException e) {

@@ -128,7 +128,7 @@ public class FSDirAttrOp {
   static boolean setReplication(
       FSDirectory fsd, FSPermissionChecker pc, BlockManager bm, String src,
       final short replication) throws IOException {
-    bm.verifyReplication(src, replication, null);
+    short replicationWithConstraint = bm.verifyReplication(src, replication, null);
     final boolean isFile;
     fsd.writeLock();
     try {
@@ -138,14 +138,15 @@ public class FSDirAttrOp {
       }
 
       final BlockInfo[] blocks = unprotectedSetReplication(fsd, iip,
-                                                           replication);
+          replicationWithConstraint);
       isFile = blocks != null;
       if (isFile) {
-        fsd.getEditLog().logSetReplication(iip.getPath(), replication);
+        fsd.getEditLog().logSetReplication(iip.getPath(), replicationWithConstraint);
         if (iip.getLastINode() instanceof  INodeFile) {
           ReplicationRule rule = ((INodeFile)iip.getLastINode()).getReplicationRule(fsd);
-          if (rule != null && rule.getReplica() != replication) {
-            FSDirectory.LOG.warn("replication={} conflicts with rule='{}'", replication, rule);
+          if (rule != null && rule.getReplica() != replicationWithConstraint) {
+            FSDirectory.LOG.warn("replication={} conflicts with rule='{}'",
+                replicationWithConstraint, rule);
           }
         }
       }

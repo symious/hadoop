@@ -386,6 +386,7 @@ public class BlockManager implements BlockStatsMXBean {
   int replicationStreamsHardLimit;
   /** Minimum copies needed or else write is disallowed */
   public final short minReplication;
+  public final short minReplicationConstraint;
   /** Default number of replicas */
   public final int defaultReplication;
   /** value returned by MAX_CORRUPT_FILES_RETURNED */
@@ -532,6 +533,8 @@ public class BlockManager implements BlockStatsMXBean {
     this.minReplication = (short)minR;
     this.maxReplication = (short)maxR;
 
+    this.minReplicationConstraint = (short) conf.getInt(DFS_NAMENODE_REPLICATION_MIN_CONSTRAINT_KEY,
+        minR);
     this.maxReplicationStreams =
         conf.getInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_MAX_STREAMS_KEY,
             DFSConfigKeys.DFS_NAMENODE_REPLICATION_MAX_STREAMS_DEFAULT);
@@ -1629,7 +1632,7 @@ public class BlockManager implements BlockStatsMXBean {
    * @throws java.io.IOException thrown if the requested replication factor
    * is out of bounds
    */
-   public void verifyReplication(String src,
+   public short verifyReplication(String src,
                           short replication,
                           String clientName) throws IOException {
     String err = null;
@@ -1644,6 +1647,11 @@ public class BlockManager implements BlockStatsMXBean {
           + err + " for " + src
           + (clientName == null? "": ", clientName=" + clientName));
     }
+
+    if (replication < minReplicationConstraint) {
+      return minReplicationConstraint;
+    }
+    return replication;
   }
 
   /**
