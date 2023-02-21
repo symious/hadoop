@@ -4185,7 +4185,8 @@ public abstract class FileSystem extends Configured
   }
 
   // Symlinks are temporarily disabled - see HADOOP-10020 and HADOOP-10052
-  private static boolean symlinksEnabled = false;
+  // Updates are enabled by default on the client side
+  private static boolean symlinksEnabled = true;
 
   @VisibleForTesting
   public static boolean areSymlinksEnabled() {
