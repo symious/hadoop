@@ -223,6 +223,8 @@ public class DockerLinuxContainerRuntime extends OCIContainerRuntime {
   @InterfaceAudience.Private
   public static final String ENV_DOCKER_CONTAINER_MOUNTS =
       "YARN_CONTAINER_RUNTIME_DOCKER_MOUNTS";
+  public static final String ENV_DOCKER_CONTAINER_DEVICES =
+      "YARN_CONTAINER_RUNTIME_DOCKER_DEVICES";
   @InterfaceAudience.Private
   public static final String ENV_DOCKER_CONTAINER_TMPFS_MOUNTS =
       "YARN_CONTAINER_RUNTIME_DOCKER_TMPFS_MOUNTS";
@@ -775,6 +777,33 @@ public class DockerLinuxContainerRuntime extends OCIContainerRuntime {
               mount);
         }
         runCommand.addTmpfsMount(mount);
+      }
+    }
+
+    if (environment.containsKey(ENV_DOCKER_CONTAINER_DEVICES)) {
+      Matcher parsedDevices =
+          DEVICE_PATTERN.matcher(environment.get(ENV_DOCKER_CONTAINER_DEVICES));
+      if (!parsedDevices.find()) {
+        throw new ContainerExecutionException(
+            "Unable to parse user supplied device list: "
+                + environment.get(ENV_DOCKER_CONTAINER_DEVICES));
+      }
+      parsedDevices.reset();
+      long mountCount = 0;
+      while (parsedDevices.find()) {
+        mountCount++;
+        String src = parsedDevices.group(1);
+        String dst =
+            parsedDevices.group(3) == null ? src : parsedDevices.group(3);
+        runCommand.addDevice(src, dst);
+      }
+      long commaCount = environment.get(ENV_DOCKER_CONTAINER_DEVICES).chars()
+          .filter(c -> c == ',').count();
+      if (mountCount != commaCount + 1) {
+        // this means the matcher skipped an improperly formatted mount
+        throw new ContainerExecutionException(
+            "Unable to parse some devices in user supplied device list: "
+                + environment.get(ENV_DOCKER_CONTAINER_DEVICES));
       }
     }
 

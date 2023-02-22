@@ -74,6 +74,8 @@ public abstract class OCIContainerRuntime implements LinuxContainerRuntime {
   static final Pattern USER_MOUNT_PATTERN = Pattern.compile(
       "(?<=^|,)([^:\\x00]+):([^:\\x00]+)" +
       "(:(r[ow]|(r[ow][+])?(r?shared|r?slave|r?private)))?(?:,|$)");
+  static final Pattern DEVICE_PATTERN =
+      Pattern.compile("(?<=^|,)(/[^,:\\x00]+)(:(/[^,:\\x00]+))?(?:,|$)");
   static final Pattern TMPFS_MOUNT_PATTERN = Pattern.compile(
       "^/[^:\\x00]+$");
   static final String PORTS_MAPPING_PATTERN =
