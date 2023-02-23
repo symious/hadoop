@@ -200,6 +200,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.HADOOP_USER_GROUP_METRICS_PER
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.FS_PROTECTED_DIRECTORIES;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_NAMENODE_RPC_PORT_DEFAULT;
 import static org.apache.hadoop.util.ExitUtil.terminate;
 import static org.apache.hadoop.util.ToolRunner.confirmPrompt;
@@ -343,6 +345,7 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION,
           DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY,
           DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES,
+          DFS_NAMENODE_SYMLINKS_ENABLED_KEY,
           DFS_LEASE_HARDLIMIT_KEY,
           DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY,
           DFS_NAMENODE_QUOTA_INIT_THREADS_KEY,
@@ -2388,6 +2391,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfMaintenanceEnabled(datanodeManager, property, newVal);
     } else if (property.equals(DFS_NAMENODE_QUOTA_INIT_THREADS_KEY)) {
       return reconfigureQuotaInitThreads(newVal);
+    } else if (property.equals(DFS_NAMENODE_SYMLINKS_ENABLED_KEY)) {
+      return reconfigureDisableSymlinksFeature(newVal);
     } else if (property.equals(DFS_IMAGE_PARALLEL_LOAD_KEY)) {
       return reconfigureParallelLoad(newVal);
     } else if (property.equals(DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY)) {
@@ -2717,6 +2722,19 @@ public class NameNode extends ReconfigurableBase implements
       onlyDurableTxns = editLogTailer.setOnlyDurableTxns(onlyDurableTxns);
     }
     return String.valueOf(onlyDurableTxns);
+  }
+
+  String reconfigureDisableSymlinksFeature(String newVal) {
+    boolean enableAclVerify;
+    if (newVal == null) {
+      enableAclVerify = DFS_NAMENODE_SYMLINKS_ENABLED_DEFAULT;
+    } else {
+      enableAclVerify = Boolean.parseBoolean(newVal);
+    }
+    namesystem.setEnableSymlinks(enableAclVerify);
+    String newSetting = Boolean.toString(enableAclVerify);
+    LOG.info("RECONFIGURE* changed enableSymlinks to {}", newSetting);
+    return newSetting;
   }
 
   @Override  // ReconfigurableBase

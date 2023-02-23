@@ -30,6 +30,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY;
 import static org.junit.Assert.*;
 
 import org.apache.commons.logging.Log;
@@ -339,6 +340,19 @@ public class TestNameNodeReconfigure {
     assertTrue(nameNode.getConf().getBoolean(
         DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
         DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT));
+  }
+
+  @Test
+  public void testReconfigureDisableSymlinksFeature() throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode(0);
+    FSNamesystem fsNamesystem = nameNode.getNamesystem();
+    assertFalse(fsNamesystem.isEnableSymlinks());
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_SYMLINKS_ENABLED_KEY, "true");
+    assertTrue(fsNamesystem.isEnableSymlinks());
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_SYMLINKS_ENABLED_KEY, "false");
+    assertFalse(fsNamesystem.isEnableSymlinks());
   }
 
   @After

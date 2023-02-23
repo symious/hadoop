@@ -1274,6 +1274,7 @@ public class TestFsck {
     conf.setLong(DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY,
         precision);
     conf.setLong(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY, 10000L);
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY, true);
     File builderBaseDir = new File(GenericTestUtils.getRandomizedTempPath());
     cluster = new MiniDFSCluster.Builder(conf, builderBaseDir)
         .numDataNodes(4).build();

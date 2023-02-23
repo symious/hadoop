@@ -1390,6 +1390,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public HdfsFileStatus getFileLinkInfo(String src) throws IOException {
     checkNNStartup();
     metrics.incrFileInfoOps();
+    checkSymlinksFlag();
     return namesystem.getFileInfo(src, false);
   }
   
@@ -1654,6 +1655,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
       boolean createParent) throws IOException {
     checkNNStartup();
     namesystem.checkOperation(OperationCategory.WRITE);
+    checkSymlinksFlag();
     CacheEntry cacheEntry = getCacheEntry();
     if (cacheEntry != null && cacheEntry.isSuccess()) {
       return; // Return previous response
@@ -1686,6 +1688,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public String getLinkTarget(String path) throws IOException {
     checkNNStartup();
     metrics.incrGetLinkTargetOps();
+    checkSymlinksFlag();
     HdfsFileStatus stat = null;
     try {
       stat = namesystem.getFileInfo(path, false);
@@ -1703,6 +1706,11 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     return stat.getSymlink();
   }
 
+  private void checkSymlinksFlag () {
+    if (!namesystem.isEnableSymlinks()) {
+      throw new UnsupportedOperationException("Symlinks not supported");
+    }
+  }
 
   @Override // DatanodeProtocol
   public DatanodeRegistration registerDatanode(DatanodeRegistration nodeReg)

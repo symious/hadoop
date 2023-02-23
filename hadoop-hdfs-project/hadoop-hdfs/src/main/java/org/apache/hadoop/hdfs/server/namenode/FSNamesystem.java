@@ -91,6 +91,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_SUPERUSERGROU
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PERMISSIONS_SUPERUSERGROUP_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_REPLICATION_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_DEFAULT;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_SUPPORT_APPEND_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_SUPPORT_APPEND_KEY;
@@ -455,6 +457,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   private final long leaseRecheckIntervalMs;
   /** Maximum time the lock is hold to release lease. */
   private final long maxLockHoldToReleaseLeaseMs;
+
+  private volatile boolean enableSymlinks;
 
   // Batch size for open files response
   private final int maxListOpenFilesResponses;
@@ -909,6 +913,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
           DFS_NAMENODE_MAX_LOCK_HOLD_TO_RELEASE_LEASE_MS_KEY,
           DFS_NAMENODE_MAX_LOCK_HOLD_TO_RELEASE_LEASE_MS_DEFAULT);
 
+      this.enableSymlinks = conf.getBoolean(
+          DFS_NAMENODE_SYMLINKS_ENABLED_KEY, DFS_NAMENODE_SYMLINKS_ENABLED_DEFAULT);
+
       // For testing purposes, allow the DT secret manager to be started regardless
       // of whether security is enabled.
       alwaysUseDelegationTokensForTests = conf.getBoolean(
@@ -996,6 +1003,15 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
   public int getMaxListOpenFilesResponses() {
     return maxListOpenFilesResponses;
+  }
+
+  @VisibleForTesting
+  public boolean isEnableSymlinks() {
+    return this.enableSymlinks;
+  }
+
+  public void setEnableSymlinks(boolean enableSymlinks) {
+    this.enableSymlinks = enableSymlinks;
   }
 
   void lockRetryCache() {
@@ -2179,9 +2195,6 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       PermissionStatus dirPerms, boolean createParent, boolean logRetryCache)
       throws IOException {
     final String operationName = "createSymlink";
-    if (!FileSystem.areSymlinksEnabled()) {
-      throw new UnsupportedOperationException("Symlinks not supported");
-    }
     FileStatus auditStat = null;
     checkOperation(OperationCategory.WRITE);
     writeLock(operationName);

@@ -88,6 +88,7 @@ public class TestDFSInotifyEventInputStream {
     conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_ACLS_ENABLED_KEY, true);
     // so that we can get an atime change
     conf.setLong(DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY, 1);
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY, true);
 
     MiniQJMHACluster.Builder builder = new MiniQJMHACluster.Builder(conf);
     builder.getDfsBuilder().numDataNodes(2);

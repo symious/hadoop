@@ -22,6 +22,7 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
@@ -37,6 +38,7 @@ public class TestSymlinkHdfsDisable {
     // disable symlink resolution
     conf.setBoolean(
         CommonConfigurationKeys.FS_CLIENT_RESOLVE_REMOTE_SYMLINKS_KEY, false);
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY, true);
     // spin up minicluster, get dfs and filecontext
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).build();
     DistributedFileSystem dfs = cluster.getFileSystem();

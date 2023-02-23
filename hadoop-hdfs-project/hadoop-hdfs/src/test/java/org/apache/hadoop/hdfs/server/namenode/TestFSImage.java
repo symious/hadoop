@@ -217,6 +217,7 @@ public class TestFSImage {
     Configuration conf = new Configuration();
     MiniDFSCluster cluster = null;
     try {
+      conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY, true);
       cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
       cluster.waitActive();
       DistributedFileSystem hdfs = cluster.getFileSystem();
