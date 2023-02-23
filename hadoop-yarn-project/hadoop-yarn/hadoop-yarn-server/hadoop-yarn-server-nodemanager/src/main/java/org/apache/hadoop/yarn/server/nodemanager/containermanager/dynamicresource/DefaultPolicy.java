@@ -32,7 +32,7 @@ public class DefaultPolicy implements Policy {
     ContainerMetrics containerMetrics =
         ContainerMetrics.getContainerMetrics(containerId);
     if (containerMetrics == null || (
-        Time.monotonicNow() - container.getContainerLaunchTime() < 30000)) {
+        Time.now() - container.getContainerLaunchTime() < 30000)) {
       return null;
     }
 
