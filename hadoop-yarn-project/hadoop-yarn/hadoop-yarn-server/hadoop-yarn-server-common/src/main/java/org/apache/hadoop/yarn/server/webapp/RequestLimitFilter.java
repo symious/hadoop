@@ -3,6 +3,7 @@ package org.apache.hadoop.yarn.server.webapp;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.server.metrics.RestRequestMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,8 +62,13 @@ public class RequestLimitFilter implements Filter {
 
   private static int ONE_MINUTE = 60 * 1000;
 
+  RestRequestMetrics requestMetrics;
+
   @Override
   public void init(FilterConfig filterConfig) throws ServletException {
+
+    requestMetrics = RestRequestMetrics.getMetrics();
+
     maxRequestsPerMinutePerAPI = 5;
     String maxReqPerMinute = filterConfig.getInitParameter(MAX_REQUESTS_PER_MINUTE_PER_API);
     if (!StringUtils.isNullOrEmpty(maxReqPerMinute)) {
@@ -106,6 +112,8 @@ public class RequestLimitFilter implements Filter {
       HttpServletResponse response = (HttpServletResponse) servletResponse;
       boolean isSpecifiedUser = isSpecifiedUser(request.getParameter(WHITE_USER_FROM_REQUEST));
       String requestPath = request.getRequestURI();
+
+      countRequest(requestPath);
 
       if (disabledRestAPISet.contains(requestPath)) {
         response.getWriter()
@@ -308,6 +316,43 @@ public class RequestLimitFilter implements Filter {
       requestNum = 0;
       ip = ipAddress;
       lastLimitRequestTime = System.currentTimeMillis();
+    }
+  }
+
+  void countRequest(String reqPath) {
+    requestMetrics.incrRestAPICount();
+
+
+    /**
+     * Request path like:
+     *  /ws/v1/cluster/metrics
+     *  /ws/v1/cluster/scheduler
+     *  /ws/v1/cluster/nodes
+     *  /ws/v1/cluster/apps
+     *  /ws/v1/cluster/containers
+     */
+    String[] paths = reqPath.split("/");
+    if (null != paths && paths.length > 4) {
+      String tmpPath = paths[4];
+      switch (tmpPath) {
+        case "metrics":
+          requestMetrics.incrMetricsAPICount();
+          break;
+        case "scheduler":
+          requestMetrics.incrSchedulerAPICount();
+          break;
+        case "nodes":
+          requestMetrics.incrNodesAPICount();
+          break;
+        case "apps":
+          requestMetrics.incrAppsAPICount();
+          break;
+        case "containers":
+          requestMetrics.incrContainersAPICount();
+          break;
+        default:
+          break;
+      }
     }
   }
 }
