@@ -218,6 +218,13 @@ public class ContainerLaunch implements Callable<Integer> {
       return 0;
     }
 
+    if (container.getContainerState() == ContainerState.NEW) {
+      LOG.info("Container " + container.getContainerId() + " state is NEW, skip this time.");
+      dispatcher.getEventHandler().handle(new ContainersLauncherEvent(container,
+          ContainersLauncherEventType.LAUNCH_CONTAINER));
+      return 0;
+    }
+
     final ContainerLaunchContext launchContext = container.getLaunchContext();
     ContainerId containerID = container.getContainerId();
     String containerIdStr = containerID.toString();
