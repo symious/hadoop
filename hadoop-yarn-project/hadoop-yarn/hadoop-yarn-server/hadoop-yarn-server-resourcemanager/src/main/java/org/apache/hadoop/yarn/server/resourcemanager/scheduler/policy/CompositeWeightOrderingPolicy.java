@@ -149,7 +149,10 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
       // (app_priority / high_flag_priority) * m +
       // (pending_resources / pending_flag_resources) * n +
       // (pending_time / pending_flag_time) * q
-
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("queueName: " + queueName +
+            " ,WeightComparator reorder start time: " + reorderStartTime);
+      }
       int r1_priority = r1.getPriority().getPriority();
       int r2_priority = r2.getPriority().getPriority();
 
@@ -180,16 +183,15 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
         r2_pending_resources_weight =
             r2_pending_resources_weight * pendingMemoryWeightFactor;
 
-        long currentTimeMillis = System.currentTimeMillis();
         double r1_pending_time_weight =
-            (currentTimeMillis - r1.getStartTime()) / pendingFlagTime;
+            (reorderStartTime - r1.getStartTime()) / pendingFlagTime;
         r1_pending_time_weight =
             (r1_pending_time_weight < 1) ? r1_pending_time_weight : 1;
         r1_pending_time_weight =
             r1_pending_time_weight * pendingTimeWeightFactor;
 
         double r2_pending_time_weight =
-            (currentTimeMillis - r2.getStartTime()) / pendingFlagTime;
+            (reorderStartTime - r2.getStartTime()) / pendingFlagTime;
         r2_pending_time_weight =
             (r2_pending_time_weight < 1) ? r2_pending_time_weight : 1;
         r2_pending_time_weight =
@@ -276,7 +278,7 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
     this.pendingMemoryWeightFactor =
         Double.parseDouble(conf.get("pendingMemoryWeightFactor"));
 
-    if (this.priorityWeightFactor + this.priorityWeightFactor < 1) {
+    if (this.priorityWeightFactor + this.pendingMemoryWeightFactor < 1) {
       this.pendingTimeWeightFactor =
           1.0 - (priorityWeightFactor + pendingMemoryWeightFactor);
     } else {
@@ -291,6 +293,10 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
               " ,pendingMemoryWeightFactor: " + this.pendingMemoryWeightFactor +
           " ,pendingTimeWeightFactor: " + pendingTimeWeightFactor);
     }
+    LOG.info("Final take effect results, " +
+        "priorityWeightFactor: " + this.priorityWeightFactor +
+        " ,pendingMemoryWeightFactor: " + this.pendingMemoryWeightFactor +
+        " ,pendingTimeWeightFactor: " + pendingTimeWeightFactor);
   }
 
   @Override

@@ -40,6 +40,7 @@ public abstract class AbstractComparatorOrderingPolicy<S extends SchedulableEnti
   protected ConcurrentSkipListSet<S> schedulableEntities;
   protected Comparator<SchedulableEntity> comparator;
   protected Map<String, S> entitiesToReorder = new HashMap<String, S>();
+  protected long reorderStartTime;
   
   public AbstractComparatorOrderingPolicy() { }
   
@@ -75,6 +76,10 @@ public abstract class AbstractComparatorOrderingPolicy<S extends SchedulableEnti
   
   protected void reorderScheduleEntities() {
     synchronized (entitiesToReorder) {
+      reorderStartTime = System.currentTimeMillis();
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("reorderScheduleEntities start time: " + reorderStartTime);
+      }
       for (Map.Entry<String, S> entry :
           entitiesToReorder.entrySet()) {
         reorderSchedulableEntity(entry.getValue());
