@@ -19,6 +19,8 @@ package org.apache.hadoop.fs;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CHECKPOINT_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CHECKPOINT_INTERVAL_KEY;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CREATE_ROOT_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_CREATE_ROOT_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
 
@@ -68,6 +70,8 @@ public class TrashPolicyDefault extends TrashPolicy {
       new SimpleDateFormat("yyMMddHHmm");
   private static final int MSECS_PER_MINUTE = 60*1000;
 
+  protected boolean createTrashRootEnable;
+
   private long emptierInterval;
 
   public TrashPolicyDefault() { }
@@ -90,6 +94,8 @@ public class TrashPolicyDefault extends TrashPolicy {
     this.emptierInterval = (long)(conf.getFloat(
         FS_TRASH_CHECKPOINT_INTERVAL_KEY, FS_TRASH_CHECKPOINT_INTERVAL_DEFAULT)
         * MSECS_PER_MINUTE);
+    this.createTrashRootEnable = conf.getBoolean(FS_TRASH_CREATE_ROOT_KEY,
+        FS_TRASH_CREATE_ROOT_DEFAULT);
    }
 
   @Override
@@ -101,6 +107,8 @@ public class TrashPolicyDefault extends TrashPolicy {
     this.emptierInterval = (long)(conf.getFloat(
         FS_TRASH_CHECKPOINT_INTERVAL_KEY, FS_TRASH_CHECKPOINT_INTERVAL_DEFAULT)
         * MSECS_PER_MINUTE);
+    this.createTrashRootEnable = conf.getBoolean(FS_TRASH_CREATE_ROOT_KEY,
+        FS_TRASH_CREATE_ROOT_DEFAULT);
     if (deletionInterval < 0) {
       LOG.warn("Invalid value {} for deletion interval,"
           + " deletion interaval can not be negative."
@@ -149,29 +157,31 @@ public class TrashPolicyDefault extends TrashPolicy {
 
     // try twice, in case checkpoint between the mkdirs() & rename()
     for (int i = 0; i < 2; i++) {
-      try {
-        if (!fs.mkdirs(baseTrashPath, PERMISSION)) {      // create current
-          LOG.warn("Can't create(mkdir) trash directory: " + baseTrashPath);
-          return false;
+      if (createTrashRootEnable) {
+        try {
+          if (!fs.mkdirs(baseTrashPath, PERMISSION)) {      // create current
+            LOG.warn("Can't create(mkdir) trash directory: " + baseTrashPath);
+            return false;
+          }
+        } catch (FileAlreadyExistsException e) {
+          // find the path which is not a directory, and modify baseTrashPath
+          // & trashPath, then mkdirs
+          Path existsFilePath = baseTrashPath;
+          while (!fs.exists(existsFilePath)) {
+            existsFilePath = existsFilePath.getParent();
+          }
+          baseTrashPath = new Path(baseTrashPath.toString().replace(
+              existsFilePath.toString(), existsFilePath.toString() + Time.now())
+          );
+          trashPath = new Path(baseTrashPath, trashPath.getName());
+          // retry, ignore current failure
+          --i;
+          continue;
+        } catch (IOException e) {
+          LOG.warn("Can't create trash directory: " + baseTrashPath, e);
+          cause = e;
+          break;
         }
-      } catch (FileAlreadyExistsException e) {
-        // find the path which is not a directory, and modify baseTrashPath
-        // & trashPath, then mkdirs
-        Path existsFilePath = baseTrashPath;
-        while (!fs.exists(existsFilePath)) {
-          existsFilePath = existsFilePath.getParent();
-        }
-        baseTrashPath = new Path(baseTrashPath.toString().replace(
-            existsFilePath.toString(), existsFilePath.toString() + Time.now())
-        );
-        trashPath = new Path(baseTrashPath, trashPath.getName());
-        // retry, ignore current failure
-        --i;
-        continue;
-      } catch (IOException e) {
-        LOG.warn("Can't create trash directory: " + baseTrashPath, e);
-        cause = e;
-        break;
       }
       try {
         // if the target path in Trash already exists, then append with 
@@ -181,10 +191,11 @@ public class TrashPolicyDefault extends TrashPolicy {
         while(fs.exists(trashPath)) {
           trashPath = new Path(orig + Time.now());
         }
-        
+
         // move to current trash
         fs.rename(path, trashPath,
             Rename.TO_TRASH);
+
         LOG.info("Moved: '" + path + "' to trash at: " + trashPath);
         return true;
       } catch (IOException e) {
