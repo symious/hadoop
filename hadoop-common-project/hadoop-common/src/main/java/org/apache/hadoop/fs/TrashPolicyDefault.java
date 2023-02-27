@@ -196,6 +196,8 @@ public class TrashPolicyDefault extends TrashPolicy {
         fs.rename(path, trashPath,
             Rename.TO_TRASH);
 
+        // SPDI-16065. Only correct the client output, since the actual control is at NN side.
+        trashPath = correctTrashPath(path, trashPath);
         LOG.info("Moved: '" + path + "' to trash at: " + trashPath);
         return true;
       } catch (IOException e) {
@@ -204,6 +206,16 @@ public class TrashPolicyDefault extends TrashPolicy {
     }
     throw (IOException)
       new IOException("Failed to move to trash: " + path).initCause(cause);
+  }
+
+  private Path correctTrashPath(Path src, Path dst) {
+    String[] split = dst.toString().split("/");
+    // Old format is /user/$USER/.Trash/Current/abcxyz....
+    String user = split[2];
+
+    Path trashRoot = new Path("/Trash", user);
+    Path trashCurrent = new Path(trashRoot, "Current");
+    return Path.mergePaths(trashCurrent, src);
   }
 
   @SuppressWarnings("deprecation")
