@@ -85,7 +85,7 @@ static int is_volume_name(const char *volume_name) {
  */
 static int is_volume_name_matched_by_regex(const char* requested, const char* pattern) {
     // execute_regex_match return 0 is matched success
-    return is_volume_name(requested) && (execute_regex_match(pattern + sizeof("regex:"), requested) == 0);
+    return (execute_regex_match(pattern + sizeof("regex:"), requested) == 0);
 }
 
 /**
