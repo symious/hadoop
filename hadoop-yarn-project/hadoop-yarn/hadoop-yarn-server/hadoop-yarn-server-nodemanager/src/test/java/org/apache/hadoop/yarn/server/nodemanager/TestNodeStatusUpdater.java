@@ -1824,7 +1824,8 @@ public class TestNodeStatusUpdater extends NodeManagerTestBase {
     NodeManager nodeManager = new NodeManager();
     YarnConfiguration nmConf = new YarnConfiguration();
     nmConf.setSocketAddr(YarnConfiguration.RM_RESOURCE_TRACKER_ADDRESS,
-        resourceTracker.getListenerAddress());
+        InetSocketAddress.createUnresolved("0.0.0.0",
+            resourceTracker.getListenerAddress().getPort()));
     nmConf.set(YarnConfiguration.NM_LOCALIZER_ADDRESS, "0.0.0.0:0");
     nodeManager.init(nmConf);
     nodeManager.start();
