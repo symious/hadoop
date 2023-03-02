@@ -28,6 +28,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
+import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.server.api.protocolrecords.LogAggregationReport;
 import org.apache.hadoop.yarn.server.api.records.AppCollectorData;
 import org.apache.hadoop.yarn.server.api.records.NodeHealthStatus;
@@ -51,6 +52,8 @@ import org.apache.hadoop.yarn.server.security.ApplicationACLsManager;
  * NodeManager.
  */
 public interface Context {
+
+  Dispatcher getDispatcher();
 
   /**
    * Return the nodeId. Usable only when the ContainerManager is started.

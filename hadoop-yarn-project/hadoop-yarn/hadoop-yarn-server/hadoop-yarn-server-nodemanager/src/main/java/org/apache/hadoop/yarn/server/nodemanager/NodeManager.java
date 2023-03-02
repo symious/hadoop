@@ -405,6 +405,7 @@ public class NodeManager extends CompositeService
 
     this.context = createNMContext(containerTokenSecretManager,
         nmTokenSecretManager, nmStore, isDistSchedulingEnabled, conf);
+    eventQueueMetrics.setNmContext(context);
 
     ResourcePluginManager pluginManager = createResourcePluginManager();
     pluginManager.initialize(context);
@@ -421,6 +422,7 @@ public class NodeManager extends CompositeService
 
     // NodeManager level dispatcher
     this.dispatcher = createNMDispatcher();
+    ((NMContext)context).setDispatcher(dispatcher);
 
     this.nodeHealthChecker = new NodeHealthCheckerService(dirsHandler);
     addService(nodeHealthChecker);
@@ -480,7 +482,6 @@ public class NodeManager extends CompositeService
     dispatcher.register(ContainerManagerEventType.class, containerManager);
     dispatcher.register(NodeManagerEventType.class, this);
     addService(dispatcher);
-    countDispatcherEventQueue((NMContext) context, conf);
 
     pauseMonitor = new JvmPauseMonitor();
     addService(pauseMonitor);
@@ -690,6 +691,8 @@ public class NodeManager extends CompositeService
 
     private AuxServices auxServices;
 
+    private Dispatcher dispatcher;
+
     public NMContext(NMContainerTokenSecretManager containerTokenSecretManager,
         NMTokenSecretManagerInNM nmTokenSecretManager,
         LocalDirsHandlerService dirsHandler, ApplicationACLsManager aclsManager,
@@ -711,6 +714,11 @@ public class NodeManager extends CompositeService
           LogAggregationReport>();
       this.isDistSchedulingEnabled = isDistSchedulingEnabled;
       this.conf = conf;
+    }
+
+    @Override
+    public Dispatcher getDispatcher() {
+      return dispatcher;
     }
 
     /**
@@ -976,6 +984,10 @@ public class NodeManager extends CompositeService
     public DynamicResourcePublisher getDynamicResourcePublisher() {
       return dynamicResourcePublisher;
     }
+
+    void setDispatcher(Dispatcher dispatcher) {
+      this.dispatcher = dispatcher;
+    }
   }
 
   /**
@@ -1142,56 +1154,4 @@ public class NodeManager extends CompositeService
       Context ctxt) {
     return new NMLogAggregationStatusTracker(ctxt);
   }
-
-  private void countDispatcherEventQueue(NMContext nmContext, Configuration conf) {
-
-     long monitoringEventQueueInterval =
-        conf.getLong(YarnConfiguration.NM_MONITOR_EVENT_QUEUE_INTERVAL_MS,
-            YarnConfiguration.DEFAULT_NM_MONITOR_EVENT_QUEUE_INTERVAL_MS);
-    LOG.info("monitoringEventQueueInterval: " + monitoringEventQueueInterval);
-
-      Runnable r = () -> {
-        int nmEventQueueSize = 0, nmContainerManagerQueueSize = 0,
-            nmTimelineQueueSize = 0;
-        while (true) {
-          try {
-            if (this.dispatcher != null) {
-              nmEventQueueSize = this.dispatcher.getCurrentEventQueueSize();
-            }
-            if (this.getContainerManager().getDispatcher() != null) {
-              nmContainerManagerQueueSize =
-                  this.getContainerManager().getDispatcher()
-                      .getCurrentEventQueueSize();
-            }
-            if (nmContext.getNMTimelinePublisher().getDispatcher() != null) {
-              nmTimelineQueueSize =
-                  nmContext.getNMTimelinePublisher().getDispatcher()
-                      .getCurrentEventQueueSize();
-            }
-            if (LOG.isDebugEnabled()) {
-              LOG.debug(
-                  "countEventQueueThread nmEventQueueSize: " +
-                      nmEventQueueSize +
-                      " ,nmContainerManagerQueueSize: " +
-                      nmContainerManagerQueueSize + " ,nmTimelineQueueSize: " +
-                      nmTimelineQueueSize);
-            }
-            eventQueueMetrics.setNMEventQueueSize(nmEventQueueSize);
-            eventQueueMetrics
-                .setNmContainerManagerQueueSize(nmContainerManagerQueueSize);
-            eventQueueMetrics.setnmTimelineQueueSize(nmTimelineQueueSize);
-            Thread.sleep(monitoringEventQueueInterval);
-          } catch (Exception e) {
-            LOG.error("countDispatcherEventQueue failed!", e);
-          }
-        }
-      };
-
-    if (monitoringEventQueueInterval > 0) {
-      new Thread(r).start();
-      LOG.info("NM countEventQueueThread start!");
-    }
-
-  }
-
 }

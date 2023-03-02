@@ -41,6 +41,7 @@ import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.AsyncDispatcher;
+import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.hadoop.yarn.server.api.protocolrecords.LogAggregationReport;
@@ -679,6 +680,11 @@ public abstract class BaseAMRMProxyTest {
   }
 
   protected class NullContext implements Context {
+
+    @Override
+    public Dispatcher getDispatcher() {
+      return null;
+    }
 
     @Override
     public NodeId getNodeId() {

@@ -4,20 +4,14 @@ import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
-import org.apache.hadoop.metrics2.lib.MutableGaugeInt;
-import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
+import org.apache.hadoop.yarn.event.AsyncDispatcher;
+import org.apache.hadoop.yarn.server.nodemanager.Context;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManagerImpl;
 
 @Metrics(about = "Metrics for node manager event queue", context = "yarn")
 public class EventQueueMetrics {
 
-  @Metric("Count for NM event")
-  MutableGaugeInt nmEventQueueSize;
-
-  @Metric("Count for ContainerManager event")
-  MutableGaugeInt nmContainerManagerQueueSize;
-
-  @Metric("Count for Timeline event")
-  MutableGaugeLong nmTimelineQueueSize;
+  private Context context = null;
 
   private EventQueueMetrics() {
   }
@@ -30,31 +24,34 @@ public class EventQueueMetrics {
     return ms.register(new EventQueueMetrics());
   }
 
-  public MutableGaugeInt getNmEventQueueSize() {
-    return nmEventQueueSize;
+  public void setNmContext(Context context) {
+    this.context = context;
   }
 
-  public void setNMEventQueueSize(
-      int nmEventQueueSize) {
-    this.nmEventQueueSize.set(nmEventQueueSize);
+  @Metric(type = Metric.Type.COUNTER)
+  public int getNMEventQueueSize() {
+    if (context != null) {
+      return ((AsyncDispatcher) context.getDispatcher())
+          .getCurrentEventQueueSize();
+    }
+    return 0;
   }
 
-  public MutableGaugeInt getNmContainerManagerQueueSize() {
-    return nmContainerManagerQueueSize;
+  @Metric(type = Metric.Type.COUNTER)
+  public int getNMContainerManagerQueueSize() {
+    if (context != null) {
+      return ((ContainerManagerImpl) context.getContainerManager())
+          .getDispatcher().getCurrentEventQueueSize();
+    }
+    return 0;
   }
 
-  public void setNmContainerManagerQueueSize(
-      int nmContainerManagerEventQueueSize) {
-    this.nmContainerManagerQueueSize.set(nmContainerManagerEventQueueSize);
+  @Metric(type = Metric.Type.COUNTER)
+  public int getNMTimelineQueueSize() {
+    if (context != null && context.getNMTimelinePublisher() != null) {
+      return context.getNMTimelinePublisher().getDispatcher()
+          .getCurrentEventQueueSize();
+    }
+    return 0;
   }
-
-  public MutableGaugeLong getNmTimelineQueueSize() {
-    return nmTimelineQueueSize;
-  }
-
-  public void setnmTimelineQueueSize(
-      int nmTimelineQueueSize) {
-    this.nmTimelineQueueSize.set(nmTimelineQueueSize);
-  }
-
 }
