@@ -103,6 +103,8 @@ public interface Context {
 
   NodeFailedContainersMonitor getNodeFailedContainersMonitor();
 
+  void setNodeFailedContainersMonitor(NodeFailedContainersMonitor nodeFailedContainersMonitor);
+
   LocalDirsHandlerService getLocalDirsHandler();
 
   ApplicationACLsManager getApplicationACLsManager();

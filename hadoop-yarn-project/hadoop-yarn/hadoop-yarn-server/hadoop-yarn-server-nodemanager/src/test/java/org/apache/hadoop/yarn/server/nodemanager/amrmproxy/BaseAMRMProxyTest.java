@@ -791,6 +791,12 @@ public abstract class BaseAMRMProxyTest {
     }
 
     @Override
+    public void setNodeFailedContainersMonitor(
+        NodeFailedContainersMonitor nodeFailedContainersMonitor) {
+      return;
+    }
+
+    @Override
     public NodeStatusUpdater getNodeStatusUpdater() {
       return null;
     }
