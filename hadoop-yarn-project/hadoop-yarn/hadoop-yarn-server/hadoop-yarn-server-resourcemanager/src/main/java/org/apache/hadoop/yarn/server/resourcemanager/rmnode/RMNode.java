@@ -35,6 +35,7 @@ import org.apache.hadoop.yarn.api.records.NodeAttribute;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
 import org.apache.hadoop.yarn.server.api.records.OpportunisticContainersStatus;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.SchedulingNodeType;
 
 /**
  * Node managers information on available resources 
@@ -204,6 +205,10 @@ public interface RMNode {
   boolean isCoLocate();
 
   void setCoLocate(boolean isCoLocate);
+
+  SchedulingNodeType getNodeSchedulerType();
+
+  void setNodeSchedulerType(SchedulingNodeType schedulingNodeType);
 
   /**
    * Get the allocation tags and their counts associated with this node.

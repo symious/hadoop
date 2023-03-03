@@ -761,6 +761,8 @@ public class AppSchedulingInfo {
       if (!isDummyAllocated) {
         queue.getMetrics().allocateResources(node.getPartition(), user, 1,
             containerAllocated.getContainer().getResource(), false);
+        queue.getMetrics().incrSchedulerTypeAggregations(
+            node.getRMNode().getNodeSchedulerType());
       }
       queue.getMetrics().decrPendingResources(
           containerAllocated.getNodeLabelExpression(), user, 1,

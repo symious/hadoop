@@ -46,6 +46,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.metrics.CustomResourceMetricValue;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.SchedulingNodeType;
 import org.apache.hadoop.yarn.util.resource.ResourceUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,6 +87,12 @@ public class QueueMetrics implements MetricsSource {
     MutableCounterLong aggregateMemoryMBPreempted;
   @Metric("Aggregate total of preempted vcores")
     MutableCounterLong aggregateVcoresPreempted;
+
+  @Metric("Aggregate # of allocated global scheduler containers")
+  MutableCounterLong aggregateGlobalSchedulerContainersAllocated;
+
+  @Metric("Aggregate # of allocated heartbeat scheduler containers")
+  MutableCounterLong aggregateHeartBeatSchedulerContainersAllocated;
 
   //Metrics updated only for "default" partition
   @Metric("Allocated memory in MB") MutableGaugeLong allocatedMB;
@@ -736,6 +743,19 @@ public class QueueMetrics implements MetricsSource {
     }
   }
 
+  public void incrSchedulerTypeAggregations(SchedulingNodeType type) {
+    if (type == SchedulingNodeType.GLOBAL) {
+      aggregateGlobalSchedulerContainersAllocated.incr();
+    } else if (type == SchedulingNodeType.HEARTBEAT) {
+      aggregateHeartBeatSchedulerContainersAllocated.incr();
+    } else {
+      return;
+    }
+    if (parent != null) {
+      parent.incrSchedulerTypeAggregations(type);
+    }
+  }
+
   public void allocateResources(String partition, String user, int containers,
       Resource res, boolean decrPending) {
 
@@ -1201,6 +1221,14 @@ public class QueueMetrics implements MetricsSource {
 
   public long getAggregateAllocatedContainers() {
     return aggregateContainersAllocated.value();
+  }
+
+  public long getAggregateGlobalSchedulerContainers(){
+    return aggregateGlobalSchedulerContainersAllocated.value();
+  }
+
+  public long getAggregateHeartBeatSchedulerContainers(){
+    return aggregateHeartBeatSchedulerContainersAllocated.value();
   }
 
   public long getAggregateNodeLocalContainersAllocated() {

@@ -45,6 +45,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsMana
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode
         .UpdatedContainerInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.SchedulingNodeType;
 
 @Private
 @Unstable
@@ -72,6 +73,7 @@ public class NodeInfo {
     private List<ApplicationId> runningApplications;
     private boolean isGoodTarget = true;
     private boolean isCoLocate = false;
+    private SchedulingNodeType schedulingNodeType = SchedulingNodeType.HEARTBEAT;
 
     public FakeRMNodeImpl(NodeId nodeId, String nodeAddr, String httpAddress,
         Resource perNode, String rackName, String healthReport,
@@ -253,6 +255,16 @@ public class NodeInfo {
     @Override
     public void setCoLocate(boolean isCoLocate) {
       this.isCoLocate = isCoLocate;
+    }
+
+    @Override
+    public SchedulingNodeType getNodeSchedulerType() {
+      return schedulingNodeType;
+    }
+
+    @Override
+    public void setNodeSchedulerType(SchedulingNodeType schedulingNodeType) {
+      this.schedulingNodeType = schedulingNodeType;
     }
 
     @Override

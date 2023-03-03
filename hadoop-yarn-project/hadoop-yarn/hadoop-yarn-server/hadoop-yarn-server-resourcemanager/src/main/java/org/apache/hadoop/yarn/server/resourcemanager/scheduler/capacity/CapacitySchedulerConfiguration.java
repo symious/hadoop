@@ -21,6 +21,9 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Strings;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableSet;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.IpPrefixSchedulingNodeTypeSettingPolicy;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.PercentageSchedulingNodeTypeSettingPolicy;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.SchedulingNodeTypeSettingPolicy;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.Utilization2RandomQueueOrderingPolicy;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy.CompositeWeightOrderingPolicy;
 import org.slf4j.Logger;
@@ -311,6 +314,33 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
       SCHEDULE_ASYNCHRONOUSLY_PREFIX + ".enable";
 
   @Private
+  public static final String SCHEDULE_PARALLELLY_PREFIX =
+      PREFIX + "schedule-parallelly";
+
+  @Private
+  public static final String SCHEDULE_PARALLELLY_ENABLE =
+      SCHEDULE_PARALLELLY_PREFIX + ".enable";
+
+  /**
+   * Scheduling Node Type Setting policy
+   */
+  public static final String SCHEDULING_NODE_SETTING_POLICY =
+      "scheduling-node-setting-policy";
+
+  public static final String PERCENTAGE_NODE_SCHEDULING_SETTING_POLICY =
+      "percentage";
+
+  public static final String IP_PREFIX_NODE_SCHEDULING_SETTING_POLICY =
+      "ipPrefix";
+
+  public static final String DEFAULT_NODE_SCHEDULING_SETTING_POLICY =
+      PERCENTAGE_NODE_SCHEDULING_SETTING_POLICY;
+
+  @Private
+  public static final String GLOBAL_SCHEDULER_NODES_CONFIG =
+      SCHEDULE_PARALLELLY_PREFIX + ".global-scheduler-nodes-config";
+
+  @Private
   public static final String SCHEDULE_ASYNCHRONOUSLY_MAXIMUM_THREAD =
       SCHEDULE_ASYNCHRONOUSLY_PREFIX + ".maximum-threads";
 
@@ -330,6 +360,9 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
 
   @Private
   public static final boolean DEFAULT_SCHEDULE_ASYNCHRONOUSLY_ENABLE = false;
+
+  @Private
+  public static final boolean DEFAULT_SCHEDULE_PARALLELLY_ENABLE = false;
 
   @Private
   public static final String QUEUE_MAPPING = PREFIX + "queue-mappings";
@@ -1443,6 +1476,49 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
 
   public void setScheduleAynschronously(boolean async) {
     setBoolean(SCHEDULE_ASYNCHRONOUSLY_ENABLE, async);
+  }
+
+  public boolean getMultipleSchedulersParallelly() {
+    return getBoolean(SCHEDULE_PARALLELLY_ENABLE,
+        DEFAULT_SCHEDULE_PARALLELLY_ENABLE);
+  }
+
+  public void setMultipleSchedulersParallelly(boolean parallel) {
+    setBoolean(SCHEDULE_PARALLELLY_ENABLE, parallel);
+  }
+
+  public String getGlobalSchedulerNodesConfig() {
+    return get(GLOBAL_SCHEDULER_NODES_CONFIG, "");
+  }
+
+  @VisibleForTesting
+  public void setGlobalSchedulerNodesConfig(String globalSchedulerNodesConfig) {
+    set(GLOBAL_SCHEDULER_NODES_CONFIG, globalSchedulerNodesConfig);
+  }
+
+  public SchedulingNodeTypeSettingPolicy getNodeSchedulingPolicy() {
+
+    String policyType = get(PREFIX + SCHEDULING_NODE_SETTING_POLICY,
+        DEFAULT_NODE_SCHEDULING_SETTING_POLICY);
+    LOG.info("SchedulingNodeTypeSettingPolicy: " + policyType);
+
+    String nodePolicyConfigs = getGlobalSchedulerNodesConfig();
+    LOG.info("nodePolicyConfigs: " + nodePolicyConfigs);
+
+    SchedulingNodeTypeSettingPolicy schedulingNodeTypeSettingPolicy = null;
+
+    if (policyType.trim().equals(PERCENTAGE_NODE_SCHEDULING_SETTING_POLICY)) {
+      schedulingNodeTypeSettingPolicy =
+          new PercentageSchedulingNodeTypeSettingPolicy(nodePolicyConfigs);
+    } else if (policyType.trim()
+        .equals(IP_PREFIX_NODE_SCHEDULING_SETTING_POLICY)) {
+      schedulingNodeTypeSettingPolicy =
+          new IpPrefixSchedulingNodeTypeSettingPolicy(nodePolicyConfigs);
+    } else {
+      LOG.error("UnKnown NodeSchedulingPolicy: " + policyType);
+    }
+
+    return schedulingNodeTypeSettingPolicy;
   }
 
   public boolean getOverrideWithQueueMappings() {

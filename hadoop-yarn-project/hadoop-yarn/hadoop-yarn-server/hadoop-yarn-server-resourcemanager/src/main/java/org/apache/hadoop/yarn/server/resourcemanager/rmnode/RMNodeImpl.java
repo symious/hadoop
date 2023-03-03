@@ -40,6 +40,7 @@ import org.apache.commons.collections.keyvalue.DefaultMapEntry;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.yarn.server.api.records.NodeStatus;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.SchedulingNodeType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -158,6 +159,8 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
 
   //Record status of Co-locate
   private boolean isCoLocate =  Boolean.FALSE;
+
+  private volatile SchedulingNodeType schedulingNodeType = SchedulingNodeType.HEARTBEAT;
 
   private String healthReport;
   private long lastHealthReportTime;
@@ -544,6 +547,16 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
   @Override
   public void setCoLocate(boolean isCoLocate) {
     this.isCoLocate = isCoLocate;
+  }
+
+  @Override
+  public SchedulingNodeType getNodeSchedulerType() {
+    return this.schedulingNodeType;
+  }
+
+  @Override
+  public void setNodeSchedulerType(SchedulingNodeType schedulingNodeType) {
+    this.schedulingNodeType = schedulingNodeType;
   }
 
   public void setHealthReport(String healthReport) {

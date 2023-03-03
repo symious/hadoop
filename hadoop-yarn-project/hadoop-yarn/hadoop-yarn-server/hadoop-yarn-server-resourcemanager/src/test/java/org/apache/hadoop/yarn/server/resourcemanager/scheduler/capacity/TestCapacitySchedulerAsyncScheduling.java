@@ -70,6 +70,8 @@ import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -77,6 +79,10 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class TestCapacitySchedulerAsyncScheduling {
+
+  private static final Logger LOG =
+      LoggerFactory.getLogger(TestCapacitySchedulerAsyncScheduling.class);
+
   private final int GB = 1024;
 
   private YarnConfiguration conf;
@@ -715,7 +721,7 @@ public class TestCapacitySchedulerAsyncScheduling {
       Assert.assertEquals(NodeState.DECOMMISSIONING, rmNode.getState());
       boolean shouldSkip =
           cs.shouldSkipNodeSchedule(cs.getNode(nms.get(i).getNodeId()),
-              cs, true);
+              cs, true, false);
       // make sure should skip
       Assert.assertTrue(shouldSkip);
     }
@@ -723,7 +729,7 @@ public class TestCapacitySchedulerAsyncScheduling {
     for (int i = 5; i < 9; i++) {
       boolean shouldSkip =
           cs.shouldSkipNodeSchedule(cs.getNode(nms.get(i).getNodeId()),
-              cs, true);
+              cs, true, false);
       // make sure should not skip
       Assert.assertFalse(shouldSkip);
     }
@@ -748,6 +754,116 @@ public class TestCapacitySchedulerAsyncScheduling {
       } else {
         Assert.assertTrue(checkNumNonAMContainersOnNode(cs, nms.get(i)) > 0);
       }
+    }
+    rm.close();
+  }
+
+
+  @Test
+  public void testAsyncWithMultipleSchedulersParallelly() throws Exception {
+    int heartbeatInterval = 100;
+    conf.setBoolean(
+        CapacitySchedulerConfiguration.SCHEDULE_PARALLELLY_ENABLE, true);
+    conf.setInt(
+        CapacitySchedulerConfiguration.SCHEDULE_ASYNCHRONOUSLY_MAXIMUM_THREAD,
+        5);
+    conf.setInt(CapacitySchedulerConfiguration.SCHEDULE_ASYNCHRONOUSLY_PREFIX
+        + ".scheduling-interval-ms", 100);
+
+    conf.set(CapacitySchedulerConfiguration.MULTI_NODE_SORTING_POLICIES,
+        "resource-based");
+    conf.set(CapacitySchedulerConfiguration.MULTI_NODE_SORTING_POLICY_NAME,
+        "resource-based");
+    String policyName =
+        CapacitySchedulerConfiguration.MULTI_NODE_SORTING_POLICY_NAME
+            + ".resource-based" + ".class";
+    conf.set(policyName, POLICY_CLASS_NAME);
+    conf.setBoolean(CapacitySchedulerConfiguration.MULTI_NODE_PLACEMENT_ENABLED,
+        true);
+
+    // Heartbeat interval is 100 ms.
+    conf.setInt(YarnConfiguration.RM_NM_HEARTBEAT_INTERVAL_MS,
+        heartbeatInterval);
+    conf.setInt(YarnConfiguration.SCHEDULER_SKIP_NODE_MULTIPLIER,
+        5);
+    final RMNodeLabelsManager mgr = new NullRMNodeLabelsManager();
+    mgr.init(conf);
+
+    // inject node label manager
+    MockRM rm = new MockRM(TestUtils.getConfigurationWithMultipleQueues(conf)) {
+      @Override
+      public RMNodeLabelsManager createNodeLabelManager() {
+        return mgr;
+      }
+    };
+
+    CapacityScheduler cs = (CapacityScheduler) rm.getResourceScheduler();
+    rm.getRMContext().setNodeLabelManager(mgr);
+    rm.start();
+
+    List<MockNM> nms = new ArrayList<>();
+    // Add 10 nodes to the cluster, in the cluster we have 200 GB resource
+    for (int i = 0; i < 10; i++) {
+      MockNM nm = rm.registerNode("127.0.0." + i + ":1234", 20 * GB);
+      if (i >= 5) {
+        RMNode rmNode = cs.getNode(nm.getNodeId()).getRMNode();
+        rmNode.setNodeSchedulerType(SchedulingNodeType.GLOBAL);
+      }
+      nms.add(nm);
+      LOG.info("rmNode: " + nm.getNodeId().getHost() + " schedulerType: " +
+          cs.getNode(nm.getNodeId()).getRMNode().getNodeSchedulerType());
+    }
+
+    keepNMHeartbeat(nms, heartbeatInterval);
+
+    List<MockAM> ams = new ArrayList<>();
+    for (int i = 0; i < 3; i++) {
+      RMApp rmApp = MockRMAppSubmitter.submit(rm,
+          MockRMAppSubmissionData.Builder.createWithMemory(1024, rm)
+              .withAppName("app")
+              .withUser("user")
+              .withAcls(null)
+              .withUnmanagedAM(false)
+              .withQueue(Character.toString((char) (i % 34 + 97)))
+              .withMaxAppAttempts(1)
+              .withCredentials(null)
+              .withAppType(null)
+              .withWaitForAppAcceptedState(false)
+              .build());
+      MockAM am = MockRM.launchAMWhenAsyncSchedulingEnabled(rmApp, rm);
+      am.registerAppAttempt();
+      ams.add(am);
+      LOG.info("register am " + i);
+    }
+
+    //non-global-scheduler nodes should skip for global scheduler
+    for (int i = 0; i < 5; i++) {
+      boolean shouldSkip =
+          cs.shouldSkipNodeSchedule(cs.getNode(nms.get(i).getNodeId()),
+              cs, true, false);
+      Assert.assertTrue(shouldSkip);
+    }
+
+    //non-heartbeat-scheduler nodes should skip for heartbeat scheduler
+    for (int i = 5; i < 9; i++) {
+      boolean shouldSkip =
+          cs.shouldSkipNodeSchedule(cs.getNode(nms.get(i).getNodeId()),
+              cs, true, true);
+      Assert.assertTrue(shouldSkip);
+    }
+
+    // Applications request 210G resources, make sure cluster resources 200G
+    // are used up, then all nodes should have assign non-AM containers
+    for (int i = 0; i < 3; i++) {
+      ams.get(i).allocate("*", 1024, 70, new ArrayList<>());
+    }
+
+    // Wait for 5000 ms.
+    Thread.sleep(5000);
+
+    //all nodes should have non-AM containers.
+    for (int i = 0; i < 9; i++) {
+      Assert.assertTrue(checkNumNonAMContainersOnNode(cs, nms.get(i)) > 0);
     }
     rm.close();
   }

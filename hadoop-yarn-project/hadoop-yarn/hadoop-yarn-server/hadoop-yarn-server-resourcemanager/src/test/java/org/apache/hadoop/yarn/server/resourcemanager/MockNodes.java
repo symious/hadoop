@@ -44,6 +44,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo
 
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableSet;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.SchedulingNodeType;
 
 /**
  * Test helper to generate mock nodes
@@ -129,6 +130,7 @@ public class MockNodes {
     private RMContext rmContext;
     private boolean isGoodTarget = true;
     private boolean isCoLocate = false;
+    private SchedulingNodeType schedulingNodeType = SchedulingNodeType.HEARTBEAT;
 
 
     MockRMNodeImpl(NodeId nodeId, String nodeAddr, String httpAddress,
@@ -352,6 +354,16 @@ public class MockNodes {
     @Override
     public void setCoLocate(boolean isCoLocate) {
       this.isCoLocate = isCoLocate;
+    }
+
+    @Override
+    public SchedulingNodeType getNodeSchedulerType() {
+      return schedulingNodeType;
+    }
+
+    @Override
+    public void setNodeSchedulerType(SchedulingNodeType schedulingNodeType) {
+      this.schedulingNodeType = schedulingNodeType;
     }
 
     @Override

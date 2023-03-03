@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.server.resourcemanager.ClusterMetrics;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy.SchedulingNodeTypeSettingPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Marker;
@@ -228,6 +229,11 @@ public class CapacityScheduler extends
   private boolean usePortForNodeName;
 
   private boolean scheduleAsynchronously;
+  private volatile boolean multipleSchedulersParallelly;
+  private SchedulingNodeTypeSettingPolicy schedulingNodeTypeSettingPolicy;
+  private String nodePolicyConfigs;
+  private volatile List<String> globalChoosePartitions = new ArrayList<>();
+
   @VisibleForTesting
   protected List<AsyncScheduleThread> asyncSchedulerThreads;
   private ResourceCommitterService resourceCommitterService;
@@ -356,6 +362,8 @@ public class CapacityScheduler extends
       asyncScheduleInterval = this.conf.getLong(ASYNC_SCHEDULER_INTERVAL,
           DEFAULT_ASYNC_SCHEDULER_INTERVAL);
 
+      this.multipleSchedulersParallelly = this.conf.getMultipleSchedulersParallelly();
+
       this.assignMultipleEnabled = this.conf.getAssignMultipleEnabled();
       this.maxAssignPerHeartbeat = this.conf.getMaxAssignPerHeartbeat();
 
@@ -378,6 +386,17 @@ public class CapacityScheduler extends
                 SCHEDULE_ASYNCHRONOUSLY_MAXIMUM_PENDING_BACKLOGS,
             CapacitySchedulerConfiguration.
                 DEFAULT_SCHEDULE_ASYNCHRONOUSLY_MAXIMUM_PENDING_BACKLOGS);
+        if (multipleSchedulersParallelly) {
+          schedulingNodeTypeSettingPolicy = this.conf.getNodeSchedulingPolicy();
+          nodePolicyConfigs =
+              schedulingNodeTypeSettingPolicy.getNodePolicyConfigs();
+          List<String> updateLabels =
+              schedulingNodeTypeSettingPolicy
+                  .updateAllConfigureLabels(rmContext);
+          if (updateLabels.size() > 0) {
+            globalChoosePartitions = updateLabels;
+          }
+        }
       }
 
       // Setup how many containers we can allocate for each round
@@ -505,6 +524,28 @@ public class CapacityScheduler extends
 
         this.maxPendingCountOnMultiLabel = this.conf.getMaxPendingCountOnMultiLabel();
 
+        this.multipleSchedulersParallelly = this.conf.getMultipleSchedulersParallelly();
+
+        if (scheduleAsynchronously && multipleSchedulersParallelly) {
+          schedulingNodeTypeSettingPolicy = this.conf.getNodeSchedulingPolicy();
+          String newNodePolicyConfigs =
+              schedulingNodeTypeSettingPolicy.getNodePolicyConfigs();
+          LOG.info("oldNodePolicyConfigs: " + nodePolicyConfigs +
+              " ,newNodePolicyConfigs: " + newNodePolicyConfigs);
+          if (!nodePolicyConfigs.equals(newNodePolicyConfigs)) {
+            List<String> updateLabels =
+                schedulingNodeTypeSettingPolicy
+                    .updateAllConfigureLabels(rmContext);
+            if (updateLabels.size() > 0) {
+              globalChoosePartitions = updateLabels;
+            }
+            nodePolicyConfigs =
+                schedulingNodeTypeSettingPolicy.getNodePolicyConfigs();
+          } else {
+            LOG.info("NodePolicyConfigs not changed, not need to refresh!");
+          }
+        }
+
         super.reinitialize(newConf, rmContext);
       }
       maxRunningEnforcer.updateRunnabilityOnReload();
@@ -528,7 +569,7 @@ public class CapacityScheduler extends
 
   @VisibleForTesting
   public static boolean shouldSkipNodeSchedule(FiCaSchedulerNode node,
-      CapacityScheduler cs, boolean printVerboseLog) {
+      CapacityScheduler cs, boolean printVerboseLog, boolean withNodeHeartbeat) {
     // Skip node which missed YarnConfiguration.SCHEDULER_SKIP_NODE_MULTIPLIER
     // heartbeats since the node might be dead and we should not continue
     // allocate containers on that.
@@ -549,6 +590,32 @@ public class CapacityScheduler extends
       }
       return true;
     }
+
+    if (cs.multipleSchedulersParallelly) {
+      if (withNodeHeartbeat && node.getRMNode().getNodeSchedulerType() !=
+          SchedulingNodeType.HEARTBEAT) {
+        if (printVerboseLog && LOG.isDebugEnabled()) {
+          LOG.debug(
+              "heartbeat scheduler skip node: " + node.getNodeID().getHost() +
+                  " ,because it was marked as " +
+                  node.getRMNode().getNodeSchedulerType());
+        }
+        return true;
+      }
+
+      if (!withNodeHeartbeat &&
+          node.getRMNode().getNodeSchedulerType() !=
+              SchedulingNodeType.GLOBAL) {
+        if (printVerboseLog && LOG.isDebugEnabled()) {
+          LOG.debug(
+              "global scheduler skip node: " + node.getNodeID().getHost() +
+                  " ,because it was marked as " +
+                  node.getRMNode().getNodeSchedulerType());
+        }
+        return true;
+      }
+    }
+
     return false;
   }
 
@@ -592,7 +659,7 @@ public class CapacityScheduler extends
       // Allocate containers of node [start, end)
       for (FiCaSchedulerNode node : nodes) {
         if (current++ >= start) {
-          if (shouldSkipNodeSchedule(node, cs, printSkippedNodeLogging)) {
+          if (shouldSkipNodeSchedule(node, cs, printSkippedNodeLogging, false)) {
             continue;
           }
           cs.allocateContainersToNode(node.getNodeID(), false);
@@ -606,7 +673,7 @@ public class CapacityScheduler extends
         if (current++ > start) {
           break;
         }
-        if (shouldSkipNodeSchedule(node, cs, printSkippedNodeLogging)) {
+        if (shouldSkipNodeSchedule(node, cs, printSkippedNodeLogging, false)) {
           continue;
         }
         cs.allocateContainersToNode(node.getNodeID(), false);
@@ -616,8 +683,17 @@ public class CapacityScheduler extends
         cs.printedVerboseLoggingForAsyncScheduling = true;
       }
     } else {
-      // Get all partitions
-      List<String> partitions = cs.nodeTracker.getPartitions();
+      // choose partitions
+      List<String> partitions;
+      if (cs.multipleSchedulersParallelly &&
+          cs.globalChoosePartitions.size() > 0) {
+        partitions = cs.globalChoosePartitions;
+      } else {
+        partitions = cs.nodeTracker.getPartitions();
+      }
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("global scheduler choose partitions: " + partitions);
+      }
       int partitionSize = partitions.size();
       // First randomize the start point
       int start = random.nextInt(partitionSize);
@@ -1426,7 +1502,8 @@ public class CapacityScheduler extends
     }
 
     // Try to do scheduling
-    if (!scheduleAsynchronously) {
+    if (!scheduleAsynchronously || (multipleSchedulersParallelly &&
+        rmNode.getNodeSchedulerType() == SchedulingNodeType.HEARTBEAT)) {
       writeLock.lock();
       try {
         // reset allocation and reservation stats before we start doing any
@@ -1566,7 +1643,8 @@ public class CapacityScheduler extends
             || assignedContainers < maxAssignPerHeartbeat);
   }
 
-  private Map<NodeId, FiCaSchedulerNode> getNodesHeartbeated(String partition) {
+  private Map<NodeId, FiCaSchedulerNode> getNodesHeartbeated(String partition,
+      boolean withNodeHeartbeat) {
     Map<NodeId, FiCaSchedulerNode> nodesByPartition = new HashMap<>();
     boolean printSkippedNodeLogging = isPrintSkippedNodeLogging(this);
     List<FiCaSchedulerNode> nodes = nodeTracker
@@ -1575,7 +1653,8 @@ public class CapacityScheduler extends
       //Filter for node heartbeat too long
       nodes.stream()
           .filter(node ->
-              !shouldSkipNodeSchedule(node, this, printSkippedNodeLogging))
+              !shouldSkipNodeSchedule(node, this, printSkippedNodeLogging,
+                  withNodeHeartbeat))
           .forEach(n -> nodesByPartition.put(n.getNodeID(), n));
     }
     if (printSkippedNodeLogging) {
@@ -1588,7 +1667,7 @@ public class CapacityScheduler extends
       String partition) {
     CandidateNodeSet<FiCaSchedulerNode> candidates = null;
     Map<NodeId, FiCaSchedulerNode> nodesByPartition
-        = getNodesHeartbeated(partition);
+        = getNodesHeartbeated(partition, false);
 
     if (!nodesByPartition.isEmpty()) {
       candidates = new SimpleCandidateNodeSet<FiCaSchedulerNode>(
@@ -1599,12 +1678,12 @@ public class CapacityScheduler extends
   }
 
   private CandidateNodeSet<FiCaSchedulerNode> getCandidateNodeSet(
-      FiCaSchedulerNode node) {
+      FiCaSchedulerNode node, boolean withNodeHeartbeat) {
     CandidateNodeSet<FiCaSchedulerNode> candidates = null;
     candidates = new SimpleCandidateNodeSet<>(node);
     if (multiNodePlacementEnabled) {
       Map<NodeId, FiCaSchedulerNode> nodesByPartition =
-          getNodesHeartbeated(node.getPartition());
+          getNodesHeartbeated(node.getPartition(), withNodeHeartbeat);
       if (!nodesByPartition.isEmpty()) {
         candidates = new SimpleCandidateNodeSet<FiCaSchedulerNode>(
             nodesByPartition, node.getPartition());
@@ -1625,7 +1704,7 @@ public class CapacityScheduler extends
       int assignedContainers = 0;
 
       CandidateNodeSet<FiCaSchedulerNode> candidates = getCandidateNodeSet(
-          node);
+          node, withNodeHeartbeat);
 
       CSAssignment assignment = allocateContainersToNode(candidates,
           withNodeHeartbeat);
@@ -1877,7 +1956,6 @@ public class CapacityScheduler extends
         rmContext.isWorkPreservingRecoveryEnabled()) {
       return null;
     }
-
     long startTime = System.nanoTime();
 
     // Backward compatible way to make sure previous behavior which allocation
@@ -1906,6 +1984,20 @@ public class CapacityScheduler extends
         && assignment.getAssignmentInformation().getNumAllocations() > 0) {
       long allocateTime = System.nanoTime() - startTime;
       CapacitySchedulerMetrics.getMetrics().addAllocate(allocateTime);
+      if (LOG.isDebugEnabled()) {
+        List<AssignmentInformation.AssignmentDetails> allocations =
+            assignment.getAssignmentInformation().getAllocationDetails();
+        NodeId nodeId =
+            allocations.get(allocations.size() - 1).rmContainer.getNodeId();
+        if (withNodeHeartbeat) {
+          LOG.debug(
+              "HeartBeat scheduler assign container on nodeId: " + nodeId +
+                  " ,cost time: " + allocateTime);
+        } else {
+          LOG.debug("Global scheduler assign container on nodeId: " + nodeId +
+              " ,cost time: " + allocateTime);
+        }
+      }
     }
     return assignment;
   }
@@ -2159,6 +2251,11 @@ public class CapacityScheduler extends
             }
             nodeTracker.updateNodesPerPartition(RMNodeLabelsManager.NO_LABEL,
                 nodesNewDefaultPartition);
+            //update default label nodes scheduler type
+            if (scheduleAsynchronously && multipleSchedulersParallelly) {
+              schedulingNodeTypeSettingPolicy
+                  .updateByLabel(rmContext, RMNodeLabelsManager.NO_LABEL);
+            }
             long endTime = System.nanoTime();
             LOG.info("Delete node: " + node.getNodeID() + " from default label"
                 + ", cost time: " + (endTime - startTime) / 1000 + " us!");
@@ -2179,6 +2276,11 @@ public class CapacityScheduler extends
             nodesNewDefaultPartition.add(node.getNodeID());
             nodeTracker.updateNodesPerPartition(RMNodeLabelsManager.NO_LABEL,
                 nodesNewDefaultPartition);
+            //update default label nodes scheduler type
+            if (scheduleAsynchronously && multipleSchedulersParallelly) {
+              schedulingNodeTypeSettingPolicy
+                  .updateByLabel(rmContext, RMNodeLabelsManager.NO_LABEL);
+            }
             long endTime = System.nanoTime();
             LOG.info(
                 "Add node: " + node.getNodeID() + " to default label, " +
@@ -2197,6 +2299,14 @@ public class CapacityScheduler extends
           LOG.debug("update for non-default labels: " + updateLabels);
         }
         refreshLabelToNodeCache(updateLabels);
+
+        //update label nodes scheduler type
+        if (scheduleAsynchronously && multipleSchedulersParallelly) {
+          for (String label : updateLabels) {
+            schedulingNodeTypeSettingPolicy.updateByLabel(rmContext, label);
+          }
+        }
+
       }
 
       if (!labelUpdateEvent.isFromAddNode()) {
@@ -2247,6 +2357,11 @@ public class CapacityScheduler extends
       LOG.info(
           "Added node " + nodeManager.getNodeAddress() + " clusterResource: "
               + clusterResource);
+
+      //update node scheduler type
+      if (scheduleAsynchronously && multipleSchedulersParallelly) {
+        schedulingNodeTypeSettingPolicy.updateByNode(rmContext, nodeManager);
+      }
 
       if (scheduleAsynchronously && getNumClusterNodes() == 1) {
         for (AsyncScheduleThread t : asyncSchedulerThreads) {
@@ -3499,4 +3614,5 @@ public class CapacityScheduler extends
   public int getMaxPendingCountOnMultiLabel() {
     return this.maxPendingCountOnMultiLabel;
   }
+
 }

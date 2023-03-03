@@ -36,6 +36,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsMana
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode
         .UpdatedContainerInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.SchedulingNodeType;
 
 import java.util.Collections;
 import java.util.List;
@@ -50,6 +51,7 @@ public class RMNodeWrapper implements RMNode {
   private boolean pulled = false;
   private boolean isGoodTarget = true;
   private boolean isCoLocate = false;
+  private SchedulingNodeType schedulingNodeType = SchedulingNodeType.HEARTBEAT;
 
   public RMNodeWrapper(RMNode node) {
     this.node = node;
@@ -238,6 +240,16 @@ public class RMNodeWrapper implements RMNode {
   @Override
   public void setCoLocate(boolean isCoLocate) {
     this.isCoLocate = isCoLocate;
+  }
+
+  @Override
+  public SchedulingNodeType getNodeSchedulerType() {
+    return schedulingNodeType;
+  }
+
+  @Override
+  public void setNodeSchedulerType(SchedulingNodeType schedulingNodeType) {
+    this.schedulingNodeType = schedulingNodeType;
   }
 
   @Override

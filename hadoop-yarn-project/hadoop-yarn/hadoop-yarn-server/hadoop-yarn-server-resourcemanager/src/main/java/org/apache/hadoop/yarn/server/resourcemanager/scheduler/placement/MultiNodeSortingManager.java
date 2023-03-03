@@ -155,7 +155,14 @@ public class MultiNodeSortingManager<N extends SchedulerNode>
         }
         while (nodesIterator.hasNext()) {
           cached = nodesIterator.next();
-          if (SchedulerUtils.isNodeHeartbeated(cached, skipNodeInterval)) {
+          // We have filtered out the candidates, just need to return
+          // the sorted candidates
+          if (nodes == null || nodes.size() == 0) {
+            return false;
+          }
+          else if (
+              SchedulerUtils.isNodeHeartbeated(cached, skipNodeInterval) &&
+                  nodes.contains(cached)) {
             hasCached = true;
             return true;
           }
