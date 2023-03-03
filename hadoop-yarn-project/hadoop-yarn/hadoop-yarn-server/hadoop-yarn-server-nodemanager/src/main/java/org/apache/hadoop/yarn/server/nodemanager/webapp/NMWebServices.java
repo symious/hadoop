@@ -21,17 +21,24 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Field;
 import java.nio.charset.Charset;
 import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.LinkedList;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.records.AuxServiceRecord;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.records.AuxServiceRecords;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.ResourcePlugin;
@@ -44,6 +51,7 @@ import org.slf4j.LoggerFactory;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.ws.rs.GET;
+import javax.ws.rs.POST;
 import javax.ws.rs.PUT;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
@@ -757,5 +765,72 @@ public class NMWebServices {
       result.put("msg", "FAILURE");
     }
     return result;
+  }
+
+  @POST
+  @Path("/modify")
+  @Produces({ MediaType.TEXT_PLAIN + "; " + JettyUtils.UTF_8 })
+  @Public
+  @Unstable
+  public Response change(@QueryParam("jsonstring") String json) {
+    try {
+      Deque<Wrapper> stack = new LinkedList<>();
+      stack.push(new Wrapper(this.nmContext, ""));
+      ObjectMapper mapper = new ObjectMapper();
+      JsonNode node = mapper.readTree(json);
+      parseNode(node, stack);
+    } catch (JsonProcessingException | NoSuchFieldException | IllegalAccessException e) {
+      return Response.status(Status.BAD_REQUEST).entity(e.getCause()).build();
+    }
+    return Response.ok().build();
+  }
+
+  private void parseNode(JsonNode node, Deque<Wrapper> stack)
+      throws NoSuchFieldException, IllegalAccessException {
+    if (node.isContainerNode()) {
+      Iterator<Map.Entry<String, JsonNode>> iter = node.fields();
+      while(iter.hasNext()) {
+        Map.Entry<String, JsonNode> tmp = iter.next();
+        Object o = stack.peek().getObject();
+        Field f = o.getClass().getDeclaredField(tmp.getKey());
+        f.setAccessible(true);
+        stack.push(new Wrapper(f.get(o), tmp.getKey()));
+        parseNode(tmp.getValue(), stack);
+        stack.pop();
+      }
+    } else {
+      Wrapper wrap = stack.pop();
+      Object currentObject = wrap.getObject();
+      String fieldName = wrap.getFieldName();
+      Object parentObject = stack.peek().getObject();
+      Field f = parentObject.getClass().getDeclaredField(fieldName);
+      f.setAccessible(true);
+      if (currentObject.getClass().equals(String.class)) {
+        f.set(parentObject, node.asText());
+      } else if (currentObject.getClass().equals(Integer.class)) {
+        f.set(parentObject, node.asInt());
+      } else if (currentObject.getClass().equals(Boolean.class)) {
+        f.set(parentObject, node.asBoolean());
+      }
+      stack.push(wrap);
+    }
+  }
+
+  public static class Wrapper {
+    private Object object;
+    private String fieldName;
+
+    public Wrapper(Object o, String fieldName) {
+      this.object = o;
+      this.fieldName = fieldName;
+    }
+
+    public Object getObject() {
+      return this.object;
+    }
+
+    public String getFieldName() {
+      return this.fieldName;
+    }
   }
 }
