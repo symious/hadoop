@@ -243,6 +243,9 @@ public class CapacityScheduler extends
 
   private static boolean printedVerboseLoggingForAsyncScheduling = false;
 
+  protected final CapacitySchedulerMetrics csMetrics =
+      CapacitySchedulerMetrics.getMetrics();
+
   /**
    * EXPERT
    */
@@ -260,6 +263,7 @@ public class CapacityScheduler extends
   public CapacityScheduler() {
     super(CapacityScheduler.class.getName());
     this.maxRunningEnforcer = new CSMaxRunningAppsEnforcer(this);
+    csMetrics.setCapacityScheduler(this);
   }
 
   @Override

@@ -29,6 +29,8 @@ import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -40,6 +42,14 @@ import static org.apache.hadoop.metrics2.lib.Interns.info;
 @InterfaceAudience.Private
 @Metrics(context="yarn")
 public class CapacitySchedulerMetrics {
+  private static final Logger LOG =
+      LoggerFactory.getLogger(CapacitySchedulerMetrics.class);
+
+  private CapacityScheduler cs = null;
+
+  public void setCapacityScheduler(CapacityScheduler cs) {
+    this.cs = cs;
+  }
 
   private static AtomicBoolean isInitialized = new AtomicBoolean(false);
 
@@ -142,5 +152,16 @@ public class CapacitySchedulerMetrics {
   public void recoveryContainerLatency(long duration) {
     recoveryContainerLatency.add(duration);
     aggRecoveryContainerLatency.incr(duration);
+  }
+
+  @Metric(type = Metric.Type.COUNTER)
+  public int getGlobalSchedulerBackLogsLength() {
+    int pendingBackLogs = 0;
+    try {
+      pendingBackLogs = cs.getAsyncSchedulingPendingBacklogs();
+    } catch (Exception e) {
+      LOG.error("getGlobalSchedulerBackLogsLength error", e);
+    }
+    return pendingBackLogs;
   }
 }
