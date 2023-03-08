@@ -916,7 +916,26 @@ public class ResourceManager extends CompositeService
         addIfService(volumeManager);
       }
 
+      addEventMetrics();
+
       super.serviceInit(conf);
+    }
+
+    public void addEventMetrics() {
+      AsyncDispatcher dispatcher = (AsyncDispatcher) rmDispatcher;
+      dispatcher.addMetrics(GenericEventTypeMetricsManager
+          .create("RMAppEvent", RMAppEventType.class), RMAppEventType.class);
+      dispatcher.addMetrics(GenericEventTypeMetricsManager
+              .create("RMAppAttemptEvent", RMAppAttemptEventType.class),
+          RMAppAttemptEventType.class);
+      dispatcher.addMetrics(GenericEventTypeMetricsManager
+          .create("RMNodeEvent", RMNodeEventType.class), RMNodeEventType.class);
+      dispatcher.addMetrics(GenericEventTypeMetricsManager
+              .create("RMAppManagerEvent", RMAppManagerEventType.class),
+          RMAppManagerEventType.class);
+      dispatcher.addMetrics(GenericEventTypeMetricsManager
+              .create("AMLauncherEvent", AMLauncherEventType.class),
+          AMLauncherEventType.class);
     }
 
     private void createAndRegisterOpportunisticDispatcher(

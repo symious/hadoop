@@ -24,6 +24,7 @@ import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
+import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +40,7 @@ public class GenericEventTypeMetrics<T extends Enum<T>>
 
   private final EnumMap<T, MutableGaugeLong> eventCountMetrics;
   private final EnumMap<T, MutableGaugeLong> processingTimeMetrics;
+  private final EnumMap<T, MutableRate> eventRateMetrics;
   private final MetricsRegistry registry;
   private final MetricsSystem ms;
   private final MetricsInfo info;
@@ -51,6 +53,7 @@ public class GenericEventTypeMetrics<T extends Enum<T>>
     this.enumClass = enumClass;
     this.eventCountMetrics = new EnumMap<>(this.enumClass);
     this.processingTimeMetrics = new EnumMap<>(this.enumClass);
+    this.eventRateMetrics = new EnumMap<>(this.enumClass);
     this.ms = ms;
     this.info = info;
     this.registry = new MetricsRegistry(this.info);
@@ -65,6 +68,7 @@ public class GenericEventTypeMetrics<T extends Enum<T>>
           newGauge(eventCountMetricsName, eventCountMetricsName, 0L));
       processingTimeMetrics.put(type, this.registry.
           newGauge(processingTimeMetricsName, processingTimeMetricsName, 0L));
+      eventRateMetrics.put(type, this.registry.newRate(type.toString()));
     }
   }
 
@@ -86,6 +90,10 @@ public class GenericEventTypeMetrics<T extends Enum<T>>
     if (eventCountMetrics.get(type) != null) {
       eventCountMetrics.get(type).incr();
       processingTimeMetrics.get(type).incr(processingTimeUs);
+    }
+
+    if (eventRateMetrics.get(type) != null) {
+      eventRateMetrics.get(type).add(processingTimeUs);
     }
   }
 
