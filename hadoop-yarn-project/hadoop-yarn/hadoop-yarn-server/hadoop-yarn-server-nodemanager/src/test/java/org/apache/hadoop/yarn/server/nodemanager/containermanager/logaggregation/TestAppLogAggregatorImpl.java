@@ -44,6 +44,7 @@ import org.apache.hadoop.yarn.server.nodemanager.DeletionService;
 import org.apache.hadoop.yarn.server.nodemanager.LocalDirsHandlerService;
 import org.apache.hadoop.yarn.server.nodemanager.NodeManager;
 import org.apache.hadoop.yarn.server.nodemanager.NodeManager.NMContext;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.Application;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.deletion.task.FileDeletionTask;
 import org.apache.hadoop.yarn.server.nodemanager.logaggregation.tracker.NMLogAggregationStatusTracker;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMNullStateStoreService;
@@ -75,6 +76,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Unit tests of AppLogAggregatorImpl class.
@@ -238,6 +240,10 @@ public class TestAppLogAggregatorImpl {
     format.initialize(config, "TFile");
 
     Context context = createContext(config);
+    ((NMContext) context).setNMLogAggregationStatusTracker(new NMLogAggregationStatusTracker(context));
+    Application app = mock(Application.class);
+    when(app.getYarnApplicationState()).thenReturn(null);
+    context.getApplications().put(appId, app);
     final AppLogAggregatorInTest appLogAggregator =
         createAppLogAggregator(appId, LOCAL_LOG_DIR.getAbsolutePath(),
             config, context, recoveredLogInitedTimeMillis,
@@ -452,6 +458,10 @@ public class TestAppLogAggregatorImpl {
         .when(format).closeWriter();
 
     NodeManager.NMContext context = (NMContext) createContext(config);
+    Application app = mock(Application.class);
+    when(app.getYarnApplicationState()).thenReturn(null);
+    context.getApplications().put(appId, app);
+
     context.setNMLogAggregationStatusTracker(
         Mockito.mock(NMLogAggregationStatusTracker.class));
 
