@@ -30,6 +30,10 @@ import java.util.Map.Entry;
 import java.util.NavigableSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
@@ -41,6 +45,7 @@ import org.apache.hadoop.yarn.api.records.timelineservice.ContainerEntity;
 import org.apache.hadoop.yarn.api.records.timelineservice.TimelineEntity;
 import org.apache.hadoop.yarn.api.records.timelineservice.TimelineEvent;
 import org.apache.hadoop.yarn.api.records.timelineservice.TimelineMetric;
+import org.apache.hadoop.yarn.client.api.TimelineV2Client;
 import org.apache.hadoop.yarn.client.api.impl.TimelineV2ClientImpl;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.AsyncDispatcher;
@@ -56,6 +61,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerResumeEvent;
 import org.apache.hadoop.yarn.util.ResourceCalculatorProcessTree;
 import org.apache.hadoop.yarn.util.TimelineServiceHelper;
+import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
 import org.junit.Test;
 import org.junit.After;
@@ -91,6 +97,43 @@ public class TestNMTimelinePublisher {
 //          getAppToClientMap().put(appId, timelineClient);
 //        }
 //      }
+      public void createTimelineClientAsync(ApplicationId appId) {
+        if (!getAppToClientMap().containsKey(appId)) {
+          timelineClient.init(getConfig());
+          timelineClient.start();
+          Future<TimelineV2Client> future = new Future<TimelineV2Client>() {
+            @Override
+            public boolean cancel(boolean mayInterruptIfRunning) {
+              return false;
+            }
+
+            @Override
+            public boolean isCancelled() {
+              return false;
+            }
+
+            @Override
+            public boolean isDone() {
+              return true;
+            }
+
+            @Override
+            public TimelineV2Client get()
+                throws InterruptedException, ExecutionException {
+              return timelineClient;
+            }
+
+            @Override
+            public TimelineV2Client get(long timeout, @NotNull TimeUnit unit)
+                throws InterruptedException, ExecutionException,
+                TimeoutException {
+              return timelineClient;
+            }
+          };
+          getAppToClientMap().put(appId, future);
+        }
+      }
+
 
       @Override protected AsyncDispatcher createDispatcher() {
         return dispatcher;

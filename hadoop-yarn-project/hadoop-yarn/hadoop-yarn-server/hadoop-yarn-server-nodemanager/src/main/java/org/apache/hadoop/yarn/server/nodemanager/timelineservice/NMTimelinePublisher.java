@@ -595,4 +595,7 @@ public class NMTimelinePublisher extends CompositeService {
     return (AsyncDispatcher) this.dispatcher;
   }
 
+  public Map<ApplicationId, Future<TimelineV2Client>> getAppToClientMap() {
+    return appToFutureMap;
+  }
 }
