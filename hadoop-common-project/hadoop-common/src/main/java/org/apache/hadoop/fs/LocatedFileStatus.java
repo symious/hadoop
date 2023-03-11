@@ -119,4 +119,13 @@ public class LocatedFileStatus extends FileStatus {
   public int hashCode() {
     return super.hashCode();
   }
+
+  /**
+   * Compatible with Symlinks.
+   * @return
+   */
+  @Override
+  public boolean isFile() {
+    return super.isFile() || (isSymlink() && !isDirectory());
+  }
 }
