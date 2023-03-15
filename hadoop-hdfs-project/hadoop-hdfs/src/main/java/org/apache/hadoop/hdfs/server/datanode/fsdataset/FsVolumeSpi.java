@@ -83,6 +83,8 @@ public interface FsVolumeSpi
    */
   void reserveSpaceForReplica(long bytesToReserve);
 
+  long getReservedForReplicas();
+
   /**
    * Release disk space previously reserved for block opened for write.
    */

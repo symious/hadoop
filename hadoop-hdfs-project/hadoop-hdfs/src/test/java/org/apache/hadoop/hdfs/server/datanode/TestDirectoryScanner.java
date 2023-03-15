@@ -973,6 +973,11 @@ public class TestDirectoryScanner {
     }
 
     @Override
+    public long getReservedForReplicas() {
+      return 0;
+    }
+
+    @Override
     public void releaseReservedSpace(long bytesToRelease) {
     }
 
