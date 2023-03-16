@@ -20,12 +20,12 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>2.10.sdi-077</version>
+    <version>2.10.sdi-078-SNAPSHOT</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
   <artifactId>hadoop-fastcopy</artifactId>
-  <version>2.10.sdi-077</version>
+  <version>2.10.sdi-078-SNAPSHOT</version>
   <description>Apache Hadoop FastCopy</description>
   <name>Apache Hadoop FastCopy</name>
   <packaging>jar</packaging>
