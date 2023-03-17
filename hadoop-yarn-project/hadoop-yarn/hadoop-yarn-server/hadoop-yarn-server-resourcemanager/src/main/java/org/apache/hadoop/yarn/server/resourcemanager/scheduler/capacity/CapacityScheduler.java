@@ -249,7 +249,7 @@ public class CapacityScheduler extends
   /**
    * EXPERT
    */
-  private long asyncScheduleInterval;
+  private volatile long asyncScheduleInterval;
   private static final String ASYNC_SCHEDULER_INTERVAL =
       CapacitySchedulerConfiguration.SCHEDULE_ASYNCHRONOUSLY_PREFIX
           + ".scheduling-interval-ms";
@@ -529,6 +529,12 @@ public class CapacityScheduler extends
         this.maxPendingCountOnMultiLabel = this.conf.getMaxPendingCountOnMultiLabel();
 
         this.multipleSchedulersParallelly = this.conf.getMultipleSchedulersParallelly();
+
+        this.asyncScheduleInterval = this.conf.getLong(ASYNC_SCHEDULER_INTERVAL,
+            DEFAULT_ASYNC_SCHEDULER_INTERVAL);
+        LOG.info(
+            "multipleSchedulersParallelly: " + multipleSchedulersParallelly +
+                " ,asyncScheduleInterval: " + asyncScheduleInterval);
 
         if (scheduleAsynchronously && multipleSchedulersParallelly) {
           schedulingNodeTypeSettingPolicy = this.conf.getNodeSchedulingPolicy();
