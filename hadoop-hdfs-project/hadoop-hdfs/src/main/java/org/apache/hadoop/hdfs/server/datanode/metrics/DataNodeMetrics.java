@@ -27,6 +27,7 @@ import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.protocol.DataNodeUsageReport;
 import org.apache.hadoop.hdfs.server.protocol.DataNodeUsageReportUtil;
+import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 import org.apache.hadoop.metrics2.MetricsSystem;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
@@ -226,6 +227,8 @@ public class DataNodeMetrics {
   JvmMetrics jvmMetrics = null;
   private final DNSToSwitchMapping dnsToSwitchMapping;
   private DataNodeUsageReportUtil dnUsageReportUtil;
+
+  private long[] bandwidths = new long[3];
 
   public DataNodeMetrics(String name, String sessionId, int[] intervals,
       final JvmMetrics jvmMetrics, final DNSToSwitchMapping switchMapping) {
@@ -831,5 +834,43 @@ public class DataNodeMetrics {
 
   public void incrPacketsSlowWriteToOsCache() {
     packetsSlowWriteToOsCache.incr();
+  }
+
+  public void setBandwidths(long[] bandwidths) {
+    this.bandwidths = bandwidths;
+  }
+
+  @Metric
+  public long getReadBandwidth() {
+    return bandwidths[0];
+  }
+
+  @Metric
+  public long getWriteBandwidth() {
+    return bandwidths[1];
+  }
+
+  @Metric
+  public long getTransferBandwidth() {
+    return bandwidths[2];
+  }
+
+  @Metric MutableRate readBytes;
+  @Metric MutableRate writeBytes;
+  @Metric MutableRate transferBytes;
+
+  /**
+   * Only used to hook to {@link DataTransferThrottler}
+   */
+  public MutableRate getReadBytes() {
+    return readBytes;
+  }
+
+  public MutableRate getWriteBytes() {
+    return writeBytes;
+  }
+
+  public MutableRate getTransferBytes() {
+    return transferBytes;
   }
 }

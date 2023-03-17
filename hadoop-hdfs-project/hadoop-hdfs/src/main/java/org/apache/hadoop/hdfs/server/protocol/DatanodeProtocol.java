@@ -112,6 +112,9 @@ public interface DatanodeProtocol {
    * @param slowPeers Details of peer DataNodes that were detected as being
    *                  slow to respond to packet writes. Empty report if no
    *                  slow peers were detected by the DataNode.
+   * @param readBytesThrottled total read bytes throttled since last throttler refresh
+   * @param writeBytesThrottled total write bytes throttled since last throttler refresh
+   * @param transferBytesThrottled total transfer bytes throttled since last throttler refresh
    * @throws IOException on error
    */
   @Idempotent
@@ -125,7 +128,10 @@ public interface DatanodeProtocol {
                                        VolumeFailureSummary volumeFailureSummary,
                                        boolean requestFullBlockReportLease,
                                        @Nonnull SlowPeerReports slowPeers,
-                                       @Nonnull SlowDiskReports slowDisks)
+                                       @Nonnull SlowDiskReports slowDisks,
+                                       long readBytesThrottled,
+                                       long writeBytesThrottled,
+                                       long transferBytesThrottled)
       throws IOException;
 
   /**

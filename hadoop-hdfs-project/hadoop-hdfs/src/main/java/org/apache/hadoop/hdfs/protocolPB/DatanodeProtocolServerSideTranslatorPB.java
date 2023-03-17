@@ -64,6 +64,7 @@ import org.apache.hadoop.hdfs.server.protocol.VolumeFailureSummary;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.thirdparty.protobuf.RpcController;
 import org.apache.hadoop.thirdparty.protobuf.ServiceException;
+import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 
 public class DatanodeProtocolServerSideTranslatorPB implements
     DatanodeProtocolPB {
@@ -122,7 +123,10 @@ public class DatanodeProtocolServerSideTranslatorPB implements
           request.getXceiverCount(), request.getFailedVolumes(),
           volumeFailureSummary, request.getRequestFullBlockReportLease(),
           PBHelper.convertSlowPeerInfo(request.getSlowPeersList()),
-          PBHelper.convertSlowDiskInfo(request.getSlowDisksList()));
+          PBHelper.convertSlowDiskInfo(request.getSlowDisksList()),
+          request.getReadBytesThrottled(),
+          request.getWriteBytesThrottled(),
+          request.getTransferBytesThrottled());
     } catch (IOException e) {
       throw new ServiceException(e);
     }
@@ -153,6 +157,9 @@ public class DatanodeProtocolServerSideTranslatorPB implements
 
     builder.setFullBlockReportLeaseId(response.getFullBlockReportLeaseId());
     builder.setIsSlownode(response.getIsSlownode());
+    builder.setNewReadBandwidth(response.getNewReadBandwidth());
+    builder.setNewWriteBandwidth(response.getNewWriteBandwidth());
+    builder.setNewTransferBandwidth(response.getNewTransferBandwidth());
     return builder.build();
   }
 

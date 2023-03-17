@@ -138,6 +138,7 @@ import org.apache.hadoop.hdfs.protocol.SnapshotDiffReport;
 import org.apache.hadoop.hdfs.server.common.ECTopologyVerifier;
 import org.apache.hadoop.hdfs.server.namenode.metrics.ReplicatedBlocksMBean;
 import org.apache.hadoop.hdfs.server.protocol.SlowDiskReports;
+import org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationMasterPolicy;
 import org.apache.hadoop.ipc.ObserverRetryOnActiveException;
 import org.apache.hadoop.util.Time;
 
@@ -405,6 +406,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       registry.newRatesWithAggregation("detailedLockWaitTimeMetrics");
 
   private final String contextFieldSeparator;
+  private final ThrottlerCalibrationMasterPolicy throttlerCalibrationPolicy;
 
   boolean isAuditEnabled() {
     return (!isDefaultAuditLogger || auditLog.isInfoEnabled())
@@ -1068,6 +1070,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
       this.enableSymlinks = conf.getBoolean(
           DFS_NAMENODE_SYMLINKS_ENABLED_KEY, DFS_NAMENODE_SYMLINKS_ENABLED_DEFAULT);
+
+      this.throttlerCalibrationPolicy =
+          ThrottlerCalibrationMasterPolicy.newThrottlerCalibrationPolicy(conf, this);
 
       RefreshRegistry.defaultRegistry().register(FSN_LOCK_METRICS_REFRESH_HANDLER_IDENTIFIER,
           new FSNamesystemLockMetricsRefreshHandler(this));
@@ -4416,8 +4421,11 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       VolumeFailureSummary volumeFailureSummary,
       boolean requestFullBlockReportLease,
       @Nonnull SlowPeerReports slowPeers,
-      @Nonnull SlowDiskReports slowDisks)
-          throws IOException {
+      @Nonnull SlowDiskReports slowDisks,
+      long readBytesThrottled,
+      long writeBytesThrottled,
+      long transferBytesThrottled,
+      boolean isActiveNamenode) throws IOException {
     readLock(OperationName.HANDLE_HEARTBEAT);
     try {
       //get datanode commands
@@ -4438,8 +4446,13 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       Set<String> slownodes = DatanodeManager.getSlowNodesUuidSet();
       boolean isSlownode = slownodes.contains(nodeReg.getDatanodeUuid());
 
+      long[] newBandwidths = new long[] { 0, 0, 0 };
+      if (isActiveNamenode) {
+        newBandwidths = throttlerCalibrationPolicy.getNewBandwidths(nodeReg,
+            readBytesThrottled, writeBytesThrottled, transferBytesThrottled);
+      }
       return new HeartbeatResponse(cmds, haState, rollingUpgradeInfo,
-          blockReportLeaseId, isSlownode);
+          blockReportLeaseId, isSlownode, newBandwidths[0], newBandwidths[1], newBandwidths[2]);
     } finally {
       readUnlock(OperationName.HANDLE_HEARTBEAT);
     }
@@ -5633,6 +5646,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       } catch (IOException e) {
         LOG.error("Failed to close provider.", e);
       }
+    }
+    if (throttlerCalibrationPolicy != null) {
+      throttlerCalibrationPolicy.shutdown();
     }
     RefreshRegistry.defaultRegistry().unregisterAll(FSN_LOCK_METRICS_REFRESH_HANDLER_IDENTIFIER);
   }

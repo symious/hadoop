@@ -558,6 +558,12 @@ class BPServiceActor implements Runnable {
             SlowDiskReports.create(dn.getDiskMetrics().getDiskOutliersStats()) :
             SlowDiskReports.EMPTY_REPORT;
 
+    long readBytesThrottled = dn.getThrottlerCalibrationSlavePolicy() == null ? 0 :
+        dn.getThrottlerCalibrationSlavePolicy().getReadBytesThrottled();
+    long writeBytesThrottled = dn.getThrottlerCalibrationSlavePolicy() == null ? 0 :
+        dn.getThrottlerCalibrationSlavePolicy().getWriteBytesThrottled();
+    long transferBytesThrottled = dn.getThrottlerCalibrationSlavePolicy() == null ? 0 :
+        dn.getThrottlerCalibrationSlavePolicy().getTransferBytesThrottled();
     HeartbeatResponse response = bpNamenode.sendHeartbeat(bpRegistration,
         reports,
         dn.getFSDataset().getCacheCapacity(),
@@ -568,7 +574,11 @@ class BPServiceActor implements Runnable {
         volumeFailureSummary,
         requestBlockReportLease,
         slowPeers,
-        slowDisks);
+        slowDisks,
+        readBytesThrottled,
+        writeBytesThrottled,
+        transferBytesThrottled
+    );
 
     if (outliersReportDue) {
       // If the report was due and successfully sent, schedule the next one.
@@ -696,11 +706,14 @@ class BPServiceActor implements Runnable {
           // -- data transfer port
           // -- Total capacity
           // -- Bytes remaining
+          // -- Traffic throttled
           //
           boolean requestBlockReportLease = (fullBlockReportLeaseId == 0) &&
                   scheduler.isBlockReportDue(startTime);
           if (!dn.areHeartbeatsDisabledForTests()) {
             resp = sendHeartBeat(requestBlockReportLease);
+            calibrateThrottlers(resp);
+
             assert resp != null;
             if (resp.getFullBlockReportLeaseId() != 0) {
               if (fullBlockReportLeaseId != 0) {
@@ -779,6 +792,14 @@ class BPServiceActor implements Runnable {
       processQueueMessages();
     } // while (shouldRun())
   } // offerService
+
+  private void calibrateThrottlers(HeartbeatResponse resp) throws IOException {
+    if (resp.getNewReadBandwidth() <= -1 || resp.getNewWriteBandwidth() <= -1 || resp.getNewTransferBandwidth() <= -1) {
+      return;
+    }
+
+    dn.calibrateThrottlers(this.nnAddr, resp.getNewReadBandwidth(), resp.getNewWriteBandwidth(), resp.getNewTransferBandwidth());
+  }
 
   private void sleepAfterException() {
     try {

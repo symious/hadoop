@@ -157,7 +157,10 @@ public class TestBlockRecovery2 {
         Mockito.any(),
         Mockito.anyBoolean(),
         Mockito.any(),
-        Mockito.any()))
+        Mockito.any(),
+        Mockito.anyLong(),
+        Mockito.anyLong(),
+        Mockito.anyLong()))
         .thenReturn(new HeartbeatResponse(
             new DatanodeCommand[0],
             new NNHAStatusHeartbeat(HAServiceProtocol.HAServiceState.ACTIVE, 1),

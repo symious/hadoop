@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.datanode;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
 import java.nio.channels.AsynchronousCloseException;
 import java.util.HashMap;
@@ -32,6 +33,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.net.Peer;
 import org.apache.hadoop.hdfs.net.PeerServer;
+import org.apache.hadoop.hdfs.server.datanode.metrics.DataNodeMetrics;
+import org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationSlavePolicy;
 import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 import org.apache.hadoop.util.Daemon;
 
@@ -63,6 +66,9 @@ class DataXceiverServer implements Runnable {
   private boolean closed = false;
   private int maxReconfigureWaitTime = DEFAULT_RECONFIGURE_WAIT;
 
+  private ThrottlerCalibrationSlavePolicy throttlerCalibrationSlavePolicy;
+  private final long[] bandwidths = new long[3];
+
   /**
    * Maximal number of concurrent xceivers per node.
    * Enforcing the limit is required in order to avoid data-node
@@ -77,6 +83,10 @@ class DataXceiverServer implements Runnable {
       peersXceiver.get(p).updateDatanodeSlowLogThresholdMs(
           datanodeSlowLogThresholdMs);
     }
+  }
+
+  public ThrottlerCalibrationSlavePolicy getThrottlerCalibrationSlavePolicy() {
+    return throttlerCalibrationSlavePolicy;
   }
 
   /**
@@ -205,9 +215,15 @@ class DataXceiverServer implements Runnable {
     this.estimateBlockSize = conf.getLongBytes(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,
         DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT);
 
+    this.throttlerCalibrationSlavePolicy =
+        ThrottlerCalibrationSlavePolicy.newThrottlerCalibrationSlavePolicy(conf);
     refreshThrottlerConfig(conf);
   }
 
+  /**
+   * Refresh throttlers. Used for refreshes triggered by admin or DN initialization.
+   * @param conf
+   */
   public synchronized void refreshThrottlerConfig(Configuration conf) {
     //set up parameter for cluster balancing
     this.balanceThrottler = new BlockBalanceThrottler(
@@ -216,31 +232,89 @@ class DataXceiverServer implements Runnable {
         conf.getInt(DFSConfigKeys.DFS_DATANODE_BALANCE_MAX_NUM_CONCURRENT_MOVES_KEY,
             DFSConfigKeys.DFS_DATANODE_BALANCE_MAX_NUM_CONCURRENT_MOVES_DEFAULT));
 
-    long bandwidthPerSec = conf.getLongBytes(
-        DFSConfigKeys.DFS_DATANODE_DATA_TRANSFER_BANDWIDTHPERSEC_KEY,
-        DFSConfigKeys.DFS_DATANODE_DATA_TRANSFER_BANDWIDTHPERSEC_DEFAULT);
-    if (bandwidthPerSec > 0) {
-      this.transferThrottler = new DataTransferThrottler(bandwidthPerSec);
+    DataNodeMetrics metrics = datanode.metrics;
+
+    bandwidths[0] = conf.getLongBytes(
+        DFSConfigKeys.DFS_DATANODE_DATA_READ_BANDWIDTHPERSEC_KEY,
+        DFSConfigKeys.DFS_DATANODE_DATA_READ_BANDWIDTHPERSEC_DEFAULT);
+    if (bandwidths[0] > 0) {
+      this.readThrottler = new DataTransferThrottler(bandwidths[0]);
+      this.readThrottler.setCounter(throttlerCalibrationSlavePolicy.getReadBytesThrottledAL());
+      if (metrics != null) {
+        this.readThrottler.attachBytesMetrics(metrics.getReadBytes());
+      }
     } else {
-      this.transferThrottler = null;
+      this.readThrottler = null;
     }
 
-    bandwidthPerSec = conf.getLongBytes(
+    bandwidths[1] = conf.getLongBytes(
         DFSConfigKeys.DFS_DATANODE_DATA_WRITE_BANDWIDTHPERSEC_KEY,
         DFSConfigKeys.DFS_DATANODE_DATA_WRITE_BANDWIDTHPERSEC_DEFAULT);
-    if (bandwidthPerSec > 0) {
-      this.writeThrottler = new DataTransferThrottler(bandwidthPerSec);
+    if (bandwidths[1] > 0) {
+      this.writeThrottler = new DataTransferThrottler(bandwidths[1]);
+      this.writeThrottler.setCounter(throttlerCalibrationSlavePolicy.getWriteBytesThrottledAL());
+      if (metrics != null) {
+        this.writeThrottler.attachBytesMetrics(metrics.getWriteBytes());
+      }
     } else {
       this.writeThrottler = null;
     }
 
-    bandwidthPerSec = conf.getLongBytes(
-        DFSConfigKeys.DFS_DATANODE_DATA_READ_BANDWIDTHPERSEC_KEY,
-        DFSConfigKeys.DFS_DATANODE_DATA_READ_BANDWIDTHPERSEC_DEFAULT);
-    if (bandwidthPerSec > 0) {
-      this.readThrottler = new DataTransferThrottler(bandwidthPerSec);
+    bandwidths[2] = conf.getLongBytes(
+        DFSConfigKeys.DFS_DATANODE_DATA_TRANSFER_BANDWIDTHPERSEC_KEY,
+        DFSConfigKeys.DFS_DATANODE_DATA_TRANSFER_BANDWIDTHPERSEC_DEFAULT);
+    if (bandwidths[2] > 0) {
+      this.transferThrottler = new DataTransferThrottler(bandwidths[2]);
+      this.transferThrottler.setCounter(throttlerCalibrationSlavePolicy.getTransferBytesThrottledAL());
+      if (metrics != null) {
+        this.transferThrottler.attachBytesMetrics(metrics.getTransferBytes());
+      }
     } else {
-      this.readThrottler = null;
+      this.transferThrottler = null;
+    }
+    if (metrics != null) {
+      metrics.setBandwidths(bandwidths);
+    }
+  }
+
+  /**
+   * Refresh throttlers. Used for refreshes triggered by automatic calibration system.
+   * @param newBandwidths new bandwidths, tuples of 3 in this order: read -> write -> transfer
+   */
+  public synchronized void refreshThrottlerConfig(long[] newBandwidths) {
+    assert newBandwidths.length == 3;
+    DataNodeMetrics metrics = datanode.metrics;
+
+    if (newBandwidths[0] != bandwidths[0] && newBandwidths[0] > 0) {
+      bandwidths[0] = newBandwidths[0];
+      this.readThrottler = new DataTransferThrottler(bandwidths[0]);
+      this.readThrottler.setCounter(throttlerCalibrationSlavePolicy.getReadBytesThrottledAL());
+      if (metrics != null) {
+        this.readThrottler.attachBytesMetrics(metrics.getReadBytes());
+      }
+    }
+
+    if (newBandwidths[1] != bandwidths[1] && newBandwidths[1] > 0) {
+      bandwidths[1] = newBandwidths[1];
+      this.writeThrottler = new DataTransferThrottler(bandwidths[1]);
+      this.writeThrottler.setCounter(throttlerCalibrationSlavePolicy.getWriteBytesThrottledAL());
+      if (metrics != null) {
+        this.writeThrottler.attachBytesMetrics(metrics.getWriteBytes());
+      }
+    }
+
+    if (newBandwidths[2] != bandwidths[2] && newBandwidths[2] > 0) {
+      bandwidths[2] = newBandwidths[2];
+      this.transferThrottler = new DataTransferThrottler(bandwidths[2]);
+      this.transferThrottler.setCounter(
+          throttlerCalibrationSlavePolicy.getTransferBytesThrottledAL());
+      if (metrics != null) {
+        this.transferThrottler.attachBytesMetrics(metrics.getTransferBytes());
+      }
+    }
+
+    if (metrics != null) {
+      metrics.setBandwidths(bandwidths);
     }
   }
 
@@ -544,5 +618,26 @@ class DataXceiverServer implements Runnable {
   @VisibleForTesting
   void setMaxReconfigureWaitTime(int max) {
     this.maxReconfigureWaitTime = max;
+  }
+
+  public synchronized void calibrateThrottlers(InetSocketAddress nnAddr, long newReadBandwidth, long newWriteBandwidth,
+      long newTransferBandwidth) {
+    long[] newBandwidths =
+        throttlerCalibrationSlavePolicy.getNewBandwidths(nnAddr, newReadBandwidth,
+            newWriteBandwidth, newTransferBandwidth);
+
+    LOG.debug("Bandwidth calibration: read={} -> {}, write={} -> {}, transfer={} -> {}", bandwidths[0],
+        newBandwidths[0], bandwidths[1], newBandwidths[1], bandwidths[2], newBandwidths[2]);
+    // Same bandwidths, just skip
+    if (newBandwidths[0] == bandwidths[0] && newBandwidths[1] == bandwidths[1] && newBandwidths[2] == bandwidths[2]) {
+      return;
+    }
+
+    // Invalid bandwidth suggestions, also skip
+    if (newBandwidths[0] <= -1 || newBandwidths[1] <= -1 || newBandwidths[2] <= -1) {
+      return;
+    }
+
+    refreshThrottlerConfig(newBandwidths);
   }
 }

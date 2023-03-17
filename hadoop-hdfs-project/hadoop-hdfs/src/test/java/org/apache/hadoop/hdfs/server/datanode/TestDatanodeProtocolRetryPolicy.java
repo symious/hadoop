@@ -216,7 +216,10 @@ public class TestDatanodeProtocolRetryPolicy {
            Mockito.any(),
            Mockito.anyBoolean(),
            Mockito.any(),
-           Mockito.any());
+           Mockito.any(),
+           Mockito.anyLong(),
+           Mockito.anyLong(),
+           Mockito.anyLong());
 
     dn = new DataNode(conf, locations, null, null) {
       @Override

@@ -29,6 +29,10 @@ import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyDefault
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyRackFaultTolerant;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.RamDiskReplicaLruTracker;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.ReservedSpaceCalculator;
+import org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationMasterPolicy;
+import org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationMasterPolicyNoCalibration;
+import org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationSlavePolicy;
+import org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationSlavePolicyNoCalibration;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.hdfs.server.zoneservice.store.impl.StoreDriverZooKeeperImpl;
 import org.apache.hadoop.hdfs.web.URLConnectionFactory;
@@ -2146,4 +2150,57 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String
       DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_DEFAULT =
       null;
+
+  // Throttler auto calibration configs, master side
+  public static final String DFS_THROTTLER_CALIBRATION_MASTER_POLICY_CLASSNAME_KEY =
+      "dfs.throttler.calibration.master.policy.classname";
+
+  public static final Class<? extends ThrottlerCalibrationMasterPolicy>
+      DFS_THROTTLER_CALIBRATION_MASTER_POLICY_CLASSNAME_DEFAULT =
+      ThrottlerCalibrationMasterPolicyNoCalibration.class;
+
+  public static final String DFS_THROTTLER_READ_MASTER_BANDWIDTH_KEY =
+      "dfs.throttler.read.master.bandwidth";
+  public static final long DFS_THROTTLER_READ_MASTER_BANDWIDTH_DEFAULT = (long) 3E13;
+  public static final String DFS_THROTTLER_WRITE_MASTER_BANDWIDTH_KEY =
+      "dfs.throttler.write.master.bandwidth";
+  public static final long DFS_THROTTLER_WRITE_MASTER_BANDWIDTH_DEFAULT = (long) 3E13;
+  public static final String DFS_THROTTLER_TRANSFER_MASTER_BANDWIDTH_KEY =
+      "dfs.throttler.transfer.master.bandwidth";
+  public static final long DFS_THROTTLER_TRANSFER_MASTER_BANDWIDTH_DEFAULT = (long) 3E13;
+
+  public static final String DFS_THROTTLER_AVERAGE_ACTIVE_POLICY_CALIBRATION_INTERVAL_KEY =
+      "dfs.throttler.average.active.policy.calibrate.interval";
+  public static final long DFS_THROTTLER_AVERAGE_ACTIVE_POLICY_CALIBRATION_INTERVAL_DEFAULT =
+      24 * 3600 * 1000;
+
+  public static final String DFS_THROTTLER_AVERAGE_ACTIVE_POLICY_MAX_FACTOR_KEY =
+      "dfs.throttler.average.active.policy.max.factor";
+  public static final int DFS_THROTTLER_AVERAGE_ACTIVE_POLICY_MAX_FACTOR_DEFAULT = 3;
+  public static final String DFS_THROTTLER_AVERAGE_ACTIVE_POLICY_MINIMUM_SLAVE_BANDWIDTH_KEY =
+      "dfs.throttler.average.active.policy.minimum.slave.bandwidth";
+  public static final long DFS_THROTTLER_AVERAGE_ACTIVE_POLICY_MINIMUM_SLAVE_BANDWIDTH_DEFAULT =
+      (long) 1E6;
+  public static final String DFS_THROTTLER_AVERAGE_ACTIVE_POLICY_ACTIVE_THRESHOLD_KEY =
+      "dfs.throttler.average.active.policy.active.threshold";
+  public static final long DFS_THROTTLER_AVERAGE_ACTIVE_POLICY_ACTIVE_THRESHOLD_DEFAULT =
+      (long) 1E3;
+
+  public static final String DFS_THROTTLER_AVERAGE_ACTIVE_POLICY_GRACE_PERIOD_KEY =
+      "dfs.throttler.average.active.policy.grace.period";
+  public static final long DFS_THROTTLER_AVERAGE_ACTIVE_POLICY_GRACE_PERIOD_DEFAULT =
+      3600 * 1000;
+
+  // Throttler auto calibration configs, slave side
+  public static final String DFS_THROTTLER_CALIBRATION_SLAVE_POLICY_CLASSNAME_KEY =
+      "dfs.throttler.calibration.slave.policy.classname";
+
+  public static final Class<? extends ThrottlerCalibrationSlavePolicy>
+      DFS_THROTTLER_CALIBRATION_SLAVE_POLICY_CLASSNAME_DEFAULT =
+      ThrottlerCalibrationSlavePolicyNoCalibration.class;
+
+  public static final String DFS_THROTTLER_FIRST_COME_FIRST_SERVED_POLICY_CALIBRATION_INTERVAL_KEY =
+      "dfs.throttler.first.come.first.served.policy.calibrate.interval";
+  public static final long
+      DFS_THROTTLER_FIRST_COME_FIRST_SERVED_POLICY_CALIBRATION_INTERVAL_DEFAULT = 4 * 3600 * 1000;
 }

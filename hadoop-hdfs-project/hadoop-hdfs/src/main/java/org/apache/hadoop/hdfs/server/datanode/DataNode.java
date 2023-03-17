@@ -217,6 +217,8 @@ import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
 import org.apache.hadoop.hdfs.server.protocol.InterDatanodeProtocol;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.hdfs.server.protocol.ReplicaRecoveryInfo;
+import org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationSlavePolicy;
+import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 import org.apache.hadoop.http.HttpConfig;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.ReadaheadPool;
@@ -4433,10 +4435,27 @@ public class DataNode extends ReconfigurableBase
     refreshThrottlerConfig(new Configuration());
   }
 
-  @com.google.common.annotations.VisibleForTesting
+  @VisibleForTesting
   public void refreshThrottlerConfig(Configuration conf) throws IOException {
     if (xserver != null) {
       xserver.refreshThrottlerConfig(conf);
+    }
+  }
+
+
+  public ThrottlerCalibrationSlavePolicy getThrottlerCalibrationSlavePolicy() {
+    if (xserver != null) {
+      return xserver.getThrottlerCalibrationSlavePolicy();
+    } else {
+      return null;
+    }
+  }
+
+  public void calibrateThrottlers(InetSocketAddress nnAddr, long newReadBandwidth,
+      long newWriteBandwidth, long newTransferBandwidth) {
+    if (xserver != null) {
+      xserver.calibrateThrottlers(nnAddr, newReadBandwidth, newWriteBandwidth,
+          newTransferBandwidth);
     }
   }
 

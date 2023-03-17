@@ -4761,14 +4761,15 @@
   </description>
 </property>
 
+  <!--  DATANODE BANDWIDTH MANAGEMENT ==== START ==== -->
+
+  <!--  MANUAL BANDWIDTH  -->
   <property>
-    <name>dfs.datanode.data.transfer.bandwidthPerSec</name>
+    <name>dfs.datanode.data.read.bandwidthPerSec</name>
     <value>0</value>
     <description>
-      Specifies the maximum amount of bandwidth that the data transfering can utilize for transfering block when
-      BlockConstructionStage is
-      PIPELINE_SETUP_CREATE and clientName is empty.
-      When the bandwidth value is zero, there is no limit.
+      Specifies the maximum amount of bandwidth that a DN's readBlock operation
+      can utilize.
     </description>
   </property>
 
@@ -4784,14 +4785,119 @@
   </property>
 
   <property>
-    <name>dfs.datanode.data.read.bandwidthPerSec</name>
+    <name>dfs.datanode.data.transfer.bandwidthPerSec</name>
     <value>0</value>
     <description>
-      Specifies the maximum amount of bandwidth that a DN's readBlock operation
-      can utilize.
+      Specifies the maximum amount of bandwidth that the data transfering can utilize for transfering block when
+      BlockConstructionStage is
+      PIPELINE_SETUP_CREATE and clientName is empty.
+      When the bandwidth value is zero, there is no limit.
     </description>
   </property>
 
+  <!--  AUTO BANDWIDTH CALIBRATION -->
+  <!--  AUTO BANDWIDTH CALIBRATION - MASTER SIDE -->
+  <property>
+    <name>dfs.throttler.calibration.master.policy.classname</name>
+    <value>org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationMasterPolicyNoCalibration</value>
+    <description>
+      Policy class that handles calibration on NN side. Takes in traffic from DNs and determines a
+      new set of bandwidths for each DN.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.throttler.read.master.bandwidth</name>
+    <value>30000000000000</value>
+    <description>
+      Total transfer bandwidth across all datanodes.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.throttler.write.master.bandwidth</name>
+    <value>30000000000000</value>
+    <description>
+      Total read bandwidth across all datanodes.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.throttler.transfer.master.bandwidth</name>
+    <value>30000000000000</value>
+    <description>
+      Total write bandwidth across all datanodes.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.throttler.average.active.policy.calibrate.interval</name>
+    <value>86400000</value>
+    <description>
+      Used by org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationMasterPolicyAverageActiveNodes
+      Time in milliseconds between each time NNs calibrate DN bandwidths based on DN traffic
+      during this interval.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.throttler.average.active.policy.max.factor</name>
+    <value>3</value>
+    <description>
+      Used by org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationMasterPolicyAverageActiveNodes
+      The max factor over the average bandwidth a single datanode can utilize.
+      Example: master bandwidth 2000MB/s, 40 DNs, max factor 3 => one DN can only have max bandwidth of 2000/40*3 = 150MB/s
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.throttler.average.active.policy.minimum.slave.bandwidth</name>
+    <value>1000000</value>
+    <description>
+      Used by org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationMasterPolicyAverageActiveNodes
+      Minimum bandwidth to be used by DN.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.throttler.average.active.policy.active.threshold</name>
+    <value>1000</value>
+    <description>
+      Used by org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationMasterPolicyAverageActiveNodes
+      Minimum DN throughput per NN calibration period for that DN to be considered active.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.throttler.average.active.policy.grace.period</name>
+    <value>3600000</value>
+    <description>
+      Used by org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationMasterPolicyAverageActiveNodes
+      Period (in millisecs) after NN boot where NN records throughput data from DNs without calibrating any bandwidths.
+    </description>
+  </property>
+
+
+  <!--  AUTO BANDWIDTH CALIBRATION - SLAVE SIDE -->
+  <property>
+    <name>dfs.throttler.calibration.slave.policy.classname</name>
+    <value>org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationSlavePolicyNoCalibration</value>
+    <description>
+      Policy class that handles calibration on DN side. Takes in bandwidth suggestions from NNs
+      then determines a new set of bandwidths.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.throttler.first.come.first.served.policy.calibrate.interval</name>
+    <value>14400000</value>
+    <description>
+      Used by org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationSlavePolicyFirstComeFirstServed
+      Time in milliseconds between each time DNs calibrate bandwidths based on NN suggestions collected.
+    </description>
+  </property>
+
+  <!-- EC RELATED BANDWIDTHS -->
   <property>
     <name>dfs.datanode.ec.reconstruct.read.bandwidthPerSec</name>
     <value>0</value>
@@ -4809,6 +4915,7 @@
       When the bandwidth value is zero, there is no limit.
     </description>
   </property>
+  <!--  DATANODE BANDWIDTH MANAGEMENT ==== END ==== -->
 
 <property>
   <name>dfs.datanode.fsdataset.factory</name>

@@ -138,8 +138,10 @@ public class DatanodeProtocolClientSideTranslatorPB implements
       VolumeFailureSummary volumeFailureSummary,
       boolean requestFullBlockReportLease,
       @Nonnull SlowPeerReports slowPeers,
-      @Nonnull SlowDiskReports slowDisks)
-          throws IOException {
+      @Nonnull SlowDiskReports slowDisks,
+      long readBytesThrottled,
+      long writeBytesThrottled,
+      long transferBytesThrottled) throws IOException {
     HeartbeatRequestProto.Builder builder = HeartbeatRequestProto.newBuilder()
         .setRegistration(PBHelper.convert(registration))
         .setXmitsInProgress(xmitsInProgress).setXceiverCount(xceiverCount)
@@ -162,7 +164,15 @@ public class DatanodeProtocolClientSideTranslatorPB implements
     if (slowDisks.haveSlowDisks()) {
       builder.addAllSlowDisks(PBHelper.convertSlowDiskInfo(slowDisks));
     }
-
+    if (readBytesThrottled > 0) {
+      builder.setReadBytesThrottled(readBytesThrottled);
+    }
+    if (writeBytesThrottled > 0) {
+      builder.setWriteBytesThrottled(writeBytesThrottled);
+    }
+    if (transferBytesThrottled > 0) {
+      builder.setTransferBytesThrottled(transferBytesThrottled);
+    }
     HeartbeatResponseProto resp;
     try {
       resp = rpcProxy.sendHeartbeat(NULL_CONTROLLER, builder.build());
@@ -184,7 +194,8 @@ public class DatanodeProtocolClientSideTranslatorPB implements
     }
     return new HeartbeatResponse(cmds, PBHelper.convert(resp.getHaStatus()),
         rollingUpdateStatus, resp.getFullBlockReportLeaseId(),
-        resp.getIsSlownode());
+        resp.getIsSlownode(),
+        resp.getNewReadBandwidth(), resp.getNewWriteBandwidth(), resp.getNewTransferBandwidth());
   }
 
   @Override

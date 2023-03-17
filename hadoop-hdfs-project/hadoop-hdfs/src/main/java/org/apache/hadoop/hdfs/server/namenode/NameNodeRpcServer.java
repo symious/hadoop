@@ -1861,14 +1861,17 @@ public class NameNodeRpcServer implements NamenodeProtocols {
       int failedVolumes, VolumeFailureSummary volumeFailureSummary,
       boolean requestFullBlockReportLease,
       @Nonnull SlowPeerReports slowPeers,
-      @Nonnull SlowDiskReports slowDisks)
-          throws IOException {
+      @Nonnull SlowDiskReports slowDisks,
+      long readBytesThrottled,
+      long writeBytesThrottled,
+      long transferBytesThrottled) throws IOException {
     checkNNStartup();
     verifyRequest(nodeReg);
     return namesystem.handleHeartbeat(nodeReg, report,
         dnCacheCapacity, dnCacheUsed, xceiverCount, xmitsInProgress,
         failedVolumes, volumeFailureSummary, requestFullBlockReportLease,
-        slowPeers, slowDisks);
+        slowPeers, slowDisks, readBytesThrottled, writeBytesThrottled, transferBytesThrottled,
+        nn.getState().equals(NameNode.ACTIVE_STATE.toString()));
   }
 
   @Override // DatanodeProtocol

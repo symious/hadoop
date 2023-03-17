@@ -163,7 +163,10 @@ public class InternalDataNodeTestUtils {
             Mockito.anyInt(), Mockito.any(),
             Mockito.anyBoolean(),
             Mockito.any(),
-            Mockito.any())).thenReturn(
+            Mockito.any(),
+            Mockito.anyLong(),
+            Mockito.anyLong(),
+            Mockito.anyLong())).thenReturn(
         new HeartbeatResponse(new DatanodeCommand[0], new NNHAStatusHeartbeat(
             HAServiceState.ACTIVE, 1), null, ThreadLocalRandom.current()
             .nextLong() | 1L));

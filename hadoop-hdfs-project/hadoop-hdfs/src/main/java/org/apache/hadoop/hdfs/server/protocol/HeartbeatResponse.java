@@ -38,21 +38,28 @@ public class HeartbeatResponse {
   private final long fullBlockReportLeaseId;
 
   private final boolean isSlownode;
-  
-  public HeartbeatResponse(DatanodeCommand[] cmds,
-      NNHAStatusHeartbeat haStatus, RollingUpgradeStatus rollingUpdateStatus,
-      long fullBlockReportLeaseId) {
-    this(cmds, haStatus, rollingUpdateStatus, fullBlockReportLeaseId, false);
-  }
+
+  private final long newReadBandwidth;
+  private final long newWriteBandwidth;
+  private final long newTransferBandwidth;
 
   public HeartbeatResponse(DatanodeCommand[] cmds,
       NNHAStatusHeartbeat haStatus, RollingUpgradeStatus rollingUpdateStatus,
-      long fullBlockReportLeaseId, boolean isSlownode) {
+      long fullBlockReportLeaseId) {
+    this(cmds, haStatus, rollingUpdateStatus, fullBlockReportLeaseId, false, 0, 0, 0);
+  }
+
+  public HeartbeatResponse(DatanodeCommand[] cmds, NNHAStatusHeartbeat haStatus,
+      RollingUpgradeStatus rollingUpdateStatus, long fullBlockReportLeaseId, boolean isSlownode,
+      long newReadBandwidth, long newWriteBandwidth, long newTransferBandwidth) {
     commands = cmds;
     this.haStatus = haStatus;
     this.rollingUpdateStatus = rollingUpdateStatus;
     this.fullBlockReportLeaseId = fullBlockReportLeaseId;
     this.isSlownode = isSlownode;
+    this.newReadBandwidth = newReadBandwidth;
+    this.newWriteBandwidth = newWriteBandwidth;
+    this.newTransferBandwidth = newTransferBandwidth;
   }
   
   public DatanodeCommand[] getCommands() {
@@ -73,5 +80,17 @@ public class HeartbeatResponse {
 
   public boolean getIsSlownode() {
     return isSlownode;
+  }
+
+  public long getNewReadBandwidth() {
+    return newReadBandwidth;
+  }
+
+  public long getNewWriteBandwidth() {
+    return newWriteBandwidth;
+  }
+
+  public long getNewTransferBandwidth() {
+    return newTransferBandwidth;
   }
 }

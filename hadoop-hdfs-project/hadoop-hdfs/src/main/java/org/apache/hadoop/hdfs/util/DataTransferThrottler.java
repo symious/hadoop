@@ -17,6 +17,11 @@
  */
 package org.apache.hadoop.hdfs.util;
 
+import java.util.concurrent.atomic.AtomicLong;
+
+import com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.metrics2.lib.MutableRate;
+
 import static org.apache.hadoop.util.Time.monotonicNow;
 
 /** 
@@ -32,6 +37,8 @@ public class DataTransferThrottler {
   private long curPeriodStart;  // current period starting time
   private long curReserve;      // remaining bytes can be sent in the period
   private long bytesAlreadyUsed;
+  private AtomicLong totalBytes;
+  private MutableRate bytesMetrics;
 
   /** Constructor 
    * @param bandwidthPerSec bandwidth allowed in bytes per second. 
@@ -58,6 +65,16 @@ public class DataTransferThrottler {
    */
   public synchronized long getBandwidth() {
     return bytesPerPeriod*1000/period;
+  }
+
+  public synchronized void setCounter(AtomicLong totalBytes) {
+    this.totalBytes = totalBytes;
+  }
+
+  @VisibleForTesting
+  public synchronized void dummyThrottleForTesting(long incr) {
+    this.totalBytes.addAndGet(incr);
+    this.bytesMetrics.add(incr);
   }
   
   /**
@@ -128,5 +145,13 @@ public class DataTransferThrottler {
     }
 
     bytesAlreadyUsed -= numOfBytes;
+    if (totalBytes != null) {
+      totalBytes.addAndGet(numOfBytes);
+      this.bytesMetrics.add(numOfBytes);
+    }
+  }
+
+  public void attachBytesMetrics(MutableRate metrics) {
+    this.bytesMetrics = metrics;
   }
 }
