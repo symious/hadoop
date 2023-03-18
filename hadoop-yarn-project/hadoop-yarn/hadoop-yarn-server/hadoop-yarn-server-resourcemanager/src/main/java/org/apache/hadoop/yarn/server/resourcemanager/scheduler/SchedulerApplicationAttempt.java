@@ -211,6 +211,7 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
   private String nodeLabelExpression;
 
   private final long startTime;
+  private long reOrderTime;
 
   public SchedulerApplicationAttempt(ApplicationAttemptId applicationAttemptId, 
       String user, Queue queue, AbstractUsersManager abstractUsersManager,
@@ -246,6 +247,7 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
     readLock = lock.readLock();
     writeLock = lock.writeLock();
     startTime = SystemClock.getInstance().getTime();
+    reOrderTime = startTime;
   }
 
   public void setOpportunisticContainerContext(
@@ -1512,5 +1514,15 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
   @Override
   public long getStartTime() {
     return startTime;
+  }
+
+  @Override
+  public long getReOrderTime() {
+    return reOrderTime;
+  }
+
+  @Override
+  public void setReOrderTime(long reOrderTime) {
+    this.reOrderTime = reOrderTime;
   }
 }

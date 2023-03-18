@@ -30,6 +30,7 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.concurrent.ConcurrentSkipListSet;
 
 public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends AbstractComparatorOrderingPolicy<S> {
@@ -39,6 +40,10 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
 
   private String queueName;
   private long cacheTime;
+
+  private final static Random random = new Random(System.currentTimeMillis());
+  private int fullReorderIntervalSecond;
+  protected long nextFullOrderTime;
 
   //global scheduler will have multiple threads, update visibility
   private volatile long lastUpdateTime;
@@ -133,6 +138,14 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
     this.pendingTimeWeightFactor = pendingTimeWeightFactor;
   }
 
+  public void setFullReorderIntervalSecond(int fullReorderIntervalSecond) {
+    this.fullReorderIntervalSecond = fullReorderIntervalSecond;
+  }
+
+  public void setNextFullOrderTime(long nextFullOrderTime) {
+    this.nextFullOrderTime = nextFullOrderTime;
+  }
+
   public CompoundComparator getWeightComparator() {
     return weightComparator;
   }
@@ -149,10 +162,6 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
       // (app_priority / high_flag_priority) * m +
       // (pending_resources / pending_flag_resources) * n +
       // (pending_time / pending_flag_time) * q
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("queueName: " + queueName +
-            " ,WeightComparator reorder start time: " + reorderStartTime);
-      }
       int r1_priority = r1.getPriority().getPriority();
       int r2_priority = r2.getPriority().getPriority();
 
@@ -184,14 +193,14 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
             r2_pending_resources_weight * pendingMemoryWeightFactor;
 
         double r1_pending_time_weight =
-            (reorderStartTime - r1.getStartTime()) / pendingFlagTime;
+            (r1.getReOrderTime() - r1.getStartTime()) / pendingFlagTime;
         r1_pending_time_weight =
             (r1_pending_time_weight < 1) ? r1_pending_time_weight : 1;
         r1_pending_time_weight =
             r1_pending_time_weight * pendingTimeWeightFactor;
 
         double r2_pending_time_weight =
-            (reorderStartTime - r2.getStartTime()) / pendingFlagTime;
+            (r2.getReOrderTime() - r2.getStartTime()) / pendingFlagTime;
         r2_pending_time_weight =
             (r2_pending_time_weight < 1) ? r2_pending_time_weight : 1;
         r2_pending_time_weight =
@@ -241,6 +250,41 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
     this.schedulableEntities = new ConcurrentSkipListSet<S>(comparator);
   }
 
+  protected void reorderScheduleEntities() {
+    synchronized (entitiesToReorder) {
+      long now = System.currentTimeMillis();
+      if (now > nextFullOrderTime && fullReorderIntervalSecond > 0) {
+        for (S s : schedulableEntities) {
+          //only need to add apps that haven't updated time beyond fullReorderIntervalSecond
+          long reOrderInterval = (now - s.getReOrderTime()) / 1000;
+          if (reOrderInterval >= fullReorderIntervalSecond) {
+            entitiesToReorder.put(s.getId(), s);
+          }
+        }
+        int waitSecond = fullReorderIntervalSecond +
+            random.nextInt(fullReorderIntervalSecond);
+        nextFullOrderTime = now + waitSecond * 1000;
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("queueName: " + this.queueName + " ,now: " + now +
+              " ,nextFullOrderTime: " + nextFullOrderTime + " ,wait second: " +
+              waitSecond);
+        }
+      }
+      long start = System.nanoTime();
+      int size = entitiesToReorder.size();
+      for (Map.Entry<String, S> entry :
+          entitiesToReorder.entrySet()) {
+        reorderSchedulableEntity(entry.getValue());
+      }
+      long end = System.nanoTime();
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("queueName: " + this.queueName + " ,reorder " + size +
+            " apps, cost time: " + (end - start) / 1000 + " us!");
+      }
+      entitiesToReorder.clear();
+    }
+  }
+
   @Override
   public Iterator<S> getAssignmentIterator(IteratorSelector sel) {
     long now = System.currentTimeMillis();
@@ -270,6 +314,11 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
   public void configure(Map<String, String> conf) {
     this.queueName = conf.get("queueName");
     this.cacheTime = Long.parseLong(conf.get("appsOrderCacheTime"));
+    this.fullReorderIntervalSecond =
+        Integer.parseInt(conf.get("fullReorderIntervalSecond"));
+    this.nextFullOrderTime =
+        System.currentTimeMillis() + (fullReorderIntervalSecond +
+            random.nextInt(fullReorderIntervalSecond)) * 1000;
     this.highFlagPriority = Double.parseDouble(conf.get("highFlagPriority"));
     this.pendingFlagMemory = Double.parseDouble(conf.get("pendingFlagMemory"));
     this.pendingFlagTime = Double.parseDouble(conf.get("pendingFlagTime"));
@@ -278,7 +327,7 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
     this.pendingMemoryWeightFactor =
         Double.parseDouble(conf.get("pendingMemoryWeightFactor"));
 
-    if (this.priorityWeightFactor + this.pendingMemoryWeightFactor < 1) {
+    if (this.priorityWeightFactor + this.pendingMemoryWeightFactor <= 1) {
       this.pendingTimeWeightFactor =
           1.0 - (priorityWeightFactor + pendingMemoryWeightFactor);
     } else {

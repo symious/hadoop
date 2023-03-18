@@ -21,8 +21,6 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy;
 import java.util.*;
 import java.util.concurrent.ConcurrentSkipListSet;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.*;
 import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
@@ -33,15 +31,11 @@ import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
  * expressed in terms of comparators
  */
 public abstract class AbstractComparatorOrderingPolicy<S extends SchedulableEntity> implements OrderingPolicy<S> {
-  
-  private static final Logger LOG =
-      LoggerFactory.getLogger(OrderingPolicy.class);
-                                            
+
   protected ConcurrentSkipListSet<S> schedulableEntities;
   protected Comparator<SchedulableEntity> comparator;
   protected Map<String, S> entitiesToReorder = new HashMap<String, S>();
-  protected long reorderStartTime;
-  
+
   public AbstractComparatorOrderingPolicy() { }
   
   @Override
@@ -71,15 +65,12 @@ public abstract class AbstractComparatorOrderingPolicy<S extends SchedulableEnti
     schedulableEntities.remove(schedulableEntity);
     updateSchedulingResourceUsage(
       schedulableEntity.getSchedulingResourceUsage());
+    schedulableEntity.setReOrderTime(System.currentTimeMillis());
     schedulableEntities.add(schedulableEntity);
   }
   
   protected void reorderScheduleEntities() {
     synchronized (entitiesToReorder) {
-      reorderStartTime = System.currentTimeMillis();
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("reorderScheduleEntities start time: " + reorderStartTime);
-      }
       for (Map.Entry<String, S> entry :
           entitiesToReorder.entrySet()) {
         reorderSchedulableEntity(entry.getValue());

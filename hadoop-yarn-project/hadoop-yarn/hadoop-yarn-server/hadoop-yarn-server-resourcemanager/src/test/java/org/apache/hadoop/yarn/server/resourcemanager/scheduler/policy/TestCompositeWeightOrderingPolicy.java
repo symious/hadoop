@@ -466,6 +466,187 @@ public class TestCompositeWeightOrderingPolicy {
         .getAssignmentIterator(IteratorSelector.EMPTY_ITERATOR_SELECTOR), 2);
   }
 
+  @Test
+  public void testPendingTimeWithLeak() throws InterruptedException {
+
+    CompositeWeightOrderingPolicy<MockSchedulableEntity> schedOrder =
+        new CompositeWeightOrderingPolicy<MockSchedulableEntity>();
+
+    long cacheTime = 3000;
+    double highFlagPriority = 60;
+    double pendingFlagMemory = 100 * 1024 * 1024;
+    double pendingFlagTime = 120 * 60 * 1000;
+    double priorityWeight = 0.6;
+    double pendingResourcesWeight = 0.2;
+    double pendingTimeWeight = 0.2;
+    schedOrder.setCacheTime(cacheTime);
+    schedOrder.setHighFlagPriority(highFlagPriority);
+    schedOrder.setPendingFlagMemory(pendingFlagMemory);
+    schedOrder.setPendingFlagTime(pendingFlagTime);
+    schedOrder.setPriorityWeightFactor(priorityWeight);
+    schedOrder.setPendingMemoryWeightFactor(pendingResourcesWeight);
+    schedOrder.setPendingTimeWeightFactor(pendingTimeWeight);
+
+    MockSchedulableEntity r1 = new MockSchedulableEntity();
+    MockSchedulableEntity r2 = new MockSchedulableEntity();
+    MockSchedulableEntity r3 = new MockSchedulableEntity();
+    MockSchedulableEntity r4 = new MockSchedulableEntity();
+
+    r1.setId("1");
+    r2.setId("2");
+    r3.setId("3");
+    r4.setId("4");
+
+    //Set priority
+    Priority p1 = Priority.newInstance(10);
+    Priority p2 = Priority.newInstance(40);
+    Priority p3 = Priority.newInstance(50);
+    Priority p4 = Priority.newInstance(60);
+    r1.setApplicationPriority(p1);
+    r2.setApplicationPriority(p2);
+    r3.setApplicationPriority(p3);
+    r4.setApplicationPriority(p4);
+
+    //Set pending resources
+    r1.setPending(Resources.createResource(60 * 1024 * GB));
+    r2.setPending(Resources.createResource(100 * 1024 * GB));
+    r3.setPending(Resources.createResource(100 * 1024 * GB));
+    r4.setPending(Resources.createResource(20 * 1024 * GB));
+    AbstractComparatorOrderingPolicy
+        .updateSchedulingResourceUsage(r1.getSchedulingResourceUsage());
+    AbstractComparatorOrderingPolicy
+        .updateSchedulingResourceUsage(r2.getSchedulingResourceUsage());
+    AbstractComparatorOrderingPolicy
+        .updateSchedulingResourceUsage(r3.getSchedulingResourceUsage());
+    AbstractComparatorOrderingPolicy
+        .updateSchedulingResourceUsage(r4.getSchedulingResourceUsage());
+
+    //Set pending time
+    long currentTime = System.currentTimeMillis();
+    r1.setStartTime(currentTime - 120 * 60 * 1000);
+    r2.setStartTime(currentTime - 60 * 60 * 1000);
+    r3.setStartTime(currentTime - 20 * 60 * 1000);
+    r4.setStartTime(currentTime - 15 * 60 * 1000);
+
+    schedOrder.addSchedulableEntity(r1);
+    schedOrder.addSchedulableEntity(r2);
+    schedOrder.addSchedulableEntity(r3);
+    schedOrder.addSchedulableEntity(r4);
+
+    //Assignment, greatest to least weight
+    Iterator<MockSchedulableEntity> iterator1 = schedOrder.getAssignmentIterator(
+        IteratorSelector.EMPTY_ITERATOR_SELECTOR);
+    checkIds(iterator1, new String[]{"4","3", "2", "1"});
+
+    //Change value with cache, should see no change for assignmentIterator
+    r2.setReOrderTime(currentTime + 60 * 60 * 1000);
+    schedOrder.removeSchedulableEntity(r2);
+
+    //Cache time out, will reorder
+    Thread.sleep(2 * cacheTime);
+    schedOrder.containerAllocated(r2, null);
+
+    Iterator<MockSchedulableEntity> iterator3 = schedOrder.getAssignmentIterator(
+        IteratorSelector.EMPTY_ITERATOR_SELECTOR);
+    checkIds(iterator3, new String[]{"4", "2", "3", "2", "1"});
+  }
+
+  @Test
+  public void testPendingTimeWithoutLeak() throws InterruptedException {
+
+    CompositeWeightOrderingPolicy<MockSchedulableEntity> schedOrder =
+        new CompositeWeightOrderingPolicy<MockSchedulableEntity>();
+
+    long cacheTime = 3000;
+    double highFlagPriority = 60;
+    double pendingFlagMemory = 100 * 1024 * 1024;
+    double pendingFlagTime = 120 * 60 * 1000;
+    double priorityWeight = 0.6;
+    double pendingResourcesWeight = 0.2;
+    double pendingTimeWeight = 0.2;
+    int fullReorderIntervalSecond = (int)cacheTime;
+
+    schedOrder.setCacheTime(cacheTime);
+    schedOrder.setFullReorderIntervalSecond(fullReorderIntervalSecond);
+    schedOrder.setNextFullOrderTime(
+        System.currentTimeMillis() + fullReorderIntervalSecond);
+
+    schedOrder.setHighFlagPriority(highFlagPriority);
+    schedOrder.setPendingFlagMemory(pendingFlagMemory);
+    schedOrder.setPendingFlagTime(pendingFlagTime);
+    schedOrder.setPriorityWeightFactor(priorityWeight);
+    schedOrder.setPendingMemoryWeightFactor(pendingResourcesWeight);
+    schedOrder.setPendingTimeWeightFactor(pendingTimeWeight);
+
+    MockSchedulableEntity r1 = new MockSchedulableEntity();
+    MockSchedulableEntity r2 = new MockSchedulableEntity();
+    MockSchedulableEntity r3 = new MockSchedulableEntity();
+    MockSchedulableEntity r4 = new MockSchedulableEntity();
+
+    r1.setId("1");
+    r2.setId("2");
+    r3.setId("3");
+    r4.setId("4");
+
+    //Set priority
+    Priority p1 = Priority.newInstance(10);
+    Priority p2 = Priority.newInstance(40);
+    Priority p3 = Priority.newInstance(50);
+    Priority p4 = Priority.newInstance(60);
+    r1.setApplicationPriority(p1);
+    r2.setApplicationPriority(p2);
+    r3.setApplicationPriority(p3);
+    r4.setApplicationPriority(p4);
+
+    //Set pending resources
+    r1.setPending(Resources.createResource(60 * 1024 * GB));
+    r2.setPending(Resources.createResource(100 * 1024 * GB));
+    r3.setPending(Resources.createResource(100 * 1024 * GB));
+    r4.setPending(Resources.createResource(20 * 1024 * GB));
+    AbstractComparatorOrderingPolicy
+        .updateSchedulingResourceUsage(r1.getSchedulingResourceUsage());
+    AbstractComparatorOrderingPolicy
+        .updateSchedulingResourceUsage(r2.getSchedulingResourceUsage());
+    AbstractComparatorOrderingPolicy
+        .updateSchedulingResourceUsage(r3.getSchedulingResourceUsage());
+    AbstractComparatorOrderingPolicy
+        .updateSchedulingResourceUsage(r4.getSchedulingResourceUsage());
+
+    //Set pending time
+    long currentTime = System.currentTimeMillis();
+    r1.setStartTime(currentTime - 120 * 60 * 1000);
+    r1.setReOrderTime(currentTime - 120 * 60 * 1000);
+    r2.setStartTime(currentTime - 120 * 60 * 1000);
+    r2.setReOrderTime(currentTime - 120 * 60 * 1000);
+    r3.setStartTime(currentTime - 20 * 60 * 1000);
+    r3.setReOrderTime(currentTime - 20 * 60 * 1000);
+    r4.setStartTime(currentTime - 15 * 60 * 1000);
+    r4.setReOrderTime(currentTime - 15 * 60 * 1000);
+
+    schedOrder.addSchedulableEntity(r1);
+    schedOrder.addSchedulableEntity(r2);
+    schedOrder.addSchedulableEntity(r3);
+    schedOrder.addSchedulableEntity(r4);
+
+    //Assignment, greatest to least weight
+    Iterator<MockSchedulableEntity> iterator1 = schedOrder.getAssignmentIterator(
+        IteratorSelector.EMPTY_ITERATOR_SELECTOR);
+    checkIds(iterator1, new String[]{"4","3", "2", "1"});
+
+    //Cache time out, will full order
+    Thread.sleep(2 * cacheTime);
+
+    Iterator<MockSchedulableEntity> iterator3 = schedOrder.getAssignmentIterator(
+        IteratorSelector.EMPTY_ITERATOR_SELECTOR);
+    checkIds(iterator3, new String[]{"4", "2", "3", "1"});
+
+    schedOrder.removeSchedulableEntity(r2);
+
+    Iterator<MockSchedulableEntity> iterator4 = schedOrder.getAssignmentIterator(
+        IteratorSelector.EMPTY_ITERATOR_SELECTOR);
+    checkIds(iterator4, new String[]{"4", "3", "1"});
+  }
+
   public void checkIds(Iterator<MockSchedulableEntity> si,
       String[] ids) {
     for (int i = 0;i < ids.length;i++) {

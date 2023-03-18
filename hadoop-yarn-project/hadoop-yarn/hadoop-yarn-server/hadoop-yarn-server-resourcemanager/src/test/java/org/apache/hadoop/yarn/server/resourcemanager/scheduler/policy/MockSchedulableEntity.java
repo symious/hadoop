@@ -33,6 +33,7 @@ public class MockSchedulableEntity implements SchedulableEntity {
   private boolean isRecovering;
   private String partition = "";
   private long startTime;
+  private long reOrderTime;
 
   public MockSchedulableEntity() { }
   
@@ -42,6 +43,7 @@ public class MockSchedulableEntity implements SchedulableEntity {
     this.priority = Priority.newInstance(priority);
     this.isRecovering = isRecovering;
     this.startTime = SystemClock.getInstance().getTime();
+    this.reOrderTime = this.startTime;
   }
 
   public void setId(String id) {
@@ -119,5 +121,15 @@ public class MockSchedulableEntity implements SchedulableEntity {
 
   public void setStartTime(long startTime) {
     this.startTime = startTime;
+  }
+
+  @Override
+  public long getReOrderTime() {
+    return reOrderTime;
+  }
+
+  @Override
+  public void setReOrderTime(long reOrderTime) {
+    this.reOrderTime = reOrderTime;
   }
 }

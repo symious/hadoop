@@ -66,4 +66,16 @@ public interface SchedulableEntity {
    * @return start time
    */
   long getStartTime();
+
+  /**
+   * reOrderTime use to update pendingTime of the job
+   * @return reOrderTime
+   */
+  long getReOrderTime();
+
+  /**
+   * update reOrderTime
+   * @return reOrderTime
+   */
+  void setReOrderTime(long reOrderTime);
 }

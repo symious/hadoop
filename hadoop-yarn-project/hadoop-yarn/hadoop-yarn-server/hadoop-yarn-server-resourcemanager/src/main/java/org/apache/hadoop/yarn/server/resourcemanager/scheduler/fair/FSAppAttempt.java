@@ -79,6 +79,7 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
       = new DefaultResourceCalculator();
 
   private final long startTime;
+  private long reOrderTime;
   private final Priority appPriority;
   private Resource demand = Resources.createResource(0);
   private final FairScheduler scheduler;
@@ -125,6 +126,7 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
 
     this.scheduler = scheduler;
     this.startTime = scheduler.getClock().getTime();
+    this.reOrderTime = this.startTime;
     this.lastTimeAtFairShare = this.startTime;
     this.appPriority = Priority.newInstance(1);
     this.enableAMPreemption = scheduler.getConf()
@@ -1322,6 +1324,16 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
   @Override
   public long getStartTime() {
     return startTime;
+  }
+
+  @Override
+  public long getReOrderTime() {
+    return reOrderTime;
+  }
+
+  @Override
+  public void setReOrderTime(long reOrderTime) {
+    this.reOrderTime = reOrderTime;
   }
 
   @Override

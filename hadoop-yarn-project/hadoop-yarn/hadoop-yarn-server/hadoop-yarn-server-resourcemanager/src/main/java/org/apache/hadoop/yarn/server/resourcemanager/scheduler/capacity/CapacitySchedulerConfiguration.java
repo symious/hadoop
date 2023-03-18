@@ -931,6 +931,19 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     return getLong(APPS_ORDER_CACHE_TIME, DEFAULT_APP_ORDER_CACHE_TIME);
   }
 
+  /**
+   * Apps full reorder time, default 60s
+   */
+  private static final String APPS_FULL_REORDER_INTERVAL_SECOND =
+      PREFIX + "apps.full.reorder.interval.second";
+
+  public static final int DEFAULT_APPS_FULL_REORDER_INTERVAL_SECOND = 60;
+
+  public int getFullReOrderIntervalSecond() {
+    return getInt(APPS_FULL_REORDER_INTERVAL_SECOND,
+        DEFAULT_APPS_FULL_REORDER_INTERVAL_SECOND);
+  }
+
   // TODO (wangda): We need to better distinguish app ordering policy and queue
   // ordering policy's classname / configuration options, etc. And dedup code
   // if possible.
@@ -974,12 +987,14 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     double priorityWeightFactor = getAppPriorityWeightFactor();
     double pendingMemoryWeightFactor = getAppPendingMemoryWeightFactor();
     long cacheTime = getAppOrderCacheTime();
+    int fullReorderIntervalSecond = getFullReOrderIntervalSecond();
     LOG.info(
         "highFlagPriority: " + highFlagPriority + " ,pendingFlagMemory: " +
             pendingFlagMemory + " ,pendingFlagTime: " + pendingFlagTime +
             " ,priorityWeightFactor: " + priorityWeightFactor +
             " ,pendingMemoryWeightFactor: " + pendingMemoryWeightFactor +
-            " ,getAppOrderCacheTime: " + cacheTime);
+            " ,getAppOrderCacheTime: " + cacheTime +
+            " ,fullReorderIntervalSecond: " + fullReorderIntervalSecond);
 
     Map<String, String> config = new HashMap<String, String>();
     String confPrefix = getQueuePrefix(queue) + ORDERING_POLICY + ".";
@@ -993,6 +1008,10 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
 
       //add cache time
       config.put("appsOrderCacheTime", String.valueOf(cacheTime));
+
+      //add fullOrderIntervalSecond
+      config.put("fullReorderIntervalSecond",
+          String.valueOf(fullReorderIntervalSecond));
 
       //add highFlagPriority
       config.put("highFlagPriority", String.valueOf(highFlagPriority));
