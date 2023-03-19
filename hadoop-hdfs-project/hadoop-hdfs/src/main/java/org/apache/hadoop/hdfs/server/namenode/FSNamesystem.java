@@ -190,6 +190,12 @@ import javax.annotation.Nonnull;
 import javax.management.NotCompliantMBeanException;
 import javax.management.ObjectName;
 import javax.management.StandardMBean;
+import javax.management.openmbean.CompositeData;
+import javax.management.openmbean.CompositeDataSupport;
+import javax.management.openmbean.CompositeType;
+import javax.management.openmbean.OpenDataException;
+import javax.management.openmbean.OpenType;
+import javax.management.openmbean.SimpleType;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -208,7 +214,6 @@ import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FileEncryptionInfo;
 import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FsServerDefaults;
 import org.apache.hadoop.fs.InvalidPathException;
 import org.apache.hadoop.fs.Options;
@@ -5566,6 +5571,28 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   @Metric
   public int getBlockCapacity() {
     return blockManager.getCapacity();
+  }
+
+  @Override
+  public CompositeData getNeededReconstructionBlocksByPriority() {
+    int size = 5;
+    String[] fields = new String[size];
+    OpenType[] types = Collections.nCopies(size, SimpleType.INTEGER).toArray(new OpenType[0]);
+    Integer[] values = new Integer[size];
+
+    for (int level = 0; level < size; level++) {
+      fields[level] = String.valueOf(level);
+      values[level] = blockManager.getNeededReconstructionBlocksCountByPriority(level);
+    }
+
+    try {
+      CompositeType type =
+          new CompositeType(this.getClass().getName(), this.getClass().getName(), fields, fields,
+              types);
+      return new CompositeDataSupport(type, fields, values);
+    } catch (OpenDataException e) {
+      return null;
+    }
   }
 
   public HAServiceState getState() {

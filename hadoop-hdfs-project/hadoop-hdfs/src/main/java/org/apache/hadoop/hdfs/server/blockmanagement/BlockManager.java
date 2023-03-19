@@ -2749,6 +2749,10 @@ public class BlockManager implements BlockStatsMXBean {
         failedVolumes, volumeFailureSummary);
   }
 
+  public int getNeededReconstructionBlocksCountByPriority(int priority) {
+    return neededReconstruction.getNeededReconstructionBlocksCountByPriority(priority);
+  }
+
   /**
    * StatefulBlockInfo is used to build the "toUC" list, which is a list of
    * updates to the information about under-construction blocks.

@@ -401,6 +401,7 @@ public class EditLogTailer {
       // for concern, so we don't catch them here. Simple errors reading from
       // disk are ignored.
       long editsLoaded = 0;
+      long startNanos = Time.monotonicNowNanos();
       try {
         editsLoaded = image.loadEdits(
             streams, namesystem, maxTxnsPerLock, null, null);
@@ -413,6 +414,7 @@ public class EditLogTailer {
               editsLoaded, lastTxnId));
         }
         NameNode.getNameNodeMetrics().addNumEditLogLoaded(editsLoaded);
+        NameNode.getNameNodeMetrics().addLoadEditNanos(Time.monotonicNowNanos() - startNanos);
       }
 
       if (editsLoaded > 0) {

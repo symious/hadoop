@@ -588,4 +588,8 @@ class LowRedundancyBlocks implements Iterable<BlockInfo> {
       }
     };
   }
+
+  public int getNeededReconstructionBlocksCountByPriority(int priority) {
+    return priorityQueues.get(priority).size();
+  }
 }

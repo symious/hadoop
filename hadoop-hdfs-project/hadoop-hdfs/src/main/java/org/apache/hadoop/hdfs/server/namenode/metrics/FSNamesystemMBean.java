@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.namenode.metrics;
 
 import org.apache.hadoop.classification.InterfaceAudience;
+import javax.management.openmbean.CompositeData;
 
 /**
  * 
@@ -261,4 +262,6 @@ public interface FSNamesystemMBean {
    * @return number of DTs
    */
   long getCurrentTokensCount();
+
+  CompositeData getNeededReconstructionBlocksByPriority();
 }

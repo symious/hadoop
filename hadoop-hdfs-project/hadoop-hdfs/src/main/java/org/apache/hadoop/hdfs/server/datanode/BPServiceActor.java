@@ -543,6 +543,8 @@ class BPServiceActor implements Runnable {
     }
     
     final long now = monotonicNow();
+    dn.getMetrics()
+        .addHeartbeatInterval(this.nnAddr.getHostName(), now - scheduler.getLastHearbeatTime());
     scheduler.updateLastHeartbeatTime(now);
     VolumeFailureSummary volumeFailureSummary = dn.getFSDataset()
         .getVolumeFailureSummary();

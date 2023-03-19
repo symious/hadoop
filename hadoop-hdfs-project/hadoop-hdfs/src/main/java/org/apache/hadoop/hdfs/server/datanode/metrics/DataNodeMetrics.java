@@ -172,6 +172,7 @@ public class DataNodeMetrics {
   final MutableQuantiles[] sendDataPacketBlockedOnNetworkNanosQuantiles;
   @Metric MutableRate sendDataPacketTransferNanos;
   final MutableQuantiles[] sendDataPacketTransferNanosQuantiles;
+  @Metric MutableRate sendDataPacketNanos;
 
   @Metric("Count of blocks in pending IBR")
   private MutableGaugeLong blocksInPendingIBR;
@@ -217,6 +218,12 @@ public class DataNodeMetrics {
   @Metric MutableCounterLong packetsSlowWriteToOsCache;
   @Metric private MutableCounterLong slowFlushOrSyncCount;
   @Metric private MutableCounterLong slowAckToUpstreamCount;
+  @Metric("Milliseconds between heartbeats")
+  private final MutableRatesWithAggregation heartbeatIntervals;
+  @Metric("Milliseconds between heartbeats")
+  private MutableRate heartbeatInterval;
+  @Metric("Time spent to create new BlockSender instances")
+  private MutableRate blockSenderInitializationNanos;
 
   final MetricsRegistry registry = new MetricsRegistry("datanode");
   @Metric("Milliseconds spent on calling NN rpc")
@@ -247,6 +254,7 @@ public class DataNodeMetrics {
     sendDataPacketTransferNanosQuantiles = new MutableQuantiles[len];
     ramDiskBlocksEvictionWindowMsQuantiles = new MutableQuantiles[len];
     ramDiskBlocksLazyPersistWindowMsQuantiles = new MutableQuantiles[len];
+    heartbeatIntervals = registry.newRatesWithAggregation("nnRpcLatency");
 
     for (int i = 0; i < len; i++) {
       int interval = intervals[i];
@@ -872,5 +880,18 @@ public class DataNodeMetrics {
 
   public MutableRate getTransferBytes() {
     return transferBytes;
+  }
+
+  public void addHeartbeatInterval(String nnId, long interval) {
+    heartbeatIntervals.add("HeartbeatInterval" + nnId, interval);
+    heartbeatInterval.add(interval);
+  }
+
+  public void addSendDataPacketNanos(long latency) {
+    sendDataPacketNanos.add(latency);
+  }
+
+  public void addBlockSenderInitializationNanos(long latency) {
+    blockSenderInitializationNanos.add(latency);
   }
 }

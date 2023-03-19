@@ -162,6 +162,9 @@ public class NameNodeMetrics {
   @Metric("GetImageServlet putImage")
   MutableRate putImage;
 
+  @Metric("Average loadEdits time in nanos")
+  MutableRate loadEditsTime;
+
   JvmMetrics jvmMetrics = null;
   private final ConcurrentHashMap<String, MutableStat> crossDCTraffic = new ConcurrentHashMap<>();
   MutableStat overallCrossDCTraffic;
@@ -509,5 +512,9 @@ public class NameNodeMetrics {
     } else {
       return (MutableStat) registry.get(key + "CrossDCTraffic");
     }
+  }
+
+  public void addLoadEditNanos(long duration) {
+    loadEditsTime.add(duration);
   }
 }

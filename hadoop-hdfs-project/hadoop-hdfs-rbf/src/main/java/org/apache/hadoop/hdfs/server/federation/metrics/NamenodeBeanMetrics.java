@@ -33,6 +33,7 @@ import java.util.stream.Collectors;
 import javax.management.NotCompliantMBeanException;
 import javax.management.ObjectName;
 import javax.management.StandardMBean;
+import javax.management.openmbean.CompositeData;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
@@ -719,6 +720,11 @@ public class NamenodeBeanMetrics
   @Override
   public int getNumInServiceLiveDataNodes() {
     return 0;
+  }
+
+  @Override
+  public CompositeData getNeededReconstructionBlocksByPriority() {
+    return null;
   }
 
   @Override

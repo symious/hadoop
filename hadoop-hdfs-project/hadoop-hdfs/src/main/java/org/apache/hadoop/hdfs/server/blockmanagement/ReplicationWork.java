@@ -65,6 +65,8 @@ class ReplicationWork extends BlockReconstructionWork {
               getLiveReplicaStorages(), false, excludedNodes, getBlockSize(),
               storagePolicySuite.getPolicy(getStoragePolicyID()), null);
         }
+      } else {
+        LOG.info("Could not find any targets for blk_{}", getBlock());
       }
       setTargets(chosenTargets);
     } finally {

@@ -51,7 +51,7 @@ public class RpcMetrics {
   final boolean rpcQuantileEnable;
   /** The time unit used when storing/accessing time durations. */
   public final static TimeUnit TIMEUNIT = TimeUnit.MILLISECONDS;
-  
+
   RpcMetrics(Server server, Configuration conf) {
     String port = String.valueOf(server.getListenerAddress().getPort());
     name = "RpcActivityForPort" + port;
@@ -126,6 +126,12 @@ public class RpcMetrics {
   MutableCounterLong rpcSlowCalls;
   @Metric("Number of requeue calls")
   MutableCounterLong rpcRequeueCalls;
+  @Metric("Number of requeue calls")
+  MutableCounterLong callsRejectedByObserver;
+  @Metric("Number of calls that return without exceptions")
+  MutableCounterLong successfulRpcCalls;
+  @Metric("Number of calls that throw exceptions")
+  MutableCounterLong rpcCallsWithException;
 
   @Metric("Total request count of PasswordMatchedCached")
   public long passwordMatchedCacheTotalRequest() {
@@ -387,5 +393,17 @@ public class RpcMetrics {
   @VisibleForTesting
   public MetricsTag getTag(String tagName) {
     return registry.getTag(tagName);
+  }
+
+  public void incrCallsRejectedByObserver() {
+    callsRejectedByObserver.incr();
+  }
+
+  public void incrSuccessfulRpcCalls() {
+    successfulRpcCalls.incr();
+  }
+
+  public void incrRpcCallsWithException() {
+    rpcCallsWithException.incr();
   }
 }

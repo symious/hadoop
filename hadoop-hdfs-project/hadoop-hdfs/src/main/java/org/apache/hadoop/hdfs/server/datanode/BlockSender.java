@@ -51,6 +51,7 @@ import org.apache.hadoop.io.ReadaheadPool.ReadaheadRequest;
 import org.apache.hadoop.net.SocketOutputStream;
 import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.util.DataChecksum;
+import org.apache.hadoop.util.Time;
 import org.apache.htrace.core.TraceScope;
 
 import static org.apache.hadoop.io.nativeio.NativeIO.POSIX.POSIX_FADV_DONTNEED;
@@ -204,6 +205,7 @@ class BlockSender implements java.io.Closeable {
               boolean sendChecksum, DataNode datanode, String clientTraceFmt,
               CachingStrategy cachingStrategy)
       throws IOException {
+    long start = Time.monotonicNowNanos();
     InputStream blockIn = null;
     DataInputStream checksumIn = null;
     FsVolumeReference volumeRef = null;
@@ -438,6 +440,8 @@ class BlockSender implements java.io.Closeable {
       org.apache.commons.io.IOUtils.closeQuietly(blockIn);
       org.apache.commons.io.IOUtils.closeQuietly(checksumIn);
       throw ioe;
+    } finally {
+      datanode.metrics.addBlockSenderInitializationNanos(Time.monotonicNowNanos() - start);
     }
   }
 
@@ -548,6 +552,7 @@ class BlockSender implements java.io.Closeable {
    */
   private int sendPacket(ByteBuffer pkt, int maxChunks, OutputStream out,
       boolean transferTo, DataTransferThrottler throttler) throws IOException {
+    long startNanos = Time.monotonicNowNanos();
     int dataLen = (int) Math.min(endOffset - offset,
                              (chunkSize * (long) maxChunks));
     
@@ -663,6 +668,8 @@ class BlockSender implements java.io.Closeable {
         }
       }
       throw ioeToSocketException(e);
+    } finally {
+      datanode.metrics.addSendDataPacketNanos(Time.monotonicNowNanos() - startNanos);
     }
 
     if (throttler != null) { // rebalancing so throttle

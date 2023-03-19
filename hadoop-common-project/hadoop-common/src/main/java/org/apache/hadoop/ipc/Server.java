@@ -1152,6 +1152,7 @@ public abstract class Server {
       try {
         value = call(
             rpcKind, connection.protocolName, rpcRequest, timestampNanos);
+        rpcMetrics.incrSuccessfulRpcCalls();
       } catch (Throwable e) {
         populateResponseParamsOnError(e, responseParams);
       }
@@ -1207,6 +1208,7 @@ public abstract class Server {
         responseParams.error =
             responseParams.error.substring(exceptionHdr.length());
       }
+      rpcMetrics.incrRpcCallsWithException();
     }
 
     void setResponse(ByteBuffer response) throws IOException {
@@ -2859,6 +2861,9 @@ public abstract class Server {
                 header, getMaxIdleTime());
             call.setClientStateId(stateId);
           }
+        } catch (RetriableException re) {
+          rpcMetrics.incrCallsRejectedByObserver();
+          throw new RpcServerException("Processing RPC request caught ", re);
         } catch (IOException ioe) {
           throw new RpcServerException("Processing RPC request caught ", ioe);
         }
