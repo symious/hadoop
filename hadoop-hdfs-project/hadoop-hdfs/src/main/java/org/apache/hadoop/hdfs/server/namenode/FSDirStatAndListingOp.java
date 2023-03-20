@@ -478,7 +478,7 @@ class FSDirStatAndListingOp {
       // if the target path does not exist, return the fileStatus of the symlink path.
       if (targetPathStatus != null) {
         targetPathStatus.setSymlink(new Path(targetPath));
-        targetPathStatus.setPath(new Path(node.getFullPathName()));
+        targetPathStatus.setUPath(name);
         return targetPathStatus;
       }
     }

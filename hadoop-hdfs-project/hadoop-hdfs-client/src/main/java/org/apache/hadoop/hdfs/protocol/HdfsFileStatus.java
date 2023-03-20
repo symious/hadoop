@@ -494,6 +494,8 @@ public interface HdfsFileStatus
 
   String getNamespace();
 
+  void setUPath(byte[] path);
+
   /**
    * Set redundant flags for compatibility with existing applications.
    */

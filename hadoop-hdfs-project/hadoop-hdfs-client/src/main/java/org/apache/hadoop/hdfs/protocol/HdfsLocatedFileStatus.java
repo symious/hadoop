@@ -140,11 +140,6 @@ public class HdfsLocatedFileStatus
     uSymlink = DFSUtilClient.string2Bytes(sym.toString());
   }
 
-  public void setPath(Path p) {
-    super.setPath(p);
-    uPath = DFSUtilClient.string2Bytes(p.toString());
-  }
-
   /**
    * Opaque referant for the symlink, to be resolved at the client.
    */
@@ -232,5 +227,10 @@ public class HdfsLocatedFileStatus
   @Override
   public void setNamespace(String namespace) {
     this.namespace = namespace;
+  }
+
+  @Override
+  public void setUPath(byte[] path) {
+    this.uPath = path;
   }
 }
