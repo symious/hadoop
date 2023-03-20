@@ -240,6 +240,7 @@ public class CapacityScheduler extends
   private RMNodeLabelsManager labelManager;
   private AppPriorityACLsManager appPriorityACLManager;
   private boolean multiNodePlacementEnabled;
+  private boolean multiNodeForHeartBeatEnabled;
 
   private static boolean printedVerboseLoggingForAsyncScheduling = false;
 
@@ -415,6 +416,8 @@ public class CapacityScheduler extends
             multiNodePlacementEnabled,
             this.conf.getMultiNodePlacementPolicies());
       }
+      multiNodeForHeartBeatEnabled =
+          this.conf.getMultiNodePlacementEnabledForHeartBeat();
 
       LOG.info("Initialized CapacityScheduler with " + "calculator="
           + getResourceCalculator().getClass() + ", " + "minimumAllocation=<"
@@ -423,6 +426,7 @@ public class CapacityScheduler extends
           + scheduleAsynchronously + ", " + "asyncScheduleInterval="
           + asyncScheduleInterval + "ms" + ",multiNodePlacementEnabled="
           + multiNodePlacementEnabled + ", " + "assignMultipleEnabled="
+          + multiNodeForHeartBeatEnabled + ", " + "multiNodeForHeartBeatEnabled="
           + assignMultipleEnabled + ", " + "maxAssignPerHeartbeat="
           + maxAssignPerHeartbeat + ", " + "offswitchPerHeartbeatLimit="
           + offswitchPerHeartbeatLimit);
@@ -1691,7 +1695,8 @@ public class CapacityScheduler extends
       FiCaSchedulerNode node, boolean withNodeHeartbeat) {
     CandidateNodeSet<FiCaSchedulerNode> candidates = null;
     candidates = new SimpleCandidateNodeSet<>(node);
-    if (multiNodePlacementEnabled) {
+    if (multiNodePlacementEnabled &&
+        (multiNodeForHeartBeatEnabled || !withNodeHeartbeat)) {
       Map<NodeId, FiCaSchedulerNode> nodesByPartition =
           getNodesHeartbeated(node.getPartition(), withNodeHeartbeat);
       if (!nodesByPartition.isEmpty()) {
@@ -1975,19 +1980,20 @@ public class CapacityScheduler extends
     // We have two different logics to handle allocation on single node / multi
     // nodes.
     CSAssignment assignment;
-    if (!multiNodePlacementEnabled) {
+    if (multiNodePlacementEnabled &&
+        (multiNodeForHeartBeatEnabled || !withNodeHeartbeat)) {
+      ActivitiesLogger.NODE.startNodeUpdateRecording(activitiesManager,
+          ActivitiesManager.EMPTY_NODE_ID);
+      assignment = allocateContainersOnMultiNodes(candidates);
+      ActivitiesLogger.NODE.finishNodeUpdateRecording(activitiesManager,
+          ActivitiesManager.EMPTY_NODE_ID, candidates.getPartition());
+    } else {
       ActivitiesLogger.NODE.startNodeUpdateRecording(activitiesManager,
           node.getNodeID());
       assignment = allocateContainerOnSingleNode(candidates,
           node, withNodeHeartbeat);
       ActivitiesLogger.NODE.finishNodeUpdateRecording(activitiesManager,
           node.getNodeID(), candidates.getPartition());
-    } else{
-      ActivitiesLogger.NODE.startNodeUpdateRecording(activitiesManager,
-          ActivitiesManager.EMPTY_NODE_ID);
-      assignment = allocateContainersOnMultiNodes(candidates);
-      ActivitiesLogger.NODE.finishNodeUpdateRecording(activitiesManager,
-          ActivitiesManager.EMPTY_NODE_ID, candidates.getPartition());
     }
 
     if (assignment != null && assignment.getAssignmentInformation() != null

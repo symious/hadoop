@@ -2834,6 +2834,14 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   @Private
   public static final boolean DEFAULT_MULTI_NODE_PLACEMENT_ENABLED = false;
 
+  @Private
+  public static final String MULTI_NODE_PLACEMENT_ENABLED_FOR_HEARTBEAT = PREFIX
+      + "multi-node-placement-enabled-for-heartbeat";
+
+  @Private
+  public static final boolean
+      DEFAULT_MULTI_NODE_PLACEMENT_ENABLED_FOR_HEARTBEAT = true;
+
   public String getMultiNodesSortingAlgorithmPolicy(
       String queue) {
 
@@ -2865,6 +2873,11 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   public boolean getMultiNodePlacementEnabled() {
     return getBoolean(MULTI_NODE_PLACEMENT_ENABLED,
         DEFAULT_MULTI_NODE_PLACEMENT_ENABLED);
+  }
+
+  public boolean getMultiNodePlacementEnabledForHeartBeat() {
+    return getBoolean(MULTI_NODE_PLACEMENT_ENABLED_FOR_HEARTBEAT,
+        DEFAULT_MULTI_NODE_PLACEMENT_ENABLED_FOR_HEARTBEAT);
   }
 
   public Set<MultiNodePolicySpec> getMultiNodePlacementPolicies() {

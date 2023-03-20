@@ -444,16 +444,21 @@ public class TestCapacitySchedulerMultiNodes extends CapacitySchedulerTestBase {
   public void testMultiNodeSorterAfterHeartbeatInterval() throws Exception {
     MockRM rm = new MockRM(conf);
     rm.start();
-    rm.registerNode("127.0.0.1:1234", 10 * GB);
-    rm.registerNode("127.0.0.2:1234", 10 * GB);
-    rm.registerNode("127.0.0.3:1234", 10 * GB);
-    rm.registerNode("127.0.0.4:1234", 10 * GB);
+    MockNM nm1 = rm.registerNode("127.0.0.1:1234", 10 * GB);
+    MockNM nm2 = rm.registerNode("127.0.0.2:1234", 10 * GB);
+    MockNM nm3 = rm.registerNode("127.0.0.3:1234", 10 * GB);
+    MockNM nm4 = rm.registerNode("127.0.0.4:1234", 10 * GB);
 
     Set<SchedulerNode> nodes = new HashSet<>();
     String partition = "";
 
-    ResourceScheduler scheduler = rm.getRMContext().getScheduler();
+    CapacityScheduler scheduler = (CapacityScheduler) rm.getResourceScheduler();
     waitforNMRegistered(scheduler, 4, 5);
+    nodes.add(scheduler.getNode(nm1.getNodeId()));
+    nodes.add(scheduler.getNode(nm2.getNodeId()));
+    nodes.add(scheduler.getNode(nm3.getNodeId()));
+    nodes.add(scheduler.getNode(nm4.getNodeId()));
+
     MultiNodeSortingManager<SchedulerNode> mns = rm.getRMContext()
         .getMultiNodeSortingManager();
     MultiNodeSorter<SchedulerNode> sorter = mns
