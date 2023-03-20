@@ -3394,7 +3394,9 @@ public class CapacityScheduler extends
           long commitSuccess = System.nanoTime() - commitStart;
           CapacitySchedulerMetrics.getMetrics()
               .addCommitSuccess(commitSuccess);
-          LOG.info("Allocation proposal accepted");
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Allocation proposal accepted");
+          }
           isSuccess = true;
         } else{
           long commitFailed = System.nanoTime() - commitStart;
