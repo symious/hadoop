@@ -254,7 +254,7 @@ public class DataNodeMetrics {
     sendDataPacketTransferNanosQuantiles = new MutableQuantiles[len];
     ramDiskBlocksEvictionWindowMsQuantiles = new MutableQuantiles[len];
     ramDiskBlocksLazyPersistWindowMsQuantiles = new MutableQuantiles[len];
-    heartbeatIntervals = registry.newRatesWithAggregation("nnRpcLatency");
+    heartbeatIntervals = registry.newRatesWithAggregation("heartbeatIntervals");
 
     for (int i = 0; i < len; i++) {
       int interval = intervals[i];
