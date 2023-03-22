@@ -313,9 +313,9 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
       // the final state. Therefore, we should traverse the container set to see
       // whether those satisfy the ContainerLogAggregationPolicy.
       secondCheck(pendingContainerWrapper);
-      for (ContainerWrapper wrapper : pendingContainerWrapper) {
-        pendingContainerInThisCycle.add(wrapper.containerId);
-      }
+    }
+    for (ContainerWrapper wrapper : pendingContainerWrapper) {
+      pendingContainerInThisCycle.add(wrapper.containerId);
     }
     Set<ContainerId> finishedContainers =
         new HashSet<ContainerId>(pendingContainerInThisCycle);

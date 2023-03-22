@@ -208,6 +208,9 @@ public class TestLogAggregationService extends BaseContainerManagerTest {
     logAggregationService.start();
 
     ApplicationId application1 = BuilderUtils.newApplicationId(1234, 1);
+    Application app1 = mock(Application.class);
+    when(app1.getYarnApplicationState()).thenReturn(null);
+    context.getApplications().put(application1, app1);
 
     // AppLogDir should be created
     File app1LogDir =
@@ -370,6 +373,9 @@ public class TestLogAggregationService extends BaseContainerManagerTest {
     logAggregationService.start();
 
     ApplicationId application1 = BuilderUtils.newApplicationId(1234, 1);
+    Application app1 = mock(Application.class);
+    when(app1.getYarnApplicationState()).thenReturn(null);
+    context.getApplications().put(application1, app1);
 
     // AppLogDir should be created
     File app1LogDir =
@@ -421,6 +427,9 @@ public class TestLogAggregationService extends BaseContainerManagerTest {
     logAggregationService.start();
 
     ApplicationId application1 = BuilderUtils.newApplicationId(1234, 1);
+    Application app1 = mock(Application.class);
+    when(app1.getYarnApplicationState()).thenReturn(null);
+    context.getApplications().put(application1, app1);
 
     // AppLogDir should be created
     File app1LogDir =
@@ -443,6 +452,9 @@ public class TestLogAggregationService extends BaseContainerManagerTest {
     ApplicationId application2 = BuilderUtils.newApplicationId(1234, 2);
     ApplicationAttemptId appAttemptId2 =
         BuilderUtils.newApplicationAttemptId(application2, 1);
+    Application app2 = mock(Application.class);
+    when(app2.getYarnApplicationState()).thenReturn(null);
+    context.getApplications().put(application2, app2);
 
     File app2LogDir =
       new File(localLogDir, application2.toString());
@@ -472,6 +484,9 @@ public class TestLogAggregationService extends BaseContainerManagerTest {
     ApplicationId application3 = BuilderUtils.newApplicationId(1234, 3);
     ApplicationAttemptId appAttemptId3 =
         BuilderUtils.newApplicationAttemptId(application3, 1);
+    Application app3 = mock(Application.class);
+    when(app3.getYarnApplicationState()).thenReturn(null);
+    context.getApplications().put(application3, app3);
 
     File app3LogDir =
       new File(localLogDir, application3.toString());
@@ -1372,6 +1387,9 @@ public class TestLogAggregationService extends BaseContainerManagerTest {
         AllContainerLogAggregationPolicy.class.getName());
     logAggregationService.handle(new LogHandlerAppStartedEvent(
         application1, this.user, null, this.acls, contextWithAllContainers));
+    Application app = mock(Application.class);
+    when(app.getYarnApplicationState()).thenReturn(null);
+    context.getApplications().put(application1, app);
 
     logAggregationService.stop();
     assertEquals(0, logAggregationService.getNumAggregators());
@@ -1509,6 +1527,9 @@ public class TestLogAggregationService extends BaseContainerManagerTest {
     this.conf.setLong(YarnConfiguration.NM_DISK_HEALTH_CHECK_INTERVAL_MS, 500);
 
     ApplicationId application1 = BuilderUtils.newApplicationId(1234, 1);
+    Application app1 = mock(Application.class);
+    when(app1.getYarnApplicationState()).thenReturn(null);
+    context.getApplications().put(application1, app1);
     ApplicationAttemptId appAttemptId =
         BuilderUtils.newApplicationAttemptId(application1, 1);
 
@@ -2227,6 +2248,8 @@ public class TestLogAggregationService extends BaseContainerManagerTest {
     Application mockApp = mock(Application.class);
     when(mockApp.getContainers()).thenReturn(
         new HashMap<ContainerId, Container>());
+    when(mockApp.getYarnApplicationState()).thenReturn(null);
+    context.getApplications().put(appId, mockApp);
 
     this.context.getApplications().put(appId, mockApp);
     return appId;

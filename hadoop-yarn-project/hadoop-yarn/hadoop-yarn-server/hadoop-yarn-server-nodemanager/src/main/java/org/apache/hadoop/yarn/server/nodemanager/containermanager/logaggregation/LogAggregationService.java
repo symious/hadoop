@@ -208,6 +208,15 @@ public class LogAggregationService extends AbstractService implements
         break;
       }
     }
+    for (Map.Entry<ApplicationId, AppLogAggregator> entry : appLogAggregators.entrySet()) {
+      AppLogAggregator aggregator = entry.getValue();
+      ApplicationId appId = entry.getKey();
+      if (!aggregator.isLogAggregationFinished()) {
+        aggregator.run();
+        appLogAggregators.remove(appId);
+        closeFileSystems(((AppLogAggregatorImpl)aggregator).getUgi());
+      }
+    }
     for (ApplicationId appId : appLogAggregators.keySet()) {
       LOG.warn("Some logs may not have been aggregated for " + appId);
     }
