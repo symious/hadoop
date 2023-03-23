@@ -180,8 +180,12 @@ public class ForwardDistributedFileSystem extends DistributedFileSystem {
       if (isForwardFileSystem) {
         upperUri = upperSA.toUri();
         underUri = underSA.toUri();
-        underFs = FileSystem.get(underSA.toUri(), conf);
-        setConf(conf);
+        final Configuration newConf = new Configuration(conf);
+        // please refer to SPDI-77069
+        String disableCacheName = String.format("fs.%s.impl.disable.cache", underSA.getScheme());
+        newConf.set(disableCacheName, "true");
+        underFs = FileSystem.get(underSA.toUri(), newConf);
+        setConf(newConf);
       } else {
         super.initialize(upperSA.toUri(), conf);
       }
