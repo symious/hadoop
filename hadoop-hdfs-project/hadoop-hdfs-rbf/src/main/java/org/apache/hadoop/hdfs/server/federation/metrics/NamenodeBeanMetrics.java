@@ -843,6 +843,11 @@ public class NamenodeBeanMetrics
   }
 
   @Override
+  public String[] getDuplicateDNReports() {
+    return new String[0];
+  }
+
+  @Override
   public long getNumberOfSnapshottableDirs() {
     return 0;
   }

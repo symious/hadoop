@@ -97,4 +97,9 @@ public interface NameNodeStatusMXBean {
    * The report is in a real JSON format, not a JSON string.
    */
   SlowDiskTracker.DiskLatency[] getSlowDisksReportJSON();
+
+  /**
+   * Gets DNs that have erroneously duplicated reports in NN.
+   */
+  String[] getDuplicateDNReports();
 }

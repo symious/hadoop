@@ -228,7 +228,7 @@ public class DatanodeManager {
 
   @Nullable
   private final SlowDiskTracker slowDiskTracker;
-  
+
   /**
    * The minimum time between resending caching directives to Datanodes,
    * in milliseconds.
@@ -2479,6 +2479,19 @@ public class DatanodeManager {
   @VisibleForTesting
   public Map<String, DatanodeDescriptor> getDatanodeMap() {
     return datanodeMap;
+  }
+
+  public String[] getDuplicateDNReports() {
+    Set<String> countedNodes = new HashSet<>();
+    List<String> result = new ArrayList<>();
+    for (DatanodeDescriptor dn: getDatanodeListForReport(DatanodeReportType.ALL)) {
+      String addr = dn.getXferAddr();
+      if (countedNodes.contains(addr)) {
+        result.add(addr);
+      }
+      countedNodes.add(addr);
+    }
+    return result.toArray(new String[0]);
   }
 }
 

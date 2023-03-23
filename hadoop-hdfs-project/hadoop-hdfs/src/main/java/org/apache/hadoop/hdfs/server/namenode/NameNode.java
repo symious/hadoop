@@ -2967,6 +2967,12 @@ public class NameNode extends ReconfigurableBase implements
     }
   }
 
+  @Override //NameNodeStatusMXBean
+  public String[] getDuplicateDNReports() {
+    return namesystem.getBlockManager().getDatanodeManager()
+        .getDuplicateDNReports();
+  }
+
   @Override  // ReconfigurableBase
   protected Configuration getNewConf() {
     return new HdfsConfiguration();
