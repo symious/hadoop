@@ -121,6 +121,9 @@ public class NodeManagerMetrics {
   @Metric("Total start NM all services cost time")
   MutableGaugeLong totalStartNMCostTime;
 
+  @Metric("how much time passed after nm startup")
+  MutableGaugeLong passedTimeAfterStartup;
+
   // CHECKSTYLE:ON:VisibilityModifier
 
   private JvmMetrics jvmMetrics = null;
@@ -498,5 +501,13 @@ public class NodeManagerMetrics {
 
   public long getResourceDataPersistenceFailed() {
     return this.resourceDataPersistenceFailed.value();
+  }
+
+  public void setPassedTimeAfterStartup(long timeAfterStartup) {
+    this.passedTimeAfterStartup.set(timeAfterStartup);
+  }
+
+  public long getPassedTimeAfterStartup() {
+    return passedTimeAfterStartup.value();
   }
 }

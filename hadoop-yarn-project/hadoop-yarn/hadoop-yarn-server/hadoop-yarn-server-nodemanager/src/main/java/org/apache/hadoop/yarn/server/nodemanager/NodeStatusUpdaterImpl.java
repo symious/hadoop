@@ -541,6 +541,9 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     LOG.info(successfullRegistrationMsg.toString());
     long registerCostTime = Time.monotonicNow() - registerStartTime;
     LOG.info("registerWithRM cost time: " + registerCostTime + " ms!");
+
+    this.metrics.setPassedTimeAfterStartup(
+        System.currentTimeMillis() - NodeManager.getNMStartupTime());
   }
 
   private List<ApplicationId> createKeepAliveApplicationList() {
@@ -1599,6 +1602,9 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
             }
           }
           updateContainerLevel(levels);
+
+          metrics.setPassedTimeAfterStartup(
+              System.currentTimeMillis() - NodeManager.getNMStartupTime());
         } catch (ConnectException e) {
           //catch and throw the exception if tried MAX wait time to connect RM
           dispatcher.getEventHandler().handle(
