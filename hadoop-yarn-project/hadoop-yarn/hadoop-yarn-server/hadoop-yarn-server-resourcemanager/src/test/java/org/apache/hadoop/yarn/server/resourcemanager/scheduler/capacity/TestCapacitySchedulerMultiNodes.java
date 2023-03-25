@@ -48,6 +48,10 @@ import org.apache.hadoop.yarn.util.resource.DominantResourceCalculator;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import static org.mockito.Mockito.when;
+
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.SCHEDULER_MULTINODES_TOP_RANDOM_ENABLE;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.SCHEDULER_MULTINODES_TOP_RANDOM_RATE;
 
 /**
  * Test class for Multi Node scheduling related tests.
@@ -185,6 +189,54 @@ public class TestCapacitySchedulerMultiNodes extends CapacitySchedulerTestBase {
       current = it.next();
       Assert.assertEquals(current.getNodeID(), currentNodes.get(i++));
     }
+    rm.stop();
+  }
+
+  @Test
+  public void testMultiNodeSorterForSchedulingWithTopRandomOrdering() throws Exception {
+
+    conf.setBoolean(SCHEDULER_MULTINODES_TOP_RANDOM_ENABLE, true);
+    conf.setFloat(SCHEDULER_MULTINODES_TOP_RANDOM_RATE, 0.5f);
+
+    MockRM rm = new MockRM(conf);
+    rm.start();
+    MockNM nm1 = rm.registerNode("127.0.0.1:1234", 10 * GB, 10);
+    MockNM nm2 = rm.registerNode("127.0.0.2:1235", 10 * GB, 10);
+    MockNM nm3 = rm.registerNode("127.0.0.3:1236", 10 * GB, 10);
+    MockNM nm4 = rm.registerNode("127.0.0.4:1237", 10 * GB, 10);
+    ResourceScheduler scheduler = rm.getRMContext().getScheduler();
+    waitforNMRegistered(scheduler, 4, 5);
+
+    MultiNodeSortingManager<SchedulerNode> mns = rm.getRMContext()
+        .getMultiNodeSortingManager();
+    MultiNodeSorter<SchedulerNode> sorter = mns
+        .getMultiNodePolicy(POLICY_CLASS_NAME);
+    sorter.reSortClusterNodes();
+
+    Set<SchedulerNode> nodes = sorter.getMultiNodeLookupPolicy()
+        .getNodesPerPartition("");
+    Assert.assertEquals(4, nodes.size());
+
+    MockRMAppSubmissionData data1 =
+        MockRMAppSubmissionData.Builder.createWithMemory(2048, rm)
+            .withAppName("app-1")
+            .withUser("user1")
+            .withAcls(null)
+            .withQueue("default")
+            .withUnmanagedAM(false)
+            .build();
+    RMApp app1 = MockRMAppSubmitter.submit(rm, data1);
+    MockAM am1 = MockRM.launchAndRegisterAM(app1, rm, nm1);
+
+    SchedulerNodeReport reportNm1 =
+        rm.getResourceScheduler().getNodeReport(nm1.getNodeId());
+    SchedulerNodeReport reportNm2 =
+        rm.getResourceScheduler().getNodeReport(nm2.getNodeId());
+
+    //we enable top 2 nodes randomly, so first container will possible assign on node1 or node2
+    Assert.assertTrue((reportNm1.getUsedResource().getMemorySize() == 2 * GB) ||
+        (reportNm2.getUsedResource().getMemorySize() == 2 * GB));
+
     rm.stop();
   }
 

@@ -19,11 +19,16 @@
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.placement;
 
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNode;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,6 +45,9 @@ import java.util.concurrent.ConcurrentSkipListSet;
  */
 public class ResourceUsageMultiNodeLookupPolicy<N extends SchedulerNode>
     implements MultiNodeLookupPolicy<N> {
+
+  private static final Logger LOG = LoggerFactory
+      .getLogger(ResourceUsageMultiNodeLookupPolicy.class);
 
   protected Map<String, Set<N>> nodesPerPartition = new ConcurrentHashMap<>();
   protected Comparator<N> comparator;
@@ -65,11 +73,61 @@ public class ResourceUsageMultiNodeLookupPolicy<N extends SchedulerNode>
   }
 
   @Override
+  public Iterator<N> getPreferredTopRandomNodeIterator(Collection<N> nodes,
+      String partition, long skipNodeInterval, float topRate) {
+
+    long start = System.nanoTime();
+    List<N> allNodesList = new ArrayList<>();
+    List<N> topNodesList = new ArrayList<>();
+
+    Set<N> nodesPerPartitionSet = getNodesPerPartition(partition);
+    Iterator<N> nodesPerPartitionIterator = nodesPerPartitionSet.iterator();
+    int sumSize = nodes.size();
+    int topRandomSize = Math.round(sumSize * topRate);
+
+    int i = 0;
+    while (nodesPerPartitionIterator.hasNext()) {
+      N node = nodesPerPartitionIterator.next();
+      if (nodes.contains(node) &&
+          SchedulerUtils.isNodeHeartbeated(node, skipNodeInterval)) {
+        if (i < topRandomSize) {
+          topNodesList.add(node);
+          i++;
+        } else {
+          break;
+        }
+      }
+    }
+
+    Collections.shuffle(topNodesList);
+    allNodesList.addAll(topNodesList);
+    if (topNodesList.size() == 0) {
+      allNodesList.addAll(nodesPerPartitionSet);
+    }
+
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(
+          "candidateNodes sumSize: " + sumSize + ", expectTopRandomSize: " +
+              topRandomSize + " ,realTopRandomSize: " + allNodesList.size() +
+              " ,getPreferredTopRandomNodeIterator cost time: " +
+              (System.nanoTime() - start) / 1000 + " us.");
+    }
+    return allNodesList.iterator();
+  }
+
+  @Override
   public void addAndRefreshNodesSet(Collection<N> nodes,
       String partition) {
+    long start = System.nanoTime();
     Set<N> nodeList = new ConcurrentSkipListSet<N>(comparator);
     nodeList.addAll(nodes);
-    nodesPerPartition.put(partition, Collections.unmodifiableSet(nodeList));
+    Set<N> putNodeSet = Collections.unmodifiableSet(nodeList);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(
+          "Partition: " + partition + " addAndRefreshNodesSet cost time: " +
+              (System.nanoTime() - start) / 1000 + " us!");
+    }
+    nodesPerPartition.put(partition, putNodeSet);
   }
 
   @Override

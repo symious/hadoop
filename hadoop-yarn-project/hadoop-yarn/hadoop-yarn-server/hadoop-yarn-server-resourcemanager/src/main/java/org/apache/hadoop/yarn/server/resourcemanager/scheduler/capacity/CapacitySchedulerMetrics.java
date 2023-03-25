@@ -69,6 +69,9 @@ public class CapacitySchedulerMetrics {
   @Metric("Aggregate of recovery container latency")
   MutableGaugeLong aggRecoveryContainerLatency;
 
+  MutableQuantiles multiNodesPerAllocate;
+  MutableQuantiles multiNodesPerReserve;
+
   private static volatile CapacitySchedulerMetrics INSTANCE = null;
   private static MetricsRegistry registry;
 
@@ -91,6 +94,10 @@ public class CapacitySchedulerMetrics {
         "latency of recovery node", "ops", "latency", 30);
     recoveryContainerLatency = registry.newQuantiles("recoveryContainerLatency",
         "latency of recovery container", "ops", "latency", 30);
+    multiNodesPerAllocate = registry.newQuantiles("multiNodesPerAllocate",
+        "number of choose nodes", "ops", "nodesNum", 30);
+    multiNodesPerReserve = registry.newQuantiles("multiNodesPerReserve",
+        "number of choose nodes", "ops", "nodesNum", 30);
   }
 
   private static void registerMetrics() {
@@ -152,6 +159,14 @@ public class CapacitySchedulerMetrics {
   public void recoveryContainerLatency(long duration) {
     recoveryContainerLatency.add(duration);
     aggRecoveryContainerLatency.incr(duration);
+  }
+
+  public void addMultiNodesPerAllocate(int num) {
+    multiNodesPerAllocate.add(num);
+  }
+
+  public void addMultiNodesPerReserve(int num) {
+    multiNodesPerReserve.add(num);
   }
 
   @Metric(type = Metric.Type.COUNTER)

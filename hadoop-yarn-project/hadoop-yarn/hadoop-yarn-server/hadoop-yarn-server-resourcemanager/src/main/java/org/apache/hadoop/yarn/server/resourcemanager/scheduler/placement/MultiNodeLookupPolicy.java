@@ -47,6 +47,20 @@ public interface MultiNodeLookupPolicy<N extends SchedulerNode> {
   Iterator<N> getPreferredNodeIterator(Collection<N> nodes, String partition);
 
   /**
+   * Get iterator of preferred node depends on requirement and/or availability
+   * and top nodes random
+   *
+   * @param nodes
+   *          List of Nodes
+   * @param partition
+   *          node label
+   *
+   * @return iterator of preferred node
+   */
+  Iterator<N> getPreferredTopRandomNodeIterator(Collection<N> nodes,
+      String partition, long skipNodeInterval, float topRandomRate);
+
+  /**
    * Refresh working nodes set for re-ordering based on the algorithm selected.
    *
    * @param nodes

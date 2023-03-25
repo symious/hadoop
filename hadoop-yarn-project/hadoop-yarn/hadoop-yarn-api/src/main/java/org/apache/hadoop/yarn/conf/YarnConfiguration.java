@@ -802,6 +802,14 @@ public class YarnConfiguration extends Configuration {
       YARN_PREFIX + "scheduler.skip.node.multiplier";
   public static final int DEFAULT_SCHEDULER_SKIP_NODE_MULTIPLIER = 2;
 
+  public static final String SCHEDULER_MULTINODES_TOP_RANDOM_ENABLE =
+      YARN_PREFIX + "scheduler.multi-nodes.top.random.enable";
+  public static final boolean DEFAULT_MULTINODES_TOP_RANDOM_ENABLE = false;
+
+  public static final String SCHEDULER_MULTINODES_TOP_RANDOM_RATE =
+      YARN_PREFIX + "scheduler.multi-nodes.top.random.rate";
+  public static final float DEFAULT_MULTINODES_TOP_RANDOM_RATE = 0.1f;
+
   /**
    * Returns Timeout to skip node from scheduling if not heartbeated.
    *
@@ -817,6 +825,19 @@ public class YarnConfiguration extends Configuration {
     return multiplier * heartbeatIntvl;
   }
 
+  public static boolean getMultiNodesTopRandomEnable(Configuration conf) {
+    boolean multiNodesTopRandomEnable =
+        conf.getBoolean(SCHEDULER_MULTINODES_TOP_RANDOM_ENABLE,
+            DEFAULT_MULTINODES_TOP_RANDOM_ENABLE);
+    return multiNodesTopRandomEnable;
+  }
+
+  public static float getMultiNodesTopRandomRate(Configuration conf) {
+    float multiNodesTopRandomRate =
+        conf.getFloat(SCHEDULER_MULTINODES_TOP_RANDOM_RATE,
+            DEFAULT_MULTINODES_TOP_RANDOM_RATE);
+    return multiNodesTopRandomRate;
+  }
 
   public static final String RM_NM_RECOVERY_HEARTBEAT_INTERVAL_MS =
       RM_PREFIX + "nodemanagers.recovery.heartbeat-interval";

@@ -29,6 +29,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.activities.ActivityLevel;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.activities.DiagnosticsCollector;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.yarn.api.records.Container;
@@ -913,8 +914,11 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
 
     Iterator<FiCaSchedulerNode> iter = schedulingPS.getPreferredNodeIterator(
         candidates);
+    int i = 0;
+    long startTime = System.nanoTime();
     while (iter.hasNext()) {
       FiCaSchedulerNode node = iter.next();
+      i++;
 
       if (reservedContainer == null) {
         result = preCheckForNodeCandidateSet(node,
@@ -960,6 +964,22 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
           result = doAllocation(lastReservation, node, schedulerKey,
               reservedContainer);
         }
+      }
+    }
+    long endTime = System.nanoTime();
+    if (AllocationState.ALLOCATED == result.getAllocationState()) {
+      CapacitySchedulerMetrics.getMetrics().addMultiNodesPerAllocate(i);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(application.getApplicationId() + " try assign on " + i +
+            " candidate nodes, result: allocated, cost time: " +
+            (endTime - startTime) / 1000 + " us.");
+      }
+    } else if (AllocationState.RESERVED == result.getAllocationState()) {
+      CapacitySchedulerMetrics.getMetrics().addMultiNodesPerReserve(i);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(application.getApplicationId() + " try assign on " + i +
+            " candidate nodes, result: reserved, cost time: " +
+            (endTime - startTime) / 1000 + " us.");
       }
     }
 

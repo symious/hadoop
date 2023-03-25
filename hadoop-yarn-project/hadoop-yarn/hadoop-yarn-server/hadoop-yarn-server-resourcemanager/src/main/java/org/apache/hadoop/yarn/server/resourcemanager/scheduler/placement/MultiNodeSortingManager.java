@@ -52,6 +52,8 @@ public class MultiNodeSortingManager<N extends SchedulerNode>
   private Configuration conf;
   private boolean multiNodePlacementEnabled;
   private long skipNodeInterval;
+  private boolean topNodesRandomEnabled;
+  private float topRandomRate;
 
   public MultiNodeSortingManager() {
     super("MultiNodeSortingManager");
@@ -64,6 +66,9 @@ public class MultiNodeSortingManager<N extends SchedulerNode>
     super.serviceInit(configuration);
     this.conf = configuration;
     this.skipNodeInterval = YarnConfiguration.getSkipNodeInterval(conf);
+    this.topNodesRandomEnabled =
+        YarnConfiguration.getMultiNodesTopRandomEnable(conf);
+    this.topRandomRate = YarnConfiguration.getMultiNodesTopRandomRate(conf);
   }
 
   @Override
@@ -139,49 +144,57 @@ public class MultiNodeSortingManager<N extends SchedulerNode>
       policy.addAndRefreshNodesSet(nodes, partition);
     }
 
-    Iterator<N> nodesIterator = policy.getPreferredNodeIterator(nodes,
-        partition);
+    Iterator<N> filteringIterator;
 
-    // Skip node which missed YarnConfiguration.SCHEDULER_SKIP_NODE_MULTIPLIER
-    // heartbeats since the node might be dead and we should not continue
-    // allocate containers on that.
-    Iterator<N> filteringIterator = new Iterator() {
-      private N cached;
-      private boolean hasCached;
-      @Override
-      public boolean hasNext() {
-        if (hasCached) {
-          return true;
-        }
-        while (nodesIterator.hasNext()) {
-          cached = nodesIterator.next();
-          // We have filtered out the candidates, just need to return
-          // the sorted candidates
-          if (nodes == null || nodes.size() == 0) {
-            return false;
-          }
-          else if (
-              SchedulerUtils.isNodeHeartbeated(cached, skipNodeInterval) &&
-                  nodes.contains(cached)) {
-            hasCached = true;
+    if (this.topNodesRandomEnabled) {
+      filteringIterator = policy
+          .getPreferredTopRandomNodeIterator(nodes, partition, skipNodeInterval,
+              topRandomRate);
+    } else {
+      Iterator<N> nodesIterator = policy.getPreferredNodeIterator(nodes,
+          partition);
+
+      // Skip node which missed YarnConfiguration.SCHEDULER_SKIP_NODE_MULTIPLIER
+      // heartbeats since the node might be dead and we should not continue
+      // allocate containers on that.
+      filteringIterator = new Iterator() {
+        private N cached;
+        private boolean hasCached;
+        @Override
+        public boolean hasNext() {
+          if (hasCached) {
             return true;
           }
+          while (nodesIterator.hasNext()) {
+            cached = nodesIterator.next();
+            // We have filtered out the candidates, just need to return
+            // the sorted candidates
+            if (nodes == null || nodes.size() == 0) {
+              return false;
+            }
+            else if (
+                SchedulerUtils.isNodeHeartbeated(cached, skipNodeInterval) &&
+                    nodes.contains(cached)) {
+              hasCached = true;
+              return true;
+            }
+          }
+          return false;
         }
-        return false;
-      }
 
-      @Override
-      public N next() {
-        if (hasCached) {
-          hasCached = false;
-          return cached;
+        @Override
+        public N next() {
+          if (hasCached) {
+            hasCached = false;
+            return cached;
+          }
+          if (!hasNext()) {
+            throw new NoSuchElementException();
+          }
+          return next();
         }
-        if (!hasNext()) {
-          throw new NoSuchElementException();
-        }
-        return next();
-      }
-    };
+      };
+    }
     return filteringIterator;
   }
 }
