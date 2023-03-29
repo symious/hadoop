@@ -26,6 +26,7 @@ import org.apache.hadoop.yarn.server.api.CollectorNodemanagerProtocol;
 import org.apache.hadoop.yarn.server.api.protocolrecords.ReportNewCollectorInfoRequest;
 import org.apache.hadoop.yarn.server.api.records.AppCollectorData;
 import org.apache.hadoop.yarn.server.nodemanager.Context;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.Application;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -156,6 +157,10 @@ public class DynamicResourcePublisher extends CompositeService {
 
   private void increaseResource(ApplicationId appId, UpdatedContainer updatedContainer)
       throws IOException, YarnException {
+    Application application = context.getApplications().get(appId);
+    if (application == null) {
+      return;
+    }
     LOG.info(
         "Update container resource, appid: " + appId + " target container: "
             + updatedContainer);
@@ -164,10 +169,9 @@ public class DynamicResourcePublisher extends CompositeService {
             .toString());
     InetSocketAddress cmAddr =
         NetUtils.createSocketAddr(updatedContainer.getContainer().getNodeId().toString());
-    Token<NMTokenIdentifier> nmToken =
-        ConverterUtils.convertFromYarn(context.getNMTokenSecretManager()
-            .generateNMToken(context.getApplications().get(appId).getUser(),
-                updatedContainer.getContainer()).getToken(), cmAddr);
+    Token<NMTokenIdentifier> nmToken = ConverterUtils.convertFromYarn(
+        context.getNMTokenSecretManager().generateNMToken(application.getUser(),
+            updatedContainer.getContainer()).getToken(), cmAddr);
     user.addToken(nmToken);
     ContainerManagementProtocol proxy = NMProxy
         .createNMProxy(getConfig(), ContainerManagementProtocol.class, user,
