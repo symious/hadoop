@@ -277,6 +277,21 @@ class DataXceiverServer implements Runnable {
     }
   }
 
+  public void tryAttachThrottlerMetrics() {
+    DataNodeMetrics metrics = datanode.metrics;
+    if (metrics != null) {
+      if (this.readThrottler != null) {
+        this.readThrottler.attachBytesMetrics(metrics.getReadBytes());
+      }
+      if (this.writeThrottler != null) {
+        this.writeThrottler.attachBytesMetrics(metrics.getWriteBytes());
+      }
+      if (this.transferThrottler != null) {
+        this.transferThrottler.attachBytesMetrics(metrics.getTransferBytes());
+      }
+    }
+  }
+
   /**
    * Refresh throttlers. Used for refreshes triggered by automatic calibration system.
    * @param newBandwidths new bandwidths, tuples of 3 in this order: read -> write -> transfer

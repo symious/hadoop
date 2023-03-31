@@ -1891,6 +1891,10 @@ public class DataNode extends ReconfigurableBase
     initIpcServer();
 
     metrics = DataNodeMetrics.create(getConf(), getDisplayName(), this.switchMapping);
+    // Metrics is only initialized here. Try to attach metrics to data transceiver server throttlers
+    if (this.dataXceiverServer != null) {
+      xserver.tryAttachThrottlerMetrics();
+    }
     peerMetrics = dnConf.peerStatsEnabled ?
         DataNodePeerMetrics.create(getDisplayName(), getConf()) : null;
     metrics.getJvmMetrics().setPauseMonitor(pauseMonitor);

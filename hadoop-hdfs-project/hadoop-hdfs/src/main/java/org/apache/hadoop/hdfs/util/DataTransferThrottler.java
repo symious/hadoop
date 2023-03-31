@@ -147,6 +147,8 @@ public class DataTransferThrottler {
     bytesAlreadyUsed -= numOfBytes;
     if (totalBytes != null) {
       totalBytes.addAndGet(numOfBytes);
+    }
+    if (bytesMetrics != null) {
       this.bytesMetrics.add(numOfBytes);
     }
   }
