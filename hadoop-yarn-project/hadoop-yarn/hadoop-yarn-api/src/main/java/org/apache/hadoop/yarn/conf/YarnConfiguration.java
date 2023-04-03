@@ -4317,6 +4317,16 @@ public class YarnConfiguration extends Configuration {
       DEFAULT_ROUTER_QUERY_GET_APPLICATIONS_RECORD_EXPIRE_TIME =
       1000 * 60 * 5;
 
+  //Router query http connection timeout, default is 30 s
+  public static final String ROUTER_QUERY_CONNECTION_TIMEOUT_MS =
+      ROUTER_PREFIX + "query.connection.timeout-ms";
+  public static final int DEFAULT_ROUTER_QUERY_CONNECTION_TIMEOUT_MS = 30000;
+
+  //Router query http read timeout, default is 30 s
+  public static final String ROUTER_QUERY_READ_TIMEOUT_MS =
+      ROUTER_PREFIX + "query.read.timeout-ms";
+  public static final int DEFAULT_ROUTER_QUERY_READ_TIMEOUT_MS = 30000;
+
   /**
    * Specifications on how (many times) to contact Router for apps. We need to
    * do this because Router might return partial application list because some

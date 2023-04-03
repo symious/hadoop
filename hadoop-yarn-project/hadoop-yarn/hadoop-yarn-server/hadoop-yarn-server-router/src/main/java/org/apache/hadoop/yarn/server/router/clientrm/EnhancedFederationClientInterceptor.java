@@ -98,8 +98,6 @@ public class EnhancedFederationClientInterceptor
   private static final String TIC_TAG_PREFIX = "tic:";
   private static final String LIVY_TAG_PREFIX = "livy:";
 
-  public static final int HTTP_CLIENT_TIMEOUT = 30000;
-
   public EnhancedFederationClientInterceptor() {
     federationFacade = FederationStateStoreFacade.getInstance();
     routerMetrics = RouterMetrics.getMetrics();
@@ -116,6 +114,16 @@ public class EnhancedFederationClientInterceptor
   public boolean enableQueryTimeLine(){
     return getConf().getBoolean(YarnConfiguration.ROUTER_QUERY_TIMELINE_ENABLED,
         YarnConfiguration.DEFAULT_ROUTER_QUERY_TIMELINE_ENABLED);
+  }
+
+  public int getHttpURLConnectionCnTimeout(){
+    return getConf().getInt(YarnConfiguration.ROUTER_QUERY_CONNECTION_TIMEOUT_MS,
+        YarnConfiguration.DEFAULT_ROUTER_QUERY_CONNECTION_TIMEOUT_MS);
+  }
+
+  public int getHttpURLConnectionReadTimeout(){
+    return getConf().getInt(YarnConfiguration.ROUTER_QUERY_READ_TIMEOUT_MS,
+        YarnConfiguration.DEFAULT_ROUTER_QUERY_READ_TIMEOUT_MS);
   }
 
   //If exist query time exceeds 2 seconds recent 5 minutes,
@@ -161,23 +169,34 @@ public class EnhancedFederationClientInterceptor
     return resp;
   }
 
-  public static Client createClient() {
+  public static Client createClient(int connectionTimeout, int readTimeout) {
     ClientConfig cfg = new DefaultClientConfig();
     cfg.getClasses().add(YarnJacksonJaxbJsonProvider.class);
     return new Client(new URLConnectionClientHandler(
-        new DummyURLConnectionFactory()), cfg);
+        new DummyURLConnectionFactory(connectionTimeout, readTimeout)), cfg);
   }
 
   private static class DummyURLConnectionFactory
       implements HttpURLConnectionFactory {
+    private int connectionTimeout;
+    private int readTimeout;
+
+    DummyURLConnectionFactory(int connectionTimeout, int readTimeout){
+      this.connectionTimeout = connectionTimeout;
+      this.readTimeout = readTimeout;
+    }
 
     @Override
     public HttpURLConnection getHttpURLConnection(final URL url)
         throws IOException {
       try {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Create HttpURLConnection, connectionTimeout: " +
+              connectionTimeout + " ,readTimeout: " + readTimeout);
+        }
         HttpURLConnection httpURLConnection = (HttpURLConnection)url.openConnection();
-        httpURLConnection.setConnectTimeout(HTTP_CLIENT_TIMEOUT);
-        httpURLConnection.setReadTimeout(HTTP_CLIENT_TIMEOUT);
+        httpURLConnection.setConnectTimeout(this.connectionTimeout);
+        httpURLConnection.setReadTimeout(this.readTimeout);
         return httpURLConnection;
       } catch (UndeclaredThrowableException e) {
         throw new IOException(e.getCause());
@@ -200,7 +219,9 @@ public class EnhancedFederationClientInterceptor
     ClientResponse queryAppStateResp = null;
     String appId = "";
     Set<String> appTags = new HashSet<>();
-    Client httpClient = createClient();
+    int httpConnTimeout = getHttpURLConnectionCnTimeout();
+    int httpReadTimeout = getHttpURLConnectionReadTimeout();
+    Client httpClient = createClient(httpConnTimeout, httpReadTimeout);
     URI queryAppIdByTagUri = URI.create(queryAppIdByTagUrl);
 
     try {
