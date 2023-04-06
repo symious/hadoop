@@ -48,12 +48,12 @@ public class ResourceUsageMultiNodeLookupPolicy<N extends SchedulerNode>
     this.comparator = new Comparator<N>() {
       @Override
       public int compare(N o1, N o2) {
-        int allocatedDiff = o1.getAllocatedResource()
-            .compareTo(o2.getAllocatedResource());
-        if (allocatedDiff == 0) {
+        int unAllocatedDiff = o2.getUnallocatedResource()
+            .compareTo(o1.getUnallocatedResource());
+        if (unAllocatedDiff == 0) {
           return o1.getNodeID().compareTo(o2.getNodeID());
         }
-        return allocatedDiff;
+        return unAllocatedDiff;
       }
     };
   }
