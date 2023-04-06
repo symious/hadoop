@@ -46,7 +46,7 @@
           protocol = "wss://";
         }
         var url = "ws://" + window.location.hostname + ":" + window.location.port
-            + "/container/" + getQueryVariable("container");
+            + "/yarn-container/" + getQueryVariable("container");
         var user = getQueryVariable("user.name");
         if (user != null) {
           url = url + "?user.name=" + encodeURI(user);

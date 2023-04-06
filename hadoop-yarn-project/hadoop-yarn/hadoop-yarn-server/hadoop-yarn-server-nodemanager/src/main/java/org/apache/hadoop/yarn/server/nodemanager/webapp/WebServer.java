@@ -111,7 +111,7 @@ public class WebServer extends AbstractService {
           WebApps
             .$for("node", Context.class, this.nmContext, "ws")
             .at(bindAddress)
-            .withServlet("ContainerShellWebSocket", "/container/*",
+            .withServlet("ContainerShellWebSocket", "/yarn-container/*",
                 ContainerShellWebSocketServlet.class, params, false)
             .withServlet("Terminal", "/terminal/*",
                 TerminalServlet.class, terminalParams, false)
