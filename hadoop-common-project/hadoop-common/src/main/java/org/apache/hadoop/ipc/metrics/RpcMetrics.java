@@ -31,6 +31,7 @@ import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
+import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.metrics2.lib.MutableQuantiles;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.slf4j.Logger;
@@ -132,6 +133,10 @@ public class RpcMetrics {
   MutableCounterLong successfulRpcCalls;
   @Metric("Number of calls that throw exceptions")
   MutableCounterLong rpcCallsWithException;
+  @Metric("Reader CPU Usage 60 second Avg")
+  MutableGaugeLong readerCPUAvg;
+  @Metric("Handler CPU Usage 60 second Avg")
+  MutableGaugeLong handlerCpuAvg;
 
   @Metric("Total request count of PasswordMatchedCached")
   public long passwordMatchedCacheTotalRequest() {
@@ -388,6 +393,14 @@ public class RpcMetrics {
 
   public long getRpcAuthenticationFailures() {
     return rpcAuthenticationFailures.value();
+  }
+
+  public void setReaderCPUAvg(long value) {
+    readerCPUAvg.set(value);
+  }
+
+  public void setHandlerCpuAvg(long value) {
+    handlerCpuAvg.set(value);
   }
 
   @VisibleForTesting

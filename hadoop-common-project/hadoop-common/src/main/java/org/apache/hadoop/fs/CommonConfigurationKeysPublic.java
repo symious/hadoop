@@ -508,6 +508,14 @@ public class CommonConfigurationKeysPublic {
                                                 "ipc.server.log.slow.rpc";
   public static final boolean IPC_SERVER_LOG_SLOW_RPC_DEFAULT = false;
 
+  public static final String IPC_SERVER_MONITOR_CPU_USAGE =
+      "ipc.server.monitor.cpu.usage";
+  public static final boolean IPC_SERVER_MONITOR_CPU_USAGE_DEFAULT = false;
+
+  public static final String IPC_SERVER_MONITOR_SAMPLES_PER_MIN =
+      "ipc.server.monitor.samples.per.min";
+  public static final int IPC_SERVER_MONITOR_SAMPLES_PER_MIN_DEFAULT = 6;
+
   /**
    * @see
    * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">

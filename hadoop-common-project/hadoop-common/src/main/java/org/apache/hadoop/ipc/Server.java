@@ -29,6 +29,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadMXBean;
 import java.lang.reflect.UndeclaredThrowableException;
 import java.net.BindException;
 import java.net.InetAddress;
@@ -550,6 +552,7 @@ public abstract class Server {
   private Map<Integer, Listener> auxiliaryListenerMap;
   private Responder responder = null;
   private Handler[] handlers = null;
+  private ThreadMonitor monitor = null;
   private AtomicLongArray handlerProcessedCalls = null;
 
   private boolean logSlowRPC = false;
@@ -558,6 +561,8 @@ public abstract class Server {
   private final PasswordEncoder passwordEncoder;
   // PasswordMatchEntry -> passwd matched
   private final Cache<PasswordMatchEntry, Boolean> passwordMatchedCache;
+  private boolean monitorCpuUsage = false;
+  private int samplesPerMin;
 
   /**
    * Checks if LogSlowRPC is set true.
@@ -1314,6 +1319,67 @@ public abstract class Server {
     @Override
     public String toString() {
       return super.toString() + " " + rpcRequest + " from " + connection;
+    }
+  }
+
+  private class ThreadMonitor extends Thread {
+    private final ThreadMXBean tmxb;
+    private final long[] readerThreadIds;
+    private final long[] handlerThreadIds;
+    private final int samples;
+
+    ThreadMonitor(long[] readerThreadIds, long[] handlerThreadIds, int samplesPerMin) {
+      this.tmxb = ManagementFactory.getThreadMXBean();
+      this.readerThreadIds = readerThreadIds;
+      this.handlerThreadIds = handlerThreadIds;
+      this.samples = samplesPerMin;
+    }
+
+    @Override
+    public void run() {
+      int sleepMs = (60 * 1000) / samples;
+      long[] valuesForReader = new long[samples];
+      long[] valuesForHandler = new long[samples];
+      long[] cpuBeforeForReader = new long[readerThreadIds.length];;
+      long[] cpuBeforeForHandler = new long[handlerThreadIds.length];
+      int index = 0;
+      while (running & !Thread.currentThread().isInterrupted()) {
+        try {
+          for (int i = 0; i < readerThreadIds.length; i++) {
+            cpuBeforeForReader[i] = tmxb.getThreadCpuTime(readerThreadIds[i]);
+          }
+          for (int i = 0; i < handlerThreadIds.length; i++) {
+            cpuBeforeForHandler[i] = tmxb.getThreadCpuTime(handlerThreadIds[i]);
+          }
+          long wallClockBefore = Time.monotonicNow();
+          Thread.sleep(sleepMs);
+          long wallClockDelta = Time.monotonicNow() - wallClockBefore;
+          long readerDeltaSum = 0, handlerDeltaSum = 0;
+          for (int i = 0; i < readerThreadIds.length; i++) {
+            long cpuDelta = tmxb.getThreadCpuTime(readerThreadIds[i]) - cpuBeforeForReader[i];
+            readerDeltaSum += cpuDelta;
+          }
+          for (int i = 0; i < handlerThreadIds.length; i++) {
+            long cpuDelta = tmxb.getThreadCpuTime(handlerThreadIds[i]) - cpuBeforeForHandler[i];
+            handlerDeltaSum += cpuDelta;
+          }
+          valuesForReader[index] = readerDeltaSum / readerThreadIds.length / wallClockDelta;
+          valuesForHandler[index] = handlerDeltaSum / handlerThreadIds.length / wallClockDelta;
+
+          index = (index + 1) % samples;
+
+          long readerSum = 0, handlerSum = 0;
+          for (int i = 0; i < samples; i++) {
+            readerSum += valuesForReader[i];
+            handlerSum += valuesForHandler[i];
+          }
+          rpcMetrics.setReaderCPUAvg(readerSum / samples);
+          rpcMetrics.setHandlerCpuAvg(handlerSum / samples);
+        } catch (InterruptedException e) {
+          LOG.error("Returning, interrupted : " + e);
+          return;
+        }
+      }
     }
   }
 
@@ -3357,6 +3423,12 @@ public abstract class Server {
         .recordStats()
         .build();
 
+    this.monitorCpuUsage = conf.getBoolean(
+        CommonConfigurationKeysPublic.IPC_SERVER_MONITOR_CPU_USAGE,
+        CommonConfigurationKeysPublic.IPC_SERVER_MONITOR_CPU_USAGE_DEFAULT);
+    this.samplesPerMin = conf.getInt(
+        CommonConfigurationKeysPublic.IPC_SERVER_MONITOR_SAMPLES_PER_MIN,
+        CommonConfigurationKeysPublic.IPC_SERVER_MONITOR_SAMPLES_PER_MIN_DEFAULT);
     // Create the responder here
     responder = new Responder();
     
@@ -3636,12 +3708,27 @@ public abstract class Server {
       handlers[i] = new Handler(i);
       handlers[i].start();
     }
+    if (monitorCpuUsage) {
+      long[] readerIds = new long[readThreads];
+      long[] handlerIds = new long[handlerCount];
+      for (int i = 0; i < listener.readers.length; i++) {
+        readerIds[i] = listener.readers[i].getId();
+      }
+      for (int i = 0; i < handlers.length; i++) {
+        handlerIds[i] = handlers[i].getId();
+      }
+      monitor = new ThreadMonitor(readerIds, handlerIds, samplesPerMin);
+      monitor.start();
+    }
   }
 
   /** Stops the service.  No new calls will be handled after this is called. */
   public synchronized void stop() {
     LOG.info("Stopping server on " + port);
     running = false;
+    if (monitor != null) {
+      monitor.interrupt();
+    }
     if (handlers != null) {
       for (int i = 0; i < handlerCount; i++) {
         if (handlers[i] != null) {
