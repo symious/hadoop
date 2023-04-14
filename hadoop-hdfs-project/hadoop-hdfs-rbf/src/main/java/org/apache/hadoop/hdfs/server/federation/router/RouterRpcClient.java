@@ -1817,10 +1817,7 @@ public class RouterRpcClient {
 
   @VisibleForTesting
   protected void incrRejectedPermitForNs(String ns) {
-    if (!rejectedPermitsPerNs.containsKey(ns)) {
-      rejectedPermitsPerNs.put(ns, new AtomicLong());
-    }
-    rejectedPermitsPerNs.get(ns).getAndIncrement();
+    rejectedPermitsPerNs.computeIfAbsent(ns, ignored -> new AtomicLong()).getAndIncrement();
   }
 
   public Long getRejectedPermitForNs(String ns) {
@@ -1830,10 +1827,7 @@ public class RouterRpcClient {
 
   @VisibleForTesting
   protected void incrAcceptedPermitForNs(String ns) {
-    if (!acceptedPermitsPerNs.containsKey(ns)) {
-      acceptedPermitsPerNs.put(ns, new AtomicLong());
-    }
-    acceptedPermitsPerNs.get(ns).getAndIncrement();
+    acceptedPermitsPerNs.computeIfAbsent(ns, ignored -> new AtomicLong()).getAndIncrement();
   }
 
   public Long getAcceptedPermitForNs(String ns) {

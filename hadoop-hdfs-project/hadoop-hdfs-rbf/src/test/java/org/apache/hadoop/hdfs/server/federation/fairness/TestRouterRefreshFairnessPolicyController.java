@@ -161,13 +161,11 @@ public class TestRouterRefreshFairnessPolicyController {
   }
 
   @Test
-  // Ignore this UT, because NamenodeHeartbeatService monitors the namenode status with permit.
-  @Ignore
   public void testRefreshStaticChangeHandlers() throws Exception {
     // Setup and mock
     final MiniRouterDFSCluster.RouterContext routerContext = cluster.getRandomRouter();
     final RouterRpcClient client = Mockito.spy(routerContext.getRouterRpcClient());
-    final long sleepTime = 3000;
+    final long sleepTime = 1500;
     Mockito.doAnswer(invocationOnMock -> {
       Thread.sleep(sleepTime);
       return null;
@@ -181,7 +179,7 @@ public class TestRouterRefreshFairnessPolicyController {
 
     List<Thread> preRefreshInvocations = makeDummyInvocations(client, 4, "ns0");
 
-    Thread.sleep(5000);
+    Thread.sleep(2500);
     // 3 permits acquired, calls will take 3s to finish and release permits
     // 1 invocation rejected
     assertEquals("{\"ns0\":3}",
