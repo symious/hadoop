@@ -238,6 +238,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAM
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_DEFAULT;
 
 import static org.apache.hadoop.util.ExitUtil.terminate;
 import static org.apache.hadoop.util.ToolRunner.confirmPrompt;
@@ -402,7 +404,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_LEASE_HARDLIMIT_KEY,
           DFS_NAMENODE_QUOTA_INIT_THREADS_KEY,
           DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY,
-          DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY));
+          DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
+          DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2463,6 +2466,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfLeaseHardLimit(property, newVal);
     } else if (property.equals(DFS_NAMENODE_QUOTA_INIT_THREADS_KEY)) {
       return reconfigureQuotaInitThreads(newVal);
+    } else if (property.equals(DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_KEY)) {
+      return reconfigurationRemoveCorruptedBlocks(newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -2897,6 +2902,17 @@ public class NameNode extends ReconfigurableBase implements
     namenodeQuotaInitThreads = this.namesystem.getFSDirectory()
         .reConfQuotaInitThreads(namenodeQuotaInitThreads);
     return String.valueOf(namenodeQuotaInitThreads);
+  }
+
+  private String reconfigurationRemoveCorruptedBlocks(String newVal) {
+    boolean removeCorruptedBlocks;
+    if (newVal == null) {
+      removeCorruptedBlocks = DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_DEFAULT;
+    } else {
+      removeCorruptedBlocks = Boolean.parseBoolean(newVal);
+    }
+    this.namesystem.getBlockManager().setRemoveCorruptedBlocks(removeCorruptedBlocks);
+    return String.valueOf(removeCorruptedBlocks);
   }
 
   private String reconfigureTailEditsOnlyDurableTxns(String newVal) {

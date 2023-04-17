@@ -501,6 +501,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_NAMENODE_STARTUP_DELAY_BLOCK_DELETION_SEC_KEY = "dfs.namenode.startup.delay.block.deletion.sec";
   public static final long    DFS_NAMENODE_STARTUP_DELAY_BLOCK_DELETION_SEC_DEFAULT = 0L;
 
+  public static final String  DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_KEY = "dfs.namenode.remove.corrupted.blocks";
+  public static final boolean DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_DEFAULT = false;
+
   /** Block deletion increment. */
   public static final String DFS_NAMENODE_BLOCK_DELETION_INCREMENT_KEY =
       "dfs.namenode.block.deletion.increment";

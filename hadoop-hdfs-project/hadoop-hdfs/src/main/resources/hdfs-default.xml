@@ -6446,4 +6446,13 @@
       namenode right way for received or deleted blocks after one round.
     </description>
   </property>
+  <property>
+    <name>dfs.namenode.remove.corrupted.blocks</name>
+    <value>false</value>
+    <description>
+      If true, namenode will remove invalidate corrupt blocks during starting active services
+      if the storage has reported a healthy replica. If false, namenode will just mark it
+      as corrupted block. The default value is false.
+    </description>
+  </property>
 </configuration>
