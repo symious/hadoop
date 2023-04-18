@@ -362,6 +362,7 @@ public class DeepHandlerManager {
         if (deepCallQueues.containsKey(ns)) {
           return deepCallQueues.get(ns);
         } else {
+          LOG.info("Initializing deep call queue for ns {}", ns);
           String prefix = CommonConfigurationKeys.IPC_NAMESPACE + "." + port;
           CallQueueManager<Server.Call> newQueue =
               new CallQueueManager<>(getQueueClass(prefix, conf), getSchedulerClass(prefix, conf),
@@ -393,6 +394,7 @@ public class DeepHandlerManager {
       this.maxUtilization = maxUtilization;
       this.freeHandler = new Semaphore(maxUtilization);
       this.callQueue = callQueue;
+      this.setName("DeepQueueWatcher-" + nameservice);
     }
 
     public int getCurrentUtilization() {
@@ -455,10 +457,15 @@ public class DeepHandlerManager {
     }
 
     public void handleCall(DeepQueueWatcher watcher, CallQueueManager<Server.Call> callQueue,
-        Server.Call nextCall) {
+        Server.Call nextCall) throws InterruptedException {
       this.currentWatcher = watcher;
       this.currentCallQueue = callQueue;
-      currentCall.offer(nextCall);
+      /*
+         Use SynchronousQueue#put instead of SynchronousQueue#offer
+         because currentCall.offer returns false when the handler is not running currentCall.take(),
+         which can happen for a short time after deepHandlers.add(this).
+       */
+      currentCall.put(nextCall);
     }
 
     @Override
@@ -498,7 +505,6 @@ public class DeepHandlerManager {
           }
         } catch (Throwable e) {
           LOG.info(Thread.currentThread().getName() + " caught an exception", e);
-          metrics.incrDeepHandlerExceptions();
           if (traceScope != null) {
             traceScope.getSpan()
                 .addTimelineAnnotation("Exception: " + StringUtils.stringifyException(e));
