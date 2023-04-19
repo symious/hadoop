@@ -516,7 +516,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
       out.flush();
     }
 
-    if (file.isDirectory()) {
+    if (file.isDirectory() && !file.isSymlink()) {
       checkDir(path, replRes, ecRes);
       return;
     }

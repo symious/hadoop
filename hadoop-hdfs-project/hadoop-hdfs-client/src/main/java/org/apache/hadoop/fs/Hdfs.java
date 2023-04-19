@@ -432,7 +432,7 @@ public class Hdfs extends AbstractFileSystem {
   @Override
   public void createSymlink(Path target, Path link, boolean createParent)
     throws IOException, UnresolvedLinkException {
-    dfs.createSymlink(target.toString(), getUriPath(link), createParent);
+    dfs.createSymlink(getPathNameByTarget(target), getUriPath(link), createParent);
   }
 
   @Override

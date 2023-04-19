@@ -596,9 +596,7 @@ public class TestNameNodeReconfigure {
   public void testReconfigureDisableSymlinksFeature() throws ReconfigurationException {
     final NameNode nameNode = cluster.getNameNode(0);
     FSNamesystem fsNamesystem = nameNode.getNamesystem();
-    assertFalse(fsNamesystem.isEnableSymlinks());
-
-    nameNode.reconfigureProperty(DFS_NAMENODE_SYMLINKS_ENABLED_KEY, "true");
+    // Enabling symlinks is enabled by default when create MiniDFSCluster.
     assertTrue(fsNamesystem.isEnableSymlinks());
 
     nameNode.reconfigureProperty(DFS_NAMENODE_SYMLINKS_ENABLED_KEY, "false");

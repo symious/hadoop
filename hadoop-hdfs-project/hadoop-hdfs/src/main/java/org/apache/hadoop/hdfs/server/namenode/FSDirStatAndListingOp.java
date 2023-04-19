@@ -491,13 +491,19 @@ class FSDirStatAndListingOp {
         // if the inode is a symlink, it will be compatible here,
         // get the FileStatus attribute of the target path,
         // and set the symlink path and path attributes of the current FileStatus.
-        final String targetPath = node.asSymlink().getSymlinkString();
+        final String targetPathStr = node.asSymlink().getSymlinkString();
+        Path targetPath = new Path(targetPathStr);
+        if (!targetPath.isAbsolute()) {
+          // if the target path is a relative path,
+          // it's parent path will use the link path's parent path.
+          targetPath = new Path(node.getParent().getFullPathName(), targetPathStr);
+        }
         HdfsFileStatus targetPathStatus = getFileInfo(fsd, fsd.getPermissionChecker(),
-            new Path(targetPath).toUri().getPath(), false, needLocation, needBlockToken,
+            targetPath.toUri().getPath(), false, needLocation, needBlockToken,
             maxSymlinksResolvesDepth - 1);
         // if the target path does not exist, return the fileStatus of the symlink path.
         if (targetPathStatus != null) {
-          targetPathStatus.setSymlink(new Path(targetPath));
+          targetPathStatus.setSymlink(targetPath);
           targetPathStatus.setUPath(name);
           return targetPathStatus;
         }

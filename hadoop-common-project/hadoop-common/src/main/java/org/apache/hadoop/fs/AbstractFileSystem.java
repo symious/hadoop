@@ -429,7 +429,19 @@ public abstract class AbstractFileSystem implements PathCapabilities {
     }
     return s;
   }
-  
+
+  /**
+   * Expects a URI with target path.
+   */
+  public String getPathNameByTarget(Path target) {
+    String result = target.toUri().getPath();
+    if (result.isEmpty()) {
+      throw new IllegalArgumentException("Pathname " + result + " from " +
+          target +" is not a valid DFS filename.");
+    }
+    return result;
+  }
+
   /**
    * Make the path fully qualified to this file system
    * @param path

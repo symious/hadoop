@@ -3685,10 +3685,10 @@ public class TestDFSShell {
     assertEquals("wrong number of words found in the ls output '" +
         tempOutput + "'", isDisplayedLink ? 10 : 8, words.length);
     if (isDisplayedLink) {
-      assertEquals("lrwxrwxrwx", words[0]);
+      assertEquals("lrw-r--r--", words[0]);
       assertEquals(linkName, words[7]);
       assertEquals("->", words[8]);
-      assertTrue("the displayed link target didn't begin with hdfs://",
+      assertFalse("the displayed link target didn't begin with hdfs://",
           words[9].startsWith("hdfs://"));
       assertTrue("the displayed link target didn't end with the target path",
           words[9].endsWith(targetName));

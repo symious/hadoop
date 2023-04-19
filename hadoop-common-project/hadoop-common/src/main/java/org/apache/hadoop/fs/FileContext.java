@@ -2000,7 +2000,7 @@ public class FileContext implements PathCapabilities {
          */
         private void handleFileStat(LocatedFileStatus stat)
         throws IOException {
-          if (stat.isFile()) { // file
+          if (stat.isFile() && !stat.isSymlink()) { // file and not symbolic link
             curFile = stat;
           } else if (stat.isSymlink()) { // symbolic link
             // resolve symbolic link

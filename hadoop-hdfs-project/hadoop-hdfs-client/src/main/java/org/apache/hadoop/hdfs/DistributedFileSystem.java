@@ -269,6 +269,23 @@ public class DistributedFileSystem extends FileSystem
     return result;
   }
 
+  /**
+   * Expects a URI with target path.
+   *
+   * @param target  target path
+   * @return path component of {target}
+   * @throws IllegalArgumentException if URI does not belong to this DFS
+   */
+  String getPathNameByTarget(Path target) {
+    checkPath(target);
+    String result = target.toUri().getPath();
+    if (result.isEmpty()) {
+      throw new IllegalArgumentException("Pathname " + result + " from " +
+          target +" is not a valid DFS filename.");
+    }
+    return result;
+  }
+
   @Override
   public BlockLocation[] getFileBlockLocations(FileStatus file, long start,
       long len) throws IOException {
@@ -1859,7 +1876,7 @@ public class DistributedFileSystem extends FileSystem
     new FileSystemLinkResolver<Void>() {
       @Override
       public Void doCall(final Path p) throws IOException {
-        dfs.createSymlink(getPathName(target), getPathName(p), createParent);
+        dfs.createSymlink(getPathNameByTarget(target), getPathName(p), createParent);
         return null;
       }
       @Override
