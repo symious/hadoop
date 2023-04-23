@@ -29,6 +29,10 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerUtils;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.SchedulingNodeType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -135,10 +139,26 @@ public class MultiNodeSorter<N extends SchedulerNode> extends AbstractService {
       Map<NodeId, SchedulerNode> nodesByPartition = new HashMap<>();
       List<SchedulerNode> nodes = ((AbstractYarnScheduler) rmContext
           .getScheduler()).getNodeTracker().getNodesPerPartition(label);
+      CapacityScheduler cs = (CapacityScheduler) (rmContext.getScheduler());
+      boolean multiNodeEnabledForHeartBeat = cs.getConfiguration()
+          .getMultiNodePlacementEnabledForHeartBeat();
       if (nodes != null) {
-        nodes.forEach(n -> nodesByPartition.put(n.getNodeID(), n));
-        multiNodePolicy.addAndRefreshNodesSet(
-            (Collection<N>) nodesByPartition.values(), label);
+        for (SchedulerNode sn : nodes) {
+          NodeId nodeId = sn.getNodeID();
+          RMNode rmNode = ((AbstractYarnScheduler) rmContext
+              .getScheduler()).getNode(nodeId).getRMNode();
+          if (multiNodeEnabledForHeartBeat) {
+            nodesByPartition.put(nodeId, sn);
+          } else if (rmNode.getNodeSchedulerType()
+              .equals(SchedulingNodeType.GLOBAL) &&
+              SchedulerUtils.isNodeHeartbeated(sn, cs.getSkipNodeInterval())) {
+            nodesByPartition.put(nodeId, sn);
+          }
+        }
+        if (nodesByPartition.size() > 0) {
+          multiNodePolicy.addAndRefreshNodesSet(
+              (Collection<N>) nodesByPartition.values(), label);
+        }
       }
     }
   }

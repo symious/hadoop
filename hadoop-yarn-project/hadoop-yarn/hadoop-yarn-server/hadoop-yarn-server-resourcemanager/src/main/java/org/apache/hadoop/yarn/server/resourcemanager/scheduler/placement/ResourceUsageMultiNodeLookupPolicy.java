@@ -82,27 +82,25 @@ public class ResourceUsageMultiNodeLookupPolicy<N extends SchedulerNode>
 
     Set<N> nodesPerPartitionSet = getNodesPerPartition(partition);
     Iterator<N> nodesPerPartitionIterator = nodesPerPartitionSet.iterator();
-    int sumSize = nodes.size();
+    int sumSize = nodesPerPartitionSet.size();
     int topRandomSize = Math.round(sumSize * topRate);
 
     int i = 0;
     while (nodesPerPartitionIterator.hasNext()) {
       N node = nodesPerPartitionIterator.next();
-      if (nodes.contains(node) &&
-          SchedulerUtils.isNodeHeartbeated(node, skipNodeInterval)) {
         if (i < topRandomSize) {
           topNodesList.add(node);
           i++;
         } else {
           break;
         }
-      }
     }
 
-    Collections.shuffle(topNodesList);
-    allNodesList.addAll(topNodesList);
     if (topNodesList.size() == 0) {
       allNodesList.addAll(nodesPerPartitionSet);
+    } else {
+      Collections.shuffle(topNodesList);
+      allNodesList.addAll(topNodesList);
     }
 
     if (LOG.isDebugEnabled()) {
@@ -124,7 +122,8 @@ public class ResourceUsageMultiNodeLookupPolicy<N extends SchedulerNode>
     Set<N> putNodeSet = Collections.unmodifiableSet(nodeList);
     if (LOG.isDebugEnabled()) {
       LOG.debug(
-          "Partition: " + partition + " addAndRefreshNodesSet cost time: " +
+          "Partition: " + partition + ",sort nodes size:  " +
+              putNodeSet.size() + " ,addAndRefreshNodesSet cost time: " +
               (System.nanoTime() - start) / 1000 + " us!");
     }
     nodesPerPartition.put(partition, putNodeSet);
