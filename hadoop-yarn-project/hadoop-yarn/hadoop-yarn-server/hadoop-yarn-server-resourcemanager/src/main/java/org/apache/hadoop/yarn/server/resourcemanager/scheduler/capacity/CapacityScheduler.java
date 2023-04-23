@@ -425,8 +425,8 @@ public class CapacityScheduler extends
           + getMaximumResourceCapability() + ">, " + "asynchronousScheduling="
           + scheduleAsynchronously + ", " + "asyncScheduleInterval="
           + asyncScheduleInterval + "ms" + ",multiNodePlacementEnabled="
-          + multiNodePlacementEnabled + ", " + "assignMultipleEnabled="
-          + multiNodeForHeartBeatEnabled + ", " + "multiNodeForHeartBeatEnabled="
+          + multiNodePlacementEnabled + ", " + "multiNodeForHeartBeatEnabled ="
+          + multiNodeForHeartBeatEnabled + ", " + "assignMultipleEnabled="
           + assignMultipleEnabled + ", " + "maxAssignPerHeartbeat="
           + maxAssignPerHeartbeat + ", " + "offswitchPerHeartbeatLimit="
           + offswitchPerHeartbeatLimit);
