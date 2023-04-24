@@ -22,14 +22,19 @@ import static org.apache.hadoop.fs.CommonConfigurationKeys.FS_CLIENT_TOPOLOGY_RE
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_ROOT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FILE_CLOSE_NUM_COMMITTED_ALLOWED_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_CONTEXT;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -125,9 +130,11 @@ import org.apache.hadoop.test.Whitebox;
 import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
+import org.apache.hadoop.util.functional.RemoteIterators;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.InOrder;
+import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.event.Level;
@@ -669,6 +676,44 @@ public class TestDistributedFileSystem {
       checkStatistics(dfs, 0, 0, 0);
     } finally {
       cluster.shutdown();
+    }
+  }
+
+  /**
+   * This is to test that {@link DFSConfigKeys#DFS_LIST_LIMIT} works as
+   * expected when {@link DistributedFileSystem#listLocatedStatus} is called.
+   */
+  @Test
+  public void testGetListingLimit() throws Exception {
+    final Configuration conf = getTestConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_LIST_LIMIT, 9);
+    try (MiniDFSCluster cluster =
+             new MiniDFSCluster.Builder(conf).numDataNodes(9).build()) {
+      cluster.waitActive();
+      ErasureCodingPolicy ecPolicy = StripedFileTestUtil.getDefaultECPolicy();
+      final DistributedFileSystem fs = cluster.getFileSystem();
+      fs.dfs = spy(fs.dfs);
+      Path dir1 = new Path("/testRep");
+      Path dir2 = new Path("/testEC");
+      fs.mkdirs(dir1);
+      fs.mkdirs(dir2);
+      fs.setErasureCodingPolicy(dir2, ecPolicy.getName());
+      for (int i = 0; i < 3; i++) {
+        DFSTestUtil.createFile(fs, new Path(dir1, String.valueOf(i)),
+            20 * 1024L, (short) 3, 1);
+        DFSTestUtil.createStripedFile(cluster, new Path(dir2,
+            String.valueOf(i)), dir2, 1, 1, false);
+      }
+
+      List<LocatedFileStatus> str = RemoteIterators.toList(fs.listLocatedStatus(dir1));
+      assertThat(str).hasSize(3);
+      Mockito.verify(fs.dfs, Mockito.times(1)).listPaths(anyString(), any(),
+          anyBoolean());
+
+      str = RemoteIterators.toList(fs.listLocatedStatus(dir2));
+      assertThat(str).hasSize(3);
+      Mockito.verify(fs.dfs, Mockito.times(4)).listPaths(anyString(), any(),
+          anyBoolean());
     }
   }
 
