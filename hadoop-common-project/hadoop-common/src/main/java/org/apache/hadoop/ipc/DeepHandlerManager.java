@@ -147,9 +147,7 @@ public class DeepHandlerManager {
     Map<String, Integer> result = new HashMap<>();
     for (Map.Entry<String, DeepQueueWatcher> entry : watchers.entrySet()) {
       int utilization = entry.getValue().getCurrentUtilization();
-      if (utilization > 0) {
-        result.put(entry.getKey(), utilization);
-      }
+      result.put(entry.getKey(), utilization);
     }
     return result;
   }

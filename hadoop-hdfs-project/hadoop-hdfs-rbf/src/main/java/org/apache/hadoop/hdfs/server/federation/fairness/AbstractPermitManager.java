@@ -38,4 +38,8 @@ public interface AbstractPermitManager {
   int availablePermits();
 
   int getPermitCap();
+
+  int getDedicatedPermitUsage();
+
+  int getSharedPermitUsage();
 }

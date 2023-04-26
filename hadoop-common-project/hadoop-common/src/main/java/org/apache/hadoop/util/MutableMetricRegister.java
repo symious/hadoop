@@ -36,7 +36,7 @@ public class MutableMetricRegister {
     if (!metricMap.containsKey(key)) {
       synchronized (metricMap) {
         if (!metricMap.containsKey(key)) {
-          String metricName = StringUtils.capitalize(metricPrefix + key);
+          String metricName = StringUtils.capitalize(metricPrefix + key + "_");
           T metric;
           if (metricClass == MutableStat.class) {
             metric = (T) registry.newStat(metricName, metricName, "Ops", "Val", false);

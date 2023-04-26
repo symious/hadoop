@@ -91,7 +91,7 @@ public class ElasticPermitManager implements AbstractPermitManager {
   private boolean acquireElasticPermit() throws InterruptedException {
     boolean result = false;
     if (maximumELNumberCanUse > 0 && totalElasticPermits != null) {
-      if (this.maximumELPermitsCanUse.tryAcquire(0, TimeUnit.MILLISECONDS)) {
+      if (this.maximumELPermitsCanUse.tryAcquire(this.maxWaitingTime, TimeUnit.MILLISECONDS)) {
         if (this.totalElasticPermits.tryAcquire(this.maxWaitingTime, TimeUnit.MILLISECONDS)) {
           result = true;
         } else {
@@ -134,5 +134,15 @@ public class ElasticPermitManager implements AbstractPermitManager {
   @Override
   public int getPermitCap() {
     return this.dedicatedNumber + this.maximumELNumberCanUse;
+  }
+
+  @Override
+  public int getDedicatedPermitUsage() {
+    return this.dedicatedNumber - dedicatedPermits.availablePermits();
+  }
+
+  @Override
+  public int getSharedPermitUsage() {
+    return this.maximumELNumberCanUse - maximumELPermitsCanUse.availablePermits();
   }
 }

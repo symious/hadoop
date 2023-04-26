@@ -71,6 +71,16 @@ public class StaticPermitManager implements AbstractPermitManager {
     return this.permitCap;
   }
 
+  @Override
+  public int getDedicatedPermitUsage() {
+    return this.permitCap - dedicatedPermits.availablePermits();
+  }
+
+  @Override
+  public int getSharedPermitUsage() {
+    return 0;
+  }
+
   public void release(int permits) {
     this.dedicatedPermits.release(permits);
   }
