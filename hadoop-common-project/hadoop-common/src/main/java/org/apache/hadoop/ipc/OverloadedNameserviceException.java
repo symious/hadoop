@@ -17,7 +17,9 @@
  */
 package org.apache.hadoop.ipc;
 
-public class OverloadedNameserviceException extends StandbyException {
+import java.io.IOException;
+
+public class OverloadedNameserviceException extends IOException {
   private static final long serialVersionUID = 1L;
 
   private final String routerId;

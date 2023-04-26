@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.federation.router;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -28,7 +29,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.hdfs.DFSClient;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.server.federation.MiniRouterDFSCluster.RouterContext;
 import org.apache.hadoop.hdfs.server.federation.RouterConfigBuilder;
@@ -45,14 +48,17 @@ import org.apache.hadoop.hdfs.server.federation.store.protocol.AddMountTableEntr
 import org.apache.hadoop.hdfs.server.federation.store.protocol.AddMountTableEntryResponse;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+import org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider;
+import org.apache.hadoop.io.retry.RetryInvocationHandler;
 import org.apache.hadoop.ipc.DeepHandlerManager;
-import org.apache.hadoop.ipc.OverloadedNameserviceException;
 import org.apache.hadoop.ipc.ProcessingDetails;
 import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.ipc.metrics.DeepRpcMetrics;
 import org.apache.hadoop.ipc.metrics.RpcMetrics;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.test.Whitebox;
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
@@ -82,7 +88,7 @@ public class TestRouterHandlerQueue {
 
   private StateStoreDFSCluster cluster;
   RouterContext routerContext;
-  private AtomicInteger overloadedExceptionCaught;
+  private AtomicInteger standbyExceptionsCaught;
   private RpcMetrics rpcMetrics;
   private DeepRpcMetrics deepRpcMetrics;
   private DeepHandlerManager deepHandlerManager;
@@ -196,7 +202,7 @@ public class TestRouterHandlerQueue {
     int permitWaitTimeMs = 300;
     setupCluster(true, permitWaitTimeMs);
     runTest(permitWaitTimeMs * 2, false);
-    assertEquals(0, overloadedExceptionCaught.get());
+    assertEquals(0, standbyExceptionsCaught.get());
     MetricsRecordBuilder builder = getMetrics(rpcMetrics.name());
     MetricsRecordBuilder deepBuilder = getMetrics(deepRpcMetrics.getName());
     double queueTimeAvg = getDoubleGauge("RpcQueueTimeAvgTime", builder);
@@ -229,7 +235,7 @@ public class TestRouterHandlerQueue {
     int permitWaitTimeMs = 300;
     setupCluster(true, permitWaitTimeMs);
     runTest(permitWaitTimeMs * 2, true);
-    assertEquals(0, overloadedExceptionCaught.get());
+    assertEquals(0, standbyExceptionsCaught.get());
     MetricsRecordBuilder builder = getMetrics(rpcMetrics.name());
     MetricsRecordBuilder deepBuilder = getMetrics(deepRpcMetrics.getName());
     double queueTimeAvg = getDoubleGauge("RpcQueueTimeAvgTime", builder);
@@ -269,7 +275,7 @@ public class TestRouterHandlerQueue {
     int permitWaitTimeMs = 1000;
     setupCluster(false, permitWaitTimeMs);
     runTest(50, false);
-    assertEquals(SLOW_RPC_CALLS - 1, overloadedExceptionCaught.get());
+    assertEquals(SLOW_RPC_CALLS - 1, standbyExceptionsCaught.get());
     // All ns0 calls have short processing time but 1s queue time
     // 2 out of 3 ns1 calls have short queue time but 1s processing time then timeout
     // The other ns1 call has short queue time and 2s processing time
@@ -292,7 +298,7 @@ public class TestRouterHandlerQueue {
     setupCluster(false, 100000000);
     runTest(50, false);
     // Should get no overloaded exceptions
-    assertEquals(0, overloadedExceptionCaught.get());
+    assertEquals(0, standbyExceptionsCaught.get());
 
     // Everything should finish without throwing any overloaded exception
     // They just take very long to finish
@@ -317,7 +323,7 @@ public class TestRouterHandlerQueue {
   @Test
   public void testDeepHandlersQueueOverflow() throws Exception {
     int permitWaitTimeMs = 30;
-    overloadedExceptionCaught = new AtomicInteger(0);
+    standbyExceptionsCaught = new AtomicInteger(0);
     setupCluster(true, permitWaitTimeMs);
 
     List<Thread> slowThreads = new ArrayList<>();
@@ -344,18 +350,67 @@ public class TestRouterHandlerQueue {
       thread.join();
     }
 
-    assertEquals(expectedFailedCalls, overloadedExceptionCaught.get());
+    assertEquals(expectedFailedCalls, standbyExceptionsCaught.get());
 
     MetricsRecordBuilder deepBuilder = getMetrics(deepRpcMetrics.getName());
     long realDeepCalls = getLongCounter("DeepCallAttempts_ns1", deepBuilder);
     assertEquals(totalCalls - 1, realDeepCalls);
   }
 
+  @Test
+  public void testRPCOverloadClientFailover() throws Exception {
+    testRPCOverloadClientFailoverInternal(false);
+    testRPCOverloadClientFailoverInternal(true);
+  }
+
+  private void testRPCOverloadClientFailoverInternal(boolean useDeepHandlers) throws Exception {
+    try {
+      // See testDeepHandlersQueueOverflow for details on the maths
+      int slowCalls =
+          useDeepHandlers ? 1 + DEEP_QUEUE_CAPACITY + MAX_DEEP_HANDLERS_PER_NAMESPACE + 1 : 1;
+
+      setupCluster(useDeepHandlers, 1);
+      List<Thread> slowThreads = new ArrayList<>();
+      DFSClient routerClient =
+          new DFSClient(routerContext.getFileSystemURI(), new HdfsConfiguration());
+      queueThread("ns1", routerClient, slowCalls, slowThreads);
+      for (Thread thread : slowThreads) {
+        thread.start();
+      }
+      // Small sleep to make sure the slow threads spawn first
+      Thread.sleep(40);
+
+      Configuration clientConf = new Configuration(cluster.getRouterClientConf());
+      clientConf.set(
+          HdfsClientConfigKeys.Failover.PROXY_PROVIDER_KEY_PREFIX + "." + "fed",
+          ConfiguredFailoverProxyProvider.class.getName());
+      final String namenode = "r0";
+      clientConf.set(DFSConfigKeys.DFS_HA_NAMENODES_KEY_PREFIX + ".fed", namenode);
+      clientConf.set(DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY + ".fed." + namenode,
+          routerContext.getFileSystemURI().toString());
+      routerClient = new DFSClient(URI.create("hdfs://fed"), clientConf);
+
+      // Has to failover then succeeds instead of throwing
+      GenericTestUtils.LogCapturer logs =
+          GenericTestUtils.LogCapturer.captureLogs(RetryInvocationHandler.LOG);
+      routerClient.getFileInfo("/testns1/test.txt");
+      assertTrue(logs.getOutput().contains("Trying to failover"));
+
+      for (Thread thread : slowThreads) {
+        thread.join();
+      }
+
+    } finally {
+      cluster.shutdown();
+      cluster = null;
+    }
+  }
+
   /**
    * Executes test then parses log for rpc details
    */
   private void runTest(long delay, boolean queueAllNss) throws IOException, InterruptedException {
-    overloadedExceptionCaught = new AtomicInteger(0);
+    standbyExceptionsCaught = new AtomicInteger(0);
 
     List<Thread> slowThreads = new ArrayList<>();
     List<Thread> fastThreads = new ArrayList<>();
@@ -420,14 +475,11 @@ public class TestRouterHandlerQueue {
           throw new RuntimeException(e);
         }
       });
-      Thread.UncaughtExceptionHandler h = new Thread.UncaughtExceptionHandler() {
-        @Override
-        public void uncaughtException(Thread th, Throwable ex) {
-          if (ex instanceof RuntimeException && ex.getCause() instanceof RemoteException
-              && ((RemoteException) ex.getCause()).getClassName()
-              .equals(OverloadedNameserviceException.class.getCanonicalName())) {
-            overloadedExceptionCaught.incrementAndGet();
-          }
+      Thread.UncaughtExceptionHandler h = (th, ex) -> {
+        if (ex instanceof RuntimeException && ex.getCause() instanceof RemoteException
+            && ((RemoteException) ex.getCause()).getClassName()
+            .equals(StandbyException.class.getCanonicalName())) {
+          standbyExceptionsCaught.incrementAndGet();
         }
       };
       thread.setUncaughtExceptionHandler(h);

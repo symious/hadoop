@@ -1799,7 +1799,16 @@ public class RouterRpcClient {
         String msg =
             "Router " + router.getRouterId() +
                 " is overloaded for NS: " + nsId;
-        throw new OverloadedNameserviceException(msg, router.getRouterId(), nsId);
+        /**
+         * Only throw custom overloaded exception for internal router use if deep handlers
+         * are enabled, else throw StandbyException or client might skip failover erroneously
+         * See {@link org.apache.hadoop.io.retry.RetryPolicies#shouldFailoverOnException(java.lang.Exception)}
+         */
+        if (deepHandlersEnabled) {
+          throw new OverloadedNameserviceException(msg, router.getRouterId(), nsId);
+        } else {
+          throw new StandbyException(msg);
+        }
       }
       incrAcceptedPermitForNs(nsId);
     }
