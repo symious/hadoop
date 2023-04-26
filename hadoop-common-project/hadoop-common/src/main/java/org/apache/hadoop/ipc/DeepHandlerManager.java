@@ -36,12 +36,18 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.ipc.metrics.DeepRpcMetrics;
+import org.apache.hadoop.ipc.metrics.DeepRpcMetricsMBean;
+import org.apache.hadoop.metrics2.util.MBeans;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.htrace.core.TraceScope;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.management.NotCompliantMBeanException;
+import javax.management.ObjectName;
+import javax.management.StandardMBean;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeys.DFS_ROUTER_DEEP_HANDLER_MAX_UTILIZATION_PERCENTAGE_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.DFS_ROUTER_DEEP_HANDLER_MAX_UTILIZATION_PERCENTAGE_KEY;
@@ -66,7 +72,8 @@ public class DeepHandlerManager {
   private final AlignmentContext alignmentContext;
   private final int deepQueueCapacity;
   private final int deepHandlerUtilization;
-  private final DeepRpcMetrics metrics;
+  private DeepRpcMetrics metrics;
+  private ObjectName registeredBean;
   volatile private boolean running = true;
 
   private final ConcurrentHashMap<String, AtomicInteger> deepCallsByNamespace;
@@ -80,7 +87,7 @@ public class DeepHandlerManager {
     this.conf = conf;
     this.callQueue = callQueue;
     this.alignmentContext = alignmentContext;
-    this.metrics = DeepRpcMetrics.create(this, port);
+    this.initializeMetrics();
 
     int deepQueueCapacity =
         conf.getInt(DFS_ROUTER_DEEP_QUEUE_CAPACITY_KEY, DFS_ROUTER_DEEP_QUEUE_CAPACITY_DEFAULT);
@@ -123,8 +130,17 @@ public class DeepHandlerManager {
     deepCallsByNamespace = new ConcurrentHashMap<>();
   }
 
-  public String getCurrentDeepHandlerUtilization() {
-    ObjectMapper mapper = new ObjectMapper();
+  private void initializeMetrics() {
+    try{
+      this.metrics = DeepRpcMetrics.create(this, port);
+      StandardMBean bean = new StandardMBean(this.metrics, DeepRpcMetricsMBean.class);
+      registeredBean = MBeans.register("Router", "DeepRpcMetricsMBean" + port, bean);
+    } catch (NotCompliantMBeanException e) {
+      throw new RuntimeException("Bad DeepRpcMetricsMBean setup", e);
+    }
+  }
+
+  public Map<String, Integer> getCurrentDeepHandlerUtilization() {
     Map<String, Integer> result = new HashMap<>();
     for (Map.Entry<String, DeepQueueWatcher> entry : watchers.entrySet()) {
       int utilization = entry.getValue().getCurrentUtilization();
@@ -132,40 +148,28 @@ public class DeepHandlerManager {
         result.put(entry.getKey(), utilization);
       }
     }
-    try {
-      return mapper.writeValueAsString(result);
-    } catch (IOException e) {
-      LOG.warn("Failed to export deep handler metrics.");
-      return null;
-    }
+    return result;
   }
 
   public int getCurrentFreeDeepHandlerCount() {
     return deepHandlers.size();
   }
 
-  public String getCurrentDeepQueueSizes() {
-    ObjectMapper mapper = new ObjectMapper();
+  public Map<String, Integer> getCurrentDeepQueueSizes() {
     Map<String, Integer> result = new HashMap<>();
     for (Map.Entry<String, DeepQueueWatcher> entry : watchers.entrySet()) {
       int queueSize = entry.getValue().getQueueSize();
       result.put(entry.getKey(), queueSize);
     }
-    try {
-      return mapper.writeValueAsString(result);
-    } catch (IOException e) {
-      LOG.warn("Failed to export deep handler metrics.");
-      return null;
-    }
+    return result;
   }
 
-  public String getDeepCallsByNamespace() {
-    try {
-      return new ObjectMapper().writeValueAsString(deepCallsByNamespace);
-    } catch (IOException e) {
-      LOG.warn("Failed to export deep handler metrics.");
-      return null;
+  public Map<String, Integer> getDeepCallsByNamespace() {
+    Map<String, Integer> result = new HashMap<>();
+    for (Map.Entry<String, AtomicInteger> entry : deepCallsByNamespace.entrySet()) {
+      result.put(entry.getKey(), entry.getValue().intValue());
     }
+    return result;
   }
 
   private void incrDeepCall(String namespace) {
@@ -523,6 +527,11 @@ public class DeepHandlerManager {
     }
     for (DeepQueueWatcher watcher : watchers.values()) {
       watcher.interrupt();
+    }
+
+    if (registeredBean != null) {
+      MBeans.unregister(registeredBean);
+      registeredBean = null;
     }
   }
 }
