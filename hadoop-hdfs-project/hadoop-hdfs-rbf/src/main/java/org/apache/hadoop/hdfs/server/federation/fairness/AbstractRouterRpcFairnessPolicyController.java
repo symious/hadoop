@@ -29,6 +29,8 @@ import org.apache.hadoop.hdfs.server.federation.resolver.ActiveNamenodeResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamespaceInfo;
 import org.apache.hadoop.hdfs.server.federation.router.FederationUtil;
 import org.apache.hadoop.hdfs.server.federation.router.RouterRpcClient;
+import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.util.Time;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 import org.slf4j.Logger;
@@ -63,16 +65,24 @@ public class AbstractRouterRpcFairnessPolicyController
       + " %d is less than the minimum required handlers %d";
   public static final String ERROR_NS_MSG =
       "Configured handlers %s=%d is less than the minimum required handlers %d";
+  protected FairnessPolicyControllerMetrics metrics;
 
   /** Hash table to hold AbstractNSPermitManager for each name service. */
   private Map<String, AbstractPermitManager> permits = new HashMap<>();
 
   private final int maxWaitingTime;
+  private static final ThreadLocal<Long> PERMIT_ACQUISITION_TIME = new ThreadLocal<>();
 
   AbstractRouterRpcFairnessPolicyController(Configuration conf) {
     this.maxWaitingTime = conf.getInt(
         DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_KEY,
         DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_DEFAULT);
+    this.metrics = FairnessPolicyControllerMetrics.create(this);
+  }
+
+  @VisibleForTesting
+  public void resetMetrics() {
+    this.metrics = FairnessPolicyControllerMetrics.create(this);
   }
 
   /**
@@ -91,12 +101,17 @@ public class AbstractRouterRpcFairnessPolicyController
     LOG.debug("Taking lock for nameservice {}", nsId);
     AbstractPermitManager permitManager = permits.get(nsId);
     if (permitManager != null) {
-      return permitManager.acquirePermit();
+      long start = Time.monotonicNow();
+      PERMIT_ACQUISITION_TIME.set(start);
+      Permit result = permitManager.acquirePermit();
+      metrics.addPermitWaitTime(Time.monotonicNow() - start, nsId);
+      return result;
     } else {
-      // TODO Add one metric to monitor this abnormal case.
+      metrics.incrMissingPermit();
       LOG.warn("Can't find NSPermit for {}.", nsId, new Throwable());
       return Permit.NO_PERMIT;
     }
+
   }
 
   @Override
@@ -107,6 +122,7 @@ public class AbstractRouterRpcFairnessPolicyController
     AbstractPermitManager permitManager = this.permits.get(nsId);
     if (permitManager != null) {
       permitManager.releasePermit(permitInstance);
+      metrics.addPermitHoldTime(Time.monotonicNow() - PERMIT_ACQUISITION_TIME.get(), nsId);
     }
   }
 

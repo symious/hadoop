@@ -37,6 +37,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.SystemUtils;
+import org.apache.commons.lang3.text.StrBuilder;
 import org.apache.commons.lang3.time.FastDateFormat;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -269,6 +270,17 @@ public class StringUtils {
   public static String formatTimeDiff(long finishTime, long startTime){
     long timeDiff = finishTime - startTime; 
     return formatTime(timeDiff); 
+  }
+
+  public static String capitalize(String str) {
+    int strLen;
+    if (str == null || (strLen = str.length()) == 0) {
+      return str;
+    }
+    return new StrBuilder(strLen)
+        .append(Character.toTitleCase(str.charAt(0)))
+        .append(str.substring(1))
+        .toString();
   }
   
   /**

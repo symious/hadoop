@@ -1109,6 +1109,7 @@ public abstract class Server {
 
     private ResponseParams responseParams; // the response params
     private Writable rv;                   // the byte response
+    private long deepQueueStartTime = 0;
 
     RpcCall(RpcCall call) {
       super(call);
@@ -1174,6 +1175,14 @@ public abstract class Server {
       return connection.getRemotePort();
     }
 
+    public void markDeepQueueStartTime() {
+      deepQueueStartTime = Time.monotonicNowNanos();
+    }
+
+    public long getDeepQueueStartTime() {
+      return deepQueueStartTime;
+    }
+
     @Override
     public Void run() throws Exception {
       if (!connection.channel.isOpen()) {
@@ -1225,11 +1234,18 @@ public abstract class Server {
       return null;
     }
 
-    public void sendOnlyException(Exception e) throws IOException {
+    public void sendOnlyException(Exception e, long startNanos) throws IOException {
       ResponseParams responseParams = new ResponseParams();
       populateResponseParamsOnError(e, responseParams);
+
+      long deltaNanos = Time.monotonicNowNanos() - startNanos;
       ProcessingDetails details = getProcessingDetails();
-      long startNanos = Time.monotonicNowNanos();
+      details.set(Timing.PROCESSING, deltaNanos, TimeUnit.NANOSECONDS);
+      deltaNanos -= details.get(Timing.LOCKWAIT, TimeUnit.NANOSECONDS);
+      deltaNanos -= details.get(Timing.LOCKSHARED, TimeUnit.NANOSECONDS);
+      deltaNanos -= details.get(Timing.LOCKEXCLUSIVE, TimeUnit.NANOSECONDS);
+      details.set(Timing.LOCKFREE, deltaNanos, TimeUnit.NANOSECONDS);
+      startNanos = Time.monotonicNowNanos();
       setResponseFields(null, responseParams);
       sendResponse();
       details.set(Timing.RESPONSE, Time.monotonicNowNanos() - startNanos,
@@ -3212,7 +3228,7 @@ public abstract class Server {
         callQueue.add(call);
       }
       long deltaNanos = Time.monotonicNowNanos() - call.timestampNanos;
-      call.getProcessingDetails().set(Timing.ENQUEUE, deltaNanos,
+      call.getProcessingDetails().set(Timing.QUEUE, deltaNanos,
           TimeUnit.NANOSECONDS);
     } catch (CallQueueOverflowException cqe) {
       // If rpc scheduler indicates back off based on performance degradation
@@ -4315,5 +4331,9 @@ public abstract class Server {
     public int hashCode() {
       return Objects.hash(username, rawPassword, hashedPassword);
     }
+  }
+
+  public DeepHandlerManager getDeepHandlerManager() {
+    return deepHandlerManager;
   }
 }

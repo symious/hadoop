@@ -19,6 +19,8 @@
 package org.apache.hadoop.ipc;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,10 +28,14 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.ipc.metrics.DeepRpcMetrics;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
@@ -60,17 +66,21 @@ public class DeepHandlerManager {
   private final AlignmentContext alignmentContext;
   private final int deepQueueCapacity;
   private final int deepHandlerUtilization;
+  private final DeepRpcMetrics metrics;
   volatile private boolean running = true;
+
+  private final ConcurrentHashMap<String, AtomicInteger> deepCallsByNamespace;
 
   public final static String CONTEXT_KEY = "deepQueue";
 
   public DeepHandlerManager(Server server, CallQueueManager<Server.Call> callQueue,
-                            AlignmentContext alignmentContext, int port, Configuration conf, int handlerCount) {
+      AlignmentContext alignmentContext, int port, Configuration conf, int handlerCount) {
     this.server = server;
     this.port = port;
     this.conf = conf;
     this.callQueue = callQueue;
     this.alignmentContext = alignmentContext;
+    this.metrics = DeepRpcMetrics.create(this, port);
 
     int deepQueueCapacity =
         conf.getInt(DFS_ROUTER_DEEP_QUEUE_CAPACITY_KEY, DFS_ROUTER_DEEP_QUEUE_CAPACITY_DEFAULT);
@@ -110,6 +120,68 @@ public class DeepHandlerManager {
       deepHandlers.add(deepHandler);
       deepHandler.start();
     }
+    deepCallsByNamespace = new ConcurrentHashMap<>();
+  }
+
+  public String getCurrentDeepHandlerUtilization() {
+    ObjectMapper mapper = new ObjectMapper();
+    Map<String, Integer> result = new HashMap<>();
+    for (Map.Entry<String, DeepQueueWatcher> entry : watchers.entrySet()) {
+      int utilization = entry.getValue().getCurrentUtilization();
+      if (utilization > 0) {
+        result.put(entry.getKey(), utilization);
+      }
+    }
+    try {
+      return mapper.writeValueAsString(result);
+    } catch (IOException e) {
+      LOG.warn("Failed to export deep handler metrics.");
+      return null;
+    }
+  }
+
+  public int getCurrentFreeDeepHandlerCount() {
+    return deepHandlers.size();
+  }
+
+  public String getCurrentDeepQueueSizes() {
+    ObjectMapper mapper = new ObjectMapper();
+    Map<String, Integer> result = new HashMap<>();
+    for (Map.Entry<String, DeepQueueWatcher> entry : watchers.entrySet()) {
+      int queueSize = entry.getValue().getQueueSize();
+      result.put(entry.getKey(), queueSize);
+    }
+    try {
+      return mapper.writeValueAsString(result);
+    } catch (IOException e) {
+      LOG.warn("Failed to export deep handler metrics.");
+      return null;
+    }
+  }
+
+  public String getDeepCallsByNamespace() {
+    try {
+      return new ObjectMapper().writeValueAsString(deepCallsByNamespace);
+    } catch (IOException e) {
+      LOG.warn("Failed to export deep handler metrics.");
+      return null;
+    }
+  }
+
+  private void incrDeepCall(String namespace) {
+    if (!deepCallsByNamespace.containsKey(namespace)) {
+      synchronized (deepCallsByNamespace) {
+        if (!deepCallsByNamespace.containsKey(namespace)) {
+          deepCallsByNamespace.put(namespace, new AtomicInteger(0));
+        }
+      }
+    }
+    deepCallsByNamespace.get(namespace).getAndIncrement();
+  }
+
+  @VisibleForTesting
+  public DeepRpcMetrics getMetrics() {
+    return metrics;
   }
 
   private class SurfaceHandler extends Thread {
@@ -150,6 +222,7 @@ public class DeepHandlerManager {
         // can be successfully read.
         boolean connDropped = true;
         boolean passedToDeepHandlers = false;
+        long startProcessingNanos = 0;
         try {
           call = callQueue.take(); // pop the queue; maybe blocked here
           startTimeNanos = Time.monotonicNowNanos();
@@ -187,6 +260,7 @@ public class DeepHandlerManager {
           CallerContext.setCurrent(call.getCallerContext());
           UserGroupInformation remoteUser = call.getRemoteUser();
           connDropped = !call.isOpen();
+          startProcessingNanos = Time.monotonicNowNanos();
           if (remoteUser != null) {
             remoteUser.doAs(call);
           } else {
@@ -196,21 +270,26 @@ public class DeepHandlerManager {
           // If call fails due to overloaded permit controllers
           // Pass to deep handlers to retry
           try {
+            ((Server.RpcCall) call).markDeepQueueStartTime();
+            metrics.incrDeepCalls(e.getNameservice());
+            incrDeepCall(e.getNameservice());
             CallQueueManager<Server.Call> deepCallQueue = getDeepCallQueue(e.getNameservice());
             // Do not block, fail immediately if queue full
             deepCallQueue.add(call);
+            resetCallMetricsForDeepHandler(call);
             LOG.debug("{}: Router overloaded for NS {}, putting {} in deep queue",
                 Thread.currentThread().getName(), e.getNameservice(), call);
             passedToDeepHandlers = true;
           } catch (CallQueueManager.CallQueueOverflowException cqoe) {
             // Throw an OverloadedNameserviceException
             // back to client if failed from full queue
+            metrics.incrRejectedDeepCalls(e.getNameservice());
             String msg =
                 "Router " + e.getRouterId() + " is overloaded for NS: " + e.getNameservice();
             OverloadedNameserviceException resException =
                 new OverloadedNameserviceException(msg, e.getRouterId(), e.getNameservice());
             try {
-              ((Server.RpcCall) call).sendOnlyException(resException);
+              ((Server.RpcCall) call).sendOnlyException(resException, startProcessingNanos);
             } catch (IOException ex) {
               LOG.info(
                   Thread.currentThread().getName() + " failed to send exception back to client",
@@ -246,6 +325,19 @@ public class DeepHandlerManager {
       LOG.debug(Thread.currentThread().getName() + ": exiting");
     }
 
+    /**
+     * Reset all existing metrics except ENQUEUE when the call was in a shallow handler.
+     * Assign time spent in shallow handler to QUEUE.
+     */
+    private void resetCallMetricsForDeepHandler(Server.Call call) {
+      for (ProcessingDetails.Timing type : ProcessingDetails.Timing.values()) {
+        if (type.equals(ProcessingDetails.Timing.ENQUEUE)) {
+          continue;
+        }
+        call.getProcessingDetails().set(type, 0);
+      }
+    }
+
     private CallQueueManager<Server.Call> getDeepCallQueue(String ns) {
       if (deepCallQueues.containsKey(ns)) {
         return deepCallQueues.get(ns);
@@ -259,7 +351,7 @@ public class DeepHandlerManager {
               new CallQueueManager<>(getQueueClass(prefix, conf), getSchedulerClass(prefix, conf),
                   getClientBackoffEnable(prefix, conf), deepQueueCapacity, prefix, conf);
           deepCallQueues.put(ns, newQueue);
-          DeepQueueWatcher watcher = new DeepQueueWatcher(deepHandlerUtilization, newQueue);
+          DeepQueueWatcher watcher = new DeepQueueWatcher(ns, deepHandlerUtilization, newQueue);
           watchers.put(ns, watcher);
           watcher.start();
         }
@@ -276,10 +368,27 @@ public class DeepHandlerManager {
   private class DeepQueueWatcher extends Thread {
     private final CallQueueManager<Server.Call> callQueue;
     private final Semaphore freeHandler;
+    private final int maxUtilization;
+    private final String nameservice;
 
-    DeepQueueWatcher(int maxUtilization, CallQueueManager<Server.Call> callQueue) {
+    DeepQueueWatcher(String nameservice, int maxUtilization,
+         CallQueueManager<Server.Call> callQueue) {
+      this.nameservice = nameservice;
+      this.maxUtilization = maxUtilization;
       this.freeHandler = new Semaphore(maxUtilization);
       this.callQueue = callQueue;
+    }
+
+    public int getCurrentUtilization() {
+      return this.maxUtilization - this.freeHandler.availablePermits();
+    }
+
+    public int getQueueSize() {
+      return this.callQueue.size();
+    }
+
+    public String getNameservice() {
+      return nameservice;
     }
 
     void releaseHandler() {
@@ -376,6 +485,12 @@ public class DeepHandlerManager {
           if (call != null) {
             if (currentCallQueue != null) {
               server.updateMetricsInternal(call, startTimeNanos, connDropped, currentCallQueue);
+              metrics.addDeepHandlerProcessingTime(
+                  (Time.monotonicNowNanos() - startTimeNanos) / 1000000,
+                  this.currentWatcher.getNameservice());
+              metrics.addDeepLatency(
+                  (Time.monotonicNowNanos() - ((Server.RpcCall) call).getDeepQueueStartTime())
+                      / 1000000, this.currentWatcher.getNameservice());
               currentCallQueue = null;
             }
             if (currentWatcher != null) {
