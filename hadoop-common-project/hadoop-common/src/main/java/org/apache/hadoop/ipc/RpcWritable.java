@@ -24,6 +24,9 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
@@ -183,6 +186,8 @@ public abstract class RpcWritable implements Writable {
   public static class Buffer extends RpcWritable {
     private ByteBuffer bb;
 
+    protected final Map<Message, Message> cache = new HashMap<>();
+
     public static Buffer wrap(ByteBuffer bb) {
       return new Buffer(bb);
     }
@@ -234,6 +239,14 @@ public abstract class RpcWritable implements Writable {
 
     public int remaining() {
       return bb.remaining();
+    }
+
+    public Message tryGetFromCache(Message prototype) throws IOException {
+      if (!this.cache.containsKey(prototype)) {
+        Message value = getValue(prototype);
+        this.cache.put(prototype, value);
+      }
+      return this.cache.get(prototype);
     }
   }
 }

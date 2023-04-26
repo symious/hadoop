@@ -22,6 +22,8 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_CLIENT_CONN
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_CLIENT_CONNECT_TIMEOUT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_IP_PROXY_USERS;
 import static org.apache.hadoop.hdfs.server.federation.fairness.RouterRpcFairnessConstants.CONCURRENT_NS;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_DEEP_HANDLER_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_DEEP_HANDLER_ENABLED_KEY;
 
 import java.io.EOFException;
 import java.io.FileNotFoundException;
@@ -79,7 +81,9 @@ import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.io.retry.RetryPolicy.RetryAction.RetryDecision;
 import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.ipc.Client;
+import org.apache.hadoop.ipc.DeepHandlerManager;
 import org.apache.hadoop.ipc.ObserverRetryOnActiveException;
+import org.apache.hadoop.ipc.OverloadedNameserviceException;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.ipc.RetriableException;
 import org.apache.hadoop.ipc.Server;
@@ -151,6 +155,7 @@ public class RouterRpcClient {
   private final Map<String, AtomicLong> lastMsyncTimes;
 
   private final boolean addProxyHostname;
+  private final boolean deepHandlersEnabled;
 
   /** Pattern to parse a stack trace line. */
   private static final Pattern STACK_TRACE_PATTERN =
@@ -236,6 +241,9 @@ public class RouterRpcClient {
     this.isNewMsyncServerEnabled = conf.getBoolean(
         RBFConfigKeys.DSF_ROUTER_OBSERVER_ENABLE_NEW_MSYNC_SERVER_KEY,
         RBFConfigKeys.DSF_ROUTER_OBSERVER_ENABLE_NEW_MSYNC_SERVER_DEFAULT);
+    this.deepHandlersEnabled = conf.getBoolean(
+        DFS_ROUTER_DEEP_HANDLER_ENABLED_KEY,
+        DFS_ROUTER_DEEP_HANDLER_ENABLED_DEFAULT);
     String[] ipProxyUsers = conf.getStrings(DFS_NAMENODE_IP_PROXY_USERS);
     this.enableProxyUser = ipProxyUsers != null && ipProxyUsers.length > 0;
   }
@@ -1777,7 +1785,7 @@ public class RouterRpcClient {
       final RemoteMethod m, RouterRpcFairnessPolicyController controller)
       throws IOException {
     Permit permit = Permit.PERMIT_NOT_REQUIRED;
-    if (controller != null) {
+    if (shouldAcquirePermit(controller)) {
       permit = controller.acquirePermit(nsId);
       if (permit.isNoPermit()) {
         // Throw StandByException,
@@ -1791,11 +1799,23 @@ public class RouterRpcClient {
         String msg =
             "Router " + router.getRouterId() +
                 " is overloaded for NS: " + nsId;
-        throw new StandbyException(msg);
+        throw new OverloadedNameserviceException(msg, router.getRouterId(), nsId);
       }
       incrAcceptedPermitForNs(nsId);
     }
     return permit;
+  }
+
+  private boolean shouldAcquirePermit(RouterRpcFairnessPolicyController controller) {
+    if (controller == null) {
+      return false;
+    }
+    // Controller is not null and deep handlers are not in use, proceed normally
+    if (!deepHandlersEnabled) {
+      return true;
+    }
+    return CallerContext.getCurrent() == null || !CallerContext.getCurrent().getContext()
+        .contains(DeepHandlerManager.CONTEXT_KEY);
   }
 
   /**

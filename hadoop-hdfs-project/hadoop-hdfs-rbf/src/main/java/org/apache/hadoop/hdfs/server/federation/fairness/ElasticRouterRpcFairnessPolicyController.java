@@ -48,7 +48,7 @@ public class ElasticRouterRpcFairnessPolicyController
   private Semaphore totalElasticPermits = null;
 
   public ElasticRouterRpcFairnessPolicyController(Configuration conf) {
-    super();
+    super(conf);
     init(conf);
   }
 
@@ -79,7 +79,7 @@ public class ElasticRouterRpcFairnessPolicyController
 
       AbstractPermitManager permitManager = new ElasticPermitManager(
           nsId, dedicatedHandlers, maximumETPermitsCanUse,
-          this.totalElasticPermits);
+          this.totalElasticPermits, getMaxWaitingTime());
 
       permitManagerMap.put(nsId, permitManager);
       LOG.info("Assigned {} dedicatedPermits and {} maximumETPermits for nsId {} ",

@@ -321,7 +321,7 @@ public class TestRPC extends TestRpcBase {
         boolean verbose, Configuration conf,
         SecretManager<? extends TokenIdentifier> secretManager,
         String portRangeConfig, AlignmentContext alignmentContext,
-        boolean rpcPasswordAuthenticate)
+        boolean rpcPasswordAuthenticate, boolean deepHandlersEnabled)
         throws IOException {
       return null;
     }

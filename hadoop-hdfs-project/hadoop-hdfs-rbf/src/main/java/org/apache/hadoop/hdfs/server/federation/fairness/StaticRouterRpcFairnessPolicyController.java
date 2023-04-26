@@ -44,7 +44,7 @@ public class StaticRouterRpcFairnessPolicyController extends
       LoggerFactory.getLogger(StaticRouterRpcFairnessPolicyController.class);
 
   public StaticRouterRpcFairnessPolicyController(Configuration conf) {
-    super();
+    super(conf);
     init(conf);
   }
 
@@ -74,7 +74,7 @@ public class StaticRouterRpcFairnessPolicyController extends
       LOG.info("Dedicated handlers {} for ns {} ", dedicatedHandlers, nsId);
       if (dedicatedHandlers > 0) {
         handlerCount -= dedicatedHandlers;
-        newPermits.put(nsId, new StaticPermitManager(nsId, dedicatedHandlers));
+        newPermits.put(nsId, new StaticPermitManager(nsId, dedicatedHandlers, getMaxWaitingTime()));
         logAssignment(nsId, dedicatedHandlers);
       } else {
         unassignedNS.add(nsId);
@@ -89,7 +89,7 @@ public class StaticRouterRpcFairnessPolicyController extends
       LOG.info("Handlers available per ns {}", handlersPerNS);
       for (String nsId : unassignedNS) {
         // Each NS should have at least one handler assigned.
-        newPermits.put(nsId, new StaticPermitManager(nsId, handlersPerNS));
+        newPermits.put(nsId, new StaticPermitManager(nsId, handlersPerNS, getMaxWaitingTime()));
         logAssignment(nsId, handlersPerNS);
       }
     }
@@ -101,7 +101,7 @@ public class StaticRouterRpcFairnessPolicyController extends
     if (leftOverHandlers > 0) {
       LOG.info("Assigned extra {} handlers to commons pool", leftOverHandlers);
       newPermits.put(CONCURRENT_NS, new StaticPermitManager(
-          CONCURRENT_NS, existingPermits + leftOverHandlers));
+          CONCURRENT_NS, existingPermits + leftOverHandlers, getMaxWaitingTime()));
     }
     LOG.info("Final permit allocation for concurrent ns: {}",
         newPermits.get(CONCURRENT_NS).availablePermits());

@@ -19,11 +19,11 @@
 package org.apache.hadoop.ipc;
 
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
-import com.google.protobuf.BlockingService;
-import com.google.protobuf.Descriptors.MethodDescriptor;
-import com.google.protobuf.Message;
-import com.google.protobuf.ServiceException;
-import com.google.protobuf.TextFormat;
+import org.apache.hadoop.thirdparty.protobuf.BlockingService;
+import org.apache.hadoop.thirdparty.protobuf.Descriptors.MethodDescriptor;
+import org.apache.hadoop.thirdparty.protobuf.Message;
+import org.apache.hadoop.thirdparty.protobuf.ServiceException;
+import org.apache.hadoop.thirdparty.protobuf.TextFormat;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
@@ -376,11 +376,11 @@ public class ProtobufRpcEngine implements RpcEngine {
       int queueSizePerHandler, boolean verbose, Configuration conf,
       SecretManager<? extends TokenIdentifier> secretManager,
       String portRangeConfig, AlignmentContext alignmentContext,
-      boolean rpcPasswordAuthenticate)
+      boolean rpcPasswordAuthenticate, boolean deepHandlersEnabled)
       throws IOException {
     return new Server(protocol, protocolImpl, conf, bindAddress, port,
         numHandlers, numReaders, queueSizePerHandler, verbose, secretManager,
-        portRangeConfig, alignmentContext, rpcPasswordAuthenticate);
+        portRangeConfig, alignmentContext, rpcPasswordAuthenticate, deepHandlersEnabled);
   }
 
   /**
@@ -444,17 +444,18 @@ public class ProtobufRpcEngine implements RpcEngine {
      * @param portRangeConfig A config parameter that can be used to restrict
      * the range of ports used when port is 0 (an ephemeral port)
      * @param alignmentContext provides server state info on client responses
+     * @param deepHandlersEnabled true to enable a second layer of RPC handlers
      */
     public Server(Class<?> protocolClass, Object protocolImpl,
         Configuration conf, String bindAddress, int port, int numHandlers,
         int numReaders, int queueSizePerHandler, boolean verbose,
         SecretManager<? extends TokenIdentifier> secretManager,
         String portRangeConfig, AlignmentContext alignmentContext,
-        boolean rpcPasswordAuthenticate)
+        boolean rpcPasswordAuthenticate, boolean deepHandlersEnabled)
         throws IOException {
       super(protocolClass, protocolImpl, conf, bindAddress, port, numHandlers,
           numReaders, queueSizePerHandler, verbose, secretManager,
-          portRangeConfig, alignmentContext, rpcPasswordAuthenticate);
+          portRangeConfig, alignmentContext, rpcPasswordAuthenticate, deepHandlersEnabled);
     }
 
     /**
@@ -476,7 +477,7 @@ public class ProtobufRpcEngine implements RpcEngine {
         throw new RpcNoSuchMethodException(msg);
       }
       Message prototype = service.getRequestPrototype(methodDescriptor);
-      Message param = request.getValue(prototype);
+      Message param = request.tryGetFromCache(prototype);
 
       Message result;
       Call currentCall = Server.getCurCall().get();

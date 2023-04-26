@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.server.federation.resolver.ActiveNamenodeResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamespaceInfo;
@@ -44,6 +45,8 @@ import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_KEY;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_DEFAULT;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_KEY;
 
 /**
  * Base fairness policy that implements @RouterRpcFairnessPolicyController.
@@ -64,7 +67,12 @@ public class AbstractRouterRpcFairnessPolicyController
   /** Hash table to hold AbstractNSPermitManager for each name service. */
   private Map<String, AbstractPermitManager> permits = new HashMap<>();
 
-  AbstractRouterRpcFairnessPolicyController() {
+  private final int maxWaitingTime;
+
+  AbstractRouterRpcFairnessPolicyController(Configuration conf) {
+    this.maxWaitingTime = conf.getInt(
+        DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_KEY,
+        DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_DEFAULT);
   }
 
   /**
@@ -72,6 +80,10 @@ public class AbstractRouterRpcFairnessPolicyController
    */
   public void initPermits(Map<String, AbstractPermitManager> newPermits) {
     this.permits = newPermits;
+  }
+
+  protected int getMaxWaitingTime() {
+    return this.maxWaitingTime;
   }
 
   @Override

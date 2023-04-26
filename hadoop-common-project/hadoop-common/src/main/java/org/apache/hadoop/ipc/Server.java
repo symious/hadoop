@@ -515,6 +515,7 @@ public abstract class Server {
   private String bindAddress; 
   private int port;                               // port we listen on
   private int handlerCount;                       // number of handler threads
+  private boolean areDeepHandlersEnabled;
   private int readThreads;                        // number of read threads
   private int readerPendingConnectionQueue;         // number of connections to queue per read thread
   private Class<? extends Writable> rpcRequestClass;   // class used for deserializing the rpc request
@@ -552,6 +553,7 @@ public abstract class Server {
   private Map<Integer, Listener> auxiliaryListenerMap;
   private Responder responder = null;
   private Handler[] handlers = null;
+  private DeepHandlerManager deepHandlerManager = null;
   private ThreadMonitor monitor = null;
   private AtomicLongArray handlerProcessedCalls = null;
 
@@ -629,6 +631,11 @@ public abstract class Server {
   }
 
   void updateMetrics(Call call, long startTime, boolean connDropped) {
+    updateMetricsInternal(call, startTime, connDropped, callQueue);
+  }
+
+  void updateMetricsInternal(Call call, long startTime,
+    boolean connDropped, CallQueueManager<Call> callQueue) {
     // delta = handler + processing + response
     long deltaNanos = Time.monotonicNowNanos() - startTime;
     long timestampNanos = call.timestampNanos;
@@ -883,13 +890,14 @@ public abstract class Server {
     final RPC.RpcKind rpcKind;
     final byte[] clientId;
     private final TraceScope traceScope; // the HTrace scope on the server side
-    private final CallerContext callerContext; // the call context
+    private CallerContext callerContext; // the call context
     private boolean deferredResponse = false;
     private int priorityLevel;
     // the priority level assigned by scheduler, 0 by default
     private long clientStateId;
     private boolean isCallCoordinated;
     private final String proxyHostname;
+    private boolean canPassToDeepQueue;
 
     Call() {
       this(RpcConstants.INVALID_CALL_ID, RpcConstants.INVALID_RETRY_COUNT,
@@ -931,6 +939,7 @@ public abstract class Server {
       this.clientStateId = Long.MIN_VALUE;
       this.isCallCoordinated = false;
       this.proxyHostname = proxyHostname;
+      this.canPassToDeepQueue = false;
     }
 
     /**
@@ -953,6 +962,14 @@ public abstract class Server {
 
     public ProcessingDetails getProcessingDetails() {
       return processingDetails;
+    }
+
+    public TraceScope getTraceScope() {
+      return traceScope;
+    }
+
+    public CallerContext getCallerContext() {
+      return callerContext;
     }
 
     @Override
@@ -1068,10 +1085,24 @@ public abstract class Server {
 
     public void setDeferredError(Throwable t) {
     }
+
+    public void setCanPassToDeepQueue(boolean value) {
+      canPassToDeepQueue = value;
+    }
+
+    public boolean canPassToDeepQueue() {
+      return canPassToDeepQueue;
+    }
+
+    protected void appendContext(String context, String value) {
+      this.callerContext = new CallerContext.Builder(
+          this.callerContext == null ? "" :
+              this.callerContext.getContext()).append(context, value).build();
+    }
   }
 
   /** A RPC extended call queued for handling. */
-  private class RpcCall extends Call {
+  protected class RpcCall extends Call {
     final Connection connection;  // connection to client
     final Writable rpcRequest;    // Serialized Rpc request from client
     ByteBuffer rpcResponse;       // the response for this call
@@ -1158,6 +1189,15 @@ public abstract class Server {
         value = call(
             rpcKind, connection.protocolName, rpcRequest, timestampNanos);
         rpcMetrics.incrSuccessfulRpcCalls();
+      } catch (OverloadedNameserviceException one) {
+        if (this.canPassToDeepQueue()) {
+          this.appendContext(DeepHandlerManager.CONTEXT_KEY, "true");
+          // Rethrow to handler if planning to requeue it in case of
+          // overloaded permit controller
+          throw one;
+        } else {
+          populateResponseParamsOnError(one, responseParams);
+        }
       } catch (Throwable e) {
         populateResponseParamsOnError(e, responseParams);
       }
@@ -1183,6 +1223,17 @@ public abstract class Server {
         }
       }
       return null;
+    }
+
+    public void sendOnlyException(Exception e) throws IOException {
+      ResponseParams responseParams = new ResponseParams();
+      populateResponseParamsOnError(e, responseParams);
+      ProcessingDetails details = getProcessingDetails();
+      long startNanos = Time.monotonicNowNanos();
+      setResponseFields(null, responseParams);
+      sendResponse();
+      details.set(Timing.RESPONSE, Time.monotonicNowNanos() - startNanos,
+          TimeUnit.NANOSECONDS);
     }
 
     /**
@@ -3308,7 +3359,7 @@ public abstract class Server {
     throws IOException 
   {
     this(bindAddress, port, paramClass, handlerCount, -1, -1, conf, Integer
-        .toString(port), null, null);
+        .toString(port), null, null, false);
   }
   
   protected Server(String bindAddress, int port,
@@ -3317,7 +3368,7 @@ public abstract class Server {
       String serverName, SecretManager<? extends TokenIdentifier> secretManager)
     throws IOException {
     this(bindAddress, port, rpcRequestClass, handlerCount, numReaders, 
-        queueSizePerHandler, conf, serverName, secretManager, null);
+        queueSizePerHandler, conf, serverName, secretManager, null, false);
   }
 
   /**
@@ -3338,7 +3389,7 @@ public abstract class Server {
       Class<? extends Writable> rpcRequestClass, int handlerCount,
       int numReaders, int queueSizePerHandler, Configuration conf,
       String serverName, SecretManager<? extends TokenIdentifier> secretManager,
-      String portRangeConfig)
+      String portRangeConfig, boolean areDeepHandlersEnabled)
     throws IOException {
     this.bindAddress = bindAddress;
     this.conf = conf;
@@ -3346,6 +3397,7 @@ public abstract class Server {
     this.port = port;
     this.rpcRequestClass = rpcRequestClass; 
     this.handlerCount = handlerCount;
+    this.areDeepHandlersEnabled = areDeepHandlersEnabled;
     this.socketSendBufferSize = 0;
     this.serverName = serverName;
     this.auxiliaryListenerMap = null;
@@ -3399,7 +3451,10 @@ public abstract class Server {
     // set the server port to the default listener port.
     this.port = listener.getAddress().getPort();
     connectionManager = new ConnectionManager();
-    this.handlerProcessedCalls = new AtomicLongArray(handlerCount);
+    int deepHandlerCount = conf.getInt(CommonConfigurationKeys.DFS_ROUTER_DEEP_HANDLER_COUNT_KEY,
+        CommonConfigurationKeys.DFS_ROUTER_DEEP_HANDLER_COUNT_DEFAULT);
+    this.handlerProcessedCalls =
+        new AtomicLongArray(handlerCount + deepHandlerCount);
     this.rpcMetrics = RpcMetrics.create(this, conf);
     this.rpcDetailedMetrics = RpcDetailedMetrics.create(this.port);
     this.tcpNoDelay = conf.getBoolean(
@@ -3702,11 +3757,15 @@ public abstract class Server {
       }
     }
 
-    handlers = new Handler[handlerCount];
-    
-    for (int i = 0; i < handlerCount; i++) {
-      handlers[i] = new Handler(i);
-      handlers[i].start();
+    if (areDeepHandlersEnabled) {
+      deepHandlerManager =
+          new DeepHandlerManager(this, callQueue, alignmentContext, port, conf, handlerCount);
+    } else {
+      handlers = new Handler[handlerCount];
+      for (int i = 0; i < handlerCount; i++) {
+        handlers[i] = new Handler(i);
+        handlers[i].start();
+      }
     }
     if (monitorCpuUsage) {
       long[] readerIds = new long[readThreads];
@@ -3735,6 +3794,9 @@ public abstract class Server {
           handlers[i].interrupt();
         }
       }
+    }
+    if (deepHandlerManager != null) {
+      deepHandlerManager.shutdown();
     }
     listener.interrupt();
     listener.doStop();

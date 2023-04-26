@@ -38,15 +38,17 @@ public class ElasticPermitManager implements AbstractPermitManager {
   private final Semaphore maximumELPermitsCanUse;
   /** Total elastic permits **/
   private final Semaphore totalElasticPermits;
+  private final int maxWaitingTime;
 
   ElasticPermitManager(String nsId, int dedicatedNumber,
-      int maximumELNumberCanUse, Semaphore totalElasticPermits) {
+      int maximumELNumberCanUse, Semaphore totalElasticPermits, int maxWaitingTime) {
     this.nsId = nsId;
     this.dedicatedNumber = dedicatedNumber;
     this.dedicatedPermits = new Semaphore(dedicatedNumber);
     this.maximumELNumberCanUse = maximumELNumberCanUse;
     this.maximumELPermitsCanUse = new Semaphore(maximumELNumberCanUse);
     this.totalElasticPermits = totalElasticPermits;
+    this.maxWaitingTime = maxWaitingTime;
     LOG.info("New NSPermitManager " + this);
   }
 
@@ -56,6 +58,7 @@ public class ElasticPermitManager implements AbstractPermitManager {
         + ", dedicatedPermitsNumber=" + dedicatedNumber
         + ", sharedPermitsNumber=" + maximumELNumberCanUse
         + ", totalSharedPermits=" + totalElasticPermits
+        + ", maxWaitingTime=" + maxWaitingTime
         + "]";
   }
 
@@ -88,8 +91,8 @@ public class ElasticPermitManager implements AbstractPermitManager {
   private boolean acquireElasticPermit() throws InterruptedException {
     boolean result = false;
     if (maximumELNumberCanUse > 0 && totalElasticPermits != null) {
-      if (this.maximumELPermitsCanUse.tryAcquire(1, TimeUnit.SECONDS)) {
-        if (this.totalElasticPermits.tryAcquire(1, TimeUnit.SECONDS)) {
+      if (this.maximumELPermitsCanUse.tryAcquire(0, TimeUnit.MILLISECONDS)) {
+        if (this.totalElasticPermits.tryAcquire(this.maxWaitingTime, TimeUnit.MILLISECONDS)) {
           result = true;
         } else {
           this.maximumELPermitsCanUse.release();

@@ -18,6 +18,8 @@
 package org.apache.hadoop.hdfs.server.federation.router;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHORIZATION;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_DEEP_HANDLER_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_DEEP_HANDLER_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_QUEUE_SIZE_DEFAULT;
@@ -258,6 +260,10 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
     int handlerQueueSize = this.conf.getInt(DFS_ROUTER_HANDLER_QUEUE_SIZE_KEY,
         DFS_ROUTER_HANDLER_QUEUE_SIZE_DEFAULT);
 
+    boolean deepHandlersEnabled = this.conf.getBoolean(
+        DFS_ROUTER_DEEP_HANDLER_ENABLED_KEY,
+        DFS_ROUTER_DEEP_HANDLER_ENABLED_DEFAULT);
+
     // Override Hadoop Common IPC setting
     int readerQueueSize = this.conf.getInt(DFS_ROUTER_READER_QUEUE_SIZE_KEY,
         DFS_ROUTER_READER_QUEUE_SIZE_DEFAULT);
@@ -311,6 +317,7 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
         .setnumReaders(readerCount)
         .setQueueSizePerHandler(handlerQueueSize)
         .setVerbose(false)
+        .setDeepHandlersEnabled(deepHandlersEnabled)
         .setSecretManager(this.securityManager.getSecretManager())
         .build();
 
@@ -1866,5 +1873,9 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
 
   public String refreshFairnessPolicyController() {
     return rpcClient.refreshFairnessPolicyController(new Configuration());
+  }
+
+  public RouterClientProtocol getClientProto() {
+    return this.clientProto;
   }
 }

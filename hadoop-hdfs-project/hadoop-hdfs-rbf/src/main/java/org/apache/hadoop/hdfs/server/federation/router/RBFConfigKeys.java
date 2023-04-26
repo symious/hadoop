@@ -361,6 +361,14 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
       FEDERATION_ROUTER_FAIRNESS_PREFIX + "elastic.permits.percent.default";
   public static final int DFS_ROUTER_ELASTIC_PERMITS_PERCENT_DEFAULT = 20;
 
+  public static final String DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_KEY =
+      FEDERATION_ROUTER_FAIRNESS_PREFIX + "wait.time.for.acquiring.permit";
+  public static final int  DFS_ROUTER_WAIT_TIME_FOR_ACQUIRING_PERMIT_DEFAULT = 1000;
+
+  public static final String DFS_ROUTER_DEEP_HANDLER_ENABLED_KEY =
+      FEDERATION_ROUTER_PREFIX + "deep.handler.enabled";
+  public static final boolean DFS_ROUTER_DEEP_HANDLER_ENABLED_DEFAULT = false;
+
   // HDFS Router-based federation quota
   public static final String DFS_ROUTER_QUOTA_ENABLE =
       FEDERATION_ROUTER_PREFIX + "quota.enable";

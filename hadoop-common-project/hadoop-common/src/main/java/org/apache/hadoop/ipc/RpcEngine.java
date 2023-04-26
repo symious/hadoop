@@ -76,6 +76,7 @@ public interface RpcEngine {
    *        the range of ports used when port is 0 (an ephemeral port)
    * @param alignmentContext provides server state info on client responses
    * @param rpcPasswordAuthenticate If we use password to authenticate the connection.
+   * @param deepHandlersEnabled true to enable a second layer of RPC handlers
    * @return The Server instance
    * @throws IOException on any error
    */
@@ -86,7 +87,8 @@ public interface RpcEngine {
                        SecretManager<? extends TokenIdentifier> secretManager,
                        String portRangeConfig,
                        AlignmentContext alignmentContext,
-                       boolean rpcPasswordAuthenticate) throws IOException;
+                       boolean rpcPasswordAuthenticate,
+                       boolean deepHandlersEnabled) throws IOException;
 
 
   /**

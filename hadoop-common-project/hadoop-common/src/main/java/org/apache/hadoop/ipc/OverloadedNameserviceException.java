@@ -15,20 +15,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.hadoop.ipc;
 
-import org.apache.hadoop.thirdparty.protobuf.Message;
+public class OverloadedNameserviceException extends StandbyException {
+  private static final long serialVersionUID = 1L;
 
-/**
- *  This engine uses Protobuf 2.5.0. Recommended to upgrade to Protobuf 3.x
- *  from hadoop-thirdparty and use ProtobufRpcEngineCallback2.
- */
-@Deprecated
-public interface ProtobufRpcEngineCallback {
+  private final String routerId;
+  private final String nameservice;
 
-  void setResponse(Message message);
+  public OverloadedNameserviceException(String msg, String routerId, String nameservice) {
+    super(msg);
+    this.routerId = routerId;
+    this.nameservice = nameservice;
+  }
 
-  void error(Throwable t);
+  public String getRouterId() {
+    return routerId;
+  }
 
+  public String getNameservice() {
+    return nameservice;
+  }
 }
