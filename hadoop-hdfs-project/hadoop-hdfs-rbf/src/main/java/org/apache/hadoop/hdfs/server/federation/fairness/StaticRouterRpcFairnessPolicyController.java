@@ -19,16 +19,15 @@
 package org.apache.hadoop.hdfs.server.federation.fairness;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hdfs.server.federation.router.FederationUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
 
 import static org.apache.hadoop.hdfs.server.federation.fairness.RouterRpcFairnessConstants.CONCURRENT_NS;
-import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_DEFAULT;
-import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX;
@@ -44,19 +43,12 @@ public class StaticRouterRpcFairnessPolicyController extends
   private static final Logger LOG =
       LoggerFactory.getLogger(StaticRouterRpcFairnessPolicyController.class);
 
-  public static final String ERROR_MSG = "Configured handlers "
-      + DFS_ROUTER_HANDLER_COUNT_KEY + '='
-      + " %d is less than the minimum required handlers %d";
-  public static final String ERROR_NS_MSG =
-      "Configured handlers %s=%d is less than the minimum required handlers %d";
-
   public StaticRouterRpcFairnessPolicyController(Configuration conf) {
+    super();
     init(conf);
   }
 
-  public void init(Configuration conf)
-      throws IllegalArgumentException {
-    super.init(conf);
+  public void init(Configuration conf) throws IllegalArgumentException {
     // Total handlers configured to process all incoming Rpc.
     int handlerCount = conf.getInt(
         DFS_ROUTER_HANDLER_COUNT_KEY,
@@ -65,24 +57,25 @@ public class StaticRouterRpcFairnessPolicyController extends
     LOG.info("Handlers available for fairness assignment {} ", handlerCount);
 
     // Get all name services configured
-    Set<String> allConfiguredNS = FederationUtil.getAllConfiguredNS(conf);
+    Set<String> allConfiguredNS = getAllNameServices(null, conf);
+    // Insert the concurrent nameservice into the set to process together
+    allConfiguredNS.add(CONCURRENT_NS);
+
+    validateHandlersCount(conf, handlerCount, allConfiguredNS);
+    Map<String, AbstractPermitManager> newPermits = new HashMap<>();
 
     // Set to hold name services that are not
     // configured with dedicated handlers.
     Set<String> unassignedNS = new HashSet<>();
 
-    // Insert the concurrent nameservice into the set to process together
-    allConfiguredNS.add(CONCURRENT_NS);
-    validateHandlersCount(conf, handlerCount, allConfiguredNS);
     for (String nsId : allConfiguredNS) {
       int dedicatedHandlers =
           conf.getInt(DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX + nsId, 0);
       LOG.info("Dedicated handlers {} for ns {} ", dedicatedHandlers, nsId);
       if (dedicatedHandlers > 0) {
         handlerCount -= dedicatedHandlers;
-        insertNameServiceWithPermits(nsId, dedicatedHandlers);
+        newPermits.put(nsId, new StaticPermitManager(nsId, dedicatedHandlers));
         logAssignment(nsId, dedicatedHandlers);
-        getPermitSizes().put(nsId, dedicatedHandlers);
       } else {
         unassignedNS.add(nsId);
       }
@@ -96,53 +89,27 @@ public class StaticRouterRpcFairnessPolicyController extends
       LOG.info("Handlers available per ns {}", handlersPerNS);
       for (String nsId : unassignedNS) {
         // Each NS should have at least one handler assigned.
-        insertNameServiceWithPermits(nsId, handlersPerNS);
+        newPermits.put(nsId, new StaticPermitManager(nsId, handlersPerNS));
         logAssignment(nsId, handlersPerNS);
-        getPermitSizes().put(nsId, handlersPerNS);
       }
     }
 
     // Assign remaining handlers if any to fan out calls.
     int leftOverHandlers = unassignedNS.isEmpty() ? handlerCount :
         handlerCount % unassignedNS.size();
-    int existingPermits = getAvailablePermits(CONCURRENT_NS);
+    int existingPermits = newPermits.get(CONCURRENT_NS).availablePermits();
     if (leftOverHandlers > 0) {
       LOG.info("Assigned extra {} handlers to commons pool", leftOverHandlers);
-      insertNameServiceWithPermits(CONCURRENT_NS, existingPermits + leftOverHandlers);
-      getPermitSizes().put(CONCURRENT_NS, existingPermits + leftOverHandlers);
+      newPermits.put(CONCURRENT_NS, new StaticPermitManager(
+          CONCURRENT_NS, existingPermits + leftOverHandlers));
     }
-    LOG.info("Final permit allocation for concurrent ns: {}", getAvailablePermits(CONCURRENT_NS));
+    LOG.info("Final permit allocation for concurrent ns: {}",
+        newPermits.get(CONCURRENT_NS).availablePermits());
+
+    initPermits(newPermits);
   }
 
   private static void logAssignment(String nsId, int count) {
     LOG.info("Assigned {} handlers to nsId {} ", count, nsId);
-  }
-
-  private void validateHandlersCount(Configuration conf,
-      int handlerCount, Set<String> allConfiguredNS) {
-    int totalDedicatedHandlers = 0;
-    int minimumHandlerPerNs = conf.getInt(DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_KEY,
-        DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_DEFAULT);
-    for (String nsId : allConfiguredNS) {
-      int dedicatedHandlers = conf.getInt(DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX + nsId, 0);
-      if (dedicatedHandlers > 0) {
-        if (dedicatedHandlers < minimumHandlerPerNs) {
-          String msg = String.format(ERROR_NS_MSG, DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX + nsId,
-              dedicatedHandlers, minimumHandlerPerNs);
-          LOG.error(msg);
-          throw new IllegalArgumentException(msg);
-        }
-        // Total handlers should not be less than sum of dedicated handlers.
-        totalDedicatedHandlers += dedicatedHandlers;
-      } else {
-        // Each NS has to have a minimum number of handlers assigned.
-        totalDedicatedHandlers += minimumHandlerPerNs;
-      }
-    }
-    if (totalDedicatedHandlers > handlerCount) {
-      String msg = String.format(ERROR_MSG, handlerCount, totalDedicatedHandlers);
-      LOG.error(msg);
-      throw new IllegalArgumentException(msg);
-    }
   }
 }

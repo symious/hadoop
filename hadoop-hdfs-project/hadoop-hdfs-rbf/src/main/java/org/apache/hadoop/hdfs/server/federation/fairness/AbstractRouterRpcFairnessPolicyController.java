@@ -18,14 +18,16 @@
 
 package org.apache.hadoop.hdfs.server.federation.fairness;
 
+import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-
+import java.util.Set;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hdfs.server.federation.utils.AdjustableSemaphore;
+import org.apache.hadoop.hdfs.server.federation.resolver.ActiveNamenodeResolver;
+import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamespaceInfo;
+import org.apache.hadoop.hdfs.server.federation.router.FederationUtil;
+import org.apache.hadoop.hdfs.server.federation.router.RouterRpcClient;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 import org.slf4j.Logger;
@@ -38,8 +40,10 @@ import javax.management.openmbean.OpenDataException;
 import javax.management.openmbean.OpenType;
 import javax.management.openmbean.SimpleType;
 
-import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FAIRNESS_ACQUIRE_TIMEOUT;
-import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FAIRNESS_ACQUIRE_TIMEOUT_DEFAULT;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_DEFAULT;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_KEY;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_HANDLER_COUNT_KEY;
 
 /**
  * Base fairness policy that implements @RouterRpcFairnessPolicyController.
@@ -51,56 +55,60 @@ public class AbstractRouterRpcFairnessPolicyController
   public static final Logger LOG =
       LoggerFactory.getLogger(AbstractRouterRpcFairnessPolicyController.class);
 
-  /** Hash table to hold semaphore for each configured name service. */
-  private Map<String, AdjustableSemaphore> permits;
-  private final Map<String, Integer> permitSizes = new HashMap<>();
+  public static final String ERROR_MSG = "Configured handlers "
+      + DFS_ROUTER_HANDLER_COUNT_KEY + '='
+      + " %d is less than the minimum required handlers %d";
+  public static final String ERROR_NS_MSG =
+      "Configured handlers %s=%d is less than the minimum required handlers %d";
 
-  protected long acquireTimeoutMs = DFS_ROUTER_FAIRNESS_ACQUIRE_TIMEOUT_DEFAULT;
+  /** Hash table to hold AbstractNSPermitManager for each name service. */
+  private Map<String, AbstractPermitManager> permits = new HashMap<>();
 
-  public void init(Configuration conf) {
-    this.permits = new HashMap<>();
-    long timeoutMs = conf.getTimeDuration(DFS_ROUTER_FAIRNESS_ACQUIRE_TIMEOUT,
-        DFS_ROUTER_FAIRNESS_ACQUIRE_TIMEOUT_DEFAULT, TimeUnit.MILLISECONDS);
-    if (timeoutMs >= 0) {
-      acquireTimeoutMs = timeoutMs;
+  AbstractRouterRpcFairnessPolicyController() {
+  }
+
+  /**
+   * Init the permits.
+   */
+  public void initPermits(Map<String, AbstractPermitManager> newPermits) {
+    this.permits = newPermits;
+  }
+
+  @Override
+  public Permit acquirePermit(String nsId) {
+    LOG.debug("Taking lock for nameservice {}", nsId);
+    AbstractPermitManager permitManager = permits.get(nsId);
+    if (permitManager != null) {
+      return permitManager.acquirePermit();
     } else {
-      LOG.warn("Invalid value {} configured for {} should be greater than or equal to 0. " +
-              "Using default value of : {}ms instead.", timeoutMs,
-          DFS_ROUTER_FAIRNESS_ACQUIRE_TIMEOUT, DFS_ROUTER_FAIRNESS_ACQUIRE_TIMEOUT_DEFAULT);
+      // TODO Add one metric to monitor this abnormal case.
+      LOG.warn("Can't find NSPermit for {}.", nsId, new Throwable());
+      return Permit.NO_PERMIT;
     }
   }
 
   @Override
-  public boolean acquirePermit(String nsId) {
-    try {
-      LOG.debug("Taking lock for nameservice {}", nsId);
-      return this.permits.get(nsId).tryAcquire(acquireTimeoutMs, TimeUnit.MILLISECONDS);
-    } catch (InterruptedException e) {
-      LOG.debug("Cannot get a permit for nameservice {}", nsId);
+  public void releasePermit(String nsId, Permit permitInstance) {
+    if (permitInstance == null || permitInstance.isPermitNotRequired()) {
+      return;
     }
-    return false;
+    AbstractPermitManager permitManager = this.permits.get(nsId);
+    if (permitManager != null) {
+      permitManager.releasePermit(permitInstance);
+    }
   }
 
-  @Override
-  public void releasePermit(String nsId) {
-    this.permits.get(nsId).release();
+  protected Map<String, AbstractPermitManager> getPermits() {
+    return this.permits;
   }
 
   @Override
   public void shutdown() {
     LOG.info("Shutting down router fairness policy controller");
     // drain all semaphores
-    for (Semaphore sema: this.permits.values()) {
+    for (AbstractPermitManager sema: this.permits.values()) {
       sema.drainPermits();
     }
-  }
-
-  protected void insertNameServiceWithPermits(String nsId, int maxPermits) {
-    this.permits.put(nsId, new AdjustableSemaphore(maxPermits));
-  }
-
-  protected int getAvailablePermits(String nsId) {
-    return this.permits.get(nsId).availablePermits();
   }
 
   @Override
@@ -116,12 +124,34 @@ public class AbstractRouterRpcFairnessPolicyController
     return json.toString();
   }
 
-  @Override
+  /**
+   * Get All NameServices from conf and membershipStore.
+   */
+  protected Set<String> getAllNameServices(
+      RouterRpcClient rpcClient, Configuration conf) {
+    Set<String> allConfiguredNS = FederationUtil.getAllConfiguredNS(conf);
+    try {
+      if (rpcClient != null) {
+        ActiveNamenodeResolver resolver = rpcClient.getNamenodeResolver();
+        if (resolver != null) {
+          Set<FederationNamespaceInfo> federationNamespaceInfos =
+              rpcClient.getNamenodeResolver().getNamespaces();
+          for (FederationNamespaceInfo nsInfo : federationNamespaceInfos) {
+            allConfiguredNS.add(nsInfo.getNameserviceId());
+          }
+        }
+      }
+    } catch (IOException ioe) {
+      LOG.warn("GetAll NameServices from ZK failed, ", ioe);
+    }
+    return allConfiguredNS;
+  }
+
   public String getPermitCapacityPerNs() {
     JSONObject json = new JSONObject();
-    for (Map.Entry<String, Integer> entry : permitSizes.entrySet()) {
+    for (Map.Entry<String, AbstractPermitManager> entry : permits.entrySet()) {
       try {
-        json.put(entry.getKey(), entry.getValue());
+        json.put(entry.getKey(), entry.getValue().getPermitCap());
       } catch (JSONException e) {
         LOG.warn("Cannot put {} into JSONObject", entry.getKey(), e);
       }
@@ -129,19 +159,18 @@ public class AbstractRouterRpcFairnessPolicyController
     return json.toString();
   }
 
-  @Override
   public CompositeData getPermitCapacityPerNsAsJson() {
-    if (permitSizes.isEmpty()) {
+    if (permits.isEmpty()) {
       return null;
     }
 
     try {
-      String[] fields = permitSizes.keySet().toArray(new String[0]);
-      OpenType[] types = Collections.nCopies(permitSizes.size(), SimpleType.INTEGER)
-          .toArray(new OpenType[0]);
-      Integer[] values = new Integer[permitSizes.size()];
-      for (int i = 0; i < permitSizes.size(); i++) {
-        values[i] = permitSizes.get(fields[i]);
+      int size = permits.size();
+      String[] fields = permits.keySet().toArray(new String[0]);
+      OpenType[] types = Collections.nCopies(size, SimpleType.INTEGER).toArray(new OpenType[0]);
+      Integer[] values = new Integer[size];
+      for (int i = 0; i < size; i++) {
+        values[i] = permits.get(fields[i]).getPermitCap();
       }
 
       CompositeType type = new CompositeType(this.getClass().getName(),
@@ -153,11 +182,40 @@ public class AbstractRouterRpcFairnessPolicyController
     }
   }
 
-  protected Map<String, AdjustableSemaphore> getPermits() {
-    return permits;
+  protected int getDedicatedHandlers(Configuration conf, String nsId) {
+    int minimumHandlerPerNs = conf.getInt(DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_KEY,
+        DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_DEFAULT);
+    int dedicatedHandlers = conf.getInt(
+        DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX + nsId, 0);
+    if (dedicatedHandlers > 0 && dedicatedHandlers < minimumHandlerPerNs) {
+      String msg = String.format(ERROR_NS_MSG, DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX + nsId,
+          dedicatedHandlers, minimumHandlerPerNs);
+      LOG.error(msg);
+      throw new IllegalArgumentException(msg);
+    } else if (dedicatedHandlers <= 0) {
+      dedicatedHandlers = minimumHandlerPerNs;
+    }
+    return dedicatedHandlers;
   }
 
-  protected Map<String, Integer> getPermitSizes() {
-    return permitSizes;
+  /**
+   * Validate all configured dedicated handlers for the nameservices.
+   * @return sum of dedicated handlers of all nameservices
+   * @throws IllegalArgumentException
+   *         if total dedicated handlers more than handler count.
+   */
+  protected int validateHandlersCount(Configuration conf,
+      int handlerCount, Set<String> allConfiguredNS) {
+    int totalDedicatedHandlers = 0;
+    for (String nsId : allConfiguredNS) {
+      totalDedicatedHandlers += getDedicatedHandlers(conf, nsId);
+    }
+    if (totalDedicatedHandlers > handlerCount) {
+      String msg = String.format(ERROR_MSG, handlerCount,
+          totalDedicatedHandlers);
+      LOG.error(msg);
+      throw new IllegalArgumentException(msg);
+    }
+    return totalDedicatedHandlers;
   }
 }

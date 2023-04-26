@@ -264,13 +264,19 @@ public final class FederationUtil {
    * @param conf Configuration that defines the fairness controller class.
    * @return Fairness policy controller.
    */
-  public static RouterRpcFairnessPolicyController newFairnessPolicyController(
-      Configuration conf) {
+  public static RouterRpcFairnessPolicyController newFairnessPolicyController(Configuration conf) {
     Class<? extends RouterRpcFairnessPolicyController> clazz = conf.getClass(
         RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
         RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS_DEFAULT,
         RouterRpcFairnessPolicyController.class);
-    return newInstance(conf, null, null, clazz);
+    // Constructor with configuration but no context
+    try {
+      Constructor<?> constructor = clazz.getConstructor(Configuration.class);
+      return (RouterRpcFairnessPolicyController) constructor.newInstance(conf);
+    } catch (ReflectiveOperationException e) {
+      LOG.error("Could not instantiate: {}", clazz.getSimpleName(), e);
+      return null;
+    }
   }
 
   /**

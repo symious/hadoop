@@ -45,9 +45,6 @@ public class TestDynamicRouterRpcFairnessPolicyController {
       GenericTestUtils.LogCapturer.captureLogs(
           DynamicRouterRpcFairnessPolicyController.LOG);
 
-  private static String nameServices =
-      "ns1.nn1, ns1.nn2, ns2.nn1, ns2.nn2, ns3.nn1";
-
   @Test
   public void testDynamicControllerSimple()
       throws InterruptedException, TimeoutException {
@@ -72,16 +69,17 @@ public class TestDynamicRouterRpcFairnessPolicyController {
       controller = getFairnessPolicyController(20, 2);
     }
 
+    Permit dedicatedPermit = Permit.DEDICATED;
     String[] nss = new String[] { "ns1", "ns2", "ns3", CONCURRENT_NS };
     synchronized (controller.getResizerService()) {
       // Initial permit counts should be 5:5:5
       verifyRemainingPermitCounts(new int[] {5, 5, 5, 5}, nss, controller, false);
       // Release all permits
       for (int i = 0; i < 5; i++) {
-        controller.releasePermit("ns1");
-        controller.releasePermit("ns2");
-        controller.releasePermit("ns3");
-        controller.releasePermit(CONCURRENT_NS);
+        controller.releasePermit("ns1", dedicatedPermit);
+        controller.releasePermit("ns2", dedicatedPermit);
+        controller.releasePermit("ns3", dedicatedPermit);
+        controller.releasePermit(CONCURRENT_NS, dedicatedPermit);
       }
     }
 
@@ -120,6 +118,7 @@ public class TestDynamicRouterRpcFairnessPolicyController {
       controller = getFairnessPolicyController(40, 2);
     }
 
+    Permit dedicatedPermit = Permit.DEDICATED;
     String[] nss = new String[] { "ns1", "ns2", "ns3", CONCURRENT_NS };
     verifyRemainingPermitCounts(new int[] { 10, 10, 10, 10 }, nss, controller, true);
 
@@ -147,13 +146,13 @@ public class TestDynamicRouterRpcFairnessPolicyController {
     synchronized (controller.getResizerService()) {
       verifyRemainingPermitCounts(new int[] {3, 3, 3, 0}, nss, controller, false);
       // Need to release at least 8 permits for concurrent before it has any free permits
-      Assert.assertFalse(controller.acquirePermit(CONCURRENT_NS));
+      Assert.assertFalse(controller.acquirePermit(CONCURRENT_NS).isHoldPermit());
       for (int i = 0; i < 7; i++) {
-        controller.releasePermit(CONCURRENT_NS);
+        controller.releasePermit(CONCURRENT_NS, dedicatedPermit);
       }
-      Assert.assertFalse(controller.acquirePermit(CONCURRENT_NS));
-      controller.releasePermit(CONCURRENT_NS);
-      Assert.assertTrue(controller.acquirePermit(CONCURRENT_NS));
+      Assert.assertFalse(controller.acquirePermit(CONCURRENT_NS).isHoldPermit());
+      controller.releasePermit(CONCURRENT_NS, dedicatedPermit);
+      Assert.assertTrue(controller.acquirePermit(CONCURRENT_NS).isHoldPermit());
     }
   }
 
@@ -162,7 +161,7 @@ public class TestDynamicRouterRpcFairnessPolicyController {
     GenericTestUtils.waitFor(new Supplier<Boolean>() {
       @Override
       public Boolean get() {
-        return controllerLog.getOutput().contains("Resized");
+        return controllerLog.getOutput().contains("Successfully resized handlers");
       }
     }, 100, 5000);
     controllerLog.clearOutput();
@@ -191,9 +190,9 @@ public class TestDynamicRouterRpcFairnessPolicyController {
   private void verifyRemainingPermitCount(int remainingPermitCount,
                                           String nameservice, DynamicRouterRpcFairnessPolicyController controller) {
     for (int i = 0; i < remainingPermitCount; i++) {
-      Assert.assertTrue(controller.acquirePermit(nameservice));
+      Assert.assertTrue(controller.acquirePermit(nameservice).isHoldPermit());
     }
-    Assert.assertFalse(controller.acquirePermit(nameservice));
+    Assert.assertFalse(controller.acquirePermit(nameservice).isHoldPermit());
   }
 
   private void injectDummyMetrics(Map<String, AtomicLong> metrics, String ns,
@@ -207,21 +206,22 @@ public class TestDynamicRouterRpcFairnessPolicyController {
 
   private DynamicRouterRpcFairnessPolicyController getFairnessPolicyController(
       int handlers, long refreshInterval) {
-    return new DynamicRouterRpcFairnessPolicyController(createConf(handlers, 3),
+    return new DynamicRouterRpcFairnessPolicyController(createConf(handlers),
         refreshInterval);
   }
 
   private DynamicRouterRpcFairnessPolicyController getFairnessPolicyController(
       int handlers) {
-    return new DynamicRouterRpcFairnessPolicyController(createConf(handlers, 3),
+    return new DynamicRouterRpcFairnessPolicyController(createConf(handlers),
         Long.MAX_VALUE);
   }
 
-  private Configuration createConf(int handlers, int minHandlersPerNs) {
+  private Configuration createConf(int handlers) {
     Configuration conf = new HdfsConfiguration();
     conf.setInt(DFS_ROUTER_HANDLER_COUNT_KEY, handlers);
+    String nameServices = "ns1.nn1, ns1.nn2, ns2.nn1, ns2.nn2, ns3.nn1";
     conf.set(DFS_ROUTER_MONITOR_NAMENODE, nameServices);
-    conf.setInt(DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_KEY, minHandlersPerNs);
+    conf.setInt(DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_KEY, 3);
     conf.setClass(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
         DynamicRouterRpcFairnessPolicyController.class,
         RouterRpcFairnessPolicyController.class);

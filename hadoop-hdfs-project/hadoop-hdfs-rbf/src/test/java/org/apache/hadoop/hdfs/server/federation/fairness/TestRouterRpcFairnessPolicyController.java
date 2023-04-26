@@ -46,22 +46,19 @@ import static org.junit.Assert.assertTrue;
  */
 public class TestRouterRpcFairnessPolicyController {
 
-  private static String nameServices =
-      "ns1.nn1, ns1.nn2, ns2.nn1, ns2.nn2";
-
   @Test
   public void testHandlerAllocationEqualAssignment() {
-    RouterRpcFairnessPolicyController routerRpcFairnessPolicyController
+    AbstractRouterRpcFairnessPolicyController routerRpcFairnessPolicyController
         = getFairnessPolicyController(30);
     verifyHandlerAllocation(routerRpcFairnessPolicyController);
   }
 
   @Test
   public void testHandlerAllocationWithLeftOverHandler() {
-    RouterRpcFairnessPolicyController routerRpcFairnessPolicyController
+    AbstractRouterRpcFairnessPolicyController routerRpcFairnessPolicyController
         = getFairnessPolicyController(31);
     // One extra handler should be allocated to commons.
-    assertTrue(routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS));
+    assertTrue(routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS).isHoldPermit());
     verifyHandlerAllocation(routerRpcFairnessPolicyController);
   }
 
@@ -74,20 +71,21 @@ public class TestRouterRpcFairnessPolicyController {
 
     // ns1 should have 30 permits allocated
     for (int i = 0; i < 30; i++) {
-      assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns1"));
+      assert routerRpcFairnessPolicyController != null;
+      assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns1").isHoldPermit());
     }
 
     // ns2 should have 5 permits.
     // concurrent should have 5 permits.
     for (int i = 0; i < 5; i++) {
-      assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns2"));
+      assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns2").isHoldPermit());
       assertTrue(
-          routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS));
+          routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS).isHoldPermit());
     }
 
-    assertFalse(routerRpcFairnessPolicyController.acquirePermit("ns1"));
-    assertFalse(routerRpcFairnessPolicyController.acquirePermit("ns2"));
-    assertFalse(routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS));
+    assertFalse(routerRpcFairnessPolicyController.acquirePermit("ns1").isHoldPermit());
+    assertFalse(routerRpcFairnessPolicyController.acquirePermit("ns2").isHoldPermit());
+    assertFalse(routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS).isHoldPermit());
   }
 
   @Test
@@ -100,10 +98,11 @@ public class TestRouterRpcFairnessPolicyController {
 
     // ns1 should have 30 permits allocated
     for (int i = 0; i < 30; i++) {
-      assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns1"));
+      assert routerRpcFairnessPolicyController != null;
+      assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns1").isHoldPermit());
     }
     long acquireBeginTimeMs = Time.monotonicNow();
-    assertFalse(routerRpcFairnessPolicyController.acquirePermit("ns1"));
+    assertFalse(routerRpcFairnessPolicyController.acquirePermit("ns1").isHoldPermit());
     long acquireTimeMs = Time.monotonicNow() - acquireBeginTimeMs;
 
     // There are some other operations, so acquireTimeMs >= 100ms.
@@ -134,7 +133,7 @@ public class TestRouterRpcFairnessPolicyController {
     Configuration conf = createConf(9);
     conf.setInt(DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_KEY, 3);
     conf.setInt(DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX + CONCURRENT_NS, 1);
-    verifyInstantiationError(conf, CONCURRENT_NS,  1, 3);
+    verifyInstantiationError(conf);
   }
 
   @Test
@@ -150,7 +149,7 @@ public class TestRouterRpcFairnessPolicyController {
 
   @Test
   public void testGetPermitCapacityPerNs() {
-    RouterRpcFairnessPolicyController routerRpcFairnessPolicyController
+    AbstractRouterRpcFairnessPolicyController routerRpcFairnessPolicyController
         = getFairnessPolicyController(30);
     assertEquals("{\"concurrent\":10,\"ns2\":10,\"ns1\":10}",
         routerRpcFairnessPolicyController.getPermitCapacityPerNs());
@@ -162,7 +161,7 @@ public class TestRouterRpcFairnessPolicyController {
 
   @Test
   public void testGetPermitCapacityPerNsAsJson() {
-    RouterRpcFairnessPolicyController routerRpcFairnessPolicyController
+    AbstractRouterRpcFairnessPolicyController routerRpcFairnessPolicyController
         = getFairnessPolicyController(30);
     CompositeData report = routerRpcFairnessPolicyController.getPermitCapacityPerNsAsJson();
     assertEquals(10, report.get("concurrent"));
@@ -183,6 +182,7 @@ public class TestRouterRpcFairnessPolicyController {
     Configuration conf = new Configuration();
     RouterRpcFairnessPolicyController routerRpcFairnessPolicyController =
         FederationUtil.newFairnessPolicyController(conf);
+    assert routerRpcFairnessPolicyController != null;
     assertEquals("N/A",
         routerRpcFairnessPolicyController.getAvailableHandlerOnPerNs());
   }
@@ -204,79 +204,83 @@ public class TestRouterRpcFairnessPolicyController {
         FederationUtil.newFairnessPolicyController(conf);
 
     // ns1, ns2 should have 1 permit each
-    assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns1"));
-    assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns2"));
-    assertFalse(routerRpcFairnessPolicyController.acquirePermit("ns1"));
-    assertFalse(routerRpcFairnessPolicyController.acquirePermit("ns2"));
+    assert routerRpcFairnessPolicyController != null;
+    assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns1").isHoldPermit());
+    assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns2").isHoldPermit());
+    assertFalse(routerRpcFairnessPolicyController.acquirePermit("ns1").isHoldPermit());
+    assertFalse(routerRpcFairnessPolicyController.acquirePermit("ns2").isHoldPermit());
 
     // concurrent should have 3 permits
     for (int i=0; i<3; i++) {
       assertTrue(
-          routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS));
+          routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS).isHoldPermit());
     }
-    assertFalse(routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS));
+    assertFalse(routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS).isHoldPermit());
   }
 
   private void verifyInstantiationError(Configuration conf,
       int handlerCount, int totalDedicatedHandlers) {
     GenericTestUtils.LogCapturer logs = GenericTestUtils.LogCapturer
         .captureLogs(LoggerFactory.getLogger(
-            StaticRouterRpcFairnessPolicyController.class));
+            AbstractRouterRpcFairnessPolicyController.class));
     try {
       FederationUtil.newFairnessPolicyController(conf);
     } catch (IllegalArgumentException e) {
       // Ignore the exception as it is expected here.
     }
     String errorMsg = String.format(
-        StaticRouterRpcFairnessPolicyController.ERROR_MSG, handlerCount,
+        AbstractRouterRpcFairnessPolicyController.ERROR_MSG, handlerCount,
         totalDedicatedHandlers);
     assertTrue("Should contain error message: " + errorMsg,
         logs.getOutput().contains(errorMsg));
   }
 
-  private void verifyInstantiationError(Configuration conf,
-      String ns, int handlerCount, int minimumHandler) {
+  private void verifyInstantiationError(Configuration conf) {
     GenericTestUtils.LogCapturer logs = GenericTestUtils.LogCapturer.captureLogs(
-        LoggerFactory.getLogger(StaticRouterRpcFairnessPolicyController.class));
+        LoggerFactory.getLogger(AbstractRouterRpcFairnessPolicyController.class));
     try {
       FederationUtil.newFairnessPolicyController(conf);
     } catch (IllegalArgumentException e) {
       // Ignore the exception as it is expected here.
     }
-    String errorMsg = String.format(StaticRouterRpcFairnessPolicyController.ERROR_NS_MSG,
-        DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX + ns, handlerCount, minimumHandler);
+    String errorMsg = String.format(AbstractRouterRpcFairnessPolicyController.ERROR_NS_MSG,
+        DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX +
+            RouterRpcFairnessConstants.CONCURRENT_NS, 1, 3);
     assertTrue("Should contain error message: " + errorMsg, logs.getOutput().contains(errorMsg));
   }
 
-  private RouterRpcFairnessPolicyController getFairnessPolicyController(
+  private AbstractRouterRpcFairnessPolicyController getFairnessPolicyController(
       int handlers) {
-    return FederationUtil.newFairnessPolicyController(createConf(handlers));
+    return (AbstractRouterRpcFairnessPolicyController) FederationUtil.newFairnessPolicyController(
+        createConf(handlers));
   }
 
   private void verifyHandlerAllocation(
-      RouterRpcFairnessPolicyController routerRpcFairnessPolicyController) {
+      AbstractRouterRpcFairnessPolicyController routerRpcFairnessPolicyController) {
+    Permit dedicatedPermitInstance = Permit.DEDICATED;
     for (int i=0; i<10; i++) {
-      assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns1"));
-      assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns2"));
+      assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns1").isHoldPermit());
+      assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns2").isHoldPermit());
       assertTrue(
-          routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS));
+          routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS).isHoldPermit());
     }
-    assertFalse(routerRpcFairnessPolicyController.acquirePermit("ns1"));
-    assertFalse(routerRpcFairnessPolicyController.acquirePermit("ns2"));
-    assertFalse(routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS));
+    assertFalse(routerRpcFairnessPolicyController.acquirePermit("ns1").isHoldPermit());
+    assertFalse(routerRpcFairnessPolicyController.acquirePermit("ns2").isHoldPermit());
+    assertFalse(routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS).isHoldPermit());
 
-    routerRpcFairnessPolicyController.releasePermit("ns1");
-    routerRpcFairnessPolicyController.releasePermit("ns2");
-    routerRpcFairnessPolicyController.releasePermit(CONCURRENT_NS);
+    routerRpcFairnessPolicyController.releasePermit("ns1", dedicatedPermitInstance);
+    routerRpcFairnessPolicyController.releasePermit("ns2", dedicatedPermitInstance);
+    routerRpcFairnessPolicyController.releasePermit(CONCURRENT_NS, dedicatedPermitInstance);
 
-    assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns1"));
-    assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns2"));
-    assertTrue(routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS));
+    assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns1").isHoldPermit());
+    assertTrue(routerRpcFairnessPolicyController.acquirePermit("ns2").isHoldPermit());
+    assertTrue(routerRpcFairnessPolicyController.acquirePermit(CONCURRENT_NS).isHoldPermit());
   }
 
   private Configuration createConf(int handlers) {
     Configuration conf = new HdfsConfiguration();
     conf.setInt(DFS_ROUTER_HANDLER_COUNT_KEY, handlers);
+    String nameServices = "ns1.nn1, ns1.nn2, ns2.nn1, ns2.nn2";
     conf.set(DFS_ROUTER_MONITOR_NAMENODE, nameServices);
     conf.setClass(
         RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,

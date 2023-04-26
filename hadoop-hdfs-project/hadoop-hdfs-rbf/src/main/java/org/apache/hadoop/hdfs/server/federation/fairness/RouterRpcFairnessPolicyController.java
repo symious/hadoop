@@ -48,7 +48,7 @@ public interface RouterRpcFairnessPolicyController {
    * @param nsId NS id for which a permission to continue is requested.
    * @return true or false based on whether permit is given.
    */
-  boolean acquirePermit(String nsId);
+  Permit acquirePermit(String nsId);
 
   /**
    * Handler threads are expected to invoke this method that signals
@@ -58,7 +58,7 @@ public interface RouterRpcFairnessPolicyController {
    *
    * @param nsId Name service id for which permission release request is made.
    */
-  void releasePermit(String nsId);
+  void releasePermit(String nsId, Permit permit);
 
   /**
    * Shutdown steps to stop accepting new permission requests and clean-up.

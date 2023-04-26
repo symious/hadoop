@@ -355,6 +355,11 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
       DFS_ROUTER_DYNAMIC_FAIRNESS_CONTROLLER_REFRESH_INTERVAL_SECONDS_KEY =
       FEDERATION_ROUTER_FAIRNESS_PREFIX
           + "policy.controller.dynamic.refresh.interval.seconds";
+  public static final String DFS_ROUTER_ELASTIC_PERMITS_PERCENT_KEY_PREFIX =
+      FEDERATION_ROUTER_FAIRNESS_PREFIX + "elastic.permits.percent.";
+  public static final String DFS_ROUTER_ELASTIC_PERMITS_PERCENT_DEFAULT_KEY =
+      FEDERATION_ROUTER_FAIRNESS_PREFIX + "elastic.permits.percent.default";
+  public static final int DFS_ROUTER_ELASTIC_PERMITS_PERCENT_DEFAULT = 20;
 
   // HDFS Router-based federation quota
   public static final String DFS_ROUTER_QUOTA_ENABLE =

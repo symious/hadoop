@@ -35,12 +35,12 @@ public class NoRouterRpcFairnessPolicyController implements
   }
 
   @Override
-  public boolean acquirePermit(String nsId) {
-    return true;
+  public Permit acquirePermit(String nsId) {
+    return Permit.PERMIT_NOT_REQUIRED;
   }
 
   @Override
-  public void releasePermit(String nsId) {
+  public void releasePermit(String nsId, Permit permitInstance) {
     // Dummy, pass through.
   }
 
@@ -63,4 +63,5 @@ public class NoRouterRpcFairnessPolicyController implements
   public CompositeData getPermitCapacityPerNsAsJson() {
     return null;
   }
+
 }

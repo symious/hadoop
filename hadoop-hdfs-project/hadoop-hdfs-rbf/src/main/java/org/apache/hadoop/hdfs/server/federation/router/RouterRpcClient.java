@@ -67,6 +67,7 @@ import org.apache.hadoop.hdfs.protocol.ClientMsyncProtocol;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.SnapshotException;
+import org.apache.hadoop.hdfs.server.federation.fairness.Permit;
 import org.apache.hadoop.hdfs.server.federation.fairness.RouterRpcFairnessPolicyController;
 import org.apache.hadoop.hdfs.server.federation.resolver.ActiveNamenodeResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeContext;
@@ -948,7 +949,7 @@ public class RouterRpcClient {
       throws IOException {
     UserGroupInformation ugi = RouterRpcServer.getRemoteUser();
     RouterRpcFairnessPolicyController controller = getRouterRpcFairnessPolicyController();
-    acquirePermit(nsId, ugi, method, controller);
+    Permit permit = acquirePermit(nsId, ugi, method, controller);
     try {
       msync(nsId, ugi, method.getMethod());
       List<? extends FederationNamenodeContext> nns = getNamenodesForNameservice(
@@ -959,7 +960,7 @@ public class RouterRpcClient {
       Object[] params = method.getParams(loc);
       return invokeMethod(ugi, nns, proto, m, params);
     } finally {
-      releasePermit(nsId, ugi, method, controller);
+      releasePermit(nsId, ugi, method, controller, permit);
     }
   }
 
@@ -1121,7 +1122,7 @@ public class RouterRpcClient {
       List<? extends FederationNamenodeContext> namenodes =
           getNamenodesForNameservice(ns, observerReadEnabled && isRead(m));
       RouterRpcFairnessPolicyController controller = getRouterRpcFairnessPolicyController();
-      acquirePermit(ns, ugi, remoteMethod, controller);
+      Permit permit = acquirePermit(ns, ugi, remoteMethod, controller);
       try {
         Class<?> proto = remoteMethod.getProtocol();
         Object[] params = remoteMethod.getParams(loc);
@@ -1155,7 +1156,7 @@ public class RouterRpcClient {
             "Unexpected exception proxying API " + e.getMessage(), e);
         thrownExceptions.add(ioe);
       } finally {
-        releasePermit(ns, ugi, remoteMethod, controller);
+        releasePermit(ns, ugi, remoteMethod, controller, permit);
       }
     }
 
@@ -1486,7 +1487,7 @@ public class RouterRpcClient {
       final List<? extends FederationNamenodeContext> namenodes =
           getNamenodesForNameservice(ns, observerReadEnabled && isRead(m));
       RouterRpcFairnessPolicyController controller = getRouterRpcFairnessPolicyController();
-      acquirePermit(ns, ugi, method, controller);
+      Permit permit = acquirePermit(ns, ugi, method, controller);
       try {
         Class<?> proto = method.getProtocol();
         Object[] paramList = method.getParams(location);
@@ -1497,7 +1498,7 @@ public class RouterRpcClient {
         // Localize the exception
         throw processException(ioe, location);
       } finally {
-        releasePermit(ns, ugi, method, controller);
+        releasePermit(ns, ugi, method, controller, permit);
       }
     }
 
@@ -1547,7 +1548,7 @@ public class RouterRpcClient {
     }
 
     RouterRpcFairnessPolicyController controller = getRouterRpcFairnessPolicyController();
-    acquirePermit(CONCURRENT_NS, ugi, method, controller);
+    Permit permit = acquirePermit(CONCURRENT_NS, ugi, method, controller);
     try {
       List<Future<Object>> futures = null;
       if (timeOutMs > 0) {
@@ -1605,7 +1606,7 @@ public class RouterRpcClient {
       throw new IOException(
           "Unexpected error while invoking API " + ex.getMessage(), ex);
     } finally {
-      releasePermit(CONCURRENT_NS, ugi, method, controller);
+      releasePermit(CONCURRENT_NS, ugi, method, controller, permit);
     }
   }
 
@@ -1772,11 +1773,13 @@ public class RouterRpcClient {
    * @param m Remote method that needs to be invoked.
    * @throws IOException If permit could not be acquired for the nsId.
    */
-  private void acquirePermit(final String nsId, final UserGroupInformation ugi,
+  private Permit acquirePermit(final String nsId, final UserGroupInformation ugi,
       final RemoteMethod m, RouterRpcFairnessPolicyController controller)
       throws IOException {
+    Permit permit = Permit.PERMIT_NOT_REQUIRED;
     if (controller != null) {
-      if (!controller.acquirePermit(nsId)) {
+      permit = controller.acquirePermit(nsId);
+      if (permit.isNoPermit()) {
         // Throw StandByException,
         // Clients could fail over and try another router.
         if (rpcMonitor != null) {
@@ -1792,6 +1795,7 @@ public class RouterRpcClient {
       }
       incrAcceptedPermitForNs(nsId);
     }
+    return permit;
   }
 
   /**
@@ -1803,9 +1807,9 @@ public class RouterRpcClient {
    * @param m Remote method that needs to be invoked.
    */
   private void releasePermit(final String nsId, final UserGroupInformation ugi,
-      final RemoteMethod m, RouterRpcFairnessPolicyController controller) {
+      final RemoteMethod m, RouterRpcFairnessPolicyController controller, Permit permit) {
     if (controller != null) {
-      controller.releasePermit(nsId);
+      controller.releasePermit(nsId, permit);
       LOG.trace("Permit released for ugi: {} for method: {}", ugi, m.getMethodName());
     }
   }
@@ -1849,14 +1853,17 @@ public class RouterRpcClient {
       return getCurrentFairnessPolicyControllerClassName();
     }
 
+    RouterRpcFairnessPolicyController oldController = routerRpcFairnessPolicyController;
+
     if (newController != null) {
       router.updateConf(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
           conf.get(RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS,
               RBFConfigKeys.DFS_ROUTER_FAIRNESS_POLICY_CONTROLLER_CLASS_DEFAULT.getName()));
-      if (routerRpcFairnessPolicyController != null) {
-        routerRpcFairnessPolicyController.shutdown();
-      }
       routerRpcFairnessPolicyController = newController;
+    }
+
+    if (oldController != null) {
+      oldController.shutdown();
     }
     return getCurrentFairnessPolicyControllerClassName();
   }
