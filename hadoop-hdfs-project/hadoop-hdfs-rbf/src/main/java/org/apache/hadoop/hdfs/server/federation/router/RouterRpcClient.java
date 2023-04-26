@@ -1126,12 +1126,12 @@ public class RouterRpcClient {
     // Invoke in priority order
     for (final RemoteLocationContext loc : locations) {
       String ns = loc.getNameserviceId();
-      msync(ns, ugi, m);
-      List<? extends FederationNamenodeContext> namenodes =
-          getNamenodesForNameservice(ns, observerReadEnabled && isRead(m));
       RouterRpcFairnessPolicyController controller = getRouterRpcFairnessPolicyController();
       Permit permit = acquirePermit(ns, ugi, remoteMethod, controller);
       try {
+        msync(ns, ugi, m);
+        List<? extends FederationNamenodeContext> namenodes =
+            getNamenodesForNameservice(ns, observerReadEnabled && isRead(m));
         Class<?> proto = remoteMethod.getProtocol();
         Object[] params = remoteMethod.getParams(loc);
         Object result = invokeMethod(ugi, namenodes, proto, m, params);
@@ -1491,12 +1491,12 @@ public class RouterRpcClient {
       // Shortcut, just one call
       T location = locations.iterator().next();
       String ns = location.getNameserviceId();
-      msync(ns, ugi, m);
-      final List<? extends FederationNamenodeContext> namenodes =
-          getNamenodesForNameservice(ns, observerReadEnabled && isRead(m));
       RouterRpcFairnessPolicyController controller = getRouterRpcFairnessPolicyController();
       Permit permit = acquirePermit(ns, ugi, method, controller);
       try {
+        msync(ns, ugi, m);
+        final List<? extends FederationNamenodeContext> namenodes =
+            getNamenodesForNameservice(ns, observerReadEnabled && isRead(m));
         Class<?> proto = method.getProtocol();
         Object[] paramList = method.getParams(location);
         R result = (R) invokeMethod(ugi, namenodes, proto, m, paramList);
@@ -1510,53 +1510,60 @@ public class RouterRpcClient {
       }
     }
 
+    RouterRpcFairnessPolicyController controller = getRouterRpcFairnessPolicyController();
+    Permit permit = acquirePermit(CONCURRENT_NS, ugi, method, controller);
+    boolean success = false;
     List<T> orderedLocations = new ArrayList<>();
     List<Callable<Object>> callables = new ArrayList<>();
-    // transfer originCall & callerContext to worker threads of executor.
-    final Server.Call originCall = Server.getCurCall().get();
-    final CallerContext originContext = CallerContext.getCurrent();
-    for (final T location : locations) {
-      String nsId = location.getNameserviceId();
-      msync(nsId, ugi, m);
-      final List<? extends FederationNamenodeContext> namenodes =
-          getNamenodesForNameservice(nsId, observerReadEnabled && isRead(m));
-      final Class<?> proto = method.getProtocol();
-      final Object[] paramList = method.getParams(location);
-      if (standby) {
-        // Call the objectGetter to all NNs (including standby)
-        for (final FederationNamenodeContext nn : namenodes) {
-          String nnId = nn.getNamenodeId();
-          final List<FederationNamenodeContext> nnList =
-              Collections.singletonList(nn);
-          T nnLocation = location;
-          if (location instanceof RemoteLocation) {
-            nnLocation = (T)new RemoteLocation(nsId, nnId, location.getDest());
+    try {
+      // transfer originCall & callerContext to worker threads of executor.
+      final Server.Call originCall = Server.getCurCall().get();
+      final CallerContext originContext = CallerContext.getCurrent();
+      for (final T location : locations) {
+        String nsId = location.getNameserviceId();
+        msync(nsId, ugi, m);
+        final List<? extends FederationNamenodeContext> namenodes =
+            getNamenodesForNameservice(nsId, observerReadEnabled && isRead(m));
+        final Class<?> proto = method.getProtocol();
+        final Object[] paramList = method.getParams(location);
+        if (standby) {
+          // Call the objectGetter to all NNs (including standby)
+          for (final FederationNamenodeContext nn : namenodes) {
+            String nnId = nn.getNamenodeId();
+            final List<FederationNamenodeContext> nnList = Collections.singletonList(nn);
+            T nnLocation = location;
+            if (location instanceof RemoteLocation) {
+              nnLocation = (T)new RemoteLocation(nsId, nnId, location.getDest());
+            }
+            orderedLocations.add(nnLocation);
+            callables.add(() -> {
+              transferThreadLocalContext(originCall, originContext);
+              return invokeMethod(ugi, nnList, proto, m, paramList);
+            });
           }
-          orderedLocations.add(nnLocation);
-          callables.add(() -> {
-                transferThreadLocalContext(originCall, originContext);
-                return invokeMethod(ugi, nnList, proto, m, paramList);
-              });
+        } else {
+          // Call the objectGetter in order of nameservices in the NS list
+          orderedLocations.add(location);
+          callables.add(() ->  {
+            transferThreadLocalContext(originCall, originContext);
+            return invokeMethod(ugi, namenodes, proto, m, paramList);
+          });
         }
-      } else {
-        // Call the objectGetter in order of nameservices in the NS list
-        orderedLocations.add(location);
-        callables.add(() ->  {
-          transferThreadLocalContext(originCall, originContext);
-          return invokeMethod(ugi, namenodes, proto, m, paramList);
-        });
+      }
+
+      if (rpcMonitor != null) {
+        rpcMonitor.proxyOp();
+      }
+      if (this.router.getRouterClientMetrics() != null) {
+        this.router.getRouterClientMetrics().incInvokedConcurrent(m);
+      }
+      success = true;
+    } finally {
+      if (!success) {
+        releasePermit(CONCURRENT_NS, ugi, method, controller, permit);
       }
     }
 
-    if (rpcMonitor != null) {
-      rpcMonitor.proxyOp();
-    }
-    if (this.router.getRouterClientMetrics() != null) {
-      this.router.getRouterClientMetrics().incInvokedConcurrent(m);
-    }
-
-    RouterRpcFairnessPolicyController controller = getRouterRpcFairnessPolicyController();
-    Permit permit = acquirePermit(CONCURRENT_NS, ugi, method, controller);
     try {
       List<Future<Object>> futures = null;
       if (timeOutMs > 0) {
@@ -1614,7 +1621,9 @@ public class RouterRpcClient {
       throw new IOException(
           "Unexpected error while invoking API " + ex.getMessage(), ex);
     } finally {
-      releasePermit(CONCURRENT_NS, ugi, method, controller, permit);
+      if (success) {
+        releasePermit(CONCURRENT_NS, ugi, method, controller, permit);
+      }
     }
   }
 
