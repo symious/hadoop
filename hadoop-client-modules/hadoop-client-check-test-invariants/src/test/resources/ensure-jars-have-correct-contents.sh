@@ -58,6 +58,7 @@ allowed_expr+="|^org.apache.hadoop.application-classloader.properties$"
 allowed_expr+="|^java.policy$"
 #   * Used by javax.annotation
 allowed_expr+="|^jndi.properties$"
+allowed_expr+="|^net/"
 #   * Used by Kafka
 allowed_expr+="|^kafka/"
 #   * Used by Kafka
