@@ -41,6 +41,7 @@ import org.apache.hadoop.metrics2.lib.MutableGaugeInt;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.metrics.CustomResourceMetricValue;
@@ -93,6 +94,18 @@ public class QueueMetrics implements MetricsSource {
 
   @Metric("Aggregate # of allocated heartbeat scheduler containers")
   MutableCounterLong aggregateHeartBeatSchedulerContainersAllocated;
+
+  @Metric("Aggregate # of allocated low priority containers")
+  MutableCounterLong aggregateContainersAllocatedWithLowPriority;
+
+  @Metric("Aggregate # of allocated mid priority containers")
+  MutableCounterLong aggregateContainersAllocatedWithMidPriority;
+
+  @Metric("Aggregate # of allocated high priority containers")
+  MutableCounterLong aggregateContainersAllocatedWithHighPriority;
+
+  @Metric("Aggregate # of allocated critical priority containers")
+  MutableCounterLong aggregateContainersAllocatedWithCriticalPriority;
 
   //Metrics updated only for "default" partition
   @Metric("Allocated memory in MB") MutableGaugeLong allocatedMB;
@@ -756,6 +769,34 @@ public class QueueMetrics implements MetricsSource {
     }
   }
 
+
+  // critical>=60 40<=high<60 10<=mid<40 low<10
+  public void incrPriorityAggregations(Priority priority) {
+    int criticalPriority = conf.getInt(YarnConfiguration.RM_APPLICATION_LEVEL_CRITICAL,
+        YarnConfiguration.RM_APPLICATION_LEVEL_CRITICAL_DEFAULT);
+    int highPriority = conf.getInt(YarnConfiguration.RM_APPLICATION_LEVEL_HIGH,
+        YarnConfiguration.RM_APPLICATION_LEVEL_HIGH_DEFAULT);
+    int midPriority = conf.getInt(YarnConfiguration.RM_APPLICATION_LEVEL_MEDIUM,
+        YarnConfiguration.RM_APPLICATION_LEVEL_MEDIUM_DEFAULT);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(
+          "highPriority: " + highPriority + " ,midPriority: " + midPriority);
+    }
+
+    if (priority.getPriority() >= criticalPriority) {
+      aggregateContainersAllocatedWithCriticalPriority.incr();
+    }else if (priority.getPriority() >= highPriority) {
+      aggregateContainersAllocatedWithHighPriority.incr();
+    } else if (priority.getPriority() >= midPriority) {
+      aggregateContainersAllocatedWithMidPriority.incr();
+    } else {
+      aggregateContainersAllocatedWithLowPriority.incr();
+    }
+    if (parent != null) {
+      parent.incrPriorityAggregations(priority);
+    }
+  }
+
   public void allocateResources(String partition, String user, int containers,
       Resource res, boolean decrPending) {
 
@@ -1229,6 +1270,22 @@ public class QueueMetrics implements MetricsSource {
 
   public long getAggregateHeartBeatSchedulerContainers(){
     return aggregateHeartBeatSchedulerContainersAllocated.value();
+  }
+
+  public long getAggregateCriticalPriorityContainers(){
+    return aggregateContainersAllocatedWithCriticalPriority.value();
+  }
+
+  public long getAggregateHighPriorityContainers(){
+    return aggregateContainersAllocatedWithHighPriority.value();
+  }
+
+  public long getAggregateMidPriorityContainers(){
+    return aggregateContainersAllocatedWithMidPriority.value();
+  }
+
+  public long getAggregateLowPriorityContainers(){
+    return aggregateContainersAllocatedWithLowPriority.value();
   }
 
   public long getAggregateNodeLocalContainersAllocated() {

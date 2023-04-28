@@ -33,6 +33,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
+import org.apache.hadoop.yarn.api.records.Priority;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -745,6 +747,15 @@ public class AppSchedulingInfo {
       metrics.runAppAttempt(applicationId, user);
     }
 
+    RMApp app = rmContext.getRMApps().get(applicationId);
+    Priority priority = app.getApplicationPriority();
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("applicationId：" + applicationId + " ,priority: " + priority);
+    }
+    if (!isDummyAllocated && priority != null) {
+      metrics.incrPriorityAggregations(priority);
+    }
+
     updateMetrics(applicationId, type, node, containerAllocated, user, queue, isDummyAllocated);
   }
 
@@ -757,7 +768,7 @@ public class AppSchedulingInfo {
         containerAllocated.getNodeId(), user,
         containerAllocated.getContainer().getResource(),
         type);
-    if(node != null) {
+    if (node != null) {
       if (!isDummyAllocated) {
         queue.getMetrics().allocateResources(node.getPartition(), user, 1,
             containerAllocated.getContainer().getResource(), false);
