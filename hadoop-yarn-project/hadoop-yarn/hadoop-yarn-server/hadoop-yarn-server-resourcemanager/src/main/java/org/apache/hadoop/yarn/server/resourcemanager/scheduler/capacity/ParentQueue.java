@@ -929,6 +929,11 @@ public class ParentQueue extends AbstractCSQueue {
       CSQueueUtils.updateConfiguredCapacityMetrics(resourceCalculator,
           labelManager.getResourceByLabel(null, clusterResource),
           RMNodeLabelsManager.NO_LABEL, this);
+
+      if (getQueuePath().equals("root")) {
+        this.getMetrics().setMaxNumApps(
+            csContext.getConfiguration().getMaximumSystemApplications());
+      }
     } finally {
       writeLock.unlock();
     }

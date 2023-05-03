@@ -2021,6 +2021,8 @@ public class LeafQueue extends AbstractCSQueue {
           labelManager.getResourceByLabel(null, clusterResource),
           RMNodeLabelsManager.NO_LABEL, this);
 
+      this.getMetrics().setMaxNumApps(this.getMaxApplications());
+
       if (!CollectionUtils.isEmpty(accessibleLabels)) {
         updatePartitionQueueMetrics();
       }

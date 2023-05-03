@@ -68,6 +68,9 @@ public class CSQueueMetrics extends QueueMetrics {
   @Metric("Maximum capacity in percentage relative to total partition")
   private MutableGaugeFloat maxAbsoluteCapacity;
 
+  @Metric("Maximum apps in queue")
+  MutableGaugeInt maxNumApps;
+
   private static final String GUARANTEED_CAPACITY_METRIC_PREFIX =
       "GuaranteedCapacity.";
   private static final String GUARANTEED_CAPACITY_METRIC_DESC =
@@ -299,5 +302,13 @@ public class CSQueueMetrics extends QueueMetrics {
       maxCapacity.set(capacity);
       maxAbsoluteCapacity.set(absoluteCapacity);
     }
+  }
+
+  public int getMaxNumApps() {
+    return this.maxNumApps.value();
+  }
+
+  public void setMaxNumApps(int maxNumApps) {
+    this.maxNumApps.set(maxNumApps);
   }
 }
