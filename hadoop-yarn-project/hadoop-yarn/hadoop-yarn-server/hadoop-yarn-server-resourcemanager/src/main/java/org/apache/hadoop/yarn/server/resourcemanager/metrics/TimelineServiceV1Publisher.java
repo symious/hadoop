@@ -271,6 +271,10 @@ public class TimelineServiceV1Publisher extends AbstractSystemMetricsPublisher {
         SystemMetricsEventType.PUBLISH_ENTITY, entity, app.getApplicationId()));
   }
 
+  @Override
+  public void appSync(RMApp app) {
+  }
+
   @SuppressWarnings("unchecked")
   @Override
   public void appStateUpdated(RMApp app, YarnApplicationState appState,

@@ -66,6 +66,13 @@ public class CombinedSystemMetricsPublisher implements SystemMetricsPublisher {
   }
 
   @Override
+  public void appSync(RMApp app) {
+    for (SystemMetricsPublisher publisher : this.publishers) {
+      publisher.appSync(app);
+    }
+  }
+
+  @Override
   public void appStateUpdated(RMApp app, YarnApplicationState appState,
       long updatedTime) {
     for (SystemMetricsPublisher publisher : this.publishers) {

@@ -68,6 +68,10 @@ public class NoOpSystemMetricPublisher implements SystemMetricsPublisher{
   }
 
   @Override
+  public void appSync(RMApp app) {
+  }
+
+  @Override
   public void appStateUpdated(RMApp app, YarnApplicationState appState,
       long updatedTime) {
   }

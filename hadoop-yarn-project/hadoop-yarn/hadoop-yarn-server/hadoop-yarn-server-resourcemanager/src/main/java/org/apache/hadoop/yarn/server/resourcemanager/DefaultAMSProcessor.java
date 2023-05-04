@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager;
 
+import org.apache.hadoop.thirdparty.com.google.common.cache.Cache;
+import org.apache.hadoop.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceUsage;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
@@ -99,6 +101,7 @@ import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static org.apache.hadoop.yarn.exceptions
         .InvalidResourceRequestException.InvalidResourceType
@@ -128,6 +131,7 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
   private boolean timelineServiceV2Enabled;
   private boolean nodelabelsEnabled;
   private Set<String> exclusiveEnforcedPartitions;
+  private Cache<Object, Object> cache;
 
   @Override
   public void init(ApplicationMasterServiceContext amsContext,
@@ -140,6 +144,11 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
         .areNodeLabelsEnabled(rmContext.getYarnConfiguration());
     this.exclusiveEnforcedPartitions = YarnConfiguration
         .getExclusiveEnforcedPartitions(rmContext.getYarnConfiguration());
+    this.cache = CacheBuilder.newBuilder().expireAfterWrite(
+        rmContext.getYarnConfiguration().getLong(
+            YarnConfiguration.TIMELINE_SERVICE_SYNC_APP_INTERVAL_SECONDS,
+            YarnConfiguration.TIMELINE_SERVICE_SYNC_APP_INTERVAL_SECONDS_DEFAULT),
+        TimeUnit.SECONDS).build();
   }
 
   @Override
@@ -232,6 +241,11 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
 
     RMApp app =
         getRmContext().getRMApps().get(appAttemptId.getApplicationId());
+    if (cache.getIfPresent(appAttemptId) == null) {
+      getRmContext().getSystemMetricsPublisher().appSync(app);
+      cache.put(appAttemptId, System.currentTimeMillis());
+    }
+
     ApplicationSubmissionContext asc = app.getApplicationSubmissionContext();
 
     String queueName = app.getQueue();

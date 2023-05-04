@@ -36,6 +36,7 @@ import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
+import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.timelineservice.ApplicationAttemptEntity;
 import org.apache.hadoop.yarn.api.records.timelineservice.ApplicationEntity;
 import org.apache.hadoop.yarn.api.records.timelineservice.ContainerEntity;
@@ -266,6 +267,33 @@ public class TimelineServiceV2Publisher extends AbstractSystemMetricsPublisher {
     Map<String, Object> entityInfo = new HashMap<String, Object>();
     entityInfo.put(ApplicationMetricsConstants.STATE_EVENT_INFO, appState);
     entity.setInfo(entityInfo);
+
+    getDispatcher().getEventHandler().handle(new TimelineV2PublishEvent(
+        SystemMetricsEventType.PUBLISH_ENTITY, entity, app.getApplicationId()));
+  }
+
+  @Override
+  public void appSync(RMApp app) {
+    long timestamp = System.currentTimeMillis();
+    ApplicationEntity entity =
+        createApplicationEntity(app.getApplicationId());
+    RMAppMetrics appMetrics = app.getRMAppMetrics();
+    Set<TimelineMetric> entityMetrics =
+        getTimelinelineAppMetrics(appMetrics, timestamp);
+    entity.addMetrics(entityMetrics);
+
+    Resource resource =
+        app.getCurrentAppAttempt().getApplicationResourceUsageReport()
+            .getUsedResources();
+    TimelineMetric memoryMetric = new TimelineMetric();
+    memoryMetric.setId("YARN_APPLICATION_ALLOCATED_MEMORY");
+    memoryMetric.addValue(timestamp, resource.getMemorySize());
+    TimelineMetric cpuMetric = new TimelineMetric();
+    cpuMetric.setId("YARN_APPLICATION_ALLOCATED_CPU");
+    cpuMetric.addValue(timestamp, resource.getVirtualCores());
+
+    entity.addMetric(memoryMetric);
+    entity.addMetric(cpuMetric);
 
     getDispatcher().getEventHandler().handle(new TimelineV2PublishEvent(
         SystemMetricsEventType.PUBLISH_ENTITY, entity, app.getApplicationId()));

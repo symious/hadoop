@@ -3358,6 +3358,10 @@ public class YarnConfiguration extends Configuration {
 
   public static final String TIMELINE_SERVICE_VERSIONS =
       TIMELINE_SERVICE_PREFIX + "versions";
+  public static final String TIMELINE_SERVICE_SYNC_APP_INTERVAL_SECONDS =
+      TIMELINE_SERVICE_PREFIX + "sync-app-interval-seconds";
+  public static final long
+      TIMELINE_SERVICE_SYNC_APP_INTERVAL_SECONDS_DEFAULT = 300;
 
   /**
    * Comma separated list of names for UIs hosted in the timeline server

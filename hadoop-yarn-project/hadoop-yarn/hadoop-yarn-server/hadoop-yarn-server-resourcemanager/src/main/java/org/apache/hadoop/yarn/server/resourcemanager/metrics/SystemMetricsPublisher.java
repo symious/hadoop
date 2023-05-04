@@ -38,6 +38,8 @@ public interface SystemMetricsPublisher {
 
   void appUpdated(RMApp app, long updatedTime);
 
+  void appSync(RMApp app);
+
   void appStateUpdated(RMApp app, YarnApplicationState appState,
       long updatedTime);
 
