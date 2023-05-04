@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.hdfs.net;
 
-import com.google.common.base.Preconditions;
+import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeStorageInfo;
 import org.apache.hadoop.net.Node;
 

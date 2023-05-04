@@ -19,7 +19,7 @@ package org.apache.hadoop.hdfs.util;
 
 import java.util.concurrent.atomic.AtomicLong;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 
 import static org.apache.hadoop.util.Time.monotonicNow;

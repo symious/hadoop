@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice;
 
-import com.google.common.base.Joiner;
+import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
 
 import javax.annotation.Nonnull;
 import java.util.HashMap;

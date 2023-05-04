@@ -19,8 +19,8 @@ package org.apache.hadoop.ipc.metrics;
 
 import java.util.concurrent.TimeUnit;
 
-import com.google.common.cache.CacheStats;
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.thirdparty.com.google.common.cache.CacheStats;
+import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.classification.InterfaceAudience;
