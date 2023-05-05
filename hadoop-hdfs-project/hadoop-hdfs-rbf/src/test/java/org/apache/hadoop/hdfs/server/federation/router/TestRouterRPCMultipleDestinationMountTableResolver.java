@@ -91,6 +91,7 @@ public class TestRouterRPCMultipleDestinationMountTableResolver {
 
     Configuration hdfsConf = new Configuration(false);
     hdfsConf.setBoolean(DFSConfigKeys.DFS_NAMENODE_ACLS_ENABLED_KEY, true);
+    hdfsConf.setBoolean(DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY, true);
 
     cluster.addRouterOverrides(routerConf);
     cluster.addNamenodeOverrides(hdfsConf);

@@ -36,13 +36,15 @@ public class MutableMetricRegister {
     if (!metricMap.containsKey(key)) {
       synchronized (metricMap) {
         if (!metricMap.containsKey(key)) {
-          String metricName = StringUtils.capitalize(metricPrefix + key + "_");
           T metric;
           if (metricClass == MutableStat.class) {
+            String metricName = StringUtils.capitalize(metricPrefix + key + "_");
             metric = (T) registry.newStat(metricName, metricName, "Ops", "Val", false);
           } else if (metricClass == MutableRate.class) {
+            String metricName = StringUtils.capitalize(metricPrefix + key + "_");
             metric = (T) registry.newRate(metricName, metricName);
           } else if (metricClass == MutableCounterLong.class) {
+            String metricName = StringUtils.capitalize(metricPrefix + key);
             metric = (T) registry.newCounter(metricName, metricName, 0L);
           } else {
             LOG.warn("Class type {} not supported by {}", metricClass.getName(), registry.info());

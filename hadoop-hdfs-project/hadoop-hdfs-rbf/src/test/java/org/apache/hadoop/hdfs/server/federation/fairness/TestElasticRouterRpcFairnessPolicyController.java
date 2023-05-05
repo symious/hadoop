@@ -55,10 +55,10 @@ public class TestElasticRouterRpcFairnessPolicyController {
 
     MetricsRecordBuilder builder = getMetrics(FairnessPolicyControllerMetrics.class.getName());
     if (elasticPermit > 0) {
-      assertEquals(elasticPermit, getLongCounter("ElasticPermitsAcquired_" + nsId, builder));
+      assertEquals(elasticPermit, getLongCounter("SharedPermitUsage_" + nsId + "_NumOps", builder));
+    } else if (dedicatedPermit > 0) {
+      assertEquals(dedicatedPermit, getLongCounter("DedicatedPermitUsage_" + nsId + "_NumOps", builder));
     }
-    assertEquals(dedicatedPermit + elasticPermit + 1,
-        getLongCounter("PermitAttempts_" + nsId, builder));
   }
 
   @Test

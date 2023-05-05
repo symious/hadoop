@@ -340,10 +340,6 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
       NoRouterRpcFairnessPolicyController.class;
   public static final String DFS_ROUTER_FAIR_HANDLER_COUNT_KEY_PREFIX =
       FEDERATION_ROUTER_FAIRNESS_PREFIX + "handler.count.";
-  public static final String DFS_ROUTER_FAIRNESS_ACQUIRE_TIMEOUT =
-      FEDERATION_ROUTER_FAIRNESS_PREFIX + "acquire.timeout";
-  public static final long   DFS_ROUTER_FAIRNESS_ACQUIRE_TIMEOUT_DEFAULT =
-      TimeUnit.SECONDS.toMillis(1);
 
   public static final String DFS_ROUTER_FAIR_MINIMUM_HANDLER_COUNT_KEY =
       FEDERATION_ROUTER_FAIRNESS_PREFIX + "minimum.handler.count";
