@@ -4894,4 +4894,254 @@
     <name>yarn.resourcemanager.application.max-tag.length</name>
     <value>100</value>
   </property>
+
+  <property>
+    <description>Specifies whether application tags should be converted to lowercase or not.</description>
+    <name>yarn.resourcemanager.application-tag-based-placement.force-lowercase</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <description>
+      Whether to enable RM to mark inactive nodes as untracked after the timeout
+      specified by yarn.resourcemanager.node-removal-untracked.timeout-ms and
+      then remove them from nodes list for the YARN cluster without configured
+      include path, which means RM can periodically clear inactive nodes to
+      avoid increasing memory to store these data when enabled, most desired by
+      elastic cloud environment with frequent auto-scaling operations.
+      It works only when the YARN cluster doesn't utilize include file, the key
+      configurations are as follows:
+          yarn.resourcemanager.nodes.exclude-path=/path-to-exclude-file
+          yarn.resourcemanager.nodes.include-path=
+          yarn.resourcemanager.node-removal-untracked.timeout-ms=60000
+      In this situation, the inactive nodes will never be marked as untracked
+      and removed from the nodes list unless this configuration is enabled:
+          yarn.resourcemanager.enable-node-untracked-without-include-path=true
+    </description>
+    <name>yarn.resourcemanager.enable-node-untracked-without-include-path</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>yarn.scheduler.app-placement-allocator.class</name>
+    <value></value>
+    <description>
+      In the absence of APPLICATION_PLACEMENT_TYPE_CLASS from the RM
+      application scheduling environments, the value of this config
+      is used to determine the default implementation of AppPlacementAllocator.
+      If APPLICATION_PLACEMENT_TYPE_CLASS is absent from the application
+      scheduling env and this config also has no value present, then
+      default implementation LocalityAppPlacementAllocator is used.
+    </description>
+  </property>
+
+  <property>
+    <name>yarn.router.keytab.file</name>
+    <value></value>
+    <description>
+       The keytab file used by router to login as its
+       service principal. The principal name is configured with
+       dfs.federation.router.kerberos.principal.
+    </description>
+  </property>
+
+  <property>
+    <name>yarn.router.kerberos.principal</name>
+    <value></value>
+    <description>
+      The Router service principal. This is typically set to
+      router/_HOST@REALM.TLD. Each Router will substitute _HOST with its
+      own fully qualified hostname at startup. The _HOST placeholder
+      allows using the same configuration setting on both Router setup.
+    </description>
+  </property>
+
+  <property>
+    <name>yarn.router.kerberos.principal.hostname</name>
+    <value></value>
+    <description>
+      Optional.
+      The hostname for the Router containing this
+      configuration file. Will be different for each machine.
+      Defaults to current hostname.
+    </description>
+  </property>
+
+  <property>
+    <name>yarn.router.webapp.appsinfo-enabled</name>
+    <value>false</value>
+    <description>
+      This configuration is used to enable the cache of AppsInfo.
+      If it is set to true, the cache is enabled.
+      If it is set to false, the cache is not enabled.
+    </description>
+  </property>
+
+  <property>
+    <name>yarn.router.webapp.appsinfo-cached-count</name>
+    <value>100</value>
+    <description>
+      When yarn.router.appsinfo-enabled is set to true,
+      the number of cached appsInfo.
+      Default is 100
+    </description>
+  </property>
+  
+  <property>
+    <name>yarn.router.webapp.cross-origin.enabled</name>
+    <value>false</value>
+    <description>
+      Flag to enable cross-origin (CORS) support for Yarn Router.
+      For Yarn Router, also add
+      org.apache.hadoop.security.HttpCrossOriginFilterInitializer to the
+      configuration hadoop.http.filter.initializers in core-site.xml.
+    </description>
+  </property>
+  
+  <property>
+    <name>yarn.federation.state-store.max-applications</name>
+    <value>1000</value>
+    <description>
+      Yarn federation state-store supports querying the maximum number of apps.
+      Default is 1000.
+    </description>
+  </property>
+
+  <property>
+    <name>yarn.nodemanager.dispatcher.metric.enable</name>
+    <value>false</value>
+    <description>
+      Yarn NodeManager enables Dispatcher Metric.
+      if true, will enable dispatcher metric; if false, will not enable dispatcher metric;
+      Default is false.
+    </description>
+  </property>
+
+  <property>
+    <name>yarn.router.interceptor.user-thread-pool.minimum-pool-size</name>
+    <value>5</value>
+    <description>
+      This configurable is used to set the corePoolSize(minimumPoolSize)
+      of the thread pool of the interceptor.
+      Default is 5.
+    </description>
+  </property>
+
+  <property>
+    <name>yarn.router.interceptor.user-thread-pool.maximum-pool-size</name>
+    <value>5</value>
+    <description>
+      This configuration is used to set the default value of maximumPoolSize
+      of the thread pool of the interceptor.
+      Default is 5.
+    </description>
+  </property>
+
+  <property>
+    <name>yarn.router.interceptor.user-thread-pool.keep-alive-time</name>
+    <value>0s</value>
+    <description>
+      This configurable is used to set the keepAliveTime of the thread pool of the interceptor.
+      Default is 0s.
+    </description>
+  </property>
+
+  <property>
+    <name>yarn.router.submit.interval.time</name>
+    <value>10ms</value>
+    <description>
+      The interval Time between calling different subCluster requests.
+      Default is 10ms.
+    </description>
+  </property>
+
+  <property>
+    <name>yarn.router.interceptor.allow-partial-result.enable</name>
+    <value>false</value>
+    <description>
+      This configuration represents whether to allow the interceptor to
+      return partial SubCluster results.
+      If true, we will ignore the exception to some subClusters during the calling process,
+      and return result.
+      If false, if an exception occurs in a subCluster during the calling process,
+      an exception will be thrown directly.
+      Default is false.
+    </description>
+  </property>
+
+  <property>
+    <name>yarn.router.asc-interceptor-max-size</name>
+    <value>1MB</value>
+    <description>
+      We define the size limit of ApplicationSubmissionContext.
+      If the size of the ApplicationSubmissionContext is larger than this value,
+      We will throw an exception. the default value is 1MB.
+    </description>
+  </property>
+
+  <property>
+    <description>
+      The number of threads to use for the Router scheduled executor service.
+    </description>
+    <name>yarn.router.subcluster.cleaner.interval.time</name>
+    <value>1</value>
+  </property>
+
+  <property>
+    <description>
+      The interval at which the subClusterCleaner runs. Default is 60s.
+    </description>
+    <name>yarn.router.subcluster.cleaner.interval.time</name>
+    <value>60s</value>
+  </property>
+
+  <property>
+    <description>
+      SubCluster heartbeat timeout. Default is 30mins.
+    </description>
+    <name>yarn.router.subcluster.heartbeat.expiration.time</name>
+    <value>30m</value>
+  </property>
+
+  <property>
+    <description>
+      Whether to enable deregisterSubCluster. Default is true.
+    </description>
+    <name>yarn.router.deregister.subcluster.enabled</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <description>
+      Number of Router Scheduler Threads.
+    </description>
+    <name>yarn.router.scheduled.executor.threads</name>
+    <value>1</value>
+  </property>
+
+  <property>
+    <description>
+      Number of Retries while trying to make root directory for node store.
+    </description>
+    <name>yarn.resourcemanager.nodestore-rootdir.num-retries</name>
+    <value>1000</value>
+  </property>
+
+  <property>
+    <description>
+      Interval in ms between retries while trying to make root directory for node store.
+    </description>
+    <name>yarn.resourcemanager.nodestore-rootdir.retry-interval-ms</name>
+    <value>1000</value>
+  </property>
+
+  <property>
+    <description>
+      Specifies the class name of the cache implementation in YARN FederationCache.
+      By default, this property is org.apache.hadoop.yarn.server.federation.cache.FederationJCache.
+    </description>
+    <name>yarn.federation.cache.class</name>
+    <value>org.apache.hadoop.yarn.server.federation.cache.FederationJCache</value>
+  </property>
+
 </configuration>
