@@ -148,8 +148,8 @@ run copy "${ROOT}/hadoop-tools/hadoop-tools-dist/target/hadoop-tools-dist-${VERS
 run ln -sf "hadoop-streaming-${VERSION}.jar" ./share/hadoop/tools/lib/hadoop-mr-streaming.jar
 
 run sh "${ROOT}/dev-support/external-dependence/jar/downloadJars.sh"
-run cp -r "${ROOT{}/dev-support/external-dependence/jar/*.jar" ./share/hadoop/common/lib/
-run rm -rf "${ROOT}/dev-support/external-dependence/jar/*.jar"
+run cp -r ${ROOT}/dev-support/external-dependence/jar/*.jar ./share/hadoop/common/lib/
+run rm -rf ${ROOT}/dev-support/external-dependence/jar/*.jar
 
 run sh ${ROOT}/dev-support/external-dependence/so/downloadSo.sh
 run cp -r -d ${ROOT}/dev-support/external-dependence/so/hadoop-so/* ./lib/native
