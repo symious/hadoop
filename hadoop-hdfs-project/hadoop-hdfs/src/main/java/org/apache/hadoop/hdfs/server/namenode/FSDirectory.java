@@ -667,6 +667,10 @@ public class FSDirectory implements Closeable {
     return inodeXAttrsLimit;
   }
 
+  int getMaxSymlinksResolvesDepth() {
+    return namesystem.getMaxSymlinksResolvesDepth();
+  }
+
   FSEditLog getEditLog() {
     return editLog;
   }

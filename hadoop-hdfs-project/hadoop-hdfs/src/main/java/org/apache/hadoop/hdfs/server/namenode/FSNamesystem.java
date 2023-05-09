@@ -37,6 +37,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_SYMLINKS_RESOLVES_DEPTH;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_SYMLINKS_RESOLVES_DEPTH_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_PERMISSIONS_SUPERUSER_ONLY_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_PERMISSIONS_SUPERUSER_ONLY_KEY;
@@ -517,6 +519,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   private volatile SortedSet<String> aclAllowUsers;
 
   private volatile boolean enableSymlinks;
+  // The maximum allowed depth of resolving symbolic links.
+  private int maxSymlinksResolvesDepth;
 
   /** Interval between each check of lease to release. */
   private final long leaseRecheckIntervalMs;
@@ -1075,6 +1079,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
       this.enableSymlinks = conf.getBoolean(
           DFS_NAMENODE_SYMLINKS_ENABLED_KEY, DFS_NAMENODE_SYMLINKS_ENABLED_DEFAULT);
+      this.maxSymlinksResolvesDepth = conf.getInt(DFS_NAMENODE_MAX_SYMLINKS_RESOLVES_DEPTH,
+          DFS_NAMENODE_MAX_SYMLINKS_RESOLVES_DEPTH_DEFAULT);
 
       this.throttlerCalibrationPolicy =
           ThrottlerCalibrationMasterPolicy.newThrottlerCalibrationPolicy(conf, this);
@@ -3468,6 +3474,11 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     }
   }
 
+  HdfsFileStatus getFileInfo(final String src, boolean resolveLink,
+      boolean needLocation, boolean needBlockToken) throws IOException {
+    return getFileInfo(src, resolveLink, needLocation, needBlockToken, 0);
+  }
+
   /**
    * Get the file info for a specific file.
    *
@@ -3485,7 +3496,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * @throws StandbyException
    */
   HdfsFileStatus getFileInfo(final String src, boolean resolveLink,
-      boolean needLocation, boolean needBlockToken) throws IOException {
+      boolean needLocation, boolean needBlockToken, int maxSymlinksResolvesDepth)
+      throws IOException {
     // if the client requests block tokens, then it can read data blocks
     // and should appear in the audit log as if getBlockLocations had been
     // called
@@ -3499,7 +3511,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       try {
         checkOperation(OperationCategory.READ);
         stat = FSDirStatAndListingOp.getFileInfo(
-            dir, pc, src, resolveLink, needLocation, needBlockToken);
+            dir, pc, src, resolveLink, needLocation, needBlockToken, maxSymlinksResolvesDepth);
       } finally {
         readUnlock(operationName);
       }
@@ -8892,6 +8904,10 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
   public void setEnableSymlinks(boolean enableSymlinks) {
     this.enableSymlinks = enableSymlinks;
+  }
+
+  public int getMaxSymlinksResolvesDepth() {
+    return maxSymlinksResolvesDepth;
   }
 }
 

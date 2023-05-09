@@ -892,11 +892,64 @@ public class TestINodeFile {
         assertEquals(fileStatuses1.isFile(), fileStatuses2.isFile());
         assertEquals(fileStatuses1.getLen(), fileStatuses2.getLen());
       }
+
+      // test recursiveLinks.
+      // target file ===> /target/targetFile
+      // link1: /link/linkFile1 -> /target/targetFile
+      // link2: /link/linkFile2 -> /link/linkFile1
+      // link3: /link/linkFile3 -> /link/linkFile2
+      String target = "/target";
+      fs.mkdirs(new Path(target));
+      targetFile = new Path(target, "targetFile");
+      FileSystemTestHelper.createFile(fs, targetFile, 1, testFileBlockSize);
+
+      Path linkFile1 = new Path("/link/linkFile1");
+      Path linkFile2 = new Path("/link/linkFile2");
+      Path linkFile3 = new Path("/link/linkFile3");
+
+      fs.createSymlink(targetFile, linkFile1,true);
+      fs.createSymlink(linkFile1, linkFile2,true);
+      fs.createSymlink(linkFile2, linkFile3,true);
+
+      checkSymlinks(fs, linkFile1, targetFile, targetFile);
+      checkSymlinks(fs, linkFile2, targetFile, linkFile1);
+      checkSymlinks(fs, linkFile3, targetFile, linkFile2);
+
+      FileStatus[] linkFilesStatus = fs.listStatus(new Path("/link"));
+      for (int i = 0; i < linkFilesStatus.length; i++) {
+        assertTrue(linkFilesStatus[i].isSymlink());
+        assertTrue(linkFilesStatus[i].isFile());
+        assertEquals(linkFilesStatus[i].getPath().toUri().getPath(),
+            "/link/linkFile" + (i + 1));
+        if (i == 0) {
+          assertEquals(linkFilesStatus[i].getSymlink().toUri().getPath(),
+              targetFile.toUri().getPath());
+        } else {
+          assertEquals(linkFilesStatus[i].getSymlink().toUri().getPath(),
+              ("/link/linkFile" + i));
+        }
+      }
     } finally {
       if (cluster != null) {
         cluster.shutdown();
       }
     }
+  }
+
+  private void checkSymlinks(DistributedFileSystem fs, Path linkPath,  Path targetPath1,
+      Path targetPath2) throws IOException {
+    FileStatus fileStatus = fs.getFileStatus(linkPath);
+    assertFalse(fileStatus.isSymlink());
+    assertTrue(fileStatus.isFile());
+    assertEquals(targetPath1.toUri().getPath(), fileStatus.getPath().toUri().getPath());
+
+    fileStatus = fs.getFileLinkStatus(linkPath);
+    assertTrue(fileStatus.isSymlink());
+    assertTrue(fileStatus.isFile());
+    assertEquals(linkPath.toUri().getPath(), fileStatus.getPath().toUri().getPath());
+    assertEquals(targetPath2.toUri().getPath(), fileStatus.getSymlink().toUri().getPath());
+
+    assertEquals(targetPath2.toUri().getPath(), fs.getLinkTarget(linkPath).toUri().getPath());
   }
 
   private void testInvalidSymlinkTarget(NamenodeProtocols nnRpc,

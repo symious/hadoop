@@ -1465,7 +1465,8 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   public HdfsFileStatus getFileInfo(String src) throws IOException {
     checkNNStartup();
     metrics.incrFileInfoOps();
-    return namesystem.getFileInfo(src, true, false, false);
+    return namesystem.getFileInfo(src, true, false, false,
+        namesystem.getMaxSymlinksResolvesDepth());
   }
 
   @Override // ClientProtocol
@@ -1478,7 +1479,8 @@ public class NameNodeRpcServer implements NamenodeProtocols {
       metrics.incrFileInfoOps();
     }
     return (HdfsLocatedFileStatus)
-        namesystem.getFileInfo(src, true, true, needBlockToken);
+        namesystem.getFileInfo(src, true, true, needBlockToken,
+            namesystem.getMaxSymlinksResolvesDepth());
   }
 
   @Override // ClientProtocol
@@ -1492,7 +1494,8 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     checkNNStartup();
     metrics.incrFileInfoOps();
     checkSymlinksFlag();
-    return namesystem.getFileInfo(src, false, false, false);
+    return namesystem.getFileInfo(src, false, false, false,
+        namesystem.getMaxSymlinksResolvesDepth());
   }
   
   @Override // ClientProtocol
@@ -1824,7 +1827,8 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     checkSymlinksFlag();
     HdfsFileStatus stat = null;
     try {
-      stat = namesystem.getFileInfo(path, false, false, false);
+      stat = namesystem.getFileInfo(path, false, false, false,
+          namesystem.getMaxSymlinksResolvesDepth());
     } catch (UnresolvedPathException e) {
       return e.getResolvedPath().toString();
     } catch (UnresolvedLinkException e) {

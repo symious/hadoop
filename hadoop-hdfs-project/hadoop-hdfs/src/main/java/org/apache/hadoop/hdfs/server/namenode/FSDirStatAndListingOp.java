@@ -103,7 +103,7 @@ class FSDirStatAndListingOp {
    */
   static HdfsFileStatus getFileInfo(FSDirectory fsd, FSPermissionChecker pc,
       String srcArg, boolean resolveLink, boolean needLocation,
-      boolean needBlockToken) throws IOException {
+      boolean needBlockToken, int maxSymlinksResolvesDepth) throws IOException {
     DirOp dirOp = resolveLink ? DirOp.READ : DirOp.READ_LINK;
     final INodesInPath iip;
     if (pc.isSuperUser()) {
@@ -118,7 +118,7 @@ class FSDirStatAndListingOp {
     } else {
       iip = fsd.resolvePath(pc, srcArg, dirOp);
     }
-    return getFileInfo(fsd, iip, needLocation, needBlockToken);
+    return getFileInfo(fsd, iip, needLocation, needBlockToken, maxSymlinksResolvesDepth);
   }
 
   /**
@@ -248,7 +248,8 @@ class FSDirStatAndListingOp {
         // target INode
         return new DirectoryListing(
             new HdfsFileStatus[]{ createFileStatus(
-                fsd, iip, null, parentStoragePolicy, needLocation, false)
+                fsd, iip, null, parentStoragePolicy, needLocation, false,
+                fsd.getMaxSymlinksResolvesDepth())
             }, 0);
       }
 
@@ -269,7 +270,7 @@ class FSDirStatAndListingOp {
                     parentStoragePolicy)
             : parentStoragePolicy;
         listing[i] = createFileStatus(fsd, iip, child, childStoragePolicy,
-            needLocation, false);
+            needLocation, false, fsd.getMaxSymlinksResolvesDepth());
         listingCnt++;
         if (listing[i] instanceof HdfsLocatedFileStatus) {
             // Once we  hit lsLimit locations, stop.
@@ -346,7 +347,7 @@ class FSDirStatAndListingOp {
    */
   static HdfsFileStatus getFileInfo(FSDirectory fsd, INodesInPath iip,
       boolean includeStoragePolicy, boolean needLocation,
-      boolean needBlockToken) throws IOException {
+      boolean needBlockToken, int maxSymlinksResolvesDepth) throws IOException {
     fsd.readLock();
     try {
       final INode node = iip.getLastINode();
@@ -357,7 +358,7 @@ class FSDirStatAndListingOp {
           ? node.getStoragePolicyID()
           : HdfsConstants.BLOCK_STORAGE_POLICY_ID_UNSPECIFIED;
       return createFileStatus(fsd, iip, null, policy, needLocation,
-          needBlockToken);
+          needBlockToken, maxSymlinksResolvesDepth);
     } finally {
       fsd.readUnlock();
     }
@@ -365,6 +366,12 @@ class FSDirStatAndListingOp {
 
   static HdfsFileStatus getFileInfo(FSDirectory fsd, INodesInPath iip,
       boolean needLocation, boolean needBlockToken) throws IOException {
+    return getFileInfo(fsd, iip, needLocation, needBlockToken, 0);
+  }
+
+  static HdfsFileStatus getFileInfo(FSDirectory fsd, INodesInPath iip,
+      boolean needLocation, boolean needBlockToken, int maxSymlinksResolvesDepth)
+      throws IOException {
     fsd.readLock();
     try {
       HdfsFileStatus status = null;
@@ -375,7 +382,8 @@ class FSDirStatAndListingOp {
           status = FSDirectory.DOT_SNAPSHOT_DIR_STATUS;
         }
       } else {
-        status = getFileInfo(fsd, iip, true, needLocation, needBlockToken);
+        status = getFileInfo(fsd, iip, true, needLocation, needBlockToken,
+            maxSymlinksResolvesDepth);
       }
       return status;
     } finally {
@@ -395,6 +403,13 @@ class FSDirStatAndListingOp {
         null, HdfsConstants.BLOCK_STORAGE_POLICY_ID_UNSPECIFIED, false, false);
   }
 
+  private static HdfsFileStatus createFileStatus(
+      FSDirectory fsd, INodesInPath iip, INode child, byte storagePolicy,
+      boolean needLocation, boolean needBlockToken) throws IOException {
+    return createFileStatus(fsd, iip, child, storagePolicy, needLocation,
+        needBlockToken, 0);
+  }
+
   /**
    * create a hdfs file status from an iip.
    *
@@ -409,7 +424,8 @@ class FSDirStatAndListingOp {
    */
   private static HdfsFileStatus createFileStatus(
       FSDirectory fsd, INodesInPath iip, INode child, byte storagePolicy,
-      boolean needLocation, boolean needBlockToken) throws IOException {
+      boolean needLocation, boolean needBlockToken, int maxSymlinksResolvesDepth)
+      throws IOException {
     assert fsd.hasReadLock();
     // only directory listing sets the status name.
     byte[] name = HdfsFileStatus.EMPTY_NAME;
@@ -469,17 +485,27 @@ class FSDirStatAndListingOp {
         DFSUtil.getFlags(isEncrypted, isErasureCoded, isSnapShottable, hasAcl);
 
     if (node.isSymlink()) {
-      // if the inode is a symlink, it will be compatible here,
-      // get the FileStatus attribute of the target path,
-      // and set the symlink path and path attributes of the current FileStatus.
-      final String targetPath = node.asSymlink().getSymlinkString();
-      HdfsFileStatus targetPathStatus = getFileInfo(fsd, fsd.getPermissionChecker(),
-          new Path(targetPath).toUri().getPath(), false, needLocation, needBlockToken);
-      // if the target path does not exist, return the fileStatus of the symlink path.
-      if (targetPathStatus != null) {
-        targetPathStatus.setSymlink(new Path(targetPath));
-        targetPathStatus.setUPath(name);
-        return targetPathStatus;
+      boolean isResolves = fsd.getFSNamesystem().isEnableSymlinks() &&
+          (maxSymlinksResolvesDepth > 0);
+      if (isResolves) {
+        // if the inode is a symlink, it will be compatible here,
+        // get the FileStatus attribute of the target path,
+        // and set the symlink path and path attributes of the current FileStatus.
+        final String targetPath = node.asSymlink().getSymlinkString();
+        HdfsFileStatus targetPathStatus = getFileInfo(fsd, fsd.getPermissionChecker(),
+            new Path(targetPath).toUri().getPath(), false, needLocation, needBlockToken,
+            maxSymlinksResolvesDepth - 1);
+        // if the target path does not exist, return the fileStatus of the symlink path.
+        if (targetPathStatus != null) {
+          targetPathStatus.setSymlink(new Path(targetPath));
+          targetPathStatus.setUPath(name);
+          return targetPathStatus;
+        }
+      } else {
+        if (maxSymlinksResolvesDepth <= 0) {
+          NameNode.stateChangeLog.warn("createFileStatus: {} not to resolve symbolic link.",
+              node.getFullPathName());
+        }
       }
     }
 
