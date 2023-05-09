@@ -154,7 +154,7 @@ run copy "${ROOT}/hadoop-tools/hadoop-dynamometer/hadoop-dynamometer-dist/target
 run ln -sf "hadoop-streaming-${VERSION}.jar" ./share/hadoop/tools/lib/hadoop-mr-streaming.jar
 
 run sh "${ROOT}/dev-support/external-dependence/jar/downloadJars.sh"
-run cp -r ${ROOT{}/dev-support/external-dependence/jar/*.jar ./share/hadoop/common/lib/
+run cp -r ${ROOT}/dev-support/external-dependence/jar/*.jar ./share/hadoop/common/lib/
 run rm -rf ${ROOT}/dev-support/external-dependence/jar/*.jar
 
 run sh ${ROOT}/dev-support/external-dependence/so/downloadSo.sh
