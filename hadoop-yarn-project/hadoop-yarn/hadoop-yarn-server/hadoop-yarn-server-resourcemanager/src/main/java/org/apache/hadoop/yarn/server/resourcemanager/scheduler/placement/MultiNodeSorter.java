@@ -29,6 +29,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
@@ -95,6 +96,11 @@ public class MultiNodeSorter<N extends SchedulerNode> extends AbstractService {
     }
     this.multiNodePolicy = (MultiNodeLookupPolicy<N>) ReflectionUtils
         .newInstance(policyClass, null);
+    int memoryResourcesUnit =
+        YarnConfiguration.getResourceUsageMultiNodeMemoryResourceUnit(
+            rmContext.getYarnConfiguration());
+    LOG.info("Init memoryResourcesUnit = " + memoryResourcesUnit);
+    this.multiNodePolicy.setMemoryResourcesUnit(memoryResourcesUnit);
   }
 
   @Override

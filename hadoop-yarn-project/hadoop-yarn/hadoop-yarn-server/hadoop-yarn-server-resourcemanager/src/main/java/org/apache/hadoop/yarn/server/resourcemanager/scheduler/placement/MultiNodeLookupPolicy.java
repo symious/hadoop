@@ -78,4 +78,10 @@ public interface MultiNodeLookupPolicy<N extends SchedulerNode> {
    */
   Set<N> getNodesPerPartition(String partition);
 
+  /**
+   * Set node memory resources compare unit
+   * default 6, represent 6G
+   */
+  void setMemoryResourcesUnit(int unit);
+
 }

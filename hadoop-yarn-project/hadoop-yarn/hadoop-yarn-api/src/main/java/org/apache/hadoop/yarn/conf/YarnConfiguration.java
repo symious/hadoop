@@ -810,6 +810,10 @@ public class YarnConfiguration extends Configuration {
       YARN_PREFIX + "scheduler.multi-nodes.top.random.rate";
   public static final float DEFAULT_MULTINODES_TOP_RANDOM_RATE = 0.1f;
 
+  public static final String SCHEDULER_MULTINODES_MEMORY_UNIT =
+      YARN_PREFIX + "scheduler.multi-nodes.memoryGB.unit";
+  public static final int DEFAULT_MULTINODES_MEMORY_UNIT = 6;
+
   /**
    * Returns Timeout to skip node from scheduling if not heartbeated.
    *
@@ -837,6 +841,13 @@ public class YarnConfiguration extends Configuration {
         conf.getFloat(SCHEDULER_MULTINODES_TOP_RANDOM_RATE,
             DEFAULT_MULTINODES_TOP_RANDOM_RATE);
     return multiNodesTopRandomRate;
+  }
+
+  public static int getResourceUsageMultiNodeMemoryResourceUnit(
+      Configuration conf) {
+    int memoryResourcesUnit = conf.getInt(SCHEDULER_MULTINODES_MEMORY_UNIT,
+        DEFAULT_MULTINODES_MEMORY_UNIT);
+    return memoryResourcesUnit;
   }
 
   public static final String RM_NM_RECOVERY_HEARTBEAT_INTERVAL_MS =
