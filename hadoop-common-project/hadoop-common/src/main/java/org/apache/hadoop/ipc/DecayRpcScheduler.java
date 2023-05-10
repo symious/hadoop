@@ -299,8 +299,7 @@ public class DecayRpcScheduler implements RpcScheduler,
       IdentityProvider.class);
 
     if (providers.size() < 1) {
-      LOG.info("IdentityProvider not specified, " +
-        "defaulting to UserIdentityProvider");
+      LOG.info("IdentityProvider not specified, defaulting to UserIdentityProvider for {}.", ns);
       return new UserIdentityProvider();
     }
 

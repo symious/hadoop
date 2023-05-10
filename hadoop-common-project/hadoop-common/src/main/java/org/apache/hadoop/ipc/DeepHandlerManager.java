@@ -294,11 +294,13 @@ public class DeepHandlerManager {
             try {
               ((Server.RpcCall) call).sendOnlyException(resException, startProcessingNanos);
             } catch (IOException ex) {
-              LOG.info(
-                  Thread.currentThread().getName() + " failed to send exception back to client",
-                  cqoe);
-              throw new RuntimeException(ex);
+              LOG.info("{} failed to send exception back to client",
+                  Thread.currentThread().getName(), cqoe);
+              metrics.incrProxyToDeepQueueExceptions();
             }
+          } catch (Exception e1) {
+            LOG.info("{} caught an unexpected exception", Thread.currentThread().getName(), e1);
+            metrics.incrProxyToDeepQueueExceptions();
           }
         } catch (InterruptedException e) {
           if (running) {                          // unexpected -- log it
@@ -350,7 +352,7 @@ public class DeepHandlerManager {
           return deepCallQueues.get(ns);
         } else {
           LOG.info("Initializing deep call queue for ns {}", ns);
-          String prefix = CommonConfigurationKeys.IPC_NAMESPACE + "." + port;
+          String prefix = CommonConfigurationKeys.IPC_NAMESPACE + "." + port + "." + ns;
           CallQueueManager<Server.Call> newQueue =
               new CallQueueManager<>(getQueueClass(prefix, conf), getSchedulerClass(prefix, conf),
                   getClientBackoffEnable(prefix, conf), deepQueueCapacity, prefix, conf);

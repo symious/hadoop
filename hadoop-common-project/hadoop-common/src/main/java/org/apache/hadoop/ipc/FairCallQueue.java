@@ -99,7 +99,7 @@ public class FairCallQueue<E extends Schedulable> extends AbstractQueue<E>
     }
     int numQueues = priorityLevels;
     LOG.info("FairCallQueue is in use with " + numQueues +
-        " queues with total capacity of " + capacity);
+        " queues with total capacity of " + capacity + " for " + ns);
 
     this.queues = new ArrayList<BlockingQueue<E>>(numQueues);
     this.overflowedCalls = new ArrayList<AtomicLong>(numQueues);

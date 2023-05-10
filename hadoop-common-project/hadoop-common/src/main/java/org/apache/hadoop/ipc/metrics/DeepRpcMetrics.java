@@ -70,6 +70,8 @@ public class DeepRpcMetrics implements DeepRpcMetricsMBean {
   MutableCounterLong rejectedDeepCalls;
   @Metric("Number of times a deep handler encountered an exception")
   MutableCounterLong deepHandlerExceptions;
+  @Metric("Number of times that failed to proxy call to deepQueue")
+  MutableCounterLong proxyToDeepQueueExceptions;
   @Metric("Number of times a deep watcher encountered an exception")
   MutableCounterLong deepWatcherExceptions;
   @Metric("Processing time in deep handlers")
@@ -151,6 +153,10 @@ public class DeepRpcMetrics implements DeepRpcMetricsMBean {
 
   public void incrDeepHandlerExceptions() {
     deepHandlerExceptions.incr();
+  }
+
+  public void incrProxyToDeepQueueExceptions() {
+    proxyToDeepQueueExceptions.incr();
   }
 
   public void incrDeepWatcherExceptions() {
