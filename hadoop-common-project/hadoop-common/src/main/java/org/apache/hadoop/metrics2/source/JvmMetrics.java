@@ -149,11 +149,11 @@ public class JvmMetrics implements MetricsSource {
         .tag(SessionId, sessionId);
     getMemoryUsage(rb);
     getGcUsage(rb);
-    if (threadMXBean != null) {
+    /*if (threadMXBean != null) {
       getThreadUsage(rb);
     } else {
       getThreadUsageFromGroup(rb);
-    }
+    }*/
     getThreadsCount(rb);
     getEventCounters(rb);
   }

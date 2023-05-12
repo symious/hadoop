@@ -18,7 +18,7 @@
 
 package org.apache.hadoop.hdfs.server.federation.fairness;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 /**
  * A permit object contains PermitType and PermitVersion.

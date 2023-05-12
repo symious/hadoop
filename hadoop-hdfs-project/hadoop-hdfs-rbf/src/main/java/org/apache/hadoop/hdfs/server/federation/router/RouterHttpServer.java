@@ -125,6 +125,9 @@ public class RouterHttpServer extends AbstractService {
         RouterFsckServlet.PATH_SPEC,
         RouterFsckServlet.class,
         true);
+    httpServer.addInternalServlet(NSServlet.SERVLET_NAME,
+        NSServlet.PATH_SPEC,
+        NSServlet.class);
   }
 
   public InetSocketAddress getHttpAddress() {

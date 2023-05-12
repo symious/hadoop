@@ -888,6 +888,10 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
     return clientProto.getFileInfo(src);
   }
 
+  public String getFile2NS(String src) throws IOException {
+    return clientProto.getFile2NS(src);
+  }
+
   @Override // ClientProtocol
   public boolean isFileClosed(String src) throws IOException {
     return clientProto.isFileClosed(src);

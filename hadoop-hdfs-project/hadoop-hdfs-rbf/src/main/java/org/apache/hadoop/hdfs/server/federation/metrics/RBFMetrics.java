@@ -191,6 +191,14 @@ public class RBFMetrics implements RouterMBean, FederationMBean {
     }
   }
 
+  public List<MembershipState> getAllMembershipState() throws IOException {
+    GetNamenodeRegistrationsRequest request = GetNamenodeRegistrationsRequest.newInstance();
+    GetNamenodeRegistrationsResponse response = membershipStore.getNamenodeRegistrations(request);
+    List<MembershipState> all = response.getNamenodeMemberships();
+    LOG.debug("getAllMembershipState all is {}.", all);
+    return all;
+  }
+
   @Override
   public String getNamenodes() {
     final Map<String, Map<String, Object>> info = new LinkedHashMap<>();

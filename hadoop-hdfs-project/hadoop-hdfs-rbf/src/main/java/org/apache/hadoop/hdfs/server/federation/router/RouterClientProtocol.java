@@ -1198,6 +1198,42 @@ public class RouterClientProtocol implements ClientProtocol {
     throw new UnsupportedOperationException("Not implemented");
   }
 
+  String getFile2NS(String src) throws IOException {
+    String result = null;
+    try {
+      List<RemoteLocation> locations = rpcServer.getLocationsForPath(
+          src, false, false);
+
+      if (locations != null && locations.size() == 1) {
+        result = locations.get(0).getNameserviceId();
+      } else if (locations != null && locations.size() > 1) {
+        RemoteMethod method = new RemoteMethod("getFileInfo",
+            new Class<?>[] {String.class}, new RemoteParam());
+        IOException lastException = null;
+        for (RemoteLocation remoteLocation : locations) {
+          try {
+            HdfsFileStatus hdfsFileStatus = rpcClient.invokeSingle(
+                remoteLocation, method, HdfsFileStatus.class);
+            if (hdfsFileStatus != null && hdfsFileStatus.isFile()) {
+              result = remoteLocation.getNameserviceId();
+              break;
+            }
+          } catch (IOException e) {
+            LOG.warn("Failed for getFile2NS ", e);
+            lastException = e;
+          }
+        }
+        if (result == null && lastException != null) {
+          throw lastException;
+        }
+      }
+    } catch (IOException e) {
+      LOG.warn("Failed for getFile2NS ", e);
+      throw e;
+    }
+    return result;
+  }
+
   @Override
   public HdfsFileStatus getFileInfo(String src) throws IOException {
     rpcServer.checkOperation(NameNode.OperationCategory.READ);
