@@ -20,11 +20,11 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>3.3.sdi-070</version>
+    <version>3.3.sdi-071-SNAPSHOT</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <artifactId>hadoop-shopee</artifactId>
-  <version>3.3.sdi-070</version>
+  <version>3.3.sdi-071-SNAPSHOT</version>
   <description>Apache Hadoop Shopee Tools</description>
   <name>Apache Hadoop Shopee Tools</name>
   <packaging>jar</packaging>
