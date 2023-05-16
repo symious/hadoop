@@ -221,6 +221,7 @@ public class TestRouterAdmin {
     testAddOrderMountTable(DestinationOrder.LOCAL);
     testAddOrderMountTable(DestinationOrder.RANDOM);
     testAddOrderMountTable(DestinationOrder.HASH_ALL);
+    testAddOrderMountTable(DestinationOrder.SUFFIX);
   }
 
   private void testAddOrderMountTable(final DestinationOrder order)

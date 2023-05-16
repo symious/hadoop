@@ -19,7 +19,9 @@ package org.apache.hadoop.hdfs.server.federation.router;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.util.HashMap;
@@ -64,6 +66,8 @@ public class TestRouterAllResolver {
   private static final String TEST_DIR_RANDOM = "/random";
   /** Directory that will be in a SPACE mount point. */
   private static final String TEST_DIR_SPACE = "/space";
+  /** Directory that will be in a SUFFIX mount point. */
+  private static final String TEST_DIR_SUFFIX= "/suffix";
 
   /** Number of namespaces. */
   private static final int NUM_NAMESPACES = 2;
@@ -106,6 +110,7 @@ public class TestRouterAllResolver {
     createMountTableEntry(TEST_DIR_HASH_ALL, DestinationOrder.HASH_ALL);
     createMountTableEntry(TEST_DIR_RANDOM, DestinationOrder.RANDOM);
     createMountTableEntry(TEST_DIR_SPACE, DestinationOrder.SPACE);
+    createMountTableEntryBySuffix(TEST_DIR_SUFFIX, DestinationOrder.SUFFIX);
 
     // Get filesystems for federated and each namespace
     routerFs = routerContext.getFileSystem();
@@ -141,6 +146,11 @@ public class TestRouterAllResolver {
   @Test
   public void testSpaceAll() throws Exception {
     testAll(TEST_DIR_SPACE);
+  }
+
+  @Test
+  public void testSuffixAll() throws Exception {
+    testAllBySuffix(TEST_DIR_SUFFIX);
   }
 
   /**
@@ -406,5 +416,156 @@ public class TestRouterAllResolver {
     List<MountTable> entries = getResponse.getEntries();
     assertEquals(1, entries.size());
     assertEquals(mountPoint, entries.get(0).getSourcePath());
+  }
+
+  /**
+   * Add a suffix mount table entry
+   * @param mountPoint Name of the mount point.
+   * @param order Order of the mount table entry.
+   * @throws Exception If the entry could not be created.
+   */
+  private void createMountTableEntryBySuffix(
+      final String mountPoint, final DestinationOrder order) throws Exception {
+    createMountTableEntry(mountPoint, order);
+    RouterClient admin = routerContext.getAdminClient();
+    MountTableManager mountTable = admin.getMountTableManager();
+    Map<String, String> tmpMap = new HashMap<>();
+    tmpMap.put(cluster.getNameservices().get(0), "/dir0");
+    MountTable newEntry = MountTable.newInstance("/dir0", tmpMap);
+    AddMountTableEntryRequest addRequest =
+        AddMountTableEntryRequest.newInstance(newEntry);
+    AddMountTableEntryResponse addResponse =
+        mountTable.addMountTableEntry(addRequest);
+    boolean created = addResponse.getStatus();
+    assertTrue(created);
+
+    tmpMap = new HashMap<>();
+    tmpMap.put(cluster.getNameservices().get(1), "/dir1");
+    newEntry = MountTable.newInstance("/dir1", tmpMap);
+    addRequest = AddMountTableEntryRequest.newInstance(newEntry);
+    addResponse = mountTable.addMountTableEntry(addRequest);
+    created = addResponse.getStatus();
+    assertTrue(created);
+
+    tmpMap = new HashMap<>();
+    tmpMap.put(cluster.getNameservices().get(0), "/dir2/dir20");
+    newEntry = MountTable.newInstance("/dir2/dir20", tmpMap);
+    addRequest = AddMountTableEntryRequest.newInstance(newEntry);
+    addResponse = mountTable.addMountTableEntry(addRequest);
+    created = addResponse.getStatus();
+    assertTrue(created);
+
+    tmpMap = new HashMap<>();
+    tmpMap.put(cluster.getNameservices().get(1), "/dir2/dir21");
+    newEntry = MountTable.newInstance("/dir2/dir21", tmpMap);
+    addRequest = AddMountTableEntryRequest.newInstance(newEntry);
+    addResponse = mountTable.addMountTableEntry(addRequest);
+    created = addResponse.getStatus();
+    assertTrue(created);
+
+    // Refresh the caches to get the mount table
+    Router router = routerContext.getRouter();
+    StateStoreService stateStore = router.getStateStore();
+    stateStore.refreshCaches(true);
+  }
+
+  /**
+   * Tests that the resolver by suffix path
+   * @throws Exception If the resolver is not working.
+   */
+  private void testAllBySuffix(String path) throws Exception {
+    // suffix path is
+    //  /dir0 -> cluster.getNameservices().get(0)
+    //  /dir1 -> cluster.getNameservices().get(1)
+    //  /dir2/dir20 -> cluster.getNameservices().get(0)
+    //  /dir2/dir21  -> cluster.getNameservices().get(1)
+
+    // Create directories
+    routerFs.mkdirs(new Path(path + "/dir0"));
+    routerFs.mkdirs(new Path(path + "/dir1"));
+    routerFs.mkdirs(new Path(path + "/dir2/dir20"));
+    routerFs.mkdirs(new Path(path + "/dir2/dir21"));
+    FileStatus[] fileStatuses = routerFs.listStatus(new Path(path));
+    assertEquals(fileStatuses.length, 3);
+
+    List<NamenodeContext> nns0 = cluster.getNamenodes(cluster.getNameservices().get(0));
+    FileSystem nnFs0 = nns0.get(0).getFileSystem();
+    List<NamenodeContext> nns1 = cluster.getNamenodes(cluster.getNameservices().get(1));
+    FileSystem nnFs1 = nns1.get(0).getFileSystem();
+
+    // Test if directory exists on correct ns,
+    assertDirectoryExists(nnFs0, new Path(path + "/dir0"));
+    assertDoesNotExist(nnFs1, new Path(path + "/dir0"));
+
+    assertDirectoryExists(nnFs1, new Path(path + "/dir1"));
+    assertDoesNotExist(nnFs0, new Path(path + "/dir1"));
+
+    assertDirectoryExists(nnFs0, new Path(path + "/dir2/dir20"));
+    assertDoesNotExist(nnFs1, new Path(path + "/dir2/dir20"));
+
+    assertDirectoryExists(nnFs1, new Path(path + "/dir2/dir21"));
+    assertDoesNotExist(nnFs0, new Path(path + "/dir2/dir21"));
+
+    // Create files.
+    createTestFile(routerFs, path + "/dir0/file1.txt");
+    createTestFile(routerFs, path + "/dir0/file2.txt");
+    createTestFile(routerFs, path + "/dir1/file2.txt");
+    createTestFile(routerFs, path + "/dir1/file3.txt");
+    createTestFile(routerFs, path + "/dir2/dir20/file4.txt");
+    createTestFile(routerFs, path + "/dir2/dir20/file5.txt");
+    createTestFile(routerFs, path + "/dir2/dir21/file6.txt");
+    createTestFile(routerFs, path + "/dir2/dir21/file7.txt");
+    assertFileNums(nnFs0, path  + "/dir0", 2);
+    assertFileNums(nnFs1, path  + "/dir1", 2);
+    assertFileNums(nnFs0, path  + "/dir2/dir20", 2);
+    assertFileNums(nnFs1, path  + "/dir2/dir21", 2);
+
+    // Test append file
+    String testFile = path + "/dir2/dir21/file-append.txt";
+    createTestFile(routerFs, testFile);
+    appendTestFile(routerFs, testFile);
+    assertFileNums(nnFs1,path  + "/dir2/dir21", 3);
+
+    // Removing file
+    routerFs.delete(new Path(path + "/dir2/dir21/file-append.txt"), true);
+    assertFileNums(nnFs1,path  + "/dir2/dir21", 2);
+    assertDoesNotExist(routerFs, new Path(path + "/dir2/dir21/file-append.txt"));
+    assertDoesNotExist(nnFs1, new Path(path + "/dir2/dir21/file-append.txt"));
+
+    // Removing all directories
+    routerFs.delete(new Path(path + "/dir0"), true);
+    routerFs.delete(new Path(path + "/dir1"), true);
+    routerFs.delete(new Path(path + "/dir2/dir20"), true);
+    routerFs.delete(new Path(path + "/dir2/dir21"), true);
+    assertDoesNotExist(routerFs, new Path(path + "/dir0"));
+    assertDoesNotExist(nnFs0, new Path(path + "/dir0"));
+    assertDoesNotExist(routerFs, new Path(path + "/dir1"));
+    assertDoesNotExist(nnFs1, new Path(path + "/dir1"));
+    assertDoesNotExist(routerFs, new Path(path + "/dir2/dir20"));
+    assertDoesNotExist(nnFs0, new Path(path + "/dir2/dir20"));
+    assertDoesNotExist(routerFs, new Path(path + "/dir2/dir21"));
+    assertDoesNotExist(nnFs1, new Path(path + "/dir2/dir21"));
+  }
+
+  private void assertDirectoryExists(FileSystem fs, Path path) throws Exception {
+    FileStatus fileStatus = fs.getFileStatus(path);
+    assertTrue(path + " should be a directory", fileStatus.isDirectory());
+  }
+
+  private void assertDoesNotExist(FileSystem fs, Path path) throws Exception {
+    try {
+      fs.getFileStatus(path);
+      fail("The file should not exist on ns.");
+    } catch (FileNotFoundException e) {
+      // Expected
+    }
+  }
+
+  private void assertFileNums(FileSystem nnFs, String path, int expectedNumFiles)
+      throws IOException {
+    FileStatus[] fileStatuses = routerFs.listStatus(new Path(path));
+    assertEquals(fileStatuses.length, expectedNumFiles);
+    fileStatuses = nnFs.listStatus(new Path(path));
+    assertEquals(fileStatuses.length, expectedNumFiles);
   }
 }

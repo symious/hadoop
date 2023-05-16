@@ -29,11 +29,13 @@ public enum DestinationOrder {
   LOCAL, // Local first
   RANDOM, // Random order
   HASH_ALL, // Follow consistent hashing
-  SPACE; // Available space based order
+  SPACE, // Available space based order
+  SUFFIX; // The suffix path based order
 
   /** Approaches that write folders in all subclusters. */
   public static final EnumSet<DestinationOrder> FOLDER_ALL = EnumSet.of(
       HASH_ALL,
       RANDOM,
-      SPACE);
+      SPACE,
+      SUFFIX);
 }

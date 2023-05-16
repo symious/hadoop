@@ -68,6 +68,19 @@ public class RemoteLocation extends RemoteLocationContext {
     this.srcPath = other.srcPath + tail;
   }
 
+  /**
+   *
+   * @param other
+   * @param srcPrefix The path prefix in the target namespace, that cannot end with a "/".
+   * @param dstPrefix The path prefix in the federated level, that cannot end with a "/".
+   */
+  public RemoteLocation(RemoteLocation other, String srcPrefix, String dstPrefix){
+    this.nameserviceId = other.nameserviceId;
+    this.namenodeId = other.namenodeId;
+    this.srcPath = srcPrefix + other.srcPath;
+    this.dstPath = dstPrefix + other.dstPath;
+  }
+
   @Override
   public String getNameserviceId() {
     String ret = this.nameserviceId;

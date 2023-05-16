@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.federation.resolver;
 
 import static org.apache.hadoop.hdfs.server.federation.resolver.order.HashResolver.extractTempFileName;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -104,6 +105,49 @@ public class TestMultipleDestinationResolver {
     MountTable readOnlyEntry = MountTable.newInstance("/readonly", mapReadOnly);
     readOnlyEntry.setReadOnly(true);
     resolver.addEntry(readOnlyEntry);
+
+    // We point /suffix to subclusters 0, 1, 2 with the suffix order
+    Map<String, String> mapSuffix = new HashMap<>();
+    mapSuffix.put("subcluster0", "/suffix");
+    mapSuffix.put("subcluster1", "/suffix");
+    mapSuffix.put("subcluster2", "/suffix");
+    mapSuffix.put("subcluster6", "/suffix6");
+    mapSuffix.put("subcluster7", "/suffix7");
+    MountTable suffixEntry = MountTable.newInstance("/suffix", mapSuffix);
+    suffixEntry.setDestOrder(DestinationOrder.SUFFIX);
+    resolver.addEntry(suffixEntry);
+    // point /dir0 to only subcluster0
+    Map<String, String> tmpMap = new HashMap<>();
+    tmpMap.put("subcluster0", "/dir0");
+    resolver.addEntry(MountTable.newInstance("/dir0", tmpMap));
+    // point /dir1 to only subcluster1
+    tmpMap = new HashMap<>();
+    tmpMap.put("subcluster1", "/dir1");
+    resolver.addEntry(MountTable.newInstance("/dir1", tmpMap));
+    // point /dir2 to only subcluster2
+    tmpMap = new HashMap<>();
+    tmpMap.put("subcluster2", "/dir2");
+    resolver.addEntry(MountTable.newInstance("/dir2", tmpMap));
+    // point /dir3 to only subcluster3
+    tmpMap = new HashMap<>();
+    tmpMap.put("subcluster3", "/dir3");
+    resolver.addEntry(MountTable.newInstance("/dir3", tmpMap));
+    // point /dir5 to subclusters 0, 1, 2 with the suffix order
+    mapSuffix = new HashMap<>();
+    mapSuffix.put("subcluster0", "/dir5");
+    mapSuffix.put("subcluster1", "/dir5");
+    mapSuffix.put("subcluster2", "/dir5");
+    suffixEntry = MountTable.newInstance("/dir5", mapSuffix);
+    suffixEntry.setDestOrder(DestinationOrder.SUFFIX);
+    resolver.addEntry(suffixEntry);
+    // point /dir6 to only subcluster6
+    tmpMap = new HashMap<>();
+    tmpMap.put("subcluster6", "/dir6");
+    resolver.addEntry(MountTable.newInstance("/dir6", tmpMap));
+    // point /dir7 to only subcluster7
+    tmpMap = new HashMap<>();
+    tmpMap.put("subcluster7", "/dir7_sub");
+    resolver.addEntry(MountTable.newInstance("/dir7", tmpMap));
   }
 
   @Test
@@ -411,6 +455,64 @@ public class TestMultipleDestinationResolver {
         assertTrue(Math.abs(filesCount - avg) < (avg / 5));
       }
     }
+  }
+
+  @Test
+  public void testSuffixResolver() throws IOException {
+
+    // /suffix
+    PathLocation dest = resolver.getDestinationForPath("/suffix");
+    assertEquals(5, dest.getDestinations().size());
+    assertEquals(DestinationOrder.SUFFIX.name(), dest.getDestinationOrder().name());
+
+    // /suffix/dir0/file0.txt
+    PathLocation dest0 = resolver.getDestinationForPath("/suffix/dir0/file0.txt");
+    assertDest("subcluster0", dest0);
+
+    // /suffix/dir1/file1.txt
+    PathLocation dest1 = resolver.getDestinationForPath("/suffix/dir1/file1.txt");
+    assertDest("subcluster1", dest1);
+
+    // /suffix/dir2/file2.txt
+    PathLocation dest2 = resolver.getDestinationForPath("/suffix/dir2/file2.txt");
+    assertDest("subcluster2", dest2);
+
+    // point /suffix to subclusters 0, 1, 2 with the suffix order,
+    // and point /dir3 to subclusters 3,
+    // so point /suffix/dir3/file3.txt dest ns is subclusters 3.
+    PathLocation dest3 = resolver.getDestinationForPath("/suffix/dir3/file3.txt");
+    assertDest("subcluster3", dest3);
+
+    // point /suffix to subclusters 0, 1, 2 with the suffix order,
+    // point / to subclusters 0, 1, 2 with default order (hash), not set point /dir4,
+    // and get point /dir4 dest ns is subcluster0, 1, 2,
+    // so point /suffix/dir4/file4.txt dest ns also is subclusters 0, 1, 2.
+    PathLocation dest4 = resolver.getDestinationForPath("/suffix/dir4/file4.txt");
+    assertEquals(3, dest4.getDestinations().size());
+
+    // point /suffix to subclusters 0, 1, 2 with the suffix order,
+    // point /suffix/dir5 to subclusters 0, 1, 2 with the suffix order,
+    // so point /suffix/dir5/file5.txt will throw RouterResolveException.
+    assertThrows(RouterResolveException.class, () ->
+        resolver.getDestinationForPath("/suffix/dir5/file5.txt"));
+
+    // point /suffix to subclusters 6 and dstPath path is /suffix6 with the suffix order,
+    // and point /dir6 to subclusters 6,
+    // so point /suffix/dir6/file6.txt dest ns is subclusters 6
+    // and dstPath is /suffix6/dir6/file6.txt.
+    PathLocation dest6 = resolver.getDestinationForPath("/suffix/dir6/file6.txt");
+    assertEquals(1, dest6.getDestinations().size());
+    assertEquals("/suffix6/dir6/file6.txt", dest6.getDestinations().get(0).getDest());
+    assertEquals("subcluster6", dest6.getDestinations().get(0).getNameserviceId());
+
+    // point /suffix to subclusters 7 and dstPath path is /suffix7 with the suffix order,
+    // and point /dir7 to subclusters 7 and dstPath path is /dir7_sub,
+    // so point /suffix/dir7/file7.txt dest ns is subclusters 7
+    // and dstPath is /suffix7/dir7_sub/file7.txt.
+    PathLocation dest7 = resolver.getDestinationForPath("/suffix/dir7/file7.txt");
+    assertEquals(1, dest7.getDestinations().size());
+    assertEquals("/suffix7/dir7_sub/file7.txt", dest7.getDestinations().get(0).getDest());
+    assertEquals("subcluster7", dest7.getDestinations().get(0).getNameserviceId());
   }
 
   private static void assertDest(String expectedDest, PathLocation loc) {

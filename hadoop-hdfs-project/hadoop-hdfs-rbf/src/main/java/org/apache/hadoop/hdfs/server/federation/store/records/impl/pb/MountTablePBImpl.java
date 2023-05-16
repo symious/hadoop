@@ -322,6 +322,8 @@ public class MountTablePBImpl extends MountTable implements PBRecord {
       return DestinationOrder.HASH_ALL;
     case SPACE:
       return DestinationOrder.SPACE;
+    case SUFFIX:
+      return DestinationOrder.SUFFIX;
     default:
       return DestinationOrder.HASH;
     }
@@ -337,6 +339,8 @@ public class MountTablePBImpl extends MountTable implements PBRecord {
       return DestOrder.HASH_ALL;
     case SPACE:
       return DestOrder.SPACE;
+    case SUFFIX:
+      return DestOrder.SUFFIX;
     default:
       return DestOrder.HASH;
     }
