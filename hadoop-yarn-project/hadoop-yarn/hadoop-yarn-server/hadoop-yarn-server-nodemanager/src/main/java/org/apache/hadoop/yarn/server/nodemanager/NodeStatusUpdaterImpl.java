@@ -163,6 +163,8 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
   private final NodeHealthCheckerService healthChecker;
   private final NodeManagerMetrics metrics;
 
+  private NodeManagerLabelTracker labelTracker;
+
   private static int coreNumber = 0;
 
   private Runnable statusUpdaterRunnable;
@@ -190,6 +192,9 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     this.context = context;
     this.dispatcher = dispatcher;
     this.metrics = metrics;
+    String jmxPrometheusConfig = context.getConf().get(YarnConfiguration.NM_JMX_PROMETHEUS_CONFIG_FILE,
+        YarnConfiguration.DEFAULT_NM_JMX_PROMETHEUS_CONFIG_FILE);
+    this.labelTracker = new NodeManagerLabelTracker(jmxPrometheusConfig);
     this.recentlyStoppedContainers = new LinkedHashMap<ContainerId, Long>();
     this.pendingCompletedContainers =
         new HashMap<ContainerId, ContainerStatus>();
@@ -537,6 +542,9 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
         .verifyRMRegistrationResponseForNodeLabels(regNMResponse));
     successfullRegistrationMsg.append(nodeAttributesHandler
         .verifyRMRegistrationResponseForNodeAttributes(regNMResponse));
+
+    // Update NodeLabel
+    this.labelTracker.setNodeLabel(regNMResponse.getNodeLabel());
 
     LOG.info(successfullRegistrationMsg.toString());
     long registerCostTime = Time.monotonicNow() - registerStartTime;
@@ -1603,6 +1611,8 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
           }
           updateContainerLevel(levels);
 
+          updateNMNodeLabel(response.getNodeLabel());
+
           metrics.setPassedTimeAfterStartup(
               System.currentTimeMillis() - NodeManager.getNMStartupTime());
         } catch (ConnectException e) {
@@ -1630,6 +1640,19 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
             }
           }
         }
+      }
+    }
+
+    private void updateNMNodeLabel(String nodeLabel) {
+      String nmLabel = labelTracker.getDefaultNodeLabel();
+      if (!StringUtils.isNullOrEmpty(nodeLabel)) {
+        nmLabel = nodeLabel;
+      }
+      if (!nmLabel.equals(labelTracker.getNodeLabel())) {
+        labelTracker.setNodeLabel(nmLabel);
+      }
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Current NodeLable:" + nmLabel);
       }
     }
 

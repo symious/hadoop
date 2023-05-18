@@ -139,4 +139,8 @@ public abstract class NodeHeartbeatResponse {
   public abstract List<ApplicationLevel> getApplicationLevel();
 
   public abstract void setApplicationLevel(List<ApplicationLevel> applicationLevels);
+
+  public abstract void setNodeLabel(String nodeLabel);
+
+  public abstract String getNodeLabel();
 }

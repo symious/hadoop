@@ -87,6 +87,7 @@ message RegisterNodeManagerResponseProto {
   optional bool areNodeLabelsAcceptedByRM = 7 [default = false];
   optional ResourceProto resource = 8;
   optional bool areNodeAttributesAcceptedByRM = 9 [default = false];
+  optional string node_label = 10;
 }
 
 message UnRegisterNodeManagerRequestProto {
@@ -137,6 +138,7 @@ message NodeHeartbeatResponseProto {
   optional int64 tokenSequenceNo = 19;
   repeated ApplicationLevelProto application_level = 20;
   repeated ApplicationSimpleReportProto applications_to_cleanup_v2 = 21;
+  optional string node_label = 22;
 }
 
 message ApplicationLevelProto {

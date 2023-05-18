@@ -37,6 +37,7 @@ import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableMap;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.event.EventDispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
+import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
 import org.apache.hadoop.yarn.server.ApplicationLevelType;
 import org.apache.hadoop.yarn.server.api.records.ApplicationLevel;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEvent;
@@ -681,7 +682,15 @@ public class ResourceTrackerService extends AbstractService implements
     response.setNodeAction(NodeAction.NORMAL);
     response.setRMIdentifier(ResourceManager.getClusterTimeStamp());
     response.setRMVersion(YarnVersionInfo.getVersion());
+    response.setNodeLabel(getNodeLabel(rmNode.getNodeLabels()));
     return response;
+  }
+
+  private String getNodeLabel(Set<String> nodeLabels) {
+    if (!CollectionUtils.isEmpty(nodeLabels)) {
+      return StringUtils.join(",", nodeLabels);
+    }
+    return CommonNodeLabelsManager.NO_LABEL;
   }
 
   @SuppressWarnings("unchecked")
@@ -897,6 +906,7 @@ public class ResourceTrackerService extends AbstractService implements
       }
     }
 
+    nodeHeartBeatResponse.setNodeLabel(getNodeLabel(rmNode.getNodeLabels()));
     return nodeHeartBeatResponse;
   }
 

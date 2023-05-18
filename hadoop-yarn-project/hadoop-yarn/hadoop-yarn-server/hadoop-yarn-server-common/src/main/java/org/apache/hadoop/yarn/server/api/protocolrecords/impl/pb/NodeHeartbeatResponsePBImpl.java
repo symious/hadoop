@@ -803,6 +803,25 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
     addApplicationLevel(applicationLevel);
   }
 
+  @Override
+  public void setNodeLabel(String nodeLabel) {
+    maybeInitBuilder();
+    if (nodeLabel == null) {
+      builder.clearNodeLabel();
+      return;
+    }
+    builder.setNodeLabel(nodeLabel);
+  }
+
+  @Override
+  public String getNodeLabel() {
+    NodeHeartbeatResponseProtoOrBuilder p = viaProto ? proto : builder;
+    if (!p.hasNodeLabel()) {
+      return null;
+    }
+    return p.getNodeLabel();
+  }
+
   public void addApplicationLevel(final List<ApplicationLevel> applicationLevels) {
     if (applicationLevels == null) {
       return;

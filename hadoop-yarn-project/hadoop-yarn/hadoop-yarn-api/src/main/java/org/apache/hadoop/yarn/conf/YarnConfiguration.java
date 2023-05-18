@@ -2177,6 +2177,12 @@ public class YarnConfiguration extends Configuration {
   @Deprecated
   public final static int DEFAULT_NM_CONTAINER_MON_INTERVAL_MS = 3000;
 
+  public final static String NM_JMX_PROMETHEUS_CONFIG_FILE =
+      NM_PREFIX + "jmx-prometheus-config.file";
+
+  public final static String DEFAULT_NM_JMX_PROMETHEUS_CONFIG_FILE =
+      "/etc/yarn-server/jmx_prometheus_config.yaml";
+
   public final static String NM_DISK_UTILIZATION_PERCENTAGE_THRESHOLD =
       NM_PREFIX +"disk-utilization-threshold";
   public final static float DEFAULT_NM_DISK_UTILIZATION_PERCENTAGE_THRESHOLD =

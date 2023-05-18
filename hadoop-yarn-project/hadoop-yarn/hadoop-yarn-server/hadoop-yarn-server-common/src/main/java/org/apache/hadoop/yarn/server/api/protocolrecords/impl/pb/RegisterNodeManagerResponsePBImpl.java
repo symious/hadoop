@@ -284,4 +284,23 @@ public class RegisterNodeManagerResponsePBImpl
     this.builder
         .setAreNodeAttributesAcceptedByRM(areNodeAttributesAcceptedByRM);
   }
+
+  @Override
+  public void setNodeLabel(String nodeLabel) {
+    maybeInitBuilder();
+    if (nodeLabel == null) {
+      builder.clearNodeLabel();
+      return;
+    }
+    builder.setNodeLabel(nodeLabel);
+  }
+
+  @Override
+  public String getNodeLabel() {
+    RegisterNodeManagerResponseProtoOrBuilder p = viaProto ? proto : builder;
+    if (!p.hasNodeLabel()) {
+      return null;
+    }
+    return p.getNodeLabel();
+  }
 }  

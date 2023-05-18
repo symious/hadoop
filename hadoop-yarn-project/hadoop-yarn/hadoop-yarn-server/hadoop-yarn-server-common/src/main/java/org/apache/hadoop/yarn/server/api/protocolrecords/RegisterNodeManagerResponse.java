@@ -63,4 +63,8 @@ public abstract class RegisterNodeManagerResponse {
 
   public abstract void setAreNodeAttributesAcceptedByRM(
       boolean areNodeAttributesAcceptedByRM);
+
+  public abstract void setNodeLabel(String nodeLabel);
+
+  public abstract String getNodeLabel();
 }
