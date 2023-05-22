@@ -513,11 +513,12 @@ public class TestRouterAllResolver {
     createTestFile(routerFs, path + "/dir1/file3.txt");
     createTestFile(routerFs, path + "/dir2/dir20/file4.txt");
     createTestFile(routerFs, path + "/dir2/dir20/file5.txt");
+    createTestFile(routerFs, path + "/dir2/dir20/file8.txt_COPYING_");
     createTestFile(routerFs, path + "/dir2/dir21/file6.txt");
     createTestFile(routerFs, path + "/dir2/dir21/file7.txt");
     assertFileNums(nnFs0, path  + "/dir0", 2);
     assertFileNums(nnFs1, path  + "/dir1", 2);
-    assertFileNums(nnFs0, path  + "/dir2/dir20", 2);
+    assertFileNums(nnFs0, path  + "/dir2/dir20", 3);
     assertFileNums(nnFs1, path  + "/dir2/dir21", 2);
 
     // Test append file
@@ -525,6 +526,13 @@ public class TestRouterAllResolver {
     createTestFile(routerFs, testFile);
     appendTestFile(routerFs, testFile);
     assertFileNums(nnFs1,path  + "/dir2/dir21", 3);
+
+    // Test rename file
+    routerFs.rename(new Path(path + "/dir2/dir20/file8.txt_COPYING_"),
+        new Path(path + "/dir2/dir20/file8.txt"));
+    assertFileNums(nnFs0, path  + "/dir2/dir20", 3);
+    assertFileExists(routerFs, new Path(path + "/dir2/dir20/file8.txt"));
+    assertFileExists(nnFs0, new Path(path + "/dir2/dir20/file8.txt"));
 
     // Removing file
     routerFs.delete(new Path(path + "/dir2/dir21/file-append.txt"), true);
@@ -550,6 +558,11 @@ public class TestRouterAllResolver {
   private void assertDirectoryExists(FileSystem fs, Path path) throws Exception {
     FileStatus fileStatus = fs.getFileStatus(path);
     assertTrue(path + " should be a directory", fileStatus.isDirectory());
+  }
+
+  private void assertFileExists(FileSystem fs, Path path) throws Exception {
+    FileStatus fileStatus = fs.getFileStatus(path);
+    assertTrue(path + " should be a file", fileStatus.isFile());
   }
 
   private void assertDoesNotExist(FileSystem fs, Path path) throws Exception {

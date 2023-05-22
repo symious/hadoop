@@ -513,6 +513,13 @@ public class TestMultipleDestinationResolver {
     assertEquals(1, dest7.getDestinations().size());
     assertEquals("/suffix7/dir7_sub/file7.txt", dest7.getDestinations().get(0).getDest());
     assertEquals("subcluster7", dest7.getDestinations().get(0).getNameserviceId());
+
+    // add path suffix is "_COPYING_".
+    dest7 = resolver.getDestinationForPath("/suffix/dir7/file7.txt_COPYING_");
+    assertEquals(1, dest7.getDestinations().size());
+    assertEquals("/suffix7/dir7_sub/file7.txt_COPYING_",
+        dest7.getDestinations().get(0).getDest());
+    assertEquals("subcluster7", dest7.getDestinations().get(0).getNameserviceId());
   }
 
   private static void assertDest(String expectedDest, PathLocation loc) {

@@ -394,10 +394,14 @@ public class MountTableResolver
     if(this.locationCache != null && (pathLocation = locationCache.getIfPresent(path)) != null){
       return pathLocation;
     }
-    String dirPrefix = getDirPrefix(path);
-    String pathTail = path.substring(dirPrefix.length());
-    pathLocation = getDestinationForPathInner(dirPrefix);
-    return pathLocation.addTail(pathTail);
+    if (locationCache != null) {
+      String dirPrefix = getDirPrefix(path);
+      String pathTail = path.substring(dirPrefix.length());
+      pathLocation = getDestinationForPathInner(dirPrefix);
+      return pathLocation.addTail(pathTail);
+    } else {
+      return getDestinationForPathInner(path);
+    }
   }
 
 

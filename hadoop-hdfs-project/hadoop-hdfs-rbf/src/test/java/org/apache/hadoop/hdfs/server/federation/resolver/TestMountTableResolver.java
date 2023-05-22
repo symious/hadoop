@@ -650,6 +650,12 @@ public class TestMountTableResolver {
     // Check resolve path without cache
     assertEquals("2->/tmp/tesfile1.txt",
         tmpMountTable.getDestinationForPath("/tmp/tesfile1.txt").toString());
+
+    // Check resolve path without cache and not run getDirPrefix.
+    assertEquals("2->/tmp/tesfile1.txt_COPYING_",
+        tmpMountTable.getDestinationForPath("/tmp/tesfile1.txt_COPYING_").toString());
+    assertEquals("/tmp",
+        tmpMountTable.getDestinationForPath("/tmp/tesfile1.txt_COPYING_").getSourcePath());
   }
 
   @Test
@@ -679,9 +685,22 @@ public class TestMountTableResolver {
     mountTable.refreshEntries(entries);
     assertEquals("1->/testlocationcache",
             mountTable.getDestinationForPath("/testlocationcache").toString());
+    // validate getDirPrefix.
+    assertEquals("1->/testlocationcache/test_COPYING_",
+        mountTable.getDestinationForPath("/testlocationcache/test_COPYING_").toString());
+    assertEquals("/testlocationcache",
+        mountTable.getDestinationForPath("/testlocationcache/test_COPYING_").getSourcePath());
+
     assertEquals("2->/anothertestlocationcache",
             mountTable.getDestinationForPath("/anothertestlocationcache")
                     .toString());
+    // validate getDirPrefix.
+    assertEquals("2->/anothertestlocationcache/test/.spark-staging",
+        mountTable.getDestinationForPath(
+            "/anothertestlocationcache/test/.spark-staging").toString());
+    assertEquals("/anothertestlocationcache",
+        mountTable.getDestinationForPath(
+            "/anothertestlocationcache/test/.spark-staging").getSourcePath());
 
     // Remove the entry1
     entries.remove(entry1);
@@ -690,6 +709,11 @@ public class TestMountTableResolver {
     // Add the default location and test location cache
     assertEquals("0->/testlocationcache",
             mountTable.getDestinationForPath("/testlocationcache").toString());
+    // validate getDirPrefix.
+    assertEquals("0->/testlocationcache/test_COPYING_",
+        mountTable.getDestinationForPath("/testlocationcache/test_COPYING_").toString());
+    assertNull(mountTable.getDestinationForPath(
+        "/testlocationcache/test_COPYING_").getSourcePath());
 
     // Add the entry again but mount to another ns
     Map<String, String> map3 = getMountTableEntry("3", "/testlocationcache");
