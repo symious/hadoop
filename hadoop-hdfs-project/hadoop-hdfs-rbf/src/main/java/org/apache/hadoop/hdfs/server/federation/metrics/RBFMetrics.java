@@ -57,6 +57,7 @@ import org.apache.hadoop.hdfs.server.federation.resolver.ActiveNamenodeResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeContext;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamespaceInfo;
 import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
+import org.apache.hadoop.hdfs.server.federation.resolver.order.DestinationOrder;
 import org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys;
 import org.apache.hadoop.hdfs.server.federation.router.Router;
 import org.apache.hadoop.hdfs.server.federation.router.RouterRpcServer;
@@ -308,7 +309,7 @@ public class RBFMetrics implements RouterMBean, FederationMBean {
         innerInfo.putAll(map);
         innerInfo.put("nameserviceId", StringUtils.join(",", nameservices));
         innerInfo.put("path", StringUtils.join(",", paths));
-        if (nameservices.size() > 1) {
+        if (nameservices.size() > 1 || entry.getDestOrder().equals(DestinationOrder.SUFFIX)) {
           innerInfo.put("order", entry.getDestOrder().toString());
         } else {
           innerInfo.put("order", "");

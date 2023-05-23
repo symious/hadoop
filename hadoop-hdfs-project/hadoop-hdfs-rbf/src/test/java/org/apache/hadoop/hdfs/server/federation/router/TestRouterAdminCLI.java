@@ -230,6 +230,7 @@ public class TestRouterAdminCLI {
     testAddOrderMountTable(DestinationOrder.RANDOM);
     testAddOrderMountTable(DestinationOrder.HASH_ALL);
     testAddOrderMountTable(DestinationOrder.SPACE);
+    testAddOrderMountTable(DestinationOrder.SUFFIX);
   }
 
   @Test
@@ -589,7 +590,7 @@ public class TestRouterAdminCLI {
         "\t[-add <source> <nameservice1, nameservice2, ...> "
             + "<one destination or the same number of destinations as nameservices> "
             + "[-readonly] [-faulttolerant] "
-            + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE] "
+            + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX] "
             + "-owner <owner> -group <group> -mode <mode>]"));
     out.reset();
 
@@ -599,7 +600,7 @@ public class TestRouterAdminCLI {
         "\t[-update <source> [<nameservice1, nameservice2, ...> "
             + "<one destination or the same number of destinations as nameservices>] "
             + "[-readonly true|false] [-faulttolerant true|false] "
-            + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE] "
+            + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX] "
             + "-owner <owner> -group <group> -mode <mode>]"));
     out.reset();
 
@@ -648,13 +649,13 @@ public class TestRouterAdminCLI {
         + "\t[-add <source> <nameservice1, nameservice2, ...> "
         + "<one destination or the same number of destinations as nameservices> "
         + "[-readonly] [-faulttolerant] "
-        + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE] "
+        + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX] "
         + "-owner <owner> -group <group> -mode <mode>]\n"
         + "\t[-update <source> [<nameservice1, nameservice2, ...> "
         + "<one destination or the same number of destinations as nameservices>]"
         + " [-readonly true|false]"
         + " [-faulttolerant true|false] "
-        + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE] "
+        + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX] "
         + "-owner <owner> -group <group> -mode <mode>]\n" + "\t[-rm <source>]\n"
         + "\t[-ls [-d] <path>]\n"
         + "\t[-getDestination <path>]\n"
