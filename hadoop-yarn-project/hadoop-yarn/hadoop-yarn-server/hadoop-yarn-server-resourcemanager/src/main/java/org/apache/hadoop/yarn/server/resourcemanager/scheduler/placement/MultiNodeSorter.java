@@ -157,7 +157,8 @@ public class MultiNodeSorter<N extends SchedulerNode> extends AbstractService {
             nodesByPartition.put(nodeId, sn);
           } else if (rmNode.getNodeSchedulerType()
               .equals(SchedulingNodeType.GLOBAL) &&
-              SchedulerUtils.isNodeHeartbeated(sn, cs.getSkipNodeInterval())) {
+              SchedulerUtils.isNodeHeartbeated(sn, cs.getSkipNodeInterval()) &&
+              rmNode.isGoodTarget()) {
             nodesByPartition.put(nodeId, sn);
           }
         }
