@@ -143,4 +143,9 @@ public abstract class NodeHeartbeatResponse {
   public abstract void setNodeLabel(String nodeLabel);
 
   public abstract String getNodeLabel();
+
+  public abstract void setSlowNode(int slowNode);
+
+  public abstract int getSlowNode();
+
 }

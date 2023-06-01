@@ -156,6 +156,14 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
 
   //Record status of Node
   private boolean isGoodTarget = Boolean.TRUE;
+  private int slowNode = DEFAULT_SLOW_NODE_NORMAL;
+
+  private static final int DEFAULT_SLOW_NODE_NORMAL = 0;
+  private static final int DEFAULT_SLOW_NODE_HIGH_LOAD1 = 108;
+  private static final int DEFAULT_SLOW_NODE_HIGH_LOAD5 = 208;
+  private static final int DEFAULT_SLOW_NODE_DISK_FULL = 308;
+  private static final int DEFAULT_SLOW_NODE_MEMORY_FULL = 508;
+  private static final int DEFAULT_SLOW_NODE_HIGH_FAILED = 608;
 
   //Record status of Co-locate
   private boolean isCoLocate =  Boolean.FALSE;
@@ -537,6 +545,14 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
   @Override
   public void setGoodTarget(boolean isGoodTarget) {
     this.isGoodTarget = isGoodTarget;
+  }
+
+  public void setSlowNode(int slowNode) {
+    this.slowNode = slowNode;
+  }
+
+  public int getSlowNode() {
+    return this.slowNode;
   }
 
   @Override
@@ -1566,21 +1582,25 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
 
       if (load1 > load1WatermarkHigh) {
         metrics.incrHighLoad1Skipped();
+        this.setSlowNode(DEFAULT_SLOW_NODE_HIGH_LOAD1);
         return false;
       }
 
       if (load5 > load5WatermarkHigh) {
         metrics.incrHighLoad5Skipped();
+        this.setSlowNode(DEFAULT_SLOW_NODE_HIGH_LOAD5);
         return false;
       }
 
       if (diskUsed > diskWatermarkHigh) {
         metrics.incrHighDiskUsageSkipped();
+        this.setSlowNode(DEFAULT_SLOW_NODE_DISK_FULL);
         return false;
       }
 
       if (availableMem < availableMemWatermark) {
         metrics.incrLowAvailableMemSkipped();
+        this.setSlowNode(DEFAULT_SLOW_NODE_MEMORY_FULL);
         return false;
       }
     }
@@ -1603,13 +1623,14 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
 
       if (periodFailedContainers > failedContainersWatermarkHigh) {
         metrics.incrHighFailedContainersSkipped();
+        this.setSlowNode(DEFAULT_SLOW_NODE_HIGH_FAILED);
         LOG.warn("Found a high fail rate node: " + rmNode.getHostName() +
             " ,periodFailedContainers: " + periodFailedContainers + " and " +
             "skipped to assign containers on it!");
         return false;
       }
     }
-
+    this.setSlowNode(DEFAULT_SLOW_NODE_NORMAL);
     return true;
   }
 

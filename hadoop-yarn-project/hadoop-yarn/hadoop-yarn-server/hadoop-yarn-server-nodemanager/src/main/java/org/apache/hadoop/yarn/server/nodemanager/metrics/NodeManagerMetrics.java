@@ -103,6 +103,9 @@ public class NodeManagerMetrics {
   @Metric("Current running apps")
   MutableGaugeInt applicationsRunning;
 
+  @Metric("Current slow node")
+  MutableGaugeInt slowNode;
+
   @Metric("Missed localization requests in bytes")
       MutableCounterLong localizedCacheMissBytes;
   @Metric("Cached localization requests in bytes")
@@ -509,5 +512,13 @@ public class NodeManagerMetrics {
 
   public long getPassedTimeAfterStartup() {
     return passedTimeAfterStartup.value();
+  }
+
+  public int getSlowNode() {
+    return this.slowNode.value();
+  }
+
+  public void setSlowNode(int slowNode) {
+    this.slowNode.set(slowNode);
   }
 }

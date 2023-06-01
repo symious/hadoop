@@ -907,6 +907,10 @@ public class ResourceTrackerService extends AbstractService implements
     }
 
     nodeHeartBeatResponse.setNodeLabel(getNodeLabel(rmNode.getNodeLabels()));
+    if (rmNode instanceof RMNodeImpl) {
+      RMNodeImpl rmNodeImpl = (RMNodeImpl) rmNode;
+      nodeHeartBeatResponse.setSlowNode(rmNodeImpl.getSlowNode());
+    }
     return nodeHeartBeatResponse;
   }
 

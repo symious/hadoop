@@ -822,6 +822,18 @@ public class NodeHeartbeatResponsePBImpl extends NodeHeartbeatResponse {
     return p.getNodeLabel();
   }
 
+  @Override
+  public void setSlowNode(int slowNode) {
+    maybeInitBuilder();
+    builder.setSlowNode(slowNode);
+  }
+
+  @Override
+  public int getSlowNode() {
+    NodeHeartbeatResponseProtoOrBuilder p = viaProto ? proto : builder;
+    return p.getSlowNode();
+  }
+
   public void addApplicationLevel(final List<ApplicationLevel> applicationLevels) {
     if (applicationLevels == null) {
       return;

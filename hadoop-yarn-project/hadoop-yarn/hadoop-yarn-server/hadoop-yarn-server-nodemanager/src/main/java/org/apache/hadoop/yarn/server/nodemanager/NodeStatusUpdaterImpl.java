@@ -1613,6 +1613,8 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
 
           updateNMNodeLabel(response.getNodeLabel());
 
+          metrics.setSlowNode(response.getSlowNode());
+
           metrics.setPassedTimeAfterStartup(
               System.currentTimeMillis() - NodeManager.getNMStartupTime());
         } catch (ConnectException e) {

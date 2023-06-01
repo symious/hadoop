@@ -139,6 +139,7 @@ message NodeHeartbeatResponseProto {
   repeated ApplicationLevelProto application_level = 20;
   repeated ApplicationSimpleReportProto applications_to_cleanup_v2 = 21;
   optional string node_label = 22;
+  optional int32 slow_node = 23;
 }
 
 message ApplicationLevelProto {
