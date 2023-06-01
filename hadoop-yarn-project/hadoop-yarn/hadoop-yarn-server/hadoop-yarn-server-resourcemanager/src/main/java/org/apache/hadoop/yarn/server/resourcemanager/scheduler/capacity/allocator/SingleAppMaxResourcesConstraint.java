@@ -44,6 +44,14 @@ public class SingleAppMaxResourcesConstraint implements ApplicationConstraint {
       SchedulerRequestKey schedulerKey, FiCaSchedulerApp application,
       ActivitiesManager activitiesManager) {
 
+    RMContainer reservedContainer = node.getReservedContainer();
+    boolean isReservedApp = false;
+    if (reservedContainer != null) {
+      isReservedApp =
+          reservedContainer.getApplicationAttemptId().getApplicationId()
+              .equals(application.getApplicationId());
+    }
+
     // Check whether the resource used by the app exceeds the maximum
     // resource limit for a single app in the queue
 
@@ -56,7 +64,7 @@ public class SingleAppMaxResourcesConstraint implements ApplicationConstraint {
           enableCheckAppMaxResources);
     }
 
-    if (enableCheckAppMaxResources) {
+    if (enableCheckAppMaxResources && !isReservedApp) {
       long start = System.nanoTime();
       ResourceUsage appResUsageReport =
           application.getAppAttemptResourceUsage();
