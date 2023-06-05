@@ -854,18 +854,18 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   }
 
   /**
-   * APP_PENDING_FLAG_MEMORY, default 100TB
+   * APP_USED_FLAG_MEMORY, default 100TB
    */
-  private static final String APP_PENDING_FLAG_MEMORY =
-      PREFIX + "apps.pending.flag.memory";
+  private static final String APP_USED_FLAG_MEMORY =
+      PREFIX + "apps.used.flag.memory";
 
-  public static final double DEFAULT_APP_PENDING_FLAG_MEMORY = 100 * 1024 * 1024;
+  public static final double DEFAULT_APP_USED_FLAG_MEMORY = 100 * 1024 * 1024;
 
-  public double getAppPendingFlagMemory() {
-    double appPendingFlagMemory =
-        getDouble(APP_PENDING_FLAG_MEMORY, DEFAULT_APP_PENDING_FLAG_MEMORY);
-    return (appPendingFlagMemory > 0) ? appPendingFlagMemory :
-        DEFAULT_APP_PENDING_FLAG_MEMORY;
+  public double getAppUsedFlagMemory() {
+    double appUsedFlagMemory =
+        getDouble(APP_USED_FLAG_MEMORY, DEFAULT_APP_USED_FLAG_MEMORY);
+    return (appUsedFlagMemory > 0) ? appUsedFlagMemory :
+        DEFAULT_APP_USED_FLAG_MEMORY;
   }
 
   /**
@@ -900,21 +900,21 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   }
 
   /**
-   * pendingMemoryWeightFactor, default 0.2
+   * usedMemoryWeightFactor, default 0.2
    */
-  private static final String APP_PENDING_MEMORY_WEIGHT_FACTOR =
-      PREFIX + "apps.pending.memory.weight.factor";
+  private static final String APP_USED_MEMORY_WEIGHT_FACTOR =
+      PREFIX + "apps.used.memory.weight.factor";
 
-  public static final double DEFAULT_APP_PENDING_MEMORY_WEIGHT_FACTOR = 0.2;
+  public static final double DEFAULT_APP_USED_MEMORY_WEIGHT_FACTOR = 0.2;
 
-  public double getAppPendingMemoryWeightFactor() {
-    double appPendingMemoryWeightFactor =
-        getDouble(APP_PENDING_MEMORY_WEIGHT_FACTOR,
-            DEFAULT_APP_PENDING_MEMORY_WEIGHT_FACTOR);
+  public double getAppUsedMemoryWeightFactor() {
+    double appUsedMemoryWeightFactor =
+        getDouble(APP_USED_MEMORY_WEIGHT_FACTOR,
+            DEFAULT_APP_USED_MEMORY_WEIGHT_FACTOR);
     return
-        (appPendingMemoryWeightFactor > 0 && appPendingMemoryWeightFactor < 1) ?
-            appPendingMemoryWeightFactor :
-            DEFAULT_APP_PENDING_MEMORY_WEIGHT_FACTOR;
+        (appUsedMemoryWeightFactor > 0 && appUsedMemoryWeightFactor < 1) ?
+            appUsedMemoryWeightFactor :
+            DEFAULT_APP_USED_MEMORY_WEIGHT_FACTOR;
   }
 
   public static final double DEFAULT_APP_PENDING_TIME_WEIGHT_FACTOR = 0.2;
@@ -982,17 +982,17 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     }
 
     double highFlagPriority = getAppHighFlagPriority();
-    double pendingFlagMemory = getAppPendingFlagMemory();
+    double usedFlagMemory = getAppUsedFlagMemory();
     double pendingFlagTime = getAppPendingFlagTime();
     double priorityWeightFactor = getAppPriorityWeightFactor();
-    double pendingMemoryWeightFactor = getAppPendingMemoryWeightFactor();
+    double usedMemoryWeightFactor = getAppUsedMemoryWeightFactor();
     long cacheTime = getAppOrderCacheTime();
     int fullReorderIntervalSecond = getFullReOrderIntervalSecond();
     LOG.info(
-        "highFlagPriority: " + highFlagPriority + " ,pendingFlagMemory: " +
-            pendingFlagMemory + " ,pendingFlagTime: " + pendingFlagTime +
+        "highFlagPriority: " + highFlagPriority + " ,usedFlagMemory: " +
+            usedFlagMemory + " ,pendingFlagTime: " + pendingFlagTime +
             " ,priorityWeightFactor: " + priorityWeightFactor +
-            " ,pendingMemoryWeightFactor: " + pendingMemoryWeightFactor +
+            " ,usedMemoryWeightFactor: " + usedMemoryWeightFactor +
             " ,getAppOrderCacheTime: " + cacheTime +
             " ,fullReorderIntervalSecond: " + fullReorderIntervalSecond);
 
@@ -1016,8 +1016,8 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
       //add highFlagPriority
       config.put("highFlagPriority", String.valueOf(highFlagPriority));
 
-      //add pendingFlagMemory
-      config.put("pendingFlagMemory", String.valueOf(pendingFlagMemory));
+      //add usedFlagMemory
+      config.put("usedFlagMemory", String.valueOf(usedFlagMemory));
 
       //add pendingFlagTime
       config.put("pendingFlagTime", String.valueOf(pendingFlagTime));
@@ -1025,9 +1025,9 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
       //add priorityWeightFactor
       config.put("priorityWeightFactor", String.valueOf(priorityWeightFactor));
 
-      //add pendingMemoryWeightFactor
-      config.put("pendingMemoryWeightFactor",
-          String.valueOf(pendingMemoryWeightFactor));
+      //add usedMemoryWeightFactor
+      config.put("usedMemoryWeightFactor",
+          String.valueOf(usedMemoryWeightFactor));
     }
     orderingPolicy.configure(config);
     return orderingPolicy;

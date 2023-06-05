@@ -38,17 +38,17 @@ public class TestCompositeWeightOrderingPolicy {
 
     long cacheTime = 3000;
     double highFlagPriority = 60;
-    double pendingFlagMemory = 100 * 1024 * 1024;
+    double usedFlagMemory = 100 * 1024 * 1024;
     double pendingFlagTime = 120 * 60 * 1000;
     double priorityWeight = 0.6;
-    double pendingResourcesWeight = 0.2;
+    double usedResourcesWeight = 0.2;
     double pendingTimeWeight = 0.2;
     schedOrder.setCacheTime(cacheTime);
     schedOrder.setHighFlagPriority(highFlagPriority);
-    schedOrder.setPendingFlagMemory(pendingFlagMemory);
+    schedOrder.setUsedFlagMemory(usedFlagMemory);
     schedOrder.setPendingFlagTime(pendingFlagTime);
     schedOrder.setPriorityWeightFactor(priorityWeight);
-    schedOrder.setPendingMemoryWeightFactor(pendingResourcesWeight);
+    schedOrder.setUsedMemoryWeightFactor(usedResourcesWeight);
     schedOrder.setPendingTimeWeightFactor(pendingTimeWeight);
 
     MockSchedulableEntity r1 = new MockSchedulableEntity();
@@ -83,17 +83,17 @@ public class TestCompositeWeightOrderingPolicy {
 
     long cacheTime = 3000;
     double highFlagPriority = 60;
-    double pendingFlagMemory = 100 * 1024 * 1024;
+    double usedFlagMemory = 100 * 1024 * 1024;
     double pendingFlagTime = 120 * 60 * 1000;
     double priorityWeight = 0.6;
-    double pendingResourcesWeight = 0.2;
+    double usedResourcesWeight = 0.2;
     double pendingTimeWeight = 0.2;
     schedOrder.setCacheTime(cacheTime);
     schedOrder.setHighFlagPriority(highFlagPriority);
-    schedOrder.setPendingFlagMemory(pendingFlagMemory);
+    schedOrder.setUsedFlagMemory(usedFlagMemory);
     schedOrder.setPendingFlagTime(pendingFlagTime);
     schedOrder.setPriorityWeightFactor(priorityWeight);
-    schedOrder.setPendingMemoryWeightFactor(pendingResourcesWeight);
+    schedOrder.setUsedMemoryWeightFactor(usedResourcesWeight);
     schedOrder.setPendingTimeWeightFactor(pendingTimeWeight);
 
     MockSchedulableEntity r1 = new MockSchedulableEntity();
@@ -112,9 +112,9 @@ public class TestCompositeWeightOrderingPolicy {
     r1.setStartTime(currentTime - 10 * 60 * 1000);
     r2.setStartTime(currentTime - 200 * 60 * 1000);
 
-    //Set pending resources, r1 pending 10TB, r2 pending 200TB
-    r1.setPending(Resources.createResource(10 * 1024 * GB));
-    r2.setPending(Resources.createResource(200 * 1024 * GB));
+    //Set used resources, r1 used 200TB, r2 used 10TB
+    r1.setUsed(Resources.createResource(200 * 1024 * GB));
+    r2.setUsed(Resources.createResource(10 * 1024 * GB));
 
     AbstractComparatorOrderingPolicy
         .updateSchedulingResourceUsage(r1.getSchedulingResourceUsage());
@@ -137,17 +137,17 @@ public class TestCompositeWeightOrderingPolicy {
 
     long cacheTime = 3000;
     double highFlagPriority = 60;
-    double pendingFlagMemory = 100 * 1024 * 1024;
+    double usedFlagMemory = 100 * 1024 * 1024;
     double pendingFlagTime = 120 * 60 * 1000;
     double priorityWeight = 0.6;
-    double pendingResourcesWeight = 0.2;
+    double usedResourcesWeight = 0.2;
     double pendingTimeWeight = 0.2;
     schedOrder.setCacheTime(cacheTime);
     schedOrder.setHighFlagPriority(highFlagPriority);
-    schedOrder.setPendingFlagMemory(pendingFlagMemory);
+    schedOrder.setUsedFlagMemory(usedFlagMemory);
     schedOrder.setPendingFlagTime(pendingFlagTime);
     schedOrder.setPriorityWeightFactor(priorityWeight);
-    schedOrder.setPendingMemoryWeightFactor(pendingResourcesWeight);
+    schedOrder.setUsedMemoryWeightFactor(usedResourcesWeight);
     schedOrder.setPendingTimeWeightFactor(pendingTimeWeight);
 
     MockSchedulableEntity r1 = new MockSchedulableEntity();
@@ -166,9 +166,9 @@ public class TestCompositeWeightOrderingPolicy {
     r1.setStartTime(currentTime - 10 * 60 * 1000);
     r2.setStartTime(currentTime - 200 * 60 * 1000);
 
-    //Set pending resources, r1 pending 10TB, r2 pending 200TB
-    r1.setPending(Resources.createResource(10 * 1024 * GB));
-    r2.setPending(Resources.createResource(200 * 1024 * GB));
+    //Set used resources, r1 used 200TB, r2 used 10TB
+    r1.setUsed(Resources.createResource(200 * 1024 * GB));
+    r2.setUsed(Resources.createResource(10 * 1024 * GB));
 
     AbstractComparatorOrderingPolicy
         .updateSchedulingResourceUsage(r1.getSchedulingResourceUsage());
@@ -200,14 +200,14 @@ public class TestCompositeWeightOrderingPolicy {
     //we start 4 example apps, like below:
     /**
      *
-     * app1: priority=10, pending 60TB resources, started 120 minutes
-     * app2: priority=30, pending 100TB resources, started 80 minutes
-     * app3: priority=50, pending 20TB resources, started 20 minutes
-     * app4: priority=60, pending 20TB resources, started 15 minutes
+     * app1: priority=10, used 40TB resources, started 120 minutes
+     * app2: priority=30, used 1TB resources, started 80 minutes
+     * app3: priority=50, used 80TB resources, started 20 minutes
+     * app4: priority=60, used 80TB resources, started 15 minutes
      *
-     * app1_Weighted_Priority = (10 / 60) * 0.6 + (60 / 100) * 0.2 + (120 / 120) * 0.2 = 0.42
-     * app2_Weighted_Priority = (30 / 60) * 0.6 + (100 / 100) * 0.2 + (80 / 120) * 0.2 = 0.633
-     * app3_Weighted_Priority = (50 / 60) * 0.6 + (20 / 100) * 0.2 + (20 / 120) * 0.2 = 0.573
+     * app1_Weighted_Priority = (10 / 60) * 0.6 + (1.0 - 40 / 100) * 0.2 + (120 / 120) * 0.2 = 0.42
+     * app2_Weighted_Priority = (30 / 60) * 0.6 + (1.0 - 1 / 100) * 0.2 + (80 / 120) * 0.2 = 0.633
+     * app3_Weighted_Priority = (50 / 60) * 0.6 + (1.0 - 80 / 100) * 0.2 + (20 / 120) * 0.2 = 0.573
      * app4 is critical job, we only compare priority with other jobs, so it has biggest priority
      */
 
@@ -216,17 +216,17 @@ public class TestCompositeWeightOrderingPolicy {
 
     long cacheTime = 3000;
     double highFlagPriority = 60;
-    double pendingFlagMemory = 100 * 1024 * 1024;
+    double usedFlagMemory = 100 * 1024 * 1024;
     double pendingFlagTime = 120 * 60 * 1000;
     double priorityWeight = 0.6;
-    double pendingResourcesWeight = 0.2;
+    double usedResourcesWeight = 0.2;
     double pendingTimeWeight = 0.2;
     schedOrder.setCacheTime(cacheTime);
     schedOrder.setHighFlagPriority(highFlagPriority);
-    schedOrder.setPendingFlagMemory(pendingFlagMemory);
+    schedOrder.setUsedFlagMemory(usedFlagMemory);
     schedOrder.setPendingFlagTime(pendingFlagTime);
     schedOrder.setPriorityWeightFactor(priorityWeight);
-    schedOrder.setPendingMemoryWeightFactor(pendingResourcesWeight);
+    schedOrder.setUsedMemoryWeightFactor(usedResourcesWeight);
     schedOrder.setPendingTimeWeightFactor(pendingTimeWeight);
 
     MockSchedulableEntity r1 = new MockSchedulableEntity();
@@ -250,10 +250,10 @@ public class TestCompositeWeightOrderingPolicy {
     r4.setApplicationPriority(p4);
 
     //Set pending resources
-    r1.setPending(Resources.createResource(60 * 1024 * GB));
-    r2.setPending(Resources.createResource(100 * 1024 * GB));
-    r3.setPending(Resources.createResource(20 * 1024 * GB));
-    r4.setPending(Resources.createResource(20 * 1024 * GB));
+    r1.setUsed(Resources.createResource(40 * 1024 * GB));
+    r2.setUsed(Resources.createResource(1 * 1024 * GB));
+    r3.setUsed(Resources.createResource(80 * 1024 * GB));
+    r4.setUsed(Resources.createResource(80 * 1024 * GB));
     AbstractComparatorOrderingPolicy
         .updateSchedulingResourceUsage(r1.getSchedulingResourceUsage());
     AbstractComparatorOrderingPolicy
@@ -278,7 +278,7 @@ public class TestCompositeWeightOrderingPolicy {
     //Assignment, greatest to least weight
     checkIds(schedOrder.getAssignmentIterator(
         IteratorSelector.EMPTY_ITERATOR_SELECTOR),
-        new String[]{"4","2", "3", "1"});
+        new String[]{"4","2","3","1"});
   }
 
   @Test
@@ -289,17 +289,17 @@ public class TestCompositeWeightOrderingPolicy {
 
     long cacheTime = 3000;
     double highFlagPriority = 60;
-    double pendingFlagMemory = 100 * 1024 * 1024;
+    double usedFlagMemory = 100 * 1024 * 1024;
     double pendingFlagTime = 120 * 60 * 1000;
     double priorityWeight = 0.6;
-    double pendingResourcesWeight = 0.2;
+    double usedResourcesWeight = 0.2;
     double pendingTimeWeight = 0.2;
     schedOrder.setCacheTime(cacheTime);
     schedOrder.setHighFlagPriority(highFlagPriority);
-    schedOrder.setPendingFlagMemory(pendingFlagMemory);
+    schedOrder.setUsedFlagMemory(usedFlagMemory);
     schedOrder.setPendingFlagTime(pendingFlagTime);
     schedOrder.setPriorityWeightFactor(priorityWeight);
-    schedOrder.setPendingMemoryWeightFactor(pendingResourcesWeight);
+    schedOrder.setUsedMemoryWeightFactor(usedResourcesWeight);
     schedOrder.setPendingTimeWeightFactor(pendingTimeWeight);
 
     MockSchedulableEntity r1 = new MockSchedulableEntity();
@@ -323,10 +323,10 @@ public class TestCompositeWeightOrderingPolicy {
     r4.setApplicationPriority(p4);
 
     //Set pending resources
-    r1.setPending(Resources.createResource(60 * 1024 * GB));
-    r2.setPending(Resources.createResource(100 * 1024 * GB));
-    r3.setPending(Resources.createResource(20 * 1024 * GB));
-    r4.setPending(Resources.createResource(20 * 1024 * GB));
+    r1.setUsed(Resources.createResource(40 * 1024 * GB));
+    r2.setUsed(Resources.createResource(1 * 1024 * GB));
+    r3.setUsed(Resources.createResource(80 * 1024 * GB));
+    r4.setUsed(Resources.createResource(80 * 1024 * GB));
     AbstractComparatorOrderingPolicy
         .updateSchedulingResourceUsage(r1.getSchedulingResourceUsage());
     AbstractComparatorOrderingPolicy
@@ -357,7 +357,7 @@ public class TestCompositeWeightOrderingPolicy {
     checkIds(iterator1, new String[]{"4","2", "3", "1"});
 
     //Change value with cache, should see no change for assignmentIterator
-    r3.setPending(Resources.createResource(100 * 1024 * GB));
+    r3.setUsed(Resources.createResource(1 * GB));
     schedOrder.containerAllocated(r3, null);
     long startTime2 = System.nanoTime();
     Iterator<MockSchedulableEntity> iterator2 = schedOrder.getAssignmentIterator(
@@ -370,14 +370,14 @@ public class TestCompositeWeightOrderingPolicy {
     Thread.sleep(2 * cacheTime);
     /**
      *
-     * app1: priority=10, pending 60TB resources, started 120 minutes
-     * app2: priority=30, pending 100TB resources, started 80 minutes
-     * app3: priority=50, pending 100TB resources, started 20 minutes
-     * app4: priority=60, pending 20TB resources, started 15 minutes
+     * app1: priority=10, used 40TB resources, started 120 minutes
+     * app2: priority=30, used 0TB resources, started 80 minutes
+     * app3: priority=50, used 0TB resources, started 20 minutes
+     * app4: priority=60, used 20TB resources, started 15 minutes
      *
-     * app1_Weighted_Priority = (10 / 60) * 0.6 + (60 / 100) * 0.2 + (120 / 120) * 0.2 = 0.42
-     * app2_Weighted_Priority = (30 / 60) * 0.6 + (100 / 100) * 0.2 + (80 / 120) * 0.2 = 0.633
-     * app3_Weighted_Priority = (50 / 60) * 0.6 + (100 / 100) * 0.2 + (20 / 120) * 0.2 = 0.733
+     * app1_Weighted_Priority = (10 / 60) * 0.6 + (1.0 - 40 / 100) * 0.2 + (120 / 120) * 0.2 = 0.42
+     * app2_Weighted_Priority = (30 / 60) * 0.6 + (1.0 - 0 / 100) * 0.2 + (80 / 120) * 0.2 = 0.633
+     * app3_Weighted_Priority = (50 / 60) * 0.6 + (1.0 - 0 / 100) * 0.2 + (20 / 120) * 0.2 = 0.733
      * app4 is critical job, we only compare priority with other jobs, so it has biggest priority
      */
     long startTime3 = System.nanoTime();
@@ -399,17 +399,17 @@ public class TestCompositeWeightOrderingPolicy {
 
     long cacheTime = 3000;
     double highFlagPriority = 60;
-    double pendingFlagMemory = 100 * 1024 * 1024;
+    double usedFlagMemory = 100 * 1024 * 1024;
     double pendingFlagTime = 120 * 60 * 1000;
     double priorityWeight = 0.6;
-    double pendingResourcesWeight = 0.2;
+    double usedResourcesWeight = 0.2;
     double pendingTimeWeight = 0.2;
     schedOrder.setCacheTime(cacheTime);
     schedOrder.setHighFlagPriority(highFlagPriority);
-    schedOrder.setPendingFlagMemory(pendingFlagMemory);
+    schedOrder.setUsedFlagMemory(usedFlagMemory);
     schedOrder.setPendingFlagTime(pendingFlagTime);
     schedOrder.setPriorityWeightFactor(priorityWeight);
-    schedOrder.setPendingMemoryWeightFactor(pendingResourcesWeight);
+    schedOrder.setUsedMemoryWeightFactor(usedResourcesWeight);
     schedOrder.setPendingTimeWeightFactor(pendingTimeWeight);
 
     /*
@@ -474,17 +474,17 @@ public class TestCompositeWeightOrderingPolicy {
 
     long cacheTime = 3000;
     double highFlagPriority = 60;
-    double pendingFlagMemory = 100 * 1024 * 1024;
+    double usedFlagMemory = 100 * 1024 * 1024;
     double pendingFlagTime = 120 * 60 * 1000;
     double priorityWeight = 0.6;
-    double pendingResourcesWeight = 0.2;
+    double usedResourcesWeight = 0.2;
     double pendingTimeWeight = 0.2;
     schedOrder.setCacheTime(cacheTime);
     schedOrder.setHighFlagPriority(highFlagPriority);
-    schedOrder.setPendingFlagMemory(pendingFlagMemory);
+    schedOrder.setUsedFlagMemory(usedFlagMemory);
     schedOrder.setPendingFlagTime(pendingFlagTime);
     schedOrder.setPriorityWeightFactor(priorityWeight);
-    schedOrder.setPendingMemoryWeightFactor(pendingResourcesWeight);
+    schedOrder.setUsedMemoryWeightFactor(usedResourcesWeight);
     schedOrder.setPendingTimeWeightFactor(pendingTimeWeight);
 
     MockSchedulableEntity r1 = new MockSchedulableEntity();
@@ -507,11 +507,11 @@ public class TestCompositeWeightOrderingPolicy {
     r3.setApplicationPriority(p3);
     r4.setApplicationPriority(p4);
 
-    //Set pending resources
-    r1.setPending(Resources.createResource(60 * 1024 * GB));
-    r2.setPending(Resources.createResource(100 * 1024 * GB));
-    r3.setPending(Resources.createResource(100 * 1024 * GB));
-    r4.setPending(Resources.createResource(20 * 1024 * GB));
+    //Set used resources
+    r1.setUsed(Resources.createResource(40 * 1024 * GB));
+    r2.setUsed(Resources.createResource(1 * GB));
+    r3.setUsed(Resources.createResource(1 * GB));
+    r4.setUsed(Resources.createResource(80 * 1024 * GB));
     AbstractComparatorOrderingPolicy
         .updateSchedulingResourceUsage(r1.getSchedulingResourceUsage());
     AbstractComparatorOrderingPolicy
@@ -559,10 +559,10 @@ public class TestCompositeWeightOrderingPolicy {
 
     long cacheTime = 3000;
     double highFlagPriority = 60;
-    double pendingFlagMemory = 100 * 1024 * 1024;
+    double usedFlagMemory = 100 * 1024 * 1024;
     double pendingFlagTime = 120 * 60 * 1000;
     double priorityWeight = 0.6;
-    double pendingResourcesWeight = 0.2;
+    double usedResourcesWeight = 0.2;
     double pendingTimeWeight = 0.2;
     int fullReorderIntervalSecond = (int)cacheTime;
 
@@ -572,10 +572,10 @@ public class TestCompositeWeightOrderingPolicy {
         System.currentTimeMillis() + fullReorderIntervalSecond);
 
     schedOrder.setHighFlagPriority(highFlagPriority);
-    schedOrder.setPendingFlagMemory(pendingFlagMemory);
+    schedOrder.setUsedFlagMemory(usedFlagMemory);
     schedOrder.setPendingFlagTime(pendingFlagTime);
     schedOrder.setPriorityWeightFactor(priorityWeight);
-    schedOrder.setPendingMemoryWeightFactor(pendingResourcesWeight);
+    schedOrder.setUsedMemoryWeightFactor(usedResourcesWeight);
     schedOrder.setPendingTimeWeightFactor(pendingTimeWeight);
 
     MockSchedulableEntity r1 = new MockSchedulableEntity();
@@ -598,11 +598,11 @@ public class TestCompositeWeightOrderingPolicy {
     r3.setApplicationPriority(p3);
     r4.setApplicationPriority(p4);
 
-    //Set pending resources
-    r1.setPending(Resources.createResource(60 * 1024 * GB));
-    r2.setPending(Resources.createResource(100 * 1024 * GB));
-    r3.setPending(Resources.createResource(100 * 1024 * GB));
-    r4.setPending(Resources.createResource(20 * 1024 * GB));
+    //Set used resources
+    r1.setUsed(Resources.createResource(40 * 1024 * GB));
+    r2.setUsed(Resources.createResource(1 * GB));
+    r3.setUsed(Resources.createResource(1 * GB));
+    r4.setUsed(Resources.createResource(80 * 1024 * GB));
     AbstractComparatorOrderingPolicy
         .updateSchedulingResourceUsage(r1.getSchedulingResourceUsage());
     AbstractComparatorOrderingPolicy

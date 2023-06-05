@@ -52,7 +52,7 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
   private double highFlagPriority;
 
   //default: 100 TB
-  private double pendingFlagMemory;
+  private double usedFlagMemory;
 
   //default: 120 minutes
   private double pendingFlagTime;
@@ -61,7 +61,7 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
   private double priorityWeightFactor;
 
   //default: 0.2
-  private double pendingMemoryWeightFactor;
+  private double usedMemoryWeightFactor;
 
   //default: 0.2
   private double pendingTimeWeightFactor;
@@ -98,12 +98,12 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
     this.highFlagPriority = highFlagPriority;
   }
 
-  public double getPendingFlagMemory() {
-    return pendingFlagMemory;
+  public double getUsedFlagMemory() {
+    return usedFlagMemory;
   }
 
-  public void setPendingFlagMemory(double pendingFlagMemory) {
-    this.pendingFlagMemory = pendingFlagMemory;
+  public void setUsedFlagMemory(double usedFlagMemory) {
+    this.usedFlagMemory = usedFlagMemory;
   }
 
   public double getPendingFlagTime() {
@@ -122,12 +122,12 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
     this.priorityWeightFactor = priorityWeightFactor;
   }
 
-  public double getPendingMemoryWeightFactor() {
-    return pendingMemoryWeightFactor;
+  public double getUsedMemoryWeightFactor() {
+    return usedMemoryWeightFactor;
   }
 
-  public void setPendingMemoryWeightFactor(double pendingMemoryWeightFactor) {
-    this.pendingMemoryWeightFactor = pendingMemoryWeightFactor;
+  public void setUsedMemoryWeightFactor(double usedMemoryWeightFactor) {
+    this.usedMemoryWeightFactor = usedMemoryWeightFactor;
   }
 
   public double getPendingTimeWeightFactor() {
@@ -160,7 +160,7 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
     public int compare(final SchedulableEntity r1, final SchedulableEntity r2) {
 
       // (app_priority / high_flag_priority) * m +
-      // (pending_resources / pending_flag_resources) * n +
+      // (used_resources / used_flag_resources) * n +
       // (pending_time / pending_flag_time) * q
       int r1_priority = r1.getPriority().getPriority();
       int r2_priority = r2.getPriority().getPriority();
@@ -174,23 +174,23 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
         r2_priority_weight = (r2_priority_weight < 1) ? r2_priority_weight : 1;
         r2_priority_weight = r2_priority_weight * priorityWeightFactor;
 
-        double r1_pending_resources_weight =
+        double r1_used_resources_weight =
             r1.getSchedulingResourceUsage()
-                .getCachedPending(CommonNodeLabelsManager.ANY)
-                .getMemorySize() / pendingFlagMemory;
-        r1_pending_resources_weight =
-            (r1_pending_resources_weight < 1) ? r1_pending_resources_weight : 1;
-        r1_pending_resources_weight =
-            r1_pending_resources_weight * pendingMemoryWeightFactor;
+                .getCachedUsed(CommonNodeLabelsManager.ANY)
+                .getMemorySize() / usedFlagMemory;
+        r1_used_resources_weight =
+            (r1_used_resources_weight < 1) ? (1.0 - r1_used_resources_weight) : 0;
+        r1_used_resources_weight =
+            r1_used_resources_weight * usedMemoryWeightFactor;
 
-        double r2_pending_resources_weight =
+        double r2_used_resources_weight =
             r2.getSchedulingResourceUsage()
-                .getCachedPending(CommonNodeLabelsManager.ANY)
-                .getMemorySize() / pendingFlagMemory;
-        r2_pending_resources_weight =
-            (r2_pending_resources_weight < 1) ? r2_pending_resources_weight : 1;
-        r2_pending_resources_weight =
-            r2_pending_resources_weight * pendingMemoryWeightFactor;
+                .getCachedUsed(CommonNodeLabelsManager.ANY)
+                .getMemorySize() / usedFlagMemory;
+        r2_used_resources_weight =
+            (r2_used_resources_weight < 1) ? (1.0 - r2_used_resources_weight) : 0;
+        r2_used_resources_weight =
+            r2_used_resources_weight * usedMemoryWeightFactor;
 
         double r1_pending_time_weight =
             (r1.getReOrderTime() - r1.getStartTime()) / pendingFlagTime;
@@ -207,24 +207,26 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
             r2_pending_time_weight * pendingTimeWeightFactor;
 
         double r1_composite_weight =
-            r1_priority_weight + r1_pending_resources_weight +
+            r1_priority_weight + r1_used_resources_weight +
                 r1_pending_time_weight;
 
         double r2_composite_weight =
-            r2_priority_weight + r2_pending_resources_weight +
+            r2_priority_weight + r2_used_resources_weight +
                 r2_pending_time_weight;
 
-        LOG.debug("appId: " + r1.getId() + " ,r1_priority_weight: "
-            + r1_priority_weight + " ,r1_pending_resources_weight: "
-            + r1_pending_resources_weight
-            + " ,r1_pending_time_weight: " + r1_pending_time_weight +
-            " ,r1_composite_weight: " + r1_composite_weight);
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("appId: " + r1.getId() + " ,r1_priority_weight: "
+              + r1_priority_weight + " ,r1_used_resources_weight: "
+              + r1_used_resources_weight
+              + " ,r1_pending_time_weight: " + r1_pending_time_weight +
+              " ,r1_composite_weight: " + r1_composite_weight);
 
-        LOG.debug("appId: " + r2.getId() + " ,r2_priority_weight: "
-            + r2_priority_weight + " ,r2_pending_resources_weight: "
-            + r2_pending_resources_weight
-            + " ,r2_pending_time_weight: " + r2_pending_time_weight +
-            " ,r2_composite_weight: " + r2_composite_weight);
+          LOG.debug("appId: " + r2.getId() + " ,r2_priority_weight: "
+              + r2_priority_weight + " ,r2_used_resources_weight: "
+              + r2_used_resources_weight
+              + " ,r2_pending_time_weight: " + r2_pending_time_weight +
+              " ,r2_composite_weight: " + r2_composite_weight);
+        }
 
         return Double.compare(r2_composite_weight, r1_composite_weight);
       } else {
@@ -320,31 +322,31 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
         System.currentTimeMillis() + (fullReorderIntervalSecond +
             random.nextInt(fullReorderIntervalSecond)) * 1000;
     this.highFlagPriority = Double.parseDouble(conf.get("highFlagPriority"));
-    this.pendingFlagMemory = Double.parseDouble(conf.get("pendingFlagMemory"));
+    this.usedFlagMemory = Double.parseDouble(conf.get("usedFlagMemory"));
     this.pendingFlagTime = Double.parseDouble(conf.get("pendingFlagTime"));
     this.priorityWeightFactor =
         Double.parseDouble(conf.get("priorityWeightFactor"));
-    this.pendingMemoryWeightFactor =
-        Double.parseDouble(conf.get("pendingMemoryWeightFactor"));
+    this.usedMemoryWeightFactor =
+        Double.parseDouble(conf.get("usedMemoryWeightFactor"));
 
-    if (this.priorityWeightFactor + this.pendingMemoryWeightFactor <= 1) {
+    if (this.priorityWeightFactor + this.usedMemoryWeightFactor <= 1) {
       this.pendingTimeWeightFactor =
-          1.0 - (priorityWeightFactor + pendingMemoryWeightFactor);
+          1.0 - (priorityWeightFactor + usedMemoryWeightFactor);
     } else {
       this.priorityWeightFactor =
           CapacitySchedulerConfiguration.DEFAULT_APP_PRIORITY_WEIGHT_FACTOR;
-      this.pendingMemoryWeightFactor =
-          CapacitySchedulerConfiguration.DEFAULT_APP_PENDING_MEMORY_WEIGHT_FACTOR;
+      this.usedMemoryWeightFactor =
+          CapacitySchedulerConfiguration.DEFAULT_APP_USED_MEMORY_WEIGHT_FACTOR;
       this.pendingTimeWeightFactor =
           CapacitySchedulerConfiguration.DEFAULT_APP_PENDING_TIME_WEIGHT_FACTOR;
       LOG.warn("Invalid WeightFactor config, fall back to default config, " +
               "priorityWeightFactor: " + this.priorityWeightFactor +
-              " ,pendingMemoryWeightFactor: " + this.pendingMemoryWeightFactor +
+              " ,usedMemoryWeightFactor: " + this.usedMemoryWeightFactor +
           " ,pendingTimeWeightFactor: " + pendingTimeWeightFactor);
     }
     LOG.info("Final take effect results, " +
         "priorityWeightFactor: " + this.priorityWeightFactor +
-        " ,pendingMemoryWeightFactor: " + this.pendingMemoryWeightFactor +
+        " ,usedMemoryWeightFactor: " + this.usedMemoryWeightFactor +
         " ,pendingTimeWeightFactor: " + pendingTimeWeightFactor);
   }
 
