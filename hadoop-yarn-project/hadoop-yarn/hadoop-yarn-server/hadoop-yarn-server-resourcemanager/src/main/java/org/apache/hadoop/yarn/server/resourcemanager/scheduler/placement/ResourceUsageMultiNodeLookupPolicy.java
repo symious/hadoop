@@ -135,6 +135,7 @@ public class ResourceUsageMultiNodeLookupPolicy<N extends SchedulerNode>
 
     if (topNodesList.size() == 0) {
       allNodesList.addAll(nodesPerPartitionSet);
+      Collections.shuffle(allNodesList);
     } else {
       Collections.shuffle(topNodesList);
       allNodesList.addAll(topNodesList);
