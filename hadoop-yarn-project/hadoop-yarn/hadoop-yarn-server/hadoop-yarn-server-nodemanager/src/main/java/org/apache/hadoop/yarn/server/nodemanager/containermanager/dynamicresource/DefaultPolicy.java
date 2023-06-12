@@ -25,6 +25,7 @@ public class DefaultPolicy implements Policy {
   private long minInterval;
   private Cache<Object, Object> cache;
   private long minAllocationMb;
+  private long launchTimeThresold;
 
   @Override
   public UpdateContainerRequest apply(Container container) {
@@ -32,7 +33,7 @@ public class DefaultPolicy implements Policy {
     ContainerMetrics containerMetrics =
         ContainerMetrics.getContainerMetrics(containerId);
     if (containerMetrics == null || (
-        Time.now() - container.getContainerLaunchTime() < 30000)) {
+        Time.now() - container.getContainerLaunchTime() < launchTimeThresold)) {
       return null;
     }
 
@@ -99,5 +100,8 @@ public class DefaultPolicy implements Policy {
     this.minAllocationMb =
         conf.getLong(YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB,
             YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_MB);
+    this.launchTimeThresold = conf.getLong(
+        YarnConfiguration.NM_DYNAMIC_ADJUSTMENT_CONTAINER_LAUNCH_TIME_THRESOLD,
+        YarnConfiguration.DEFAULT_NM_DYNAMIC_ADJUSTMENT_CONTAINER_LAUNCH_TIME_THRESOLD);
   }
 }
