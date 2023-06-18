@@ -36,6 +36,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_ALLOW_USERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
@@ -609,6 +611,34 @@ public class TestNameNodeReconfigure {
     nameNode.reconfigureProperty(DFS_NAMENODE_ACL_ALLOW_USERS, "");
     aclAllowUsers = fsNamesystem.getAclAllowUsers();
     assertEquals(0, aclAllowUsers.size());
+  }
+
+  @Test
+  public void testReconfigureCreateSymlinkVerifyParameters()
+      throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode(0);
+    FSNamesystem fsNamesystem = nameNode.getNamesystem();
+    assertFalse(fsNamesystem.isEnableCreateSymlinkConstraints());
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY, "true");
+    assertTrue(fsNamesystem.isEnableCreateSymlinkConstraints());
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY, "false");
+    assertFalse(fsNamesystem.isEnableCreateSymlinkConstraints());
+
+    SortedSet<String> createSymlinkAllowUsers = fsNamesystem.getCreateSymlinkAllowUsers();
+    assertEquals(0, createSymlinkAllowUsers.size());
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS, "user1,user2");
+    createSymlinkAllowUsers = fsNamesystem.getCreateSymlinkAllowUsers();
+    assertEquals(2, createSymlinkAllowUsers.size());
+    assertTrue(createSymlinkAllowUsers.contains("user1"));
+    assertTrue(createSymlinkAllowUsers.contains("user2"));
+    assertFalse(createSymlinkAllowUsers.contains("user3"));
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS, "");
+    createSymlinkAllowUsers = fsNamesystem.getCreateSymlinkAllowUsers();
+    assertEquals(0, createSymlinkAllowUsers.size());
   }
 
   @Test

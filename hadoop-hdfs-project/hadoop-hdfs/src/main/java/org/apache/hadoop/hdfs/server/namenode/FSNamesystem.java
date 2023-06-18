@@ -37,6 +37,9 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_SYMLINKS_RESOLVES_DEPTH;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_SYMLINKS_RESOLVES_DEPTH_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_ENABLED_DEFAULT;
@@ -109,6 +112,7 @@ import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.text.CaseUtils;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.hdfs.OperationName;
@@ -517,6 +521,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
   private volatile boolean enableAclConstraints = false;
   private volatile SortedSet<String> aclAllowUsers;
+
+  private volatile boolean enableCreateSymlinkConstraints = false;
+  private volatile SortedSet<String> createSymlinkAllowUsers;
 
   private volatile boolean enableSymlinks;
   // The maximum allowed depth of resolving symbolic links.
@@ -1082,6 +1089,11 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       this.maxSymlinksResolvesDepth = conf.getInt(DFS_NAMENODE_MAX_SYMLINKS_RESOLVES_DEPTH,
           DFS_NAMENODE_MAX_SYMLINKS_RESOLVES_DEPTH_DEFAULT);
 
+      this.enableCreateSymlinkConstraints = conf.getBoolean(
+          DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY,
+          DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_DEFAULT);
+      refreshCreateSymlinkAllowUsers(conf.get(DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS));
+
       this.throttlerCalibrationPolicy =
           ThrottlerCalibrationMasterPolicy.newThrottlerCalibrationPolicy(conf, this);
 
@@ -1118,6 +1130,14 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     this.aclAllowUsers = new TreeSet<>(StringUtils.getTrimmedStringCollection(valueString));
   }
 
+  public void refreshEnableCreateSymlinkConstraints(boolean enableCreateSymlinkConstraints) {
+    this.enableCreateSymlinkConstraints = enableCreateSymlinkConstraints;
+  }
+
+  public void refreshCreateSymlinkAllowUsers(String valueString) {
+    this.createSymlinkAllowUsers = new TreeSet<>(StringUtils.getTrimmedStringCollection(valueString));
+  }
+
   @VisibleForTesting
   public boolean isEnableAclConstraints() {
     return this.enableAclConstraints;
@@ -1126,6 +1146,16 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   @VisibleForTesting
   public SortedSet<String> getAclAllowUsers() {
     return aclAllowUsers;
+  }
+
+  @VisibleForTesting
+  public boolean isEnableCreateSymlinkConstraints() {
+    return this.enableCreateSymlinkConstraints;
+  }
+
+  @VisibleForTesting
+  public SortedSet<String> getCreateSymlinkAllowUsers() {
+    return createSymlinkAllowUsers;
   }
 
   @VisibleForTesting
@@ -2429,6 +2459,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       throws IOException {
     FileStatus auditStat = null;
     checkOperation(OperationCategory.WRITE);
+    final FSPermissionChecker pc = getPermissionChecker();
+    checkCreateSymlinkOperation(pc);
     FSPermissionChecker.setOperationType(OperationName.CREATE_SYMLINK);
     try {
       writeLock(OperationName.CREATE_SYMLINK);
@@ -7953,6 +7985,29 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       return true;
     }
     return false;
+  }
+
+  private void checkCreateSymlinkOperation(FSPermissionChecker pc) {
+    if (!enableCreateSymlinkConstraints) {
+      return;
+    }
+
+    // admin user allow to perform create symlink operations
+    if (pc.isSuperUser()) {
+      return;
+    }
+
+    UserGroupInformation ugi = Server.getRemoteUser();
+    if (ugi == null) {
+      throw new UnsupportedOperationException("Operation createSymlink not supported");
+    }
+    String userName = ugi.getUserName();
+    // if createSymlinkAllowUsers is null, no users may be allow to perform
+    // create symlink operations.
+    if (CollectionUtils.isEmpty(createSymlinkAllowUsers) ||
+        !createSymlinkAllowUsers.contains(userName)) {
+      throw new UnsupportedOperationException("Operation createSymlink not supported");
+    }
   }
 
   AclStatus getAclStatus(String src) throws IOException {

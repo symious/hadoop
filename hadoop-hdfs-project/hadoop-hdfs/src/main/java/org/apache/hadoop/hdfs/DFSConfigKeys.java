@@ -1141,6 +1141,11 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final boolean DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_DEFAULT = false;
   public static final String  DFS_NAMENODE_ACL_ALLOW_USERS = "dfs.namenode.acl.allow.users";
 
+  public static final String  DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY =
+      "dfs.namenode.create-symlink.constraints.enabled";
+  public static final boolean DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_DEFAULT = false;
+  public static final String  DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS = "dfs.namenode.create-symlink.allow.users";
+
   public static final String  DFS_NAMENODE_ENABLE_SPECIAL_TRASH_KEY =
       "dfs.namenode.enable.special.trash";
   public static final boolean DFS_NAMENODE_ENABLE_SPECIAL_TRASH_DEFAULT = false;

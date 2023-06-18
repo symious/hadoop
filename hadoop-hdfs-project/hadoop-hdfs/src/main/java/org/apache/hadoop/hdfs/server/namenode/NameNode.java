@@ -147,6 +147,9 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY;
@@ -389,6 +392,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_DISABLE_EC_KEY,
           DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY,
           DFS_NAMENODE_ACL_ALLOW_USERS,
+          DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY,
+          DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS,
           DFS_NAMENODE_SYMLINKS_ENABLED_KEY,
           DFS_DATANODE_PEER_STATS_ENABLED_KEY,
           DFS_DATANODE_MAX_NODES_TO_REPORT_KEY,
@@ -2439,6 +2444,9 @@ public class NameNode extends ReconfigurableBase implements
     } else if (property.equals(DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY) ||
         (property.equals(DFS_NAMENODE_ACL_ALLOW_USERS))) {
       return reconfigureAclConstraintsParameters(property, newVal);
+    } else if (property.equals(DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY) ||
+        (property.equals(DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS))) {
+      return reconfigureCreateSymlinkConstraintsParameters(property, newVal);
     } else if (property.equals(DFS_NAMENODE_SYMLINKS_ENABLED_KEY)) {
       return reconfigureDisableSymlinksFeature(newVal);
     } else if (property.equals(DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY) ||
@@ -2733,6 +2741,28 @@ public class NameNode extends ReconfigurableBase implements
     } else {
       throw new IllegalArgumentException("Unexpected property " +
           property + " in reconfigureAclConstraintsParameters");
+    }
+    LOG.info("RECONFIGURE* changed {} to {}", property, newSetting);
+    return String.valueOf(newSetting);
+  }
+
+  String reconfigureCreateSymlinkConstraintsParameters(String property, String newVal) {
+    String newSetting;
+    if (property.equals(DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY)) {
+      boolean enableVerify;
+      if (newVal == null) {
+        enableVerify = DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_DEFAULT;
+      } else {
+        enableVerify = Boolean.parseBoolean(newVal);
+      }
+      namesystem.refreshEnableCreateSymlinkConstraints(enableVerify);
+      newSetting = Boolean.toString(enableVerify);
+    } else if (property.equals(DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS)) {
+      namesystem.refreshCreateSymlinkAllowUsers(newVal);
+      newSetting = newVal;
+    } else {
+      throw new IllegalArgumentException("Unexpected property " +
+          property + " in reconfigureCreateSymlinkConstraintsParameters");
     }
     LOG.info("RECONFIGURE* changed {} to {}", property, newSetting);
     return String.valueOf(newSetting);
