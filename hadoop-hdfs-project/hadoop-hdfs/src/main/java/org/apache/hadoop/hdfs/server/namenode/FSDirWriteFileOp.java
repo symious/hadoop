@@ -93,9 +93,14 @@ class FSDirWriteFileOp {
           +" block is removed from the file system");
     }
 
+    short fileReplication = fileNode.getPreferredBlockReplication();
+    if (!uc.isStriped() && fileNode.getFileWithSnapshotFeature() == null) {
+      fileReplication = FSDirectory.getTargetFileReplica(fileReplication);
+    }
+
     // update space consumed
     fsd.updateCount(iip, 0, -fileNode.getPreferredBlockSize(),
-        fileNode.getPreferredBlockReplication(), true);
+        fileReplication, true);
     return true;
   }
 
@@ -510,8 +515,10 @@ class FSDirWriteFileOp {
             HdfsServerConstants.BlockUCState.UNDER_CONSTRUCTION, targets);
       } else {
         // check quota limits and updated space consumed
+        short fileReplication = FSDirectory.getTargetFileReplica(
+            fileINode.getFileReplication());
         fsd.updateCount(inodesInPath, 0, fileINode.getPreferredBlockSize(),
-            fileINode.getFileReplication(), true);
+            fileReplication, true);
 
         short numLocations = fileINode.getFileReplication();
         blockInfo = new BlockInfoContiguous(block, numLocations);

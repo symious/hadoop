@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.namenode;
 
+import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
 import org.apache.hadoop.util.StringUtils;
 
@@ -79,6 +80,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.ForkJoinPool;
@@ -88,6 +90,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.FS_PROTECTED_DIRECTORIES;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ENABLE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_QUOTA_BY_STORAGETYPE_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_QUOTA_BY_STORAGETYPE_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PROTECTED_SUBDIRECTORIES_ENABLE;
@@ -161,6 +164,9 @@ public class FSDirectory implements Closeable {
   private final AtomicInteger maxDirItemsAlarmNum;
   private final int lsLimit;  // max list limit
   private final int contentCountLimit; // max content summary counts per run
+  private static volatile boolean isRecomputeQuotaUsageEnabled;
+  private static volatile Set<Short> originalReplicationSet;
+  private static volatile short targetReplication = HdfsClientConfigKeys.DFS_REPLICATION_DEFAULT;
   private final long contentSleepMicroSec;
   private final INodeMap inodeMap; // Synchronized by dirLock
   private long yieldCount = 0; // keep track of lock yield count.
@@ -429,6 +435,62 @@ public class FSDirectory implements Closeable {
     reConfQuotaInitThreads(confQuotaInitThreads);
 
     initUsersToBypassExtProvider(conf);
+
+    boolean enableRecomputeQuotaUsage = conf.getBoolean(
+        DFSConfigKeys.DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ENABLE_KEY,
+        DFSConfigKeys.DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ENABLE_DEFAULT);
+    reConfRecomputeQuotaUsageEnable(enableRecomputeQuotaUsage);
+    String originalReplications = conf.get(
+        DFSConfigKeys.DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ORIGINAL_REPLICATIONS_KEY,
+        DFSConfigKeys.DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ORIGINAL_REPLICATIONS_DEFAULT);
+    reConfOriginalReplicationSet(originalReplications);
+    short targetReplication = (short) conf.getInt(
+        DFSConfigKeys.DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_TARGET_REPLICATION_KEY,
+        DFSConfigKeys.DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_TARGET_REPLICATION_DEFAULT);
+    reConfTargetReplication(targetReplication);
+  }
+
+  /**
+   * Return the expected replication if it needs to output a smaller space usage.
+   * Such as: output 3-replicas space usage if the fileReplica is 4 or 5.
+   */
+  public static short getTargetFileReplica(short fileReplica) {
+    if (isRecomputeQuotaUsageEnabled && originalReplicationSet != null
+        && originalReplicationSet.contains(fileReplica)) {
+      return targetReplication;
+    } else {
+      return fileReplica;
+    }
+  }
+
+  public static boolean reConfRecomputeQuotaUsageEnable(boolean newValue) {
+    if (isRecomputeQuotaUsageEnabled != newValue) {
+      LOG.info("Will reConf the isRecomputeQuotaUsageEnabled from {} to {}.",
+          isRecomputeQuotaUsageEnabled, newValue);
+      isRecomputeQuotaUsageEnabled = newValue;
+    }
+    return isRecomputeQuotaUsageEnabled;
+  }
+
+  public static String reConfOriginalReplicationSet(String originalReplicationString) {
+    String[] originalReplications = originalReplicationString.split(",");
+    Set<Short> newOriginalReplicationSet = new HashSet<>();
+    for (String s : originalReplications) {
+      newOriginalReplicationSet.add(Short.parseShort(s));
+    }
+    LOG.info("Will reConf the originalReplicationSet from {} to {}.",
+        originalReplicationSet, newOriginalReplicationSet);
+    originalReplicationSet = newOriginalReplicationSet;
+    return originalReplicationString;
+  }
+
+  public static short reConfTargetReplication(short newTargetReplication) {
+    if (targetReplication != newTargetReplication) {
+      LOG.info("Will reConf the target replica from {} to {}.",
+          targetReplication, newTargetReplication);
+      targetReplication = newTargetReplication;
+    }
+    return targetReplication;
   }
 
   public int reConfQuotaInitThreads(int newThreadNumber) {
@@ -868,7 +930,7 @@ public class FSDirectory implements Closeable {
    * This is an update of existing state of the filesystem and does not
    * throw QuotaExceededException.
    */
-  void updateCountForQuota(int initThreads) {
+  public void updateCountForQuota(int initThreads) {
     writeLock();
     try {
       int threads = (initThreads < 1) ? 1 : initThreads;
@@ -1152,7 +1214,8 @@ public class FSDirectory implements Closeable {
       replicationFactor = (short) 1;
     } else {
       diff = fileINode.getPreferredBlockSize() - completeBlk.getNumBytes();
-      replicationFactor = fileINode.getFileReplication();
+      short fileReplica = fileINode.getFileReplication();
+      replicationFactor = getTargetFileReplica(fileReplica);
     }
     if (diff > 0) {
       try {

@@ -6463,4 +6463,26 @@
       if the live replicas already met the expected.
     </description>
   </property>
+  <property>
+    <name>dfs.namenode.recompute.quota.usage.enable</name>
+    <value>false</value>
+    <description>
+      If true, namenode will recompute the quota usage if the file replicas is in
+      dfs.namenode.recompute.quota.usage.original.replications.
+    </description>
+  </property>
+  <property>
+    <name>dfs.namenode.recompute.quota.usage.original.replications</name>
+    <value>4,5</value>
+    <description>
+      A replication set to determine that if the namenode can recompute the quota usage for a file.
+    </description>
+  </property>
+  <property>
+    <name>dfs.namenode.recompute.quota.usage.target.replica</name>
+    <value>3</value>
+    <description>
+      A target replication that the namenode will recompute the quota usage by this replication.
+    </description>
+  </property>
 </configuration>

@@ -831,7 +831,7 @@ public class INodeFile extends INodeWithAdditionalFields
         bsps.getPolicy(blockStoragePolicyId);
     FileWithSnapshotFeature sf = getFileWithSnapshotFeature();
     if (sf == null) {
-      counts.add(storagespaceConsumed(bsp));
+      counts.add(storagespaceConsumed(bsp, true));
       return counts;
     }
 
@@ -895,7 +895,7 @@ public class INodeFile extends INodeWithAdditionalFields
     FileWithSnapshotFeature sf = getFileWithSnapshotFeature();
     if (sf == null) {
       counts.addContent(Content.DISKSPACE,
-          storagespaceConsumed(null).getStorageSpace());
+          storagespaceConsumed(null, true).getStorageSpace());
     } else if (isStriped()) {
       counts.addContent(Content.DISKSPACE,
           storagespaceConsumedStriped().getStorageSpace());
@@ -1018,10 +1018,20 @@ public class INodeFile extends INodeWithAdditionalFields
    * Use preferred block size for the last block if it is under construction.
    */
   public final QuotaCounts storagespaceConsumed(BlockStoragePolicy bsp) {
+    return storagespaceConsumed(bsp, false);
+  }
+
+  /**
+   * Compute size consumed by all blocks of the current file,
+   * including blocks in its snapshots.
+   * @param changeReplication if ture, this method may output a smaller replica usage.
+   *                          such as output 3-replica space usage if the file replicas is 4 or 5.
+   */
+  public final QuotaCounts storagespaceConsumed(BlockStoragePolicy bsp, boolean changeReplication) {
     if (isStriped()) {
       return storagespaceConsumedStriped();
     } else {
-      return storagespaceConsumedContiguous(bsp);
+      return storagespaceConsumedContiguous(bsp, changeReplication);
     }
   }
 
@@ -1039,7 +1049,7 @@ public class INodeFile extends INodeWithAdditionalFields
   }
 
   public final QuotaCounts storagespaceConsumedContiguous(
-      BlockStoragePolicy bsp) {
+      BlockStoragePolicy bsp, boolean changeReplication) {
     QuotaCounts counts = new QuotaCounts.Builder().build();
     final Iterable<BlockInfo> blocks;
     FileWithSnapshotFeature sf = getFileWithSnapshotFeature();
@@ -1059,10 +1069,14 @@ public class INodeFile extends INodeWithAdditionalFields
     }
 
     final short replication = getPreferredBlockReplication();
+    short targetReplication = replication;
+    if (changeReplication) {
+      targetReplication = FSDirectory.getTargetFileReplica(replication);
+    }
     for (BlockInfo b : blocks) {
       long blockSize = b.isComplete() ? b.getNumBytes() :
           getPreferredBlockSize();
-      counts.addStorageSpace(blockSize * replication);
+      counts.addStorageSpace(blockSize * targetReplication);
       if (bsp != null) {
         List<StorageType> types = bsp.chooseStorageTypes(replication);
         for (StorageType t : types) {

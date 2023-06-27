@@ -245,6 +245,12 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AVOID_SLOW_DATAN
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ENABLE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ENABLE_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ORIGINAL_REPLICATIONS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ORIGINAL_REPLICATIONS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_TARGET_REPLICATION_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_TARGET_REPLICATION_DEFAULT;
 
 import static org.apache.hadoop.util.ExitUtil.terminate;
 import static org.apache.hadoop.util.ToolRunner.confirmPrompt;
@@ -414,8 +420,10 @@ public class NameNode extends ReconfigurableBase implements
           DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
           DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_KEY,
           DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY,
-          DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA));
-
+          DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA,
+          DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ENABLE_KEY,
+          DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ORIGINAL_REPLICATIONS_KEY,
+          DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_TARGET_REPLICATION_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2483,6 +2491,12 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigurationRemoveCorruptedBlocks(newVal);
     } else if (property.equals(DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA)) {
       return reconfigurationDeleteRedundantDecommissionReplica(newVal);
+    } else if (property.equals(DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ENABLE_KEY)) {
+      return reconfigurationRecomputeQuotaUsageEnable(newVal);
+    } else if (property.equals(DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ORIGINAL_REPLICATIONS_KEY)) {
+      return reconfigurationRecomputeQuotaUsageOriginalReplications(newVal);
+    } else if (property.equals(DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_TARGET_REPLICATION_KEY)) {
+      return reconfigurationRecomputeQuotaUsageTargetReplication(newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -2961,6 +2975,39 @@ public class NameNode extends ReconfigurableBase implements
     }
     this.namesystem.getBlockManager().setDeleteRedundantDCReplica(deleteRedundantDecommissionReplica);
     return String.valueOf(deleteRedundantDecommissionReplica);
+  }
+
+  private String reconfigurationRecomputeQuotaUsageEnable(String newValue) {
+    boolean enable;
+    if (newValue == null) {
+      enable = DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ENABLE_DEFAULT;
+    } else {
+      enable = Boolean.parseBoolean(newValue);
+    }
+    FSDirectory.reConfRecomputeQuotaUsageEnable(enable);
+    return String.valueOf(enable);
+  }
+
+  private String reconfigurationRecomputeQuotaUsageOriginalReplications(String newValue) {
+    String value;
+    if (newValue == null) {
+      value = DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ORIGINAL_REPLICATIONS_DEFAULT;
+    } else {
+      value = newValue;
+    }
+    FSDirectory.reConfOriginalReplicationSet(value);
+    return value;
+  }
+
+  private String reconfigurationRecomputeQuotaUsageTargetReplication(String newValue) {
+    short value;
+    if (newValue == null) {
+      value = DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_TARGET_REPLICATION_DEFAULT;
+    } else {
+      value = Short.parseShort(newValue);
+    }
+    FSDirectory.reConfTargetReplication(value);
+    return String.valueOf(value);
   }
 
   private String reconfigureTailEditsOnlyDurableTxns(String newVal) {

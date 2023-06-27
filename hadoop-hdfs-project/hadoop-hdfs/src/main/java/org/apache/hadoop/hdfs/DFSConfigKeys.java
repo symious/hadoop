@@ -406,6 +406,14 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final int     DFS_NAMENODE_QUOTA_INIT_THREADS_DEFAULT = 12;
   public static final int     DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM = 128;
 
+  public static final String  DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ENABLE_KEY = "dfs.namenode.recompute.quota.usage.enable";
+  public static final boolean DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ENABLE_DEFAULT = false;
+  public static final String  DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ORIGINAL_REPLICATIONS_KEY = "dfs.namenode.recompute.quota.usage.original.replications";
+  public static final String  DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ORIGINAL_REPLICATIONS_DEFAULT = "4,5";
+  public static final String  DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_TARGET_REPLICATION_KEY = "dfs.namenode.recompute.quota.usage.target.replica";
+  public static final short  DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_TARGET_REPLICATION_DEFAULT =
+      HdfsClientConfigKeys.DFS_REPLICATION_DEFAULT;
+
   public static final String  DFS_NAMENODE_EDIT_LOG_AUTOROLL_MULTIPLIER_THRESHOLD = "dfs.namenode.edit.log.autoroll.multiplier.threshold";
   public static final float
       DFS_NAMENODE_EDIT_LOG_AUTOROLL_MULTIPLIER_THRESHOLD_DEFAULT = 0.5f;
