@@ -928,6 +928,23 @@ public class ClientRMService extends AbstractService implements
         }
       }
 
+      if (tags != null && !tags.isEmpty()) {
+        Set<String> appTags = application.getApplicationTags();
+        if (appTags == null || appTags.isEmpty()) {
+          continue;
+        }
+        boolean match = false;
+        for (String tag : tags) {
+          if (appTags.contains(tag)) {
+            match = true;
+            break;
+          }
+        }
+        if (!match) {
+          continue;
+        }
+      }
+
       if (applicationTypes != null && !applicationTypes.isEmpty()) {
         String appTypeToMatch =
             StringUtils.toLowerCase(application.getApplicationType());
@@ -954,23 +971,6 @@ public class ClientRMService extends AbstractService implements
 
       if (finish != null && !finish.contains(application.getFinishTime())) {
         continue;
-      }
-
-      if (tags != null && !tags.isEmpty()) {
-        Set<String> appTags = application.getApplicationTags();
-        if (appTags == null || appTags.isEmpty()) {
-          continue;
-        }
-        boolean match = false;
-        for (String tag : tags) {
-          if (appTags.contains(tag)) {
-            match = true;
-            break;
-          }
-        }
-        if (!match) {
-          continue;
-        }
       }
 
       // checkAccess can grab the scheduler lock so call it last
