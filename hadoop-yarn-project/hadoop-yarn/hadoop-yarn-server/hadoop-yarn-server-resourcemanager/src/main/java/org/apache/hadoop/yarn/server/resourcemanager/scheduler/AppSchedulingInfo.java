@@ -746,9 +746,11 @@ public class AppSchedulingInfo {
       pending = false;
       metrics.runAppAttempt(applicationId, user);
     }
-
     RMApp app = rmContext.getRMApps().get(applicationId);
-    Priority priority = app.getApplicationPriority();
+    Priority priority = null;
+    if (app != null) {
+      priority = app.getApplicationPriority();
+    }
     if (LOG.isDebugEnabled()) {
       LOG.debug("applicationId：" + applicationId + " ,priority: " + priority);
     }

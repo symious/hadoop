@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity;
 
+import org.apache.hadoop.metrics2.lib.MutableCounterInt;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.metrics2.lib.MutableQuantiles;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -71,6 +72,9 @@ public class CapacitySchedulerMetrics {
 
   MutableQuantiles multiNodesPerAllocate;
   MutableQuantiles multiNodesPerReserve;
+
+  @Metric("# count of exception throw by ResourceCommitterService")
+  MutableCounterInt resourceCommitterServiceThrowExceptionCount;
 
   private static volatile CapacitySchedulerMetrics INSTANCE = null;
   private static MetricsRegistry registry;
@@ -179,4 +183,9 @@ public class CapacitySchedulerMetrics {
     }
     return pendingBackLogs;
   }
+
+  public void incrResourceCommitterServiceThrowExceptionCount() {
+    resourceCommitterServiceThrowExceptionCount.incr();
+  }
+
 }

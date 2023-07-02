@@ -820,6 +820,10 @@ public class CapacityScheduler extends
         } catch (InterruptedException e) {
           LOG.error(e.toString());
           Thread.currentThread().interrupt();
+        } catch (Exception ex) {
+          CapacitySchedulerMetrics.getMetrics()
+              .incrResourceCommitterServiceThrowExceptionCount();
+          LOG.error("ignore this exception: " + ex.toString(), ex);
         }
       }
       LOG.info("ResourceCommitterService exited!");
