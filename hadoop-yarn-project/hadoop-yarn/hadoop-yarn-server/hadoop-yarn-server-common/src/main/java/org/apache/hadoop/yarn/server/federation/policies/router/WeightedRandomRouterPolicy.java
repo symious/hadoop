@@ -44,11 +44,11 @@ public class WeightedRandomRouterPolicy extends AbstractRouterPolicy {
     // null checks and default-queue behavior
     validate(appSubmissionContext);
 
-    Map<SubClusterId, SubClusterInfo> activeSubclusters =
-        getActiveSubclusters();
+    Map<SubClusterId, SubClusterInfo> allSubclusters =
+        getAllSubclusters();
 
     FederationPolicyUtils.validateSubClusterAvailability(
-        new ArrayList<SubClusterId>(activeSubclusters.keySet()), blacklist);
+        new ArrayList<SubClusterId>(allSubclusters.keySet()), blacklist);
 
     // note: we cannot pre-compute the weights, as the set of activeSubcluster
     // changes dynamically (and this would unfairly spread the load to
@@ -64,7 +64,7 @@ public class WeightedRandomRouterPolicy extends AbstractRouterPolicy {
         continue;
       }
       if (entry.getKey() != null
-          && activeSubclusters.containsKey(entry.getKey().toId())) {
+          && allSubclusters.containsKey(entry.getKey().toId())) {
         weightList.add(entry.getValue());
         scIdList.add(entry.getKey().toId());
       }

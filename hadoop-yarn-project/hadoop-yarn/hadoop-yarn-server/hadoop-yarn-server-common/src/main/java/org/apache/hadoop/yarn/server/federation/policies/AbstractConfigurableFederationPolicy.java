@@ -24,6 +24,7 @@ import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.server.federation.policies.dao.WeightedPolicyInfo;
 import org.apache.hadoop.yarn.server.federation.policies.exceptions.FederationPolicyInitializationException;
 import org.apache.hadoop.yarn.server.federation.policies.exceptions.NoActiveSubclustersException;
+import org.apache.hadoop.yarn.server.federation.policies.exceptions.NoSubclustersException;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterInfo;
 
@@ -152,4 +153,24 @@ public abstract class AbstractConfigurableFederationPolicy
     return activeSubclusters;
   }
 
+  /**
+   * This methods gets all subclusters map from the {@code
+   * FederationStateStoreFacade} and validate it not being null/empty.
+   *
+   * @return the map of ids to info for all active and inactive subclusters.
+   *
+   * @throws YarnException if we can't get the list.
+   */
+  protected Map<SubClusterId, SubClusterInfo> getAllSubclusters()
+      throws YarnException {
+
+    Map<SubClusterId, SubClusterInfo> allSubclusters =
+        getPolicyContext().getFederationStateStoreFacade().getSubClusters(false);
+
+    if (allSubclusters == null || allSubclusters.size() < 1) {
+      throw new NoSubclustersException(
+          "Zero subclusters, cannot pick where to send job.");
+    }
+    return allSubclusters;
+  }
 }
