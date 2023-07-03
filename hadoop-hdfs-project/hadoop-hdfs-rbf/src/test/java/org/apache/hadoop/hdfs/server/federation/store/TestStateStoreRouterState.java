@@ -21,6 +21,7 @@ import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.verif
 import static org.apache.hadoop.hdfs.server.federation.store.FederationStateStoreTestUtils.clearRecords;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -161,7 +162,19 @@ public class TestStateStoreRouterState extends TestStateStoreBase {
         RouterState routerState = routerStore
             .getRouterRegistration(getRequest).getRouter();
         // Verify entry is expired
-        return routerState.getStatus() == RouterServiceState.EXPIRED;
+        if (routerState.getStatus() == RouterServiceState.EXPIRED) {
+          long recordCommitTime = routerState.getDateCommitted();
+          long modifiedTime = routerState.getDateModified();
+          assertTrue(recordCommitTime > modifiedTime);
+
+          // Try to overwrite the expired record again.
+          RouterState newRouterState = routerStore.getRouterRegistration(getRequest).getRouter();
+          assertEquals(recordCommitTime, newRouterState.getDateCommitted());
+          assertEquals(modifiedTime, newRouterState.getDateModified());
+          return true;
+        } else {
+          return false;
+        }
       } catch (IOException e) {
         return false;
       }

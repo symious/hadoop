@@ -70,6 +70,7 @@ message NamenodeMembershipRecordProto {
   optional NamenodeMembershipStatsRecordProto stats = 15;
   optional string webScheme = 16;
   optional string msyncAddress= 100;
+  optional uint64 dateCommitted = 101;
 }
 
 message FederationNamespaceInfoProto {
@@ -211,6 +212,7 @@ message RouterRecordProto {
   optional string compileInfo = 7;
   optional uint64 dateStarted = 8;
   optional string adminAddress = 9;
+  optional uint64 dateCommitted = 100;
 }
 
 message GetRouterRegistrationRequestProto {

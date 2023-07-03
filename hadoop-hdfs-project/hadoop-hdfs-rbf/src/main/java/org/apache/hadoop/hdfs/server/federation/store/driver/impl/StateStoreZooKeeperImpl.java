@@ -327,6 +327,7 @@ public class StateStoreZooKeeperImpl extends StateStoreSerializableImpl {
     T record = newRecord(data, clazz, false);
     record.setDateCreated(stat.getCtime());
     record.setDateModified(stat.getMtime());
+    record.setDateCommitted(stat.getMtime());
     return record;
   }
 }

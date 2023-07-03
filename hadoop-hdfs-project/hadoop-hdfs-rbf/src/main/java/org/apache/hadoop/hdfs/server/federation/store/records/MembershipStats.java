@@ -134,6 +134,16 @@ public abstract class MembershipStats extends BaseRecord {
   }
 
   @Override
+  public void setDateCommitted(long time) {
+    // We don't store this record directly
+  }
+
+  @Override
+  public long getDateCommitted() {
+    return 0;
+  }
+
+  @Override
   public void setDateCreated(long time) {
     // We don't store this record directly
   }

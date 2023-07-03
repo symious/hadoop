@@ -73,6 +73,17 @@ public abstract class StateStoreVersion extends BaseRecord {
   }
 
   @Override
+  public void setDateCommitted(long time) {
+    // We don't store this record directly
+  }
+
+  @Override
+  public long getDateCommitted() {
+    // We don't store this record directly
+    return 0;
+  }
+
+  @Override
   public void setDateCreated(long time) {
     // We don't store this record directly
   }

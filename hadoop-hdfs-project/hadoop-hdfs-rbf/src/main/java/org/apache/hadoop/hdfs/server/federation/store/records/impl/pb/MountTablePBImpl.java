@@ -140,6 +140,18 @@ public class MountTablePBImpl extends MountTable implements PBRecord {
   }
 
   @Override
+  public void setDateCommitted(long time) {
+    // just use the modification time.
+    this.translator.getBuilder().setDateModified(time);
+  }
+
+  @Override
+  public long getDateCommitted() {
+    // just use the modification time.
+    return this.translator.getProtoOrBuilder().getDateModified();
+  }
+
+  @Override
   public void setDateCreated(long time) {
     this.translator.getBuilder().setDateCreated(time);
   }

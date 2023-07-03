@@ -327,6 +327,7 @@ public abstract class StateStoreFileBaseImpl
           // Update the mod time stamp. Many backends will use their
           // own timestamp for the mod time.
           record.setDateModified(this.getTime());
+          record.setDateCommitted(this.getTime());
           toWrite.put(recordPath, record);
         } else if (errorIfExists) {
           LOG.error("Attempt to insert record {} that already exists",

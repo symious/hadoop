@@ -322,7 +322,9 @@ public abstract class MembershipState extends BaseRecord
 
   @Override
   public boolean checkExpired(long currentTime) {
-    if (super.checkExpired(currentTime)) {
+    long expiration = getExpirationMs();
+    long committedTime = getDateCommitted();
+    if (committedTime > 0 && expiration > 0 && ((committedTime + expiration) < currentTime)) {
       this.setState(EXPIRED);
       // Commit it
       return true;

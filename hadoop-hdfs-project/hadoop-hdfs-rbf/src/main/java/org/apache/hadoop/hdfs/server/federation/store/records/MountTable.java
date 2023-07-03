@@ -117,6 +117,7 @@ public abstract class MountTable extends BaseRecord {
     MountTable record = newInstance(src, destinations);
     record.setDateCreated(dateCreated);
     record.setDateModified(dateModified);
+    record.setDateCommitted(dateModified);
     return record;
   }
 

@@ -366,6 +366,16 @@ public class MembershipStatePBImpl extends MembershipState implements PBRecord {
   }
 
   @Override
+  public void setDateCommitted(long time) {
+    this.translator.getBuilder().setDateCommitted(time);
+  }
+
+  @Override
+  public long getDateCommitted() {
+    return this.translator.getProtoOrBuilder().getDateCommitted();
+  }
+
+  @Override
   public void setDateCreated(long time) {
     this.translator.getBuilder().setDateCreated(time);
   }

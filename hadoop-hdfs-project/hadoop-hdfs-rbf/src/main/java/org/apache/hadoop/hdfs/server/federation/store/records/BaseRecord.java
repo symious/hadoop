@@ -54,6 +54,20 @@ public abstract class BaseRecord implements Comparable<BaseRecord> {
   public abstract long getDateModified();
 
   /**
+   * Set the committing time for the record, such as: the modification time of zNode.
+   *
+   * @param time Committing time of the record.
+   */
+  public abstract void setDateCommitted(long time);
+
+  /**
+   * Get the committing time for the record.
+   *
+   * @return Committing time of the record.
+   */
+  public abstract long getDateCommitted();
+
+  /**
    * Set the creation time for the record.
    *
    * @param time Creation time of the record.
@@ -119,6 +133,7 @@ public abstract class BaseRecord implements Comparable<BaseRecord> {
     long now = Time.now();
     this.setDateCreated(now);
     this.setDateModified(now);
+    this.setDateCommitted(now);
   }
 
   /**

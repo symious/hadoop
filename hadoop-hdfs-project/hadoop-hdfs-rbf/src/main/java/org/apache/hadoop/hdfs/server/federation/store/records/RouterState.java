@@ -27,6 +27,8 @@ import org.apache.hadoop.hdfs.server.federation.store.driver.StateStoreSerialize
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState.EXPIRED;
+
 /**
  * Entry to log the state of a
  * {@link org.apache.hadoop.hdfs.server.federation.router.Router Router} in the
@@ -157,7 +159,9 @@ public abstract class RouterState extends BaseRecord {
 
   @Override
   public boolean checkExpired(long currentTime) {
-    if (super.checkExpired(currentTime)) {
+    long expiration = getExpirationMs();
+    long committedTime = getDateCommitted();
+    if (committedTime > 0 && expiration > 0 && ((committedTime + expiration) < currentTime)) {
       setStatus(RouterServiceState.EXPIRED);
       return true;
     }
