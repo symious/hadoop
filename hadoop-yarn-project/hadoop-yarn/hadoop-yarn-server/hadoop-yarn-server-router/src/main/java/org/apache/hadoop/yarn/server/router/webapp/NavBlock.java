@@ -35,7 +35,6 @@ public class NavBlock extends HtmlBlock {
           li().a(url(""), "Overview").__().
           li().a(url("federation"), "Clusters").__().
           li().a(url("nodes"), "Nodes").__().
-          li().a(url("apps"), "Applications").__().
       __().
       h3("Tools").
       ul().
