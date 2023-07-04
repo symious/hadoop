@@ -3501,34 +3501,29 @@ public class CapacityScheduler extends
   @Override
   public long checkAndGetApplicationLifetime(String queueName,
       long lifetimeRequestedByApp) {
-    readLock.lock();
-    try {
-      CSQueue queue = getQueue(queueName);
-      if (queue == null || !(queue instanceof LeafQueue)) {
-        return lifetimeRequestedByApp;
-      }
-
-      long defaultApplicationLifetime =
-          ((LeafQueue) queue).getDefaultApplicationLifetime();
-      long maximumApplicationLifetime =
-          ((LeafQueue) queue).getMaximumApplicationLifetime();
-
-      // check only for maximum, that's enough because default can't
-      // exceed maximum
-      if (maximumApplicationLifetime <= 0) {
-        return (lifetimeRequestedByApp <= 0) ? defaultApplicationLifetime :
-            lifetimeRequestedByApp;
-      }
-
-      if (lifetimeRequestedByApp <= 0) {
-        return defaultApplicationLifetime;
-      } else if (lifetimeRequestedByApp > maximumApplicationLifetime) {
-        return maximumApplicationLifetime;
-      }
+    CSQueue queue = getQueue(queueName);
+    if (queue == null || !(queue instanceof LeafQueue)) {
       return lifetimeRequestedByApp;
-    } finally {
-      readLock.unlock();
     }
+
+    long defaultApplicationLifetime =
+        ((LeafQueue) queue).getDefaultApplicationLifetime();
+    long maximumApplicationLifetime =
+        ((LeafQueue) queue).getMaximumApplicationLifetime();
+
+    // check only for maximum, that's enough because default can't
+    // exceed maximum
+    if (maximumApplicationLifetime <= 0) {
+      return (lifetimeRequestedByApp <= 0) ? defaultApplicationLifetime :
+          lifetimeRequestedByApp;
+    }
+
+    if (lifetimeRequestedByApp <= 0) {
+      return defaultApplicationLifetime;
+    } else if (lifetimeRequestedByApp > maximumApplicationLifetime) {
+      return maximumApplicationLifetime;
+    }
+    return lifetimeRequestedByApp;
   }
 
   @Override
