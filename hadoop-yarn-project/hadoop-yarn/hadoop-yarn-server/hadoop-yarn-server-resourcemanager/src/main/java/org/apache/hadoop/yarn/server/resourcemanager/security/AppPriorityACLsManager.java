@@ -136,6 +136,36 @@ public class AppPriorityACLsManager {
   }
 
   /**
+   * Each Queue could have configured with different priority acl's groups. This
+   * method helps to replace ACL list against queue.
+   *
+   * @param priorityACLGroups
+   *          List of Priority ACL Groups.
+   * @param queueName
+   *          Queue Name associate with priority acl groups.
+   */
+  public void replacePrioirityACLs(List<AppPriorityACLGroup> priorityACLGroups,
+      String queueName) {
+
+    List<PriorityACL> priorityACL = new ArrayList<PriorityACL>();
+
+    // Ensure lowest priority PriorityACLGroup comes first in the list.
+    Collections.sort(priorityACLGroups);
+
+    for (AppPriorityACLGroup priorityACLGroup : priorityACLGroups) {
+      priorityACL.add(new PriorityACL(priorityACLGroup.getMaxPriority(),
+          priorityACLGroup.getDefaultPriority(),
+          priorityACLGroup.getACLList()));
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Priority ACL group added: max-priority - "
+            + priorityACLGroup.getMaxPriority() + "default-priority - "
+            + priorityACLGroup.getDefaultPriority());
+      }
+    }
+    allAcls.put(queueName, priorityACL);
+  }
+
+  /**
    * Priority based checkAccess to ensure that given user has enough permission
    * to submit application at a given priority level.
    *

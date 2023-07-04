@@ -2991,57 +2991,53 @@ public class CapacityScheduler extends
   public Priority checkAndGetApplicationPriority(
           Priority priorityRequestedByApp, UserGroupInformation user,
           String queuePath, ApplicationId applicationId) throws YarnException {
-    readLock.lock();
-    try {
-      Priority appPriority = priorityRequestedByApp;
+    Priority appPriority = priorityRequestedByApp;
 
-      // Verify the scenario where priority is null from submissionContext.
+    // Verify the scenario where priority is null from submissionContext.
+    if (null == appPriority) {
+      // Verify whether submitted user has any default priority set. If so,
+      // user's default priority will get precedence over queue default.
+      // for updateApplicationPriority call flow, this check is done in
+      // CientRMService itself.
+      appPriority = this.appPriorityACLManager.getDefaultPriority(
+          normalizeQueueName(queuePath),
+          user);
+
+      // Get the default priority for the Queue. If Queue is non-existent,
+      // then
+      // use default priority. Do it only if user doesn't have any default.
       if (null == appPriority) {
-        // Verify whether submitted user has any default priority set. If so,
-        // user's default priority will get precedence over queue default.
-        // for updateApplicationPriority call flow, this check is done in
-        // CientRMService itself.
-        appPriority = this.appPriorityACLManager.getDefaultPriority(
-            normalizeQueueName(queuePath),
-            user);
-
-        // Get the default priority for the Queue. If Queue is non-existent,
-        // then
-        // use default priority. Do it only if user doesn't have any default.
-        if (null == appPriority) {
-          appPriority = this.queueManager.getDefaultPriorityForQueue(
-              normalizeQueueName(queuePath));
-        }
-
-        LOG.info(
-            "Application '" + applicationId + "' is submitted without priority "
-                + "hence considering default queue/cluster priority: "
-                + appPriority.getPriority());
+        appPriority = this.queueManager.getDefaultPriorityForQueue(
+            normalizeQueueName(queuePath));
       }
 
-      // Verify whether submitted priority is lesser than max priority
-      // in the cluster. If it is out of found, defining a max cap.
-      if (appPriority.getPriority() > getMaxClusterLevelAppPriority()
-          .getPriority()) {
-        appPriority = Priority
-            .newInstance(getMaxClusterLevelAppPriority().getPriority());
-      }
-
-      // Lets check for ACLs here.
-      if (!appPriorityACLManager.checkAccess(user, normalizeQueueName(queuePath), appPriority)) {
-        throw new YarnException(new AccessControlException(
-                "User " + user + " does not have permission to submit/update "
-                        + applicationId + " for " + appPriority));
-      }
-
-      LOG.info("Priority '" + appPriority.getPriority()
-          + "' is acceptable in queue : " + queuePath + " for application: "
-          + applicationId);
-
-      return appPriority;
-    } finally {
-      readLock.unlock();
+      LOG.info(
+          "Application '" + applicationId + "' is submitted without priority "
+              + "hence considering default queue/cluster priority: "
+              + appPriority.getPriority());
     }
+
+    // Verify whether submitted priority is lesser than max priority
+    // in the cluster. If it is out of found, defining a max cap.
+    if (appPriority.getPriority() > getMaxClusterLevelAppPriority()
+        .getPriority()) {
+      appPriority = Priority
+          .newInstance(getMaxClusterLevelAppPriority().getPriority());
+    }
+
+    // Lets check for ACLs here.
+    if (!appPriorityACLManager
+        .checkAccess(user, normalizeQueueName(queuePath), appPriority)) {
+      throw new YarnException(new AccessControlException(
+          "User " + user + " does not have permission to submit/update "
+              + applicationId + " for " + appPriority));
+    }
+
+    LOG.info("Priority '" + appPriority.getPriority()
+        + "' is acceptable in queue : " + queuePath + " for application: "
+        + applicationId);
+
+    return appPriority;
   }
 
   @Override

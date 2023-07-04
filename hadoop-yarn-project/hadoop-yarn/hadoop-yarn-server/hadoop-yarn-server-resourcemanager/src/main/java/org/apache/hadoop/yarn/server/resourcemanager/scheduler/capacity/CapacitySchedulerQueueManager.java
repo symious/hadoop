@@ -361,9 +361,9 @@ public class CapacitySchedulerQueueManager implements SchedulerQueueManager<
       if (queue instanceof LeafQueue) {
         LeafQueue lQueue = (LeafQueue) queue;
 
-        // Clear Priority ACLs first since reinitialize also call same.
-        appPriorityACLManager.clearPriorityACLs(lQueue.getQueuePath());
-        appPriorityACLManager.addPrioirityACLs(lQueue.getPriorityACLs(),
+        // Use replacePrioirityACLs instead of clearPriorityACLs + addPrioirityACLs
+        // avoid AppPriorityACLsManager.getDefaultPriority return null during refresh queue
+        appPriorityACLManager.replacePrioirityACLs(lQueue.getPriorityACLs(),
             lQueue.getQueuePath());
       }
     }
