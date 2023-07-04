@@ -21,7 +21,8 @@ public class NodeManagerLabelTracker {
       "    name: 'Hadoop_NodeManager_$2'\n" +
       "    labels:\n" +
       "      nmlabel: '%s'\n" +
-      "      name: '$1'";
+      "      name: '$1'\n" +
+      "  - pattern: '.*'";
 
   private String jmxPrometheusConfig;
 
