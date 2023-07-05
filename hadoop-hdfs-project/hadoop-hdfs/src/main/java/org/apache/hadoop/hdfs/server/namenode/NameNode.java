@@ -150,6 +150,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPO
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY;
@@ -412,7 +413,9 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY,
           DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
           DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_KEY,
-          DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY));
+          DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY,
+          DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA));
+
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2478,6 +2481,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigureQuotaInitThreads(newVal);
     } else if (property.equals(DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_KEY)) {
       return reconfigurationRemoveCorruptedBlocks(newVal);
+    } else if (property.equals(DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA)) {
+      return reconfigurationDeleteRedundantDecommissionReplica(newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -2945,6 +2950,17 @@ public class NameNode extends ReconfigurableBase implements
     }
     this.namesystem.getBlockManager().setRemoveCorruptedBlocks(removeCorruptedBlocks);
     return String.valueOf(removeCorruptedBlocks);
+  }
+
+  private String reconfigurationDeleteRedundantDecommissionReplica(String newVal) {
+    boolean deleteRedundantDecommissionReplica;
+    if (newVal == null) {
+      deleteRedundantDecommissionReplica = DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_DEFAULT;
+    } else {
+      deleteRedundantDecommissionReplica = Boolean.parseBoolean(newVal);
+    }
+    this.namesystem.getBlockManager().setDeleteRedundantDCReplica(deleteRedundantDecommissionReplica);
+    return String.valueOf(deleteRedundantDecommissionReplica);
   }
 
   private String reconfigureTailEditsOnlyDurableTxns(String newVal) {

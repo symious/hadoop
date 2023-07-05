@@ -6455,4 +6455,12 @@
       as corrupted block. The default value is false.
     </description>
   </property>
+  <property>
+    <name>dfs.namenode.delete.redundant.decommission.replica</name>
+    <value>false</value>
+    <description>
+      If true, namenode can invalidate some decommission replicas
+      if the live replicas already met the expected.
+    </description>
+  </property>
 </configuration>

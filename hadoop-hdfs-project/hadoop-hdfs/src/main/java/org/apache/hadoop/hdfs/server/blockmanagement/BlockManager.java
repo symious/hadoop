@@ -466,6 +466,9 @@ public class BlockManager implements BlockStatsMXBean {
   /** Storages accessible from multiple DNs. */
   private final ProvidedStorageMap providedStorageMap;
 
+  /** Invalidate redundant decommission replicas or not. */
+  private volatile boolean deletingRedundantDCReplicas;
+
   public BlockManager(final Namesystem namesystem, boolean haEnabled,
       final Configuration conf) throws IOException {
     this.namesystem = namesystem;
@@ -619,6 +622,10 @@ public class BlockManager implements BlockStatsMXBean {
         conf.getBoolean(DFS_NAMENODE_CORRUPT_BLOCK_DELETE_IMMEDIATELY_ENABLED,
             DFS_NAMENODE_CORRUPT_BLOCK_DELETE_IMMEDIATELY_ENABLED_DEFAULT);
 
+    setDeleteRedundantDCReplica(
+        conf.getBoolean(DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA,
+            DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA_DEFAULT));
+
     LOG.info("defaultReplication         = {}", defaultReplication);
     LOG.info("maxReplication             = {}", maxReplication);
     LOG.info("minReplication             = {}", minReplication);
@@ -626,6 +633,10 @@ public class BlockManager implements BlockStatsMXBean {
     LOG.info("redundancyRecheckInterval  = {}ms", redundancyRecheckIntervalMs);
     LOG.info("encryptDataTransfer        = {}", encryptDataTransfer);
     LOG.info("maxNumBlocksToLog          = {}", maxNumBlocksToLog);
+  }
+
+  public void setDeleteRedundantDCReplica(boolean deleteRedundantDCReplica) {
+    this.deletingRedundantDCReplicas = deleteRedundantDCReplica;
   }
 
   private static BlockTokenSecretManager createBlockTokenSecretManager(
@@ -2951,7 +2962,7 @@ public class BlockManager implements BlockStatsMXBean {
               "in block map.", b);
           continue;
         }
-        MisReplicationResult res = processMisReplicatedBlock(bi);
+        MisReplicationResult res = processMisReplicatedBlock(bi, rescannedMisreplicatedBlocks);
         LOG.debug("BLOCK* rescanPostponedMisreplicatedBlocks: " +
             "Re-scanned block {}, result is {}", b, res);
         if (res == MisReplicationResult.POSTPONE) {
@@ -3637,6 +3648,10 @@ public class BlockManager implements BlockStatsMXBean {
       processExtraRedundancyBlock(storedBlock, fileRedundancy, node,
           delNodeHint);
     }
+    if (deletingRedundantDCReplicas) {
+      attempt2DeleteRedundantDecommissionReplicas(storedBlock, num, delNodeHint, fileRedundancy,
+          postponedMisreplicatedBlocks);
+    }
     // If the file redundancy has reached desired value
     // we can remove any corrupt replicas the block may have
     int corruptReplicasCount = corruptReplicas.numCorruptReplicas(storedBlock);
@@ -3650,6 +3665,108 @@ public class BlockManager implements BlockStatsMXBean {
       invalidateCorruptReplicas(storedBlock, reportedBlock, num);
     }
     return storedBlock;
+  }
+
+  /**
+   * Attempt to invalidate some decommissioning replicas for one stored block.
+   * Case1: the delNodeHint is not null and the delNodeHint is a decommissioning node.
+   * Case2: for the contiguous block, the number of live replicas met the expected replicas,
+   *        all decommissioning replicas can be invalidated.
+   * Case3: for the striped block, try to find all internal blocks which has live replicas and
+   *        decommissioning replicas. The redundant decommissioning replicas can be invalidated.
+   *
+   * @return true if the decommission replica can be invalidated, else return false.
+   */
+  private boolean attempt2DeleteRedundantDecommissionReplicas(BlockInfo storedBlock,
+      NumberReplicas num, DatanodeDescriptor delNodeHint, short fileRedundancy,
+      Collection<Block> postponeBlocks) {
+    // Case 1: delNodeHint is not null and the delNodeHint is decommissioning
+    if (delNodeHint != null && delNodeHint.isDecommissionInProgress()) {
+      // loop all replicas to get the storageInfo
+      for (DatanodeStorageInfo storage : blocksMap.getStorages(storedBlock)) {
+        if (storage.getDatanodeDescriptor().getDatanodeUuid()
+            .equals(delNodeHint.getDatanodeUuid())) {
+          attempt2InvalidateDecommissioningReplica(storage, storedBlock, postponeBlocks);
+          return true;
+        }
+      }
+    } else if (!storedBlock.isStriped() &&
+        num.liveReplicas() >= fileRedundancy && num.decommissioning() > 0) {
+      // Case 2: the number of live replicas already met expected replicas,
+      // all decommissioning replicas can be invalidated.
+      // loop all replicas and to invalidate all decommissioning replicas
+      for (DatanodeStorageInfo storage : blocksMap.getStorages(storedBlock)) {
+        if (storage.getDatanodeDescriptor().isDecommissionInProgress()) {
+          attempt2InvalidateDecommissioningReplica(storage, storedBlock, postponeBlocks);
+        }
+      }
+      return true;
+    } else if (storedBlock.isStriped()) {
+      // Case 3: Loop all replicas for striped block to delete all decommissioning replicas
+      // if the internal block already has a live replica.
+      NumberReplicas numberReplicas = new NumberReplicas();
+      Collection<DatanodeDescriptor> nodesCorrupt = corruptReplicas.getNodes(storedBlock);
+      BlockInfoStriped blockInfoStriped = (BlockInfoStriped) storedBlock;
+      BitSet liveBitSet = new BitSet(blockInfoStriped.getTotalBlockNum());
+      Map<Byte, List<DatanodeStorageInfo>> dcReplicas = new HashMap<>();
+      boolean result = false;
+      for (StorageAndBlockIndex si : blockInfoStriped.getStorageAndIndexInfos()) {
+        StoredReplicaState state = checkReplicaOnStorage(numberReplicas, blockInfoStriped,
+            si.getStorage(), nodesCorrupt, false);
+        byte blockIndex = si.getBlockIndex();
+        if (state == StoredReplicaState.LIVE) {
+          if (!liveBitSet.get(blockIndex)) {
+            liveBitSet.set(blockIndex);
+          }
+          if (dcReplicas.containsKey(blockIndex)) {
+            // delete this decommissioningBlock.
+            dcReplicas.get(blockIndex).forEach(
+                k -> attempt2InvalidateDecommissioningReplica(k, storedBlock, postponeBlocks));
+            result = true;
+            dcReplicas.get(blockIndex).clear();
+          }
+        } else if (state == StoredReplicaState.DECOMMISSIONING) {
+          if (liveBitSet.get(blockIndex)) {
+           // delete this decommissioningBlock.
+            DatanodeStorageInfo datanodeStorageInfo = si.getStorage();
+            attempt2InvalidateDecommissioningReplica(datanodeStorageInfo,
+                storedBlock, postponeBlocks);
+            result = true;
+          } else {
+            if (!dcReplicas.containsKey(blockIndex)) {
+              dcReplicas.put(blockIndex, new ArrayList<>());
+            }
+            dcReplicas.get(blockIndex).add(si.getStorage());
+          }
+        }
+      }
+      return result;
+    }
+    return false;
+  }
+
+  private void attempt2InvalidateDecommissioningReplica(
+      DatanodeStorageInfo storage, BlockInfo storedBlock, Collection<Block> postponeBlocks) {
+    if (storage.getState() != State.NORMAL) {
+      LOG.info("Will not delete this decommissioning replica for {}, " +
+          "because the storage is unhealthy.", storedBlock);
+      return;
+    }
+    if (storage.areBlockContentsStale()) {
+      LOG.info("Will not delete this decommissioning replica for {}, " +
+          "because the storage is stale.", storedBlock);
+      postponeBlocks.add(storedBlock);
+      return;
+    }
+    if (isExcess(storage.getDatanodeDescriptor(), storedBlock)) {
+      LOG.info("Will not delete this decommissioning replica for {}, " +
+          "because the storage is marked as excess replica.", storedBlock);
+      return;
+    }
+    excessRedundancyMap.add(storage.getDatanodeDescriptor(), storedBlock);
+    final Block blockToInvalidate = getBlockOnStorage(storedBlock, storage);
+    addToInvalidates(blockToInvalidate, storage.getDatanodeDescriptor());
+    LOG.debug("Will invalidate the decommissioning replica {} for {}.", storage, storedBlock);
   }
 
   // If there is any maintenance replica, we don't have to restore
@@ -3912,6 +4029,11 @@ public class BlockManager implements BlockStatsMXBean {
    * what happened with it.
    */
   private MisReplicationResult processMisReplicatedBlock(BlockInfo block) {
+    return processMisReplicatedBlock(block, postponedMisreplicatedBlocks);
+  }
+
+  private MisReplicationResult processMisReplicatedBlock(BlockInfo block,
+      Collection<Block> postponeBlocks) {
     if (block.isDeleted()) {
       // block does not belong to any file
       addToInvalidates(block);
@@ -3948,6 +4070,13 @@ public class BlockManager implements BlockStatsMXBean {
       // extra redundancy block
       processExtraRedundancyBlock(block, expectedRedundancy, null, null);
       return MisReplicationResult.OVER_REPLICATED;
+    }
+
+    if (deletingRedundantDCReplicas) {
+      if (attempt2DeleteRedundantDecommissionReplicas(block, num, null, expectedRedundancy,
+          postponeBlocks)) {
+        return MisReplicationResult.OVER_REPLICATED;
+      }
     }
     
     return MisReplicationResult.OK;

@@ -156,4 +156,45 @@ abstract class BalancingPolicy {
       return capacity == 0L? null: blockPoolUsed*100.0/capacity;
     }
   }
+
+  static class Decommission extends BalancingPolicy {
+    static final Decommission INSTANCE = new Decommission();
+
+    private Decommission() {}
+
+    @Override
+    String getName() {
+      return "decommission";
+    }
+
+    // Will accumulate used space for decommissioning node
+    // But won't accumulate its capacity when compute the total capacity
+    // This way of computation can get the average utilization after decommission
+    @Override
+    void accumulateSpaces(DatanodeStorageReport r) {
+      for(StorageReport s : r.getStorageReports()) {
+        final StorageType t = s.getStorage().getStorageType();
+        totalUsedSpaces.add(t, s.getBlockPoolUsed());
+        if (!r.getDatanodeInfo().isDecommissionInProgress()) {
+          totalCapacities.add(t, s.getCapacity());
+        }
+      }
+    }
+
+    @Override
+    Double getUtilization(DatanodeStorageReport r, StorageType t) {
+      if (r.getDatanodeInfo().isDecommissionInProgress()) {
+        return null;
+      }
+      long capacity = 0L;
+      long dfsUsed = 0L;
+      for(StorageReport s : r.getStorageReports()) {
+        if (s.getStorage().getStorageType() == t) {
+          capacity += s.getCapacity();
+          dfsUsed += s.getDfsUsed();
+        }
+      }
+      return capacity == 0L? null: dfsUsed*100.0/capacity;
+    }
+  }
 }

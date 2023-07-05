@@ -1543,7 +1543,6 @@ public class DatanodeManager {
    */
   public void refreshNodes(final Configuration conf) throws IOException {
     refreshHostsReader(conf);
-    // Refresh DN topology info before get write lock
     List<String> refreshIpList = new ArrayList<>();
     for (InetSocketAddress addr : hostConfigManager.getIncludes()) {
       refreshIpList.add(addr.getAddress().getHostAddress());
@@ -1552,6 +1551,9 @@ public class DatanodeManager {
     dnsToSwitchMappingForMetric.resolve(refreshIpList);
     namesystem.writeLock();
     try {
+      // Refresh DN topology info
+      LOG.info("Refresh datanode admin monitor as well!");
+      datanodeAdminManager.refreshDMMonitor(conf);
       refreshDatanodes();
       countSoftwareVersions();
     } finally {

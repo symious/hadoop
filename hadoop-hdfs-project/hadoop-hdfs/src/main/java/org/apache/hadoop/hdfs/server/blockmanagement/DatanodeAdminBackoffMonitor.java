@@ -32,8 +32,6 @@ import java.util.Map;
 import java.util.List;
 import java.util.Iterator;
 import java.util.LinkedList;
-import java.util.ArrayDeque;
-import java.util.Queue;
 import java.util.stream.Collectors;
 
 /**
@@ -157,6 +155,11 @@ public class DatanodeAdminBackoffMonitor extends DatanodeAdminMonitorBase
   public int getNumNodesChecked() {
     // We always check all nodes on each tick
     return outOfServiceNodeBlocks.size();
+  }
+
+  @Override
+  public boolean isTrackingNode(DatanodeDescriptor dn) {
+    return outOfServiceNodeBlocks.containsKey(dn) || getPendingNodes().contains(dn);
   }
 
   @Override

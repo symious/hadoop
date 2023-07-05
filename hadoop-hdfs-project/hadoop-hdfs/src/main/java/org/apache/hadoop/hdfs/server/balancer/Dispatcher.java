@@ -1200,14 +1200,21 @@ public class Dispatcher {
 
   /** Get live datanode storage reports and then build the network topology. */
   public List<DatanodeStorageReport> init() throws IOException {
-    final DatanodeStorageReport[] reports = nnc.getLiveDatanodeStorageReport();
+    return init(false);
+  }
+
+  /** Get live&decommissioning datanode storage reports and then build the network topology. */
+  public List<DatanodeStorageReport> init(boolean includeDecommission) throws IOException {
+    final DatanodeStorageReport[] reports;
+    reports = nnc.getLiveDatanodeStorageReport();
+
     final List<DatanodeStorageReport> trimmed = new ArrayList<DatanodeStorageReport>(); 
     // create network topology and classify utilization collections:
     // over-utilized, above-average, below-average and under-utilized.
     Collections.shuffle(Arrays.asList(reports));
     for (DatanodeStorageReport r : reports) {
       final DatanodeInfo datanode = r.getDatanodeInfo();
-      if (shouldIgnore(datanode)) {
+      if (shouldIgnore(datanode) && !(includeDecommission && datanode.isDecommissionInProgress())) {
         continue;
       }
       trimmed.add(r);
@@ -1247,6 +1254,10 @@ public class Dispatcher {
 
   public boolean dispatchAndCheckContinue() throws InterruptedException {
     return nnc.shouldContinue(dispatchBlockMoves());
+  }
+
+  public int countDecommissioningNode() throws IOException {
+    return nnc.getLiveAndDecommissionDatanodeStorageReport().size();
   }
 
   /**

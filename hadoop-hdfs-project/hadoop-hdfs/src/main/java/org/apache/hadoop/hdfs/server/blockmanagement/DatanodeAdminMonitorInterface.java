@@ -28,6 +28,7 @@ import java.util.Queue;
 public interface DatanodeAdminMonitorInterface extends Runnable {
   void stopTrackingNode(DatanodeDescriptor dn);
   void startTrackingNode(DatanodeDescriptor dn);
+  boolean isTrackingNode(DatanodeDescriptor dn);
   int getPendingNodeCount();
   int getTrackedNodeCount();
   int getNumNodesChecked();

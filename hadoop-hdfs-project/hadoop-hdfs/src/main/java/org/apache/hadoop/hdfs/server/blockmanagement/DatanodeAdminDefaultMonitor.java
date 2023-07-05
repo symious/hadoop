@@ -67,13 +67,13 @@ public class DatanodeAdminDefaultMonitor extends DatanodeAdminMonitorBase
    * reports or other events. Before being finally marking as decommissioned,
    * another check is done with the actual block map.
    */
-  private final TreeMap<DatanodeDescriptor, AbstractList<BlockInfo>>
+  protected TreeMap<DatanodeDescriptor, AbstractList<BlockInfo>>
       outOfServiceNodeBlocks;
 
   /**
    * The maximum number of blocks to check per tick.
    */
-  private volatile int numBlocksPerCheck;
+  protected volatile int numBlocksPerCheck;
 
   /**
    * The number of blocks that have been checked on this tick.
@@ -138,6 +138,11 @@ public class DatanodeAdminDefaultMonitor extends DatanodeAdminMonitorBase
   }
 
   @Override
+  public boolean isTrackingNode(DatanodeDescriptor dn) {
+    return outOfServiceNodeBlocks.containsKey(dn) || getPendingNodes().contains(dn);
+  }
+
+  @Override
   public void run() {
     LOG.debug("DatanodeAdminMonitor is running.");
     if (!namesystem.isRunning()) {
@@ -172,7 +177,8 @@ public class DatanodeAdminDefaultMonitor extends DatanodeAdminMonitorBase
    * Pop datanodes off the pending priority queue and into decomNodeBlocks,
    * subject to the maxConcurrentTrackedNodes limit.
    */
-  private void processPendingNodes() {
+  protected void processPendingNodes() {
+    LOG.info("The number of pending nodes is {}", getPendingNodes().size());
     while (!getPendingNodes().isEmpty() &&
         (maxConcurrentTrackedNodes == 0 ||
             outOfServiceNodeBlocks.size() < maxConcurrentTrackedNodes)) {
@@ -187,14 +193,14 @@ public class DatanodeAdminDefaultMonitor extends DatanodeAdminMonitorBase
    * This method must be executed under the write lock to prevent the
    * internal structures being modified concurrently.
    */
-  private void processCancelledNodes() {
+  protected void processCancelledNodes() {
     while(!getCancelledNodes().isEmpty()) {
       DatanodeDescriptor dn = getCancelledNodes().poll();
       outOfServiceNodeBlocks.remove(dn);
     }
   }
 
-  private void check() {
+  protected void check() {
     final Iterator<Map.Entry<DatanodeDescriptor, AbstractList<BlockInfo>>>
         it = new CyclicIteration<>(outOfServiceNodeBlocks,
         iterkey).iterator();

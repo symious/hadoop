@@ -21,6 +21,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -32,6 +33,8 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+import com.nimbusds.jose.util.ArrayUtils;
+import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.RateLimiter;
 import org.apache.hadoop.ha.HAServiceProtocol;
@@ -169,8 +172,14 @@ public class NameNodeConnector implements Closeable {
   private int notChangedIterations = 0;
   private final RateLimiter getBlocksRateLimiter;
 
-  //Allow several same service run at the same time, skip the id path check
   public NameNodeConnector(URI nameNodeUri,
+      List<Path> targetPaths, Configuration conf,
+      int maxNotChangedIterations) throws IOException {
+    this(nameNodeUri, null, targetPaths, conf, maxNotChangedIterations);
+  }
+
+  //Allow several same service run at the same time, skip the id path check
+  public NameNodeConnector(URI nameNodeUri, InetSocketAddress nnAddress,
       List<Path> targetPaths, Configuration conf,
       int maxNotChangedIterations) throws IOException {
     this.nameNodeUri = nameNodeUri;
@@ -188,8 +197,14 @@ public class NameNodeConnector implements Closeable {
       this.getBlocksRateLimiter = null;
     }
 
-    this.namenode = NameNodeProxies.createProxy(conf, nameNodeUri,
-        BalancerProtocols.class, fallbackToSimpleAuth).getProxy();
+    if (nnAddress == null) {
+      this.namenode = NameNodeProxies.createProxy(conf, nameNodeUri,
+          BalancerProtocols.class, fallbackToSimpleAuth).getProxy();
+    } else {
+      this.namenode = NameNodeProxies.createNonHAProxy(conf, nnAddress,
+          BalancerProtocols.class, UserGroupInformation.getCurrentUser(), true,
+          fallbackToSimpleAuth, null).getProxy();
+    }
     this.requestToStandby = conf.getBoolean(
         DFSConfigKeys.DFS_HA_ALLOW_STALE_READ_KEY,
         DFSConfigKeys.DFS_HA_ALLOW_STALE_READ_DEFAULT);
@@ -226,6 +241,24 @@ public class NameNodeConnector implements Closeable {
       throws IOException {
     this(name, nameNodeUri, idPath, targetPaths, conf, maxNotChangedIterations);
     this.nsId = nsId;
+  }
+
+  // Connect NN by given address
+  public NameNodeConnector(String name, URI nameNodeUri, InetSocketAddress address, String nsId,
+      Path idPath, List<Path> targetPaths,
+      Configuration conf, int maxNotChangedIterations)
+      throws IOException {
+    this(nameNodeUri, address, targetPaths, conf, maxNotChangedIterations);
+    this.nsId = nsId;
+    this.idPath = idPath;
+    // if it is for test, we do not create the id file
+    if (checkOtherInstanceRunning) {
+      out = checkAndMarkRunning();
+      if (out == null) {
+        // Exit if there is another one running.
+        throw new IOException("Another " + name + " is running.");
+      }
+    }
   }
 
   public DistributedFileSystem getDistributedFileSystem() {
@@ -317,6 +350,19 @@ public class NameNodeConnector implements Closeable {
   public DatanodeStorageReport[] getLiveDatanodeStorageReport()
       throws IOException {
     return namenode.getDatanodeStorageReport(DatanodeReportType.LIVE);
+  }
+
+  /** @return live&decommission datanode storage reports. */
+  public List<DatanodeInfo> getLiveAndDecommissionDatanodeStorageReport() throws IOException {
+    DatanodeInfo[] live =
+        namenode.getDatanodeReport(DatanodeReportType.LIVE);
+    List<DatanodeInfo> reports = new ArrayList();
+    for (DatanodeInfo dsr : live) {
+      if (dsr.isDecommissionInProgress()) {
+        reports.add(dsr);
+      }
+    }
+    return reports;
   }
 
   /** @return the key manager */
@@ -433,5 +479,9 @@ public class NameNodeConnector implements Closeable {
   public String toString() {
     return getClass().getSimpleName() + "[namenodeUri=" + nameNodeUri
         + ", bpid=" + blockpoolID + "]";
+  }
+
+  public boolean equals(NameNodeConnector nnc) {
+    return this.idPath.equals(nnc.idPath);
   }
 }

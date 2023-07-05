@@ -38,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter;
+import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.slf4j.Logger;
@@ -206,19 +207,19 @@ public class Balancer {
       + "\n\t[-asService]\tRun as a long running service.";
 
   @VisibleForTesting
-  private static volatile boolean serviceRunning = false;
+  static volatile boolean serviceRunning = false;
 
-  private static volatile int exceptionsSinceLastBalance = 0;
-  private static volatile int failedTimesSinceLastSuccessfulBalance = 0;
+  static volatile int exceptionsSinceLastBalance = 0;
+  static volatile int failedTimesSinceLastSuccessfulBalance = 0;
   public static volatile boolean checkDataCenter = true;
 
-  private final Dispatcher dispatcher;
-  private final NameNodeConnector nnc;
+  protected final Dispatcher dispatcher;
+  protected final NameNodeConnector nnc;
   private final BalancingPolicy policy;
   private final Set<String> sourceNodes;
-  private final boolean runDuringUpgrade;
-  private final double threshold;
-  private final long maxSizeToMove;
+  final boolean runDuringUpgrade;
+  protected final double threshold;
+  protected final long maxSizeToMove;
   private final long defaultBlockSize;
 
   // all data node lists
@@ -232,10 +233,10 @@ public class Balancer {
   /* Check that this Balancer is compatible with the Block Placement Policy
    * used by the Namenode.
    */
-  private static void checkReplicationPolicyCompatibility(Configuration conf
-      ) throws UnsupportedActionException {
+  static void checkReplicationPolicyCompatibility(Configuration conf
+  ) throws UnsupportedActionException {
     BlockPlacementPolicies placementPolicies =
-        new BlockPlacementPolicies(conf, null, null, null);
+        new BlockPlacementPolicies(conf, null, NetworkTopology.getInstance(conf), null);
     BlockPlacementPolicy contiguousPolicy = placementPolicies.getPolicy(CONTIGUOUS);
     if (contiguousPolicy instanceof BlockPlacementPolicyWithDataCenter) {
       LOG.info("Block placement policy of Namenode is " +
@@ -347,7 +348,7 @@ public class Balancer {
         DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT);
   }
   
-  private static long getCapacity(DatanodeStorageReport report, StorageType t) {
+  static long getCapacity(DatanodeStorageReport report, StorageType t) {
     long capacity = 0L;
     for(StorageReport r : report.getStorageReports()) {
       if (r.getStorage().getStorageType() == t) {
@@ -357,7 +358,7 @@ public class Balancer {
     return capacity;
   }
 
-  private long getRemaining(DatanodeStorageReport report, StorageType t) {
+  protected long getRemaining(DatanodeStorageReport report, StorageType t) {
     long remaining = 0L;
     for(StorageReport r : report.getStorageReports()) {
       if (r.getStorage().getStorageType() == t) {
@@ -378,7 +379,7 @@ public class Balancer {
    *
    * @return the number of bytes needed to move in order to balance the cluster.
    */
-  private long init(List<DatanodeStorageReport> reports) {
+  protected long init(List<DatanodeStorageReport> reports) {
     // compute average utilization
     for (DatanodeStorageReport r : reports) {
       policy.accumulateSpaces(r);
@@ -445,7 +446,7 @@ public class Balancer {
     return Math.max(overLoadedBytes, underLoadedBytes);
   }
 
-  private static long computeMaxSize2Move(final long capacity, final long remaining,
+  protected static long computeMaxSize2Move(final long capacity, final long remaining,
       final double utilizationDiff, final long max) {
     final double diff = Math.abs(utilizationDiff);
     long maxSizeToMove = percentage2bytes(diff, capacity);
@@ -455,7 +456,7 @@ public class Balancer {
     return Math.min(max, maxSizeToMove);
   }
 
-  private static long percentage2bytes(double percentage, long capacity) {
+  protected static long percentage2bytes(double percentage, long capacity) {
     Preconditions.checkArgument(percentage >= 0, "percentage = %s < 0",
         percentage);
     return (long)(percentage * capacity / 100.0);
@@ -483,7 +484,7 @@ public class Balancer {
    * min(1 Band worth of bytes,  MAX_SIZE_TO_MOVE).
    * @return total number of bytes to move in this iteration
    */
-  private long chooseStorageGroups() {
+  long chooseStorageGroups() {
     // First, match nodes on the same node group if cluster is node group aware
     if (dispatcher.getCluster().isNodeGroupAware()) {
       chooseStorageGroups(Matcher.SAME_NODE_GROUP);
@@ -498,7 +499,7 @@ public class Balancer {
   }
 
   /** Decide all <source, target> pairs according to the matcher. */
-  private void chooseStorageGroups(final Matcher matcher) {
+  protected void chooseStorageGroups(final Matcher matcher) {
     /* first step: match each overUtilized datanode (source) to
      * one or more underUtilized datanodes (targets).
      */
@@ -527,9 +528,9 @@ public class Balancer {
    * datanodes or the candidates are source nodes with (utilization > Avg), and
    * the others are target nodes with (utilization < Avg).
    */
-  private <G extends StorageGroup, C extends StorageGroup>
+  <G extends StorageGroup, C extends StorageGroup>
       void chooseStorageGroups(Collection<G> groups, Collection<C> candidates,
-          Matcher matcher) {
+      Matcher matcher) {
     for(final Iterator<G> i = groups.iterator(); i.hasNext();) {
       final G g = i.next();
       for(; choose4One(g, candidates, matcher); );
@@ -543,7 +544,7 @@ public class Balancer {
    * For the given datanode, choose a candidate and then schedule it.
    * @return true if a candidate is chosen; false if no candidates is chosen.
    */
-  private <C extends StorageGroup> boolean choose4One(StorageGroup g,
+  protected  <C extends StorageGroup> boolean choose4One(StorageGroup g,
       Collection<C> candidates, Matcher matcher) {
     final Iterator<C> i = candidates.iterator();
     final C chosen = chooseCandidate(g, i, matcher);
@@ -562,7 +563,7 @@ public class Balancer {
     return true;
   }
   
-  private void matchSourceWithTargetToMove(Source source, StorageGroup target) {
+  protected void matchSourceWithTargetToMove(Source source, StorageGroup target) {
     long size = Math.min(source.availableSizeToMove(), target.availableSizeToMove());
     final Task task = new Task(target, size);
     source.addTask(task);
@@ -573,7 +574,7 @@ public class Balancer {
   }
   
   /** Choose a candidate for the given datanode. */
-  private <G extends StorageGroup, C extends StorageGroup>
+  protected <G extends StorageGroup, C extends StorageGroup>
       C chooseCandidate(G g, Iterator<C> candidates, Matcher matcher) {
     if (g.hasSpaceForScheduling()) {
       for(; candidates.hasNext(); ) {
@@ -588,7 +589,7 @@ public class Balancer {
     return null;
   }
 
-  private boolean matchStorageGroups(StorageGroup left, StorageGroup right,
+  protected boolean matchStorageGroups(StorageGroup left, StorageGroup right,
       Matcher matcher) {
     return left.getStorageType() == right.getStorageType()
         && matcher.match(dispatcher.getCluster(),
@@ -880,7 +881,7 @@ public class Balancer {
   }
 
   /* Given elaspedTime in ms, return a printable string */
-  private static String time2Str(long elapsedTime) {
+  static String time2Str(long elapsedTime) {
     String unit;
     double time = elapsedTime;
     if (elapsedTime < 1000) {

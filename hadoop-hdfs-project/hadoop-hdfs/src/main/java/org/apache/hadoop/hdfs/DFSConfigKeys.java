@@ -338,6 +338,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final boolean
       DFS_NAMENODE_CORRUPT_BLOCK_DELETE_IMMEDIATELY_ENABLED_DEFAULT = true;
 
+  public static final String DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA =
+      "dfs.namenode.delete.redundant.decommission.replica";
+  public static final boolean DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA_DEFAULT = false;
+
   @Deprecated
   public static final String  DFS_WEBHDFS_USER_PATTERN_KEY =
       HdfsClientConfigKeys.DFS_WEBHDFS_USER_PATTERN_KEY;
@@ -880,6 +884,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final long    DFS_BALANCER_SERVICE_INTERVAL_DEFAULT = TimeUnit.MINUTES.toMillis(5); //5 mins
   public static final String  DFS_BALANCER_SERVICE_RETRIES_ON_EXCEPTION = "dfs.balancer.service.retries.on.exception";
   public static final int     DFS_BALANCER_SERVICE_RETRIES_ON_EXCEPTION_DEFAULT = 5;
+  public static final String  DFS_DECOMMISSION_BALANCER_ADDRESS_KEY = "dfs.decommission.balancer.address";
+  public static final String  DFS_DECOMMISSION_BALANCER_ADDRESS_DEFAULT= "0.0.0.0:0";
+  public static final String  DFS_DECOMMISSION_BALANCER_CHECK_ALL_NAMENODE_KEY = "dfs.decommission.balancer.check.all.nns";
+  public static final boolean DFS_DECOMMISSION_BALANCER_CHECK_ALL_NAMENODE_DEFAULT = false;
 
   public static final String  DFS_MOVER_MOVEDWINWIDTH_KEY = "dfs.mover.movedWinWidth";
   public static final long    DFS_MOVER_MOVEDWINWIDTH_DEFAULT = 5400*1000L;

@@ -306,7 +306,7 @@ public class DatanodeDescriptor extends DatanodeInfo {
       return storages.toArray(new DatanodeStorageInfo[storages.size()]);
     }
   }
-
+  
   public EnumSet<StorageType> getStorageTypes() {
     EnumSet<StorageType> storageTypes = EnumSet.noneOf(StorageType.class);
     for (DatanodeStorageInfo dsi : getStorageInfos()) {

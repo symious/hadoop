@@ -81,7 +81,7 @@ public class DatanodeAdminManager {
   private final Namesystem namesystem;
   private final BlockManager blockManager;
   private final HeartbeatManager hbManager;
-  private final ScheduledExecutorService executor;
+  private ScheduledExecutorService executor;
 
   private DatanodeAdminMonitorInterface monitor = null;
 
@@ -101,12 +101,11 @@ public class DatanodeAdminManager {
    * @param conf
    */
   void activate(Configuration conf) {
+    checkArgumentValid(conf);
     final int intervalSecs = (int) conf.getTimeDuration(
         DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_INTERVAL_KEY,
         DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_INTERVAL_DEFAULT,
         TimeUnit.SECONDS);
-    checkArgument(intervalSecs >= 0, "Cannot set a negative " +
-        "value for " + DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_INTERVAL_KEY);
 
     int blocksPerInterval = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY,
@@ -115,24 +114,11 @@ public class DatanodeAdminManager {
     final String deprecatedKey =
         "dfs.namenode.decommission.nodes.per.interval";
     final String strNodes = conf.get(deprecatedKey);
-    if (strNodes != null) {
-      LOG.warn("Deprecated configuration key {} will be ignored.",
-          deprecatedKey);
-      LOG.warn("Please update your configuration to use {} instead.",
-          DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY);
-    }
-
-    checkArgument(blocksPerInterval > 0,
-        "Must set a positive value for "
-        + DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY);
 
     final int maxConcurrentTrackedNodes = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES,
         DFSConfigKeys
             .DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES_DEFAULT);
-    checkArgument(maxConcurrentTrackedNodes >= 0, "Cannot set a negative " +
-        "value for "
-        + DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES);
 
     Class cls = null;
     try {
@@ -157,12 +143,89 @@ public class DatanodeAdminManager {
         blocksPerInterval, maxConcurrentTrackedNodes);
   }
 
+  private void checkArgumentValid(Configuration conf) {
+    int intervalSecs = (int) conf.getTimeDuration(
+        DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_INTERVAL_KEY,
+        DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_INTERVAL_DEFAULT,
+        TimeUnit.SECONDS);
+    checkArgument(intervalSecs >= 0, "Cannot set a negative " +
+        "value for " + DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_INTERVAL_KEY);
+
+    int blocksPerInterval = conf.getInt(
+        DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY,
+        DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_DEFAULT);
+
+    String deprecatedKey =
+        "dfs.namenode.decommission.nodes.per.interval";
+    String strNodes = conf.get(deprecatedKey);
+    if (strNodes != null) {
+      LOG.warn("Deprecated configuration key {} will be ignored.",
+          deprecatedKey);
+      LOG.warn("Please update your configuration to use {} instead.",
+          DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY);
+    }
+
+    checkArgument(blocksPerInterval > 0,
+        "Must set a positive value for "
+            + DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY);
+
+    int maxConcurrentTrackedNodes = conf.getInt(
+        DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES,
+        DFSConfigKeys
+            .DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES_DEFAULT);
+    checkArgument(maxConcurrentTrackedNodes >= 0, "Cannot set a negative " +
+        "value for "
+        + DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES);
+  }
+
   public void refreshBlocksPerInterval(int blocksPerInterval) {
     this.monitor.setNumBlocksPerCheck(blocksPerInterval);
   }
 
   public void refreshMaxConcurrentTrackedNodes(int maxConcurrentTrackedNodes) {
     this.monitor.setMaxConcurrentTrackedNodes(maxConcurrentTrackedNodes);
+  }
+
+  public void refreshDMMonitor(Configuration conf) {
+    boolean updateMonitor = false;
+    int intervalSecs = (int) conf.getTimeDuration(
+        DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_INTERVAL_KEY,
+        DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_INTERVAL_DEFAULT,
+        TimeUnit.SECONDS);
+    checkArgument(intervalSecs >= 0, "Cannot set a negative " +
+        "value for " + DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_INTERVAL_KEY);
+
+    Class cls = null;
+    try {
+      cls = conf.getClass(
+          DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_MONITOR_CLASS,
+          DatanodeAdminDefaultMonitor.class);
+      if (monitor.getClass() != cls) {
+        checkArgumentValid(conf);
+        updateMonitor = true;
+        monitor =
+            (DatanodeAdminMonitorInterface) ReflectionUtils.newInstance(cls, conf);
+        monitor.setBlockManager(blockManager);
+        monitor.setNameSystem(namesystem);
+        monitor.setDatanodeAdminManager(this);
+      }
+    } catch (Exception e) {
+      throw new RuntimeException("Unable to create the Decommission monitor " +
+          "from "+cls, e);
+    }
+    try {
+      if (updateMonitor) {
+        executor.shutdownNow();
+        executor.awaitTermination(3000, TimeUnit.MILLISECONDS);
+        executor = Executors.newScheduledThreadPool(1,
+            new ThreadFactoryBuilder().setNameFormat("DatanodeAdminMonitor-%d")
+                .setDaemon(true).build());
+        executor.scheduleAtFixedRate(monitor, intervalSecs, intervalSecs,
+            TimeUnit.SECONDS);
+      }
+    } catch (InterruptedException e) {
+      LOG.warn("Waiting for executor restarted process is interrupted!");
+    }
   }
 
   public int getBlocksPerInterval() {
@@ -202,10 +265,15 @@ public class DatanodeAdminManager {
         }
         node.getLeavingServiceStatus().setStartTime(monotonicNow());
         monitor.startTrackingNode(node);
+        return;
       }
     } else {
       LOG.trace("startDecommission: Node {} in {}, nothing to do.",
           node, node.getAdminState());
+    }
+    // track if node is decommissioning but not be tracked
+    if (node.isDecommissionInProgress() && !monitor.isTrackingNode(node)) {
+      monitor.startTrackingNode(node);
     }
   }
 

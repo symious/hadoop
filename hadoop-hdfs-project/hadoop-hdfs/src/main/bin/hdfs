@@ -103,6 +103,10 @@ function hdfscmd_case
       hadoop_deprecate_envvar HADOOP_SECURE_DN_PID_DIR HADOOP_SECURE_PID_DIR
       hadoop_deprecate_envvar HADOOP_SECURE_DN_LOG_DIR HADOOP_SECURE_LOG_DIR
     ;;
+    decommissionbalancer)
+      HADOOP_SUBCMD_SUPPORTDAEMONIZATION="true"
+      HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.balancer.DecommissionBalancer
+    ;;
     debug)
       HADOOP_CLASSNAME='org.apache.hadoop.hdfs.tools.DebugAdmin'
     ;;
