@@ -38,6 +38,8 @@ import org.apache.hadoop.hdfs.server.zoneservice.AuditLogger;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRuleManager;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.Date;
@@ -49,6 +51,8 @@ import java.util.concurrent.Semaphore;
 @Path("replicarule/")
 @Singleton
 public class ZoneServiceWebRuleManagementMethods {
+  private static final Logger LOG =
+      LoggerFactory.getLogger(ZoneMoverWebMigrationRecordMethods.class);
   private static final String defaultRatio = "-1";
   private static final String defaultNull = "N/A";
   private final Semaphore semaphore;
@@ -133,7 +137,61 @@ public class ZoneServiceWebRuleManagementMethods {
       JSONObject json = new JSONObject(hashMap);
       return new ZoneServiceHttpResponse(json.toString()).toString();
     } catch (InterruptedException e) {
-      e.printStackTrace();
+      LOG.error("Block summary process is interrupted!", e);
+      AuditLogger.logRuleProcess(
+          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+          path, defaultNull, startTime, new Date(),
+          ResultCode.INTERRUPTED.getMsg(), defaultNull);
+      return new ZoneServiceHttpResponse(ResultCode.INTERRUPTED).toString();
+    }
+  }
+
+  /**
+   * Summary blocks of the given path by distribution
+   * @param hsr       http servlet request
+   * @param nameSpace URI of the NameNode
+   * @param path      the path to be checked
+   * @return the summary of the given path
+   */
+  @GET
+  @Path("count/{path:.*}")
+  @Consumes()
+  @Produces()
+  public String countSummary(@Context HttpServletRequest hsr,
+      @QueryParam("namespace") String nameSpace,
+      @PathParam("path") String path) {
+    Date startTime = new Date();
+    //Check if there is any available thread
+    if (semaphore.availablePermits() == 0) {
+      AuditLogger.logRuleProcess(
+          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+          path, defaultNull, startTime, new Date(),
+          ResultCode.THREAD_FULL.getMsg(), defaultNull);
+      return new ZoneServiceHttpResponse(ResultCode.THREAD_FULL).toString();
+    }
+
+    try {
+      semaphore.acquire();
+      Map<String, List<Long>> hashMap =
+          replicationRuleManager.countBlocksByDistribution(nameSpace, path);
+      semaphore.release();
+      AuditLogger.logRuleProcess(
+          Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+          path, defaultNull, startTime, new Date(),
+          ResultCode.SUCCESS.getMsg(), defaultNull);
+      // No result is return
+      if (hashMap.isEmpty()) {
+        AuditLogger.logRuleProcess(
+            Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
+            path, defaultNull, startTime, new Date(),
+            ResultCode.NO_DISTRIBUTION.getMsg(), defaultNull);
+        return
+            new ZoneServiceHttpResponse(ResultCode.NO_DISTRIBUTION).toString();
+      }
+      JSONObject json = new JSONObject(hashMap);
+      return new ZoneServiceHttpResponse(json.toString()).toString();
+    } catch (InterruptedException e) {
+      LOG.error("Count summary process is interrupted!", e);
       AuditLogger.logRuleProcess(
           Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
           path, defaultNull, startTime, new Date(),
@@ -186,7 +244,7 @@ public class ZoneServiceWebRuleManagementMethods {
       JSONObject json = new JSONObject(hashMap);
       return new ZoneServiceHttpResponse(json.toString()).toString();
     } catch (InterruptedException e) {
-      e.printStackTrace();
+      LOG.error("Get replica distribution process is interrupted!", e);
       AuditLogger.logRuleProcess(
           Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
           path, defaultNull, startTime, new Date(),
