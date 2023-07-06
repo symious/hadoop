@@ -21,6 +21,7 @@ package org.apache.hadoop.yarn.server.resourcemanager;
 import org.apache.hadoop.thirdparty.com.google.common.cache.Cache;
 import org.apache.hadoop.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceUsage;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
@@ -132,6 +133,8 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
   private boolean nodelabelsEnabled;
   private Set<String> exclusiveEnforcedPartitions;
   private Cache<Object, Object> cache;
+
+  private final static int MAX_PENDING_COUNT_ON_MULTI_LABEL = 20 * 60 * 24;
 
   @Override
   public void init(ApplicationMasterServiceContext amsContext,
@@ -291,9 +294,11 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
 
         FiCaSchedulerApp fiCaSchedulerApp = cs.getApplicationAttempt(appAttemptId);
         ResourceUsage resourceUsage = fiCaSchedulerApp.getAppAttemptResourceUsage();
+        int maxPendingCountOnMultiLabel =
+            getMaxPendingCountOnMultiLabelOfJob(asc, cs.getMaxPendingCountOnMultiLabel());
         if (resourceUsage.getAllPending().compareTo(Resource.newInstance(0, 0)) > 0) {
           fiCaSchedulerApp.pendingCountWithHeartbeat++;
-          if (fiCaSchedulerApp.pendingCountWithHeartbeat > cs.getMaxPendingCountOnMultiLabel()) {
+          if (fiCaSchedulerApp.pendingCountWithHeartbeat > maxPendingCountOnMultiLabel) {
             asc.setNodeLabelExpression(null);
             LOG.warn(
                 "Queue: " + app.getQueue() + " AppId: " + app.getApplicationId() +
@@ -443,6 +448,32 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
 
     response.setRejectedSchedulingRequests(allocation.getRejectedRequest());
 
+  }
+
+  /**
+   * Get the MAX_PENDING_COUNT_ON_MULTI_LABEL from Job config
+   * @param asc
+   * @param maxPendingCountOnMultiLabel
+   * @return
+   */
+  private int getMaxPendingCountOnMultiLabelOfJob(ApplicationSubmissionContext asc,
+      int maxPendingCountOnMultiLabel) {
+    ContainerLaunchContext containerLaunchContext = asc.getAMContainerSpec();
+    if (null != containerLaunchContext && null != containerLaunchContext.getEnvironment()) {
+      try {
+        String jobConfig = containerLaunchContext.getEnvironment()
+            .get(CapacitySchedulerConfiguration.JOB_MAX_PENDING_COUNT_ON_MULTI_LABEL);
+        if (!StringUtils.isNullOrEmpty(jobConfig)) {
+          int tmpMaxPendingCountOnMultiLabel = Integer.valueOf(jobConfig);
+          tmpMaxPendingCountOnMultiLabel = Math.max(tmpMaxPendingCountOnMultiLabel, 1);
+          maxPendingCountOnMultiLabel =
+              Math.min(tmpMaxPendingCountOnMultiLabel, MAX_PENDING_COUNT_ON_MULTI_LABEL);
+        }
+      } catch (Exception e) {
+        LOG.error("Unexpected Exception:", e);
+      }
+    }
+    return maxPendingCountOnMultiLabel;
   }
 
   private void handleInvalidResourceException(InvalidResourceRequestException e,

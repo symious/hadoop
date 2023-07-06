@@ -108,6 +108,7 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
 
   public static final int DEFAULT_MAX_PENDING_COUNT_ON_MULTI_LABEL = 100;
 
+  public static final String JOB_MAX_PENDING_COUNT_ON_MULTI_LABEL = "maxPendingCountOnMultiLabel";
   public static final String MULTI_LABEL_ACCESS_CONFIG = "multi-label-access-config";
 
   public static final String DEFAULT_MULTI_LABEL_ACCESS_CONFIG = "*";
