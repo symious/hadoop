@@ -605,6 +605,10 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     //Disk
     nodeStatus.setDiskUsage(this.metrics.getGoodLocalDirsDiskUtilizationPerc());
 
+    //Add free disk space
+    nodeStatus.setFreeDiskSpace(getFreeDiskSpace());
+    nodeStatus.setCheckFreeSpace(true);
+
     //CPU
     SysInfo sysInfo = SysInfo.newInstance();
     if (coreNumber == 0) {
@@ -633,9 +637,23 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     if (LOG.isDebugEnabled()) {
       LOG.debug("Info of Node, core: " + coreNumber + ", load1: " + load1 +
           ", load5: " + load5 + ", availableMem:" + availableMem +
-          ", periodFailedContainers: " + periodFailedContainers);
+          ", periodFailedContainers: " + periodFailedContainers + ", freeDiskSpace in GB: " + nodeStatus.getFreeDiskSpace());
     }
     return nodeStatus;
+  }
+
+  int getFreeDiskSpace(){
+    String[] localDirs =
+        context.getConf().get(YarnConfiguration.NM_LOCAL_DIRS).split(",");
+    long freeSpace = Long.MAX_VALUE;
+    for (String dataDiskPath: localDirs) {
+      long freeDiskSize = new File(dataDiskPath).getUsableSpace();
+      if(freeDiskSize<freeSpace){
+        freeSpace = freeDiskSize;
+      }
+    }
+    // change to use GB
+    return Double.valueOf(freeSpace / 1024 / 1024 / 1024).intValue();
   }
 
   /**

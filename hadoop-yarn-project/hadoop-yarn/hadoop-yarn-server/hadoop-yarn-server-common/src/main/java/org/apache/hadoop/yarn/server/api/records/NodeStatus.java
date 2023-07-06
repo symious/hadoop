@@ -172,4 +172,20 @@ public abstract class NodeStatus {
   @Private
   @Unstable
   public abstract void setPeriodFailedContainers(int failedContainers);
+
+  @Public
+  @Stable
+  public abstract int getFreeDiskSpace();
+
+  @Private
+  @Unstable
+  public abstract void setFreeDiskSpace(int freeDiskSpace);
+
+  @Public
+  @Stable
+  public abstract boolean getCheckFreeSpace();
+
+  @Private
+  @Unstable
+  public abstract void setCheckFreeSpace(boolean checkFreeSpace);
 }

@@ -423,6 +423,11 @@ public class YarnConfiguration extends Configuration {
       RM_PREFIX + "available.mem.watermark";
   public static final int RM_SCHEDULER_AVAILABLE_MEM_WATERMARK_DEFAULT = 120;
 
+  public static final String RM_SCHEDULER_FREE_DISK_SPACE_WATERMARK =
+      RM_PREFIX + "free.disk.space.watermark";
+
+  public static final int RM_SCHEDULER_FREE_DISK_SPACE_WATERMARK_DEFAULT = 120;
+
   //Maximum number of failed Containers in the period range
   public static final String RM_SCHEDULER_FAILED_CONTAINERS_WATERMARK =
       RM_PREFIX + "period.failed.containers.watermark.high";

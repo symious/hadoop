@@ -486,6 +486,30 @@ public class NodeStatusPBImpl extends NodeStatus {
     this.builder.setPeriodFailedContainers(failedContainers);
   }
 
+  @Override
+  public synchronized int getFreeDiskSpace() {
+    NodeStatusProtoOrBuilder p = this.viaProto ? this.proto : this.builder;
+    return (p.getFreeDiskSpace());
+  }
+
+  @Override
+  public synchronized void setFreeDiskSpace(int freeDiskSpace) {
+    maybeInitBuilder();
+    this.builder.setFreeDiskSpace(freeDiskSpace);
+  }
+
+  @Override
+  public synchronized boolean getCheckFreeSpace() {
+    NodeStatusProtoOrBuilder p = this.viaProto ? this.proto : this.builder;
+    return (p.getCheckFreeSpace());
+  }
+
+  @Override
+  public synchronized void setCheckFreeSpace(boolean checkFreeSpace) {
+    maybeInitBuilder();
+    this.builder.setCheckFreeSpace(checkFreeSpace);
+  }
+
   private NodeIdProto convertToProtoFormat(NodeId nodeId) {
     return ((NodeIdPBImpl)nodeId).getProto();
   }

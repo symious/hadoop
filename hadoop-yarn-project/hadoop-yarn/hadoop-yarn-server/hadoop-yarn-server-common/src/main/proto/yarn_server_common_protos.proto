@@ -46,6 +46,8 @@ message NodeStatusProto {
   optional int32 disk_usage = 12;
   optional int32 available_mem = 13;
   optional int32 period_failed_containers = 14;
+  optional int32 free_disk_space = 15;
+  optional bool check_free_space = 16;
 }
 
 message OpportunisticContainersStatusProto {

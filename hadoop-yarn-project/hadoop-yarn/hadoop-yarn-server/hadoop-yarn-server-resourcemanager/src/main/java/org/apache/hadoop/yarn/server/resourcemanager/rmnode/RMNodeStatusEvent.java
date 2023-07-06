@@ -104,4 +104,12 @@ public class RMNodeStatusEvent extends RMNodeEvent {
   public int getPeriodFailedContainers() {
     return nodeStatus.getPeriodFailedContainers();
   }
+
+  public int getFreeDiskSpace() {
+    return nodeStatus.getFreeDiskSpace();
+  }
+
+  public boolean getCheckDiskSpace() {
+    return nodeStatus.getCheckFreeSpace();
+  }
 }

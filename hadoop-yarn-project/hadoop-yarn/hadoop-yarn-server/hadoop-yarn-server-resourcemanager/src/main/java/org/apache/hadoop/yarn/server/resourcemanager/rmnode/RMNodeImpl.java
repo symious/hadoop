@@ -38,6 +38,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 import org.apache.commons.collections.keyvalue.DefaultMapEntry;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.server.api.records.NodeStatus;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.SchedulingNodeType;
@@ -111,6 +112,8 @@ import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_CHECK_D
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_FAILED_CONTAINERS_WATERMARK;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_FAILED_CONTAINERS_WATERMARK_DEFAULT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_FREE_DISK_SPACE_WATERMARK;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_FREE_DISK_SPACE_WATERMARK_DEFAULT;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD1_WATERMARK_HIGH;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD1_WATERMARK_HIGH_DEFAULT;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_LOAD5_WATERMARK_HIGH;
@@ -1557,27 +1560,30 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       float load5 = statusEvent.getLoad5();
       int diskUsed = statusEvent.getDiskUsage();
       int availableMem = statusEvent.getAvailableMem();
+      int freeDiskSpace = statusEvent.getFreeDiskSpace();
+      boolean checkDiskSpace = statusEvent.getCheckDiskSpace();
 
-      float load1WatermarkHigh = rmNode.context.getYarnConfiguration()
-          .getFloat(RM_SCHEDULER_LOAD1_WATERMARK_HIGH,
-              RM_SCHEDULER_LOAD1_WATERMARK_HIGH_DEFAULT);
-      float load5WatermarkHigh = rmNode.context.getYarnConfiguration()
-          .getFloat(RM_SCHEDULER_LOAD5_WATERMARK_HIGH,
-              RM_SCHEDULER_LOAD5_WATERMARK_HIGH_DEFAULT);
-      int diskWatermarkHigh = rmNode.context.getYarnConfiguration()
-          .getInt(RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH,
-              RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT);
-      int availableMemWatermark = rmNode.context.getYarnConfiguration()
-          .getInt(RM_SCHEDULER_AVAILABLE_MEM_WATERMARK,
-              RM_SCHEDULER_AVAILABLE_MEM_WATERMARK_DEFAULT);
+      Configuration slowNodeConfig = rmNode.context.getYarnConfiguration();
+      float load1WatermarkHigh = slowNodeConfig.getFloat(RM_SCHEDULER_LOAD1_WATERMARK_HIGH,
+          RM_SCHEDULER_LOAD1_WATERMARK_HIGH_DEFAULT);
+      float load5WatermarkHigh = slowNodeConfig.getFloat(RM_SCHEDULER_LOAD5_WATERMARK_HIGH,
+          RM_SCHEDULER_LOAD5_WATERMARK_HIGH_DEFAULT);
+      int diskWatermarkHigh = slowNodeConfig.getInt(RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH,
+          RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT);
+      int availableMemWatermark = slowNodeConfig.getInt(RM_SCHEDULER_AVAILABLE_MEM_WATERMARK,
+          RM_SCHEDULER_AVAILABLE_MEM_WATERMARK_DEFAULT);
+
+      int freeDiskSpaceWatermark = slowNodeConfig.getInt(RM_SCHEDULER_FREE_DISK_SPACE_WATERMARK,
+          RM_SCHEDULER_FREE_DISK_SPACE_WATERMARK_DEFAULT);
 
       if (LOG.isDebugEnabled()) {
         LOG.debug("CHECKING:" + " Info of NODE: " + rmNode.getHostName() +
             ", Load1: " + load1 + ", load5: " + load5 + ", disk:" + diskUsed +
-            ", availableMem" + availableMem + ", watermark: load1: " +
+            ", availableMem:" + availableMem + ", freeDiskSpace:" + freeDiskSpace +
+            ", watermark: load1: " +
             load1WatermarkHigh + ", load5:" + load5WatermarkHigh +
             ", disk line:" + diskWatermarkHigh + ", availableMem:" +
-            availableMemWatermark);
+            availableMemWatermark + ", freeDiskSpace Line:" + freeDiskSpaceWatermark);
       }
 
       if (load1 > load1WatermarkHigh) {
@@ -1592,11 +1598,18 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
         return false;
       }
 
-      if (diskUsed > diskWatermarkHigh) {
+      if (checkDiskSpace && freeDiskSpace < freeDiskSpaceWatermark) {
         metrics.incrHighDiskUsageSkipped();
         this.setSlowNode(DEFAULT_SLOW_NODE_DISK_FULL);
         return false;
       }
+
+      if (!checkDiskSpace && diskUsed > diskWatermarkHigh) {
+        metrics.incrHighDiskUsageSkipped();
+        this.setSlowNode(DEFAULT_SLOW_NODE_DISK_FULL);
+        return false;
+      }
+
 
       if (availableMem < availableMemWatermark) {
         metrics.incrLowAvailableMemSkipped();
