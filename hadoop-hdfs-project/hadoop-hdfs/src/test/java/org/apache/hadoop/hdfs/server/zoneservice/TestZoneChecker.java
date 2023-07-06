@@ -71,7 +71,7 @@ public class TestZoneChecker {
 
     Map<ReplicationRule, Set<String>> rulePathMap = new HashMap<>();
     Map<String, List<Long>> dcStatMap = new HashMap<>();
-    zch.getReplicaInfo(pathName, rulePathMap, dcStatMap, false);
+    zch.getReplicaInfo(pathName, rulePathMap, dcStatMap, false, false);
     assertEquals(replicationRuleListMap, rulePathMap);
 
     //Check the zone check for dir
@@ -79,7 +79,7 @@ public class TestZoneChecker {
     replicationRuleListMap.put(replicationRule, new HashSet<>(
         Collections.singletonList(dirName)));
     Map<ReplicationRule, Set<String>> rulePathMap1 = new HashMap<>();
-    zch.getReplicaInfo(dirName, rulePathMap1, dcStatMap, false);
+    zch.getReplicaInfo(dirName, rulePathMap1, dcStatMap, false, false);
     assertEquals(replicationRuleListMap, rulePathMap1);
 
     //Check the block summary
@@ -87,7 +87,14 @@ public class TestZoneChecker {
     blockSummaryResult.put("/dc0", Arrays.asList(4L, 4096L));
     blockSummaryResult.put("/dc1", Arrays.asList(2L, 2048L));
     Map<String, List<Long>> blockSummary = new HashMap<>();
-    zch.getReplicaInfo(dirName, rulePathMap1, blockSummary, true);
+    zch.getReplicaInfo(dirName, rulePathMap1, blockSummary, true, false);
     assertEquals(blockSummaryResult, blockSummary);
+
+    //Check the block number summary
+    Map<String, List<Long>> countResult = new HashMap<>();
+    countResult.put(replicationRule.toString(), Arrays.asList(2L, 2048L));
+    Map<String, List<Long>> countSummary = new HashMap<>();
+    zch.getReplicaInfo(dirName, rulePathMap1, countSummary, false, true);
+    assertEquals(countResult, countSummary);
   }
 }

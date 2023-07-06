@@ -98,6 +98,13 @@ public class ReplicationRuleManager {
     return ZoneChecker.getBlockSummary(conf, namenode, path);
   }
 
+  public Map<String, List<Long>> countBlocksByDistribution(String nameSpace,
+      String path) {
+    Configuration conf = new Configuration();
+    URI namenode = ZoneServiceUtil.getNamespaceUri(nameSpace, conf);
+    return ZoneChecker.getCountSummary(conf, namenode, path);
+  }
+
   /**
    * set batch mode process and handle the exceptions
    * @param nameSpace    URI of the NameNode
