@@ -118,6 +118,7 @@ import org.apache.hadoop.yarn.api.protocolrecords.UpdateApplicationTimeoutsReque
 import org.apache.hadoop.yarn.api.protocolrecords.UpdateApplicationTimeoutsResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.apache.hadoop.yarn.server.federation.failover.FederationProxyProviderUtil;
@@ -821,9 +822,9 @@ public class FederationClientInterceptor
           RouterAuditLogger.AuditConstants.GET_APP_REPORT, "UNKNOWN",
           "RouterClientRMService", "Application doesn't exist " +
               "in FederationStateStore", request.getApplicationId());
-      RouterServerUtil
-          .logAndThrowException("Application " + request.getApplicationId()
-              + " does not exist in FederationStateStore", e);
+      throw new ApplicationNotFoundException(
+          "Application " + request.getApplicationId() +
+              " does not exist in FederationStateStore", e);
     }
 
     ApplicationClientProtocol clientRMProxy =
