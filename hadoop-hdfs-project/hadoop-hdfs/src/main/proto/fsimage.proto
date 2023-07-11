@@ -123,6 +123,7 @@ message INodeSection {
      */
     required fixed32 name = 1;
     optional bytes value = 2;
+    optional fixed32 valueInt = 3;
   }
   
   message XAttrFeatureProto {

@@ -21,6 +21,7 @@ package org.apache.hadoop.hdfs.server.namenode;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -121,10 +122,16 @@ public final class FSImageFormatPBINode {
       for (XAttrCompactProto xAttrCompactProto : proto.getXAttrsList()) {
         int v = xAttrCompactProto.getName();
         byte[] value = null;
-        if (xAttrCompactProto.getValue() != null) {
-          value = xAttrCompactProto.getValue().toByteArray();
+        if (XAttrFormat.isNumerable(v)) {
+          assert xAttrCompactProto.getValueInt() != null;
+          int valueInt = xAttrCompactProto.getValueInt();
+          b.add(XAttrFormat.toXAttr(v, valueInt, stringTable));
+        } else {
+          if (xAttrCompactProto.getValue() != null) {
+            value = xAttrCompactProto.getValue().toByteArray();
+          }
+          b.add(XAttrFormat.toXAttr(v, value, stringTable));
         }
-        b.add(XAttrFormat.toXAttr(v, value, stringTable));
       }
       
       return b;
@@ -648,8 +655,12 @@ public final class FSImageFormatPBINode {
             newBuilder();
         int v = XAttrFormat.toInt(a);
         xAttrCompactBuilder.setName(v);
-        if (a.getValue() != null) {
-          xAttrCompactBuilder.setValue(PBHelperClient.getByteString(a.getValue()));
+        if (a.isEnumerable()) {
+          xAttrCompactBuilder.setValueInt(XAttrValueFormat.toInt(a.getValue()));
+        } else {
+          if (a.getValue() != null) {
+            xAttrCompactBuilder.setValue(PBHelperClient.getByteString(a.getValue()));
+          }
         }
         b.addXAttrs(xAttrCompactBuilder.build());
       }

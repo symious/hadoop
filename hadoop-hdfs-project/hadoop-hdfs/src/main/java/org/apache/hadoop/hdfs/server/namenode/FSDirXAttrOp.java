@@ -375,6 +375,9 @@ public class FSDirXAttrOp {
         }
       }
       XAttrSetFlag.validate(xAttr.getName(), exist, flag);
+      if (flag.contains(XAttrSetFlag.ENUM_VALUE)) {
+        xAttr.setEnumerable(true);
+      }
       // add the new XAttr since it passed validation
       xAttrs.add(xAttr);
       if (isUserVisible(xAttr)) {
