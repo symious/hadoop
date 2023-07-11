@@ -1839,6 +1839,14 @@ public class YarnConfiguration extends Configuration {
       + "elastic-memory-control.enabled";
   public static final boolean DEFAULT_NM_ELASTIC_MEMORY_CONTROL_ENABLED = false;
 
+  public static final String NM_ELASTIC_MEMORY_CONTROL_IMPL = NM_PREFIX
+      + "elastic-memory-control.impl";
+
+  public static final String DEFAULT_NM_ELASTIC_MEMORY_CONTROL_IMPL = "proc";
+
+  public static final String NM_ELASTIC_PMEM_MB =
+      NM_PREFIX + "elastic-memory-mb";
+
   /** Specifies the OOM handler code. */
   public static final String NM_ELASTIC_MEMORY_CONTROL_OOM_HANDLER = NM_PREFIX
       + "elastic-memory-control.oom-handler";

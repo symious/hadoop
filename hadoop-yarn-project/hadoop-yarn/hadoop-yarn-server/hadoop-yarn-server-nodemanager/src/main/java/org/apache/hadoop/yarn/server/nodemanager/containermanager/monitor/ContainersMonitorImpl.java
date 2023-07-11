@@ -58,17 +58,15 @@ import org.apache.hadoop.yarn.server.nodemanager.webapp.ContainerLogsUtils;
 import org.apache.hadoop.yarn.util.ResourceCalculatorPlugin;
 import org.apache.hadoop.yarn.util.ResourceCalculatorProcessTree;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.io.File;
+import java.util.Collections;
 import java.util.Map;
 import java.util.List;
+import java.io.File;
 import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Monitors containers collecting resource usage and preempting the container
@@ -124,6 +122,7 @@ public class ContainersMonitorImpl extends AbstractService implements
   private boolean containersMonitorEnabled;
   private boolean logMonitorEnabled;
   private boolean dynamicResourceEnabled;
+  private boolean elasticCgroupImpl;
 
   private long maxVCoresAllottedForContainers;
   private int threadNumLimit;
@@ -241,6 +240,10 @@ public class ContainersMonitorImpl extends AbstractService implements
     strictMemoryEnforcement = conf.getBoolean(
         YarnConfiguration.NM_MEMORY_RESOURCE_ENFORCED,
         YarnConfiguration.DEFAULT_NM_MEMORY_RESOURCE_ENFORCED);
+    if (this.conf.get(YarnConfiguration.NM_ELASTIC_MEMORY_CONTROL_IMPL,
+        YarnConfiguration.DEFAULT_NM_ELASTIC_MEMORY_CONTROL_IMPL).equals("cgroup")) {
+      elasticCgroupImpl = true;
+    }
     LOG.info("Physical memory check enabled: {}", pmemCheckEnabled);
     LOG.info("Virtual memory check enabled: {}", vmemCheckEnabled);
     LOG.info("Elastic memory control enabled: {}", elasticMemoryEnforcement);
@@ -266,7 +269,7 @@ public class ContainersMonitorImpl extends AbstractService implements
         throw new YarnException(
             "CGroup Elastic Memory controller enabled but " +
             "it is not available. Exiting.");
-      } else {
+      } else if (elasticCgroupImpl) {
         this.oomListenerThread = new CGroupElasticMemoryController(
             conf,
             context,
@@ -650,6 +653,9 @@ public class ContainersMonitorImpl extends AbstractService implements
             + "Total CPU usage(% per core)= {}", vmemUsageByAllContainers,
             pmemByAllContainers, cpuUsagePercentPerCoreByAllContainers);
 
+        if (elasticMemoryEnforcement && !elasticCgroupImpl) {
+          elasticCheckLimit();
+        }
 
         // Save the aggregated utilization of the containers
         setContainersUtilization(trackedContainersUtilization);
@@ -832,7 +838,7 @@ public class ContainersMonitorImpl extends AbstractService implements
       // are processes more than 1 iteration old.
       long curMemUsageOfAgedProcesses = pTree.getVirtualMemorySize(1);
       long curRssMemUsageOfAgedProcesses = pTree.getRssMemorySize(1);
-      if (isVmemCheckEnabled()
+      if (!elasticMemoryEnforcement && isVmemCheckEnabled()
           && isProcessTreeOverLimit(containerId.toString(),
           currentVmemUsage, curMemUsageOfAgedProcesses, vmemLimit)) {
         // The current usage (age=0) is always higher than the aged usage. We
@@ -848,7 +854,7 @@ public class ContainersMonitorImpl extends AbstractService implements
             pId, containerId, pTree, delta);
         isMemoryOverLimit = true;
         containerExitStatus = ContainerExitStatus.KILLED_EXCEEDED_VMEM;
-      } else if (isPmemCheckEnabled()
+      } else if (!elasticMemoryEnforcement && isPmemCheckEnabled()
           && isProcessTreeOverLimit(containerId.toString(),
           currentPmemUsage, curRssMemUsageOfAgedProcesses,
           pmemLimit)) {
@@ -967,6 +973,107 @@ public class ContainersMonitorImpl extends AbstractService implements
           TraditionalBinaryPrefix.long2String(pmemLimit, "", 1),
           TraditionalBinaryPrefix.long2String(currentVmemUsage, "", 1),
           TraditionalBinaryPrefix.long2String(vmemLimit, "", 1));
+    }
+
+    private void elasticCheckLimit() {
+      long totalMemoryUsage = 0;
+      for (ProcessTreeInfo p : trackingContainers.values()) {
+        totalMemoryUsage += p.getProcessTree().getRssMemorySize();
+      }
+      long limit = convertMBytesToBytes(conf.getLong(YarnConfiguration.NM_ELASTIC_PMEM_MB,
+          maxPmemAllottedForContainers));
+      LOG.debug("limit: " + limit + " totalMemoryUsage: " + totalMemoryUsage);
+      if (totalMemoryUsage <= limit) {
+        return;
+      }
+
+      ArrayList<ContainerCandidate> candidates = new ArrayList<>();
+      for (Map.Entry<ContainerId, ProcessTreeInfo> entry : trackingContainers
+          .entrySet()) {
+        ContainerId containerId = entry.getKey();
+        ProcessTreeInfo p = entry.getValue();
+        Container container = context.getContainers().get(containerId);
+        if (container == null) {
+          continue;
+        }
+        long usage = p.getProcessTree().getRssMemorySize();
+        long request = p.getPmemLimit();
+        candidates.add(
+            new ContainerCandidate(container, usage > request ? true : false,
+                usage > request ? usage - request : 0, usage));
+      }
+      Collections.sort(candidates);
+      LOG.debug("candidates: " + candidates);
+
+      long total = totalMemoryUsage;
+      int i = 0;
+      while (total > limit) {
+        ContainerCandidate candidate = candidates.get(i++);
+        eventDispatcher.getEventHandler().handle(
+            new ContainerKillEvent(candidate.container.getContainerId(),
+                ContainerExitStatus.KILLED_EXCEEDED_PMEM, "Container is killed by elastic memory control."));
+        total -= candidate.usage;
+      }
+    }
+  }
+
+  private class ContainerCandidate implements Comparable<ContainerCandidate> {
+
+    private final boolean outOfLimit;
+    final Container container;
+    private final long overUsed;
+    private final long usage;
+
+    ContainerCandidate(Container container, boolean outOfLimit, long overUsed, long usage) {
+      this.outOfLimit = outOfLimit;
+      this.container = container;
+      this.overUsed = overUsed;
+      this.usage = usage;
+    }
+
+    @Override
+    public int compareTo(ContainerCandidate o) {
+      int ret = Boolean.compare(o.outOfLimit, outOfLimit);
+      if (ret == 0) {
+        int overUsedRet = Long.compare(o.overUsed, overUsed);
+        if (overUsedRet == 0) {
+          ret = Long.compare(o.container.getContainerLaunchTime(), this.container.getContainerLaunchTime());
+        } else {
+          ret = overUsedRet;
+        }
+      }
+      return ret;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (this == obj) {
+        return true;
+      }
+      if (obj == null) {
+        return false;
+      }
+      if (this.getClass() != obj.getClass()) {
+        return false;
+      }
+      ContainerCandidate other = (ContainerCandidate) obj;
+      if (this.outOfLimit != other.outOfLimit) {
+        return false;
+      }
+      if (this.overUsed != other.overUsed) {
+        return false;
+      }
+      if (this.container == null) {
+        return other.container == null;
+      } else {
+        return this.container.equals(other.container);
+      }
+    }
+
+    @Override
+    public String toString() {
+      return "ContainerId: " + container.getContainerId() + " outOfLimit: "
+          + outOfLimit + " overUsed: " + overUsed + " usage: " + usage;
     }
   }
 
