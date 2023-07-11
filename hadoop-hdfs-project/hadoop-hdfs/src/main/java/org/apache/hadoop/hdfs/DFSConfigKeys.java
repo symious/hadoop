@@ -633,6 +633,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.zone.generate.replicationrule.kafka-request.timeout";
   public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_REQUEST_TIMEOUT_DEFAULT = 30000;
 
+  public static final String DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_MAX_POLL_RECORDS_KEY =
+      "dfs.zone.generate.replicationrule.max-poll.records";
+  public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_MAX_POLL_RECORDS_DEFAULT = 50;
+
   public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY =
       "dfs.zone.generate.replicationrule.enabled";
   public static final boolean DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY_DEFAULT =
@@ -655,6 +659,16 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.zone.generate.replicationrule.filterpaths.capacity.limit";
   public static final long  DFS_ZONE_GENERTE_REPLICATION_RULE_FILTER_PATHS_CAPACITY_LIMIT_DEFAULT =
       10000L;
+
+  public static final String  DFS_ZONE_SUPPORT_MIGRATE_REPLICA_ENABLED_KEY =
+      "dfs.zone.support.migrate-replica.enabled";
+  public static final boolean DFS_ZONE_SUPPORT_MIGRATE_REPLICA_ENABLED_KEY_DEFAULT =
+      false;
+
+  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_MAX_RATE_LIMIET_KEY =
+      "dfs.zone.generate.replicationrule.max-rate.limit";
+
+  public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_MAX_RATE_LIMIET_DEFAULT = 100;
 
   public static final String  DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_KEY =
       "dfs.namenode.audit.log.with.remote.port";
