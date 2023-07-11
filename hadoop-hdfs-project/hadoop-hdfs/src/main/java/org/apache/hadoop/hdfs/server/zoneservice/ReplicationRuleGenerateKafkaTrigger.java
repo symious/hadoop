@@ -25,6 +25,8 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.server.zoneservice.utils.MigrationDataCenters;
+import org.apache.hadoop.hdfs.server.zoneservice.utils.ZoneServiceUtil;
 import org.apache.hadoop.hdfs.server.zoneservice.web.resources.ResultCode;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
 import org.apache.kafka.clients.consumer.Consumer;
@@ -39,11 +41,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.URI;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Semaphore;
 
 import static org.apache.hadoop.util.Time.now;
 
@@ -63,6 +68,10 @@ public class ReplicationRuleGenerateKafkaTrigger {
   private long minCrossReadSize;
   private int pollTimeOut;
   private long capacityLimit;
+  private int maxRateLimit;
+  // Whether to enable the operation of migrating the replication of dc.
+  private boolean supportMigrateReplica = false;
+  private Set<String> validDataCenters;
   // "," is the separator of pattern "/dc1:replica1,/dc2:replica2"
   private final static String SECTION_SEPARATOR = ",";
   private final static String FIELD_SEPARATOR = ":";
@@ -70,6 +79,8 @@ public class ReplicationRuleGenerateKafkaTrigger {
   private final Thread monitorServer;
   private final ExecutorService executor;
   private final Set<String> filterPaths = Collections.synchronizedSet(new HashSet<String>());
+  private Semaphore rateLimiter;
+  private final Configuration conf;
 
   public ReplicationRuleGenerateKafkaTrigger(Configuration conf) throws IOException {
     final String username =
@@ -85,6 +96,9 @@ public class ReplicationRuleGenerateKafkaTrigger {
     final int requestTimeOut =
         conf.getInt(DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_REQUEST_TIMEOUT_MS,
             DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_REQUEST_TIMEOUT_DEFAULT);
+    final int maxPollRecords =
+        conf.getInt(DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_MAX_POLL_RECORDS_KEY,
+            DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_MAX_POLL_RECORDS_DEFAULT);
 
     Properties properties = new Properties();
     properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
@@ -96,6 +110,7 @@ public class ReplicationRuleGenerateKafkaTrigger {
     properties.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
     properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
     properties.put(ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG, requestTimeOut);
+    properties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPollRecords);
 
     properties.setProperty("security.protocol", "SASL_PLAINTEXT");
     properties.setProperty("sasl.mechanism", "PLAIN");
@@ -103,6 +118,7 @@ public class ReplicationRuleGenerateKafkaTrigger {
         "org.apache.kafka.common.security.plain.PlainLoginModule " +
             "required username=\""+username+"\" password=\""+password+"\";");
 
+    this.conf = conf;
     this.fs = (DistributedFileSystem) FileSystem.get(conf);
     this.replicationRuleManager = new ReplicationRuleManager(conf);
     this.consumer = new KafkaConsumer<>(properties);
@@ -114,12 +130,13 @@ public class ReplicationRuleGenerateKafkaTrigger {
     }
     consumer.seekToEnd(assignment);
     setReplicationRuleParam(conf);
-    this.monitorServer = new Thread(new Monitor(), "replicationRuleGenerateKafkaTrigger");
-    this.monitorServer.start();
+    this.rateLimiter = new Semaphore(maxRateLimit);
     executor = HadoopExecutors.newCachedThreadPool(
         new ThreadFactoryBuilder()
             .setNameFormat("addReplicationRule #%d")
             .build());
+    this.monitorServer = new Thread(new Monitor(), "replicationRuleGenerateKafkaTrigger");
+    this.monitorServer.start();
   }
 
   public void shutdown() {
@@ -145,6 +162,9 @@ public class ReplicationRuleGenerateKafkaTrigger {
       while (true) {
         ConsumerRecords<String, String> records = consumer.poll(pollTimeOut);
         for (ConsumerRecord<String, String> record : records) {
+          // Limit the number of concurrent processing threads for kafka messages,
+          // to avoid program OOM.
+          rateLimiter.acquire();
           processRecord(record.value());
         }
       }
@@ -180,9 +200,21 @@ public class ReplicationRuleGenerateKafkaTrigger {
         DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_FILTER_PATHS_CAPACITY_LIMIT_KEY,
         DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_FILTER_PATHS_CAPACITY_LIMIT_DEFAULT);
 
-    LOG.info("Init ReplicationRuleParam with ruleGenerateKey = {}, pathSizeLimit = {}, " +
-            "minCrossReadSize = {}, pollTimeOut = {}, capacityLimit = {} ", ruleGenerateKey,
-        pathSizeLimit, minCrossReadSize, pollTimeOut, capacityLimit);
+    supportMigrateReplica = conf.getBoolean(
+        DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_ENABLED_KEY,
+        DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_ENABLED_KEY_DEFAULT);
+
+    validDataCenters = new HashSet<>(
+        conf.getTrimmedStringCollection(DFSConfigKeys.DFS_ZONEMOVER_VALID_DATACENTERS_KEY));
+
+    maxRateLimit = conf.getInt(DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_MAX_RATE_LIMIET_KEY,
+        DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_MAX_RATE_LIMIET_DEFAULT);
+
+    LOG.info("Init ReplicationRuleParam with ruleGenerateKey = {}, pathSizeLimit = {}, "
+            + "minCrossReadSize = {}, pollTimeOut = {}, capacityLimit = {} , "
+            + "supportMigrateReplica = {}, validDataCenters = {}, maxRateLimit = {} ", ruleGenerateKey,
+        pathSizeLimit, minCrossReadSize, pollTimeOut, capacityLimit, supportMigrateReplica,
+        validDataCenters, maxRateLimit);
   }
 
   private class Monitor implements Runnable {
@@ -210,37 +242,56 @@ public class ReplicationRuleGenerateKafkaTrigger {
         String path = jsonObject.getString("path");
         long crossReadSize = jsonObject.getLong("size");
         if (filterPaths.contains(path)) {
-          LOG.warn("Can not add replication rule: {} and filterPaths contain {} skip.",
-              record, path);
+          LOG.warn("Can not add replication rule: {} and filterPaths contain {} skip.", record,
+              path);
           return;
         }
         ContentSummary contentSummary = fs.getContentSummary(new Path(path));
         long pathSize = contentSummary.getLength();
-        String[] rules = ruleGenerateKey.split(FIELD_SEPARATOR);
-        if (rules.length == 2 && pathSize <= pathSizeLimit &&
-            crossReadSize >= minCrossReadSize) {
-          String replicationRule = new StringBuilder().
-              append(clientDC).append(FIELD_SEPARATOR).append(rules[0]).
-              append(SECTION_SEPARATOR).
-              append(dnDC).append(FIELD_SEPARATOR).append(rules[1]).toString();
-          LOG.info("{} {} add replication rule: {} start.", ns, path, replicationRule);
-          ResultCode resultCode =
-              replicationRuleManager.createUpdateMap(ns, path, replicationRule, true);
-          LOG.info("{} {} add replication rule: {} {} and cost {} ms.", ns, path, replicationRule,
-              resultCode.getMsg(), now() - start);
-        } else {
-          if (pathSize > pathSizeLimit) {
-            if (filterPaths.size() < capacityLimit) {
-              filterPaths.add(path);
-            } else {
-              LOG.warn("Can not add {} to filterPaths and " + "capacity = {}, limit = {}.",
-                  path, filterPaths.size(), capacityLimit);
+
+        if (pathSize <= pathSizeLimit && crossReadSize >= minCrossReadSize) {
+          if (supportMigrateReplica) {
+            // Such as validDataCenters is [/AT,/TL,/STT]
+            if (validDataCenters.contains(clientDC) && validDataCenters.contains(dnDC)) {
+              LOG.info("check {} {} replica in dc: {} start.", ns, path, clientDC);
+              URI namenode = ZoneServiceUtil.getNamespaceUri(ns, conf);
+              int code = replicationRuleManager.checkReplicaInDC(conf, namenode,
+                  Collections.singletonList(new Path(path)),
+                  MigrationDataCenters.valueOf(clientDC));
+              LOG.info("check {} {} replica in dc: {} code: {} and cost {} ms.", ns, path, clientDC,
+                  code, now() - start);
+              return;
+            }
+          } else {
+            String[] rules = ruleGenerateKey.split(FIELD_SEPARATOR);
+            if (rules.length == 2) {
+              String replicationRule =
+                  new StringBuilder().append(clientDC).append(FIELD_SEPARATOR).append(rules[0])
+                      .append(SECTION_SEPARATOR).append(dnDC).append(FIELD_SEPARATOR)
+                      .append(rules[1]).toString();
+              LOG.info("{} {} add replication rule: {} start.", ns, path, replicationRule);
+              ResultCode resultCode =
+                  replicationRuleManager.createUpdateMap(ns, path, replicationRule, true);
+              LOG.info("{} {} add replication rule: {} {} and cost {} ms.", ns, path,
+                  replicationRule, resultCode.getMsg(), now() - start);
+              return;
             }
           }
-          LOG.warn("Can not add replication rule: {} and cost {} ms.", record, now() - start);
         }
+
+        if (pathSize > pathSizeLimit) {
+          if (filterPaths.size() < capacityLimit) {
+            filterPaths.add(path);
+          } else {
+            LOG.warn("Can not add {} to filterPaths and " + "capacity = {}, limit = {}.", path,
+                filterPaths.size(), capacityLimit);
+          }
+        }
+        LOG.warn("Can not add replication rule: {} and cost {} ms.", record, now() - start);
       } catch (Exception e) {
         LOG.error("Failed to add replication rule: {}", record, e);
+      } finally {
+        rateLimiter.release();
       }
     }
   }
