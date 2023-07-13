@@ -281,6 +281,7 @@ public class Dispatcher {
               if (LOG.isDebugEnabled()) {
                 LOG.debug("Decided to move " + this);
               }
+              block.refreshLocations(source, target);
               return true;
             }
           }
@@ -444,8 +445,23 @@ public class Dispatcher {
 
   /** A class for keeping track of block locations in the dispatcher. */
   public static class DBlock extends MovedBlocks.Locations<StorageGroup> {
+    protected final List<StorageGroup> newLocations = new ArrayList<StorageGroup>(3);
     public DBlock(Block block) {
       super(block);
+      for (StorageGroup storageGroup: getLocations()) {
+        newLocations.add(storageGroup);
+      }
+    }
+
+    public void refreshLocations(StorageGroup oldLoc, StorageGroup newLoc) {
+      newLocations.remove(oldLoc);
+      if (!newLocations.contains(newLoc)) {
+        newLocations.add(newLoc);
+      }
+    }
+    
+    public long getNumBytes(StorageGroup storage) {
+      return super.getNumBytes();
     }
   }
 
@@ -1262,7 +1278,7 @@ public class Dispatcher {
      StorageGroup target, DBlock block) {
     List<DatanodeInfo> datanodeInfos = new ArrayList<>();
     synchronized (block) {
-      for (StorageGroup loc : block.locations) {
+      for (StorageGroup loc : block.newLocations) {
         datanodeInfos.add(loc.getDatanodeInfo());
       }
       datanodeInfos.add(target.getDatanodeInfo());
