@@ -213,6 +213,44 @@ public abstract class BlockPlacementPolicy {
   }
 
   /**
+   * Select the excess replica storages for deletion based on:
+   *  first, priority select the datanode node belonging to the delRedundantDataCenters for
+   *  to delete.
+   *  otherwise, fallback to BlockPlacementPolicyDefault#chooseReplicasToDelete processing logic.
+   *  note: here logic delNodeHint will be null
+   *
+   * @param availableReplicas
+   *          available replicas
+   * @param delCandidates
+   *          Candidates for deletion. For normal replication, this set is the
+   *          same with availableReplicas. For striped blocks, this set is a
+   *          subset of availableReplicas.
+   * @param expectedNumOfReplicas
+   *          The expected number of replicas remaining in the delCandidates
+   * @param excessTypes
+   *          type of the storagepolicy
+   * @param addedNode
+   *          New replica reported
+   * @param delNodeHint
+   *          Hint for excess storage selection, here it will be null
+   * @param delRedundantDataCenters
+   *          Excess storage prioritizes the datanode node belonging
+   *          to the delRedundantDataCenters for to delete.
+   * @return Returns the list of excess replicas chosen for deletion
+   */
+  public List<DatanodeStorageInfo> chooseReplicasToDelete(
+      Collection<DatanodeStorageInfo> availableReplicas,
+      Collection<DatanodeStorageInfo> delCandidates,
+      int expectedNumOfReplicas,
+      List<StorageType> excessTypes,
+      DatanodeDescriptor addedNode,
+      DatanodeDescriptor delNodeHint,
+      Collection<String> delRedundantDataCenters) {
+    return chooseReplicasToDelete(availableReplicas, delCandidates,
+        expectedNumOfReplicas, excessTypes, addedNode, delNodeHint);
+  }
+
+  /**
    * Used to setup a BlockPlacementPolicy object. This should be defined by 
    * all implementations of a BlockPlacementPolicy.
    * 

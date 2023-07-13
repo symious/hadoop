@@ -44,6 +44,7 @@ import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
 
@@ -128,6 +129,12 @@ public class FSDirAttrOp {
   static boolean setReplication(
       FSDirectory fsd, FSPermissionChecker pc, BlockManager bm, String src,
       final short replication) throws IOException {
+    return setReplication(fsd, pc, bm, src, replication, null);
+  }
+
+  static boolean setReplication(
+      FSDirectory fsd, FSPermissionChecker pc, BlockManager bm, String src,
+      final short replication, Collection<String> delRedundantDataCenters) throws IOException {
     short replicationWithConstraint = bm.verifyReplication(src, replication, null);
     final boolean isFile;
     fsd.writeLock();
@@ -138,7 +145,7 @@ public class FSDirAttrOp {
       }
 
       final BlockInfo[] blocks = unprotectedSetReplication(fsd, iip,
-          replicationWithConstraint);
+          replicationWithConstraint, delRedundantDataCenters);
       isFile = blocks != null;
       if (isFile) {
         fsd.getEditLog().logSetReplication(iip.getPath(), replicationWithConstraint);
@@ -378,7 +385,8 @@ public class FSDirAttrOp {
   }
 
   static BlockInfo[] unprotectedSetReplication(
-      FSDirectory fsd, INodesInPath iip, short replication)
+      FSDirectory fsd, INodesInPath iip, short replication,
+      Collection<String> delRedundantDataCenters)
       throws QuotaExceededException, UnresolvedLinkException,
       SnapshotAccessControlException, UnsupportedActionException {
     assert fsd.hasWriteLock();
@@ -408,7 +416,7 @@ public class FSDirAttrOp {
       fsd.updateCount(iip, 0L, size, oldBR, targetReplication, true);
     }
     for (BlockInfo b : file.getBlocks()) {
-      bm.setReplication(oldBR, targetReplication, b);
+      bm.setReplication(oldBR, targetReplication, b, delRedundantDataCenters);
     }
 
     if (oldBR != -1) {

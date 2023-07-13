@@ -19,6 +19,7 @@
 package org.apache.hadoop.hdfs.server.namenode;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.SortedSet;
 
 import org.apache.hadoop.hdfs.MiniDFSNNTopology;
@@ -38,6 +39,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AVOID_SLOW_DATAN
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
@@ -650,5 +652,24 @@ public class TestNameNodeReconfigure {
 
     nameNode.reconfigureProperty(DFS_NAMENODE_SYMLINKS_ENABLED_KEY, "false");
     assertFalse(fsNamesystem.isEnableSymlinks());
+  }
+
+  @Test
+  public void testReconfigureDelRedundantDataCenters() throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode(0);
+    final BlockManager bm = nameNode.getNamesystem().getBlockManager();
+    Collection<String> delRedundantDataCenters = bm.getDelRedundantDataCenters();
+    assertEquals(0, delRedundantDataCenters.size());
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS, "/TL,/AT");
+    delRedundantDataCenters = bm.getDelRedundantDataCenters();
+    assertEquals(2, delRedundantDataCenters.size());
+    assertTrue(delRedundantDataCenters.contains("/TL"));
+    assertTrue(delRedundantDataCenters.contains("/AT"));
+    assertFalse(delRedundantDataCenters.contains("/STT"));
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS, "");
+    delRedundantDataCenters = bm.getDelRedundantDataCenters();
+    assertEquals(0, delRedundantDataCenters.size());
   }
 }

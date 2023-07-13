@@ -375,6 +375,53 @@ public class BlockPlacementPolicyWithDataCenter extends
     return excessReplicas;
   }
 
+  @Override
+  public List<DatanodeStorageInfo> chooseReplicasToDelete(
+      Collection<DatanodeStorageInfo> availableReplicas,
+      Collection<DatanodeStorageInfo> delCandidates,
+      int expectedNumOfReplicas,
+      List<StorageType> excessTypes,
+      DatanodeDescriptor addedNode,
+      DatanodeDescriptor delNodeHint,
+      Collection<String> delRedundantDataCenters) {
+
+    final Map<String, List<DatanodeStorageInfo>> dcMap = new HashMap<>();
+    splitNodesWithDataCenter(delCandidates, dcMap);
+    // Check if there is only one data center.
+    if (dcMap.size() == 1) {
+      return super.chooseReplicasToDelete(availableReplicas, delCandidates,
+          expectedNumOfReplicas, excessTypes, addedNode, delNodeHint);
+    }
+
+    List<DatanodeStorageInfo> excessReplicas = new ArrayList<>();
+
+    boolean needMoreExcessReplicas = true;
+    // Add excess replicas from the specified data center.
+    if (delRedundantDataCenters != null && !delRedundantDataCenters.isEmpty()) {
+      for (String delDataCenter : delRedundantDataCenters) {
+        if (dcMap.containsKey(delDataCenter)) {
+          List<DatanodeStorageInfo> dcStorageInfos = dcMap.get(delDataCenter);
+          needMoreExcessReplicas = !addExcessReplicas(delCandidates, expectedNumOfReplicas,
+              dcStorageInfos, excessReplicas, null);
+          if (!needMoreExcessReplicas) {
+            break;
+          }
+        }
+      }
+    }
+
+    if (needMoreExcessReplicas) {
+      // If needMoreExcessReplicas is true, choose replicas to delete from remaining candidates.
+      Collection<DatanodeStorageInfo> copyDelCandidates = new ArrayList<>(delCandidates);
+      copyDelCandidates.removeIf(excessReplicas::contains);
+      List <DatanodeStorageInfo> otherExcessReplicas =
+          super.chooseReplicasToDelete(copyDelCandidates, copyDelCandidates,
+              expectedNumOfReplicas, excessTypes, addedNode, null);
+      excessReplicas.addAll(otherExcessReplicas);
+    }
+
+    return excessReplicas;
+  }
   /**
    * Add replicas to excessReplicas list.
    */

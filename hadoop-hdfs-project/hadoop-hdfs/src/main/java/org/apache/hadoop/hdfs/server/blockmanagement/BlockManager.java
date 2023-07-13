@@ -458,6 +458,13 @@ public class BlockManager implements BlockStatsMXBean {
   private volatile boolean isReplicationRuleEnabled;
 
   /**
+   * Excess storage prioritizes specified data centers for to delete,
+   * and it will only take effect if the dfs.block.replicator.classname parameter set to
+   * the BlockPlacementPolicyWithDataCenter implementation class.
+   */
+  private volatile Collection<String> delRedundantDataCenters;
+
+  /**
    * Whether to delete corrupt replica immediately irrespective of other
    * replicas available on stale storages.
    */
@@ -625,6 +632,7 @@ public class BlockManager implements BlockStatsMXBean {
     setDeleteRedundantDCReplica(
         conf.getBoolean(DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA,
             DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA_DEFAULT));
+    setDelRedundantDataCenters(conf.get(DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS));
 
     LOG.info("defaultReplication         = {}", defaultReplication);
     LOG.info("maxReplication             = {}", maxReplication);
@@ -4081,10 +4089,11 @@ public class BlockManager implements BlockStatsMXBean {
     
     return MisReplicationResult.OK;
   }
-  
+
   /** Set replication for the blocks. */
   public void setReplication(
-      final short oldRepl, final short newRepl, final BlockInfo b) {
+      final short oldRepl, final short newRepl, final BlockInfo b,
+      final Collection<String> delRedundantDataCenters) {
     if (newRepl == oldRepl) {
       return;
     }
@@ -4094,18 +4103,19 @@ public class BlockManager implements BlockStatsMXBean {
     NumberReplicas num = countNodes(b);
     updateNeededReconstructions(b, 0, newRepl - oldRepl);
     if (shouldProcessExtraRedundancy(num, newRepl)) {
-      processExtraRedundancyBlock(b, newRepl, null, null);
+      processExtraRedundancyBlock(b, newRepl, null, null,
+          delRedundantDataCenters);
     }
   }
 
-  /**
-   * Find how many of the containing nodes are "extra", if any.
-   * If there are any extras, call chooseExcessRedundancies() to
-   * mark them in the excessRedundancyMap.
-   */
+  public void setReplication(
+      final short oldRepl, final short newRepl, final BlockInfo b) {
+    setReplication(oldRepl, newRepl, b, null);
+  }
+
   private void processExtraRedundancyBlock(final BlockInfo block,
       final short replication, final DatanodeDescriptor addedNode,
-      DatanodeDescriptor delNodeHint) {
+      DatanodeDescriptor delNodeHint, Collection<String> delRedundantDataCenters) {
     assert namesystem.hasWriteLock();
     if (addedNode == delNodeHint) {
       delNodeHint = null;
@@ -4135,14 +4145,27 @@ public class BlockManager implements BlockStatsMXBean {
       }
     }
     chooseExcessRedundancies(nonExcess, block, replication, addedNode,
-        delNodeHint);
+        delNodeHint, delRedundantDataCenters);
+  }
+
+  /**
+   * Find how many of the containing nodes are "extra", if any.
+   * If there are any extras, call chooseExcessRedundancies() to
+   * mark them in the excessRedundancyMap.
+   */
+  private void processExtraRedundancyBlock(final BlockInfo block,
+      final short replication, final DatanodeDescriptor addedNode,
+      DatanodeDescriptor delNodeHint) {
+    processExtraRedundancyBlock(block, replication, addedNode,
+        delNodeHint, null);
   }
 
   private void chooseExcessRedundancies(
       final Collection<DatanodeStorageInfo> nonExcess,
       BlockInfo storedBlock, short replication,
       DatanodeDescriptor addedNode,
-      DatanodeDescriptor delNodeHint) {
+      DatanodeDescriptor delNodeHint,
+      Collection<String> delRedundantDataCenters) {
     assert namesystem.hasWriteLock();
     // first form a rack to datanodes map and
     BlockCollection bc = getBlockCollection(storedBlock);
@@ -4158,7 +4181,7 @@ public class BlockManager implements BlockStatsMXBean {
       final List<StorageType> excessTypes = storagePolicy.chooseExcess(
           replication, DatanodeStorageInfo.toStorageTypes(nonExcess));
       chooseExcessRedundancyContiguous(nonExcess, storedBlock, replication,
-          addedNode, delNodeHint, excessTypes, rule);
+          addedNode, delNodeHint, excessTypes, rule, delRedundantDataCenters);
     }
   }
 
@@ -4180,7 +4203,7 @@ public class BlockManager implements BlockStatsMXBean {
       final Collection<DatanodeStorageInfo> nonExcess, BlockInfo storedBlock,
       short replication, DatanodeDescriptor addedNode,
       DatanodeDescriptor delNodeHint, List<StorageType> excessTypes,
-      ReplicationRule rule) {
+      ReplicationRule rule, Collection<String> delRedundantDataCenters) {
     BlockPlacementPolicy replicator = placementPolicies.getPolicy(CONTIGUOUS);
     List<DatanodeStorageInfo> replicasToDelete = null;
     if (rule != null && rule.getReplica() == replication) {
@@ -4188,6 +4211,13 @@ public class BlockManager implements BlockStatsMXBean {
           nonExcess, nonExcess, replication, rule,
           excessTypes, addedNode, delNodeHint);
     }
+
+    if (replicasToDelete == null && delNodeHint == null &&
+        (delRedundantDataCenters != null && !delRedundantDataCenters.isEmpty())) {
+      replicasToDelete = replicator.chooseReplicasToDelete(nonExcess, nonExcess, replication,
+          excessTypes, addedNode, null, delRedundantDataCenters);
+    }
+
     if (replicasToDelete == null) {
       replicasToDelete = replicator
           .chooseReplicasToDelete(nonExcess, nonExcess,
@@ -5671,5 +5701,15 @@ public class BlockManager implements BlockStatsMXBean {
   @VisibleForTesting
   public boolean getExcludeSlowNodesEnabled(BlockType blockType) {
     return placementPolicies.getPolicy(blockType).getExcludeSlowNodesEnabled();
+  }
+
+  @VisibleForTesting
+  public void setDelRedundantDataCenters(String valueString) {
+    this.delRedundantDataCenters = StringUtils.getTrimmedStringCollection(valueString);
+  }
+
+  @VisibleForTesting
+  public Collection<String> getDelRedundantDataCenters() {
+    return this.delRedundantDataCenters;
   }
 }

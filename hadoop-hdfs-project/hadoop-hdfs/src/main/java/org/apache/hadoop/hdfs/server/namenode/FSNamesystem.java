@@ -2507,7 +2507,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot set replication for " + src);
         success = FSDirAttrOp.setReplication(dir, pc, blockManager, src,
-            replication);
+            replication, blockManager.getDelRedundantDataCenters());
       } finally {
         writeUnlock(OperationName.SET_REPLICATION);
       }

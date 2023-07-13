@@ -584,7 +584,8 @@ public class FSEditLogLoader {
       INodesInPath iip = fsDir.getINodesInPath(src, DirOp.WRITE);
       short replication = fsNamesys.getBlockManager().adjustReplication(
           setReplicationOp.replication);
-      FSDirAttrOp.unprotectedSetReplication(fsDir, iip, replication);
+      FSDirAttrOp.unprotectedSetReplication(fsDir, iip, replication,
+          fsNamesys.getBlockManager().getDelRedundantDataCenters());
       break;
     }
     case OP_CONCAT_DELETE: {

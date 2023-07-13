@@ -423,8 +423,8 @@ public class TestDFSAdmin {
     final List<String> outs = Lists.newArrayList();
     final List<String> errs = Lists.newArrayList();
     getReconfigurableProperties("namenode", address, outs, errs);
-    assertEquals(38, outs.size());
     assertEquals(DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY, outs.get(24));
+    assertEquals(39, outs.size());
     assertEquals(errs.size(), 0);
   }
 

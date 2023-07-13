@@ -151,6 +151,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_AL
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY;
@@ -423,7 +424,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA,
           DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ENABLE_KEY,
           DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ORIGINAL_REPLICATIONS_KEY,
-          DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_TARGET_REPLICATION_KEY));
+          DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_TARGET_REPLICATION_KEY,
+          DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2491,6 +2493,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigurationRemoveCorruptedBlocks(newVal);
     } else if (property.equals(DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA)) {
       return reconfigurationDeleteRedundantDecommissionReplica(newVal);
+    } else if (property.equals(DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS)) {
+      return reconfigurationDelRedundantDataCenters(newVal);
     } else if (property.equals(DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ENABLE_KEY)) {
       return reconfigurationRecomputeQuotaUsageEnable(newVal);
     } else if (property.equals(DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ORIGINAL_REPLICATIONS_KEY)) {
@@ -3084,6 +3088,12 @@ public class NameNode extends ReconfigurableBase implements
     } finally {
       namesystem.writeUnlock();
     }
+  }
+
+  private String reconfigurationDelRedundantDataCenters(String newVal) {
+    namesystem.getBlockManager().setDelRedundantDataCenters(newVal);
+    LOG.info("RECONFIGURE* changed delRedundantDataCenters to {}", newVal);
+    return newVal;
   }
 
   @Override //NameNodeStatusMXBean

@@ -36,6 +36,7 @@ import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
 import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter;
+import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
 import org.apache.hadoop.net.StaticMapping;
 import org.apache.hadoop.util.Tool;
@@ -373,6 +374,98 @@ public class TestZoneMover {
     List<LocatedBlock> blocks2 = DFSTestUtil.getAllBlocks(fs, path);
     assertTrue(blocks1.size() > 0);
     assertEquals(mapRule, ZoneMover.getBlockDistribution(blocks2.get(0)));
+  }
+
+  @Test(timeout = 60000)
+  public void testSetReplicationWithDeleteRedundantDatacenters() throws Exception {
+    Configuration conf = new HdfsConfiguration();
+    final long DFS_HEARTBEAT_INTERVAL = 2;
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, 500);
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY, 10);
+    conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, DFS_HEARTBEAT_INTERVAL);
+    conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+        BlockPlacementPolicyWithDataCenter.class,
+        BlockPlacementPolicy.class);
+    conf.setBoolean(DFSConfigKeys.DFS_USE_DFS_NETWORK_TOPOLOGY_KEY, true);
+    conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY,
+        DFSNetworkTopologyWithDataCenter.class, DFSNetworkTopology.class);
+    conf.set(DFSConfigKeys.DFS_ZONEMOVER_VALID_DATACENTERS_KEY, "/datacenter0,/datacenter1");
+    conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY, true);
+    conf.set(DFSConfigKeys.DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS, "/datacenter1");
+    final String[] racks = {"/datacenter0/rack0", "/datacenter0/rack0", "/datacenter0/rack0",
+        "/datacenter0/rack0"};
+    final String[] hosts = {"host0", "host1", "host2", "host3"};
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(4).racks(racks)
+        .hosts(hosts).build();
+    cluster.waitActive();
+    DistributedFileSystem fs = cluster.getFileSystem();
+    final FSNamesystem namesystem = cluster.getNamesystem();
+
+    try {
+      fs.mkdir(new Path("/test"), new FsPermission("777"));
+
+      // write a file
+      Path path = new Path("/test/testBlockMove.txt");
+      // client(127.0.0.1) will be mapped to a random node in (host0, host1, host2, host3)
+      DFSTestUtil.createFile(fs, path, 1, (short) 4, 0L);
+
+      // validate replica distribution before moving
+      Map<String, Short> distribution = new HashMap<>();
+      distribution.put("/datacenter0", (short) 4);
+      List<LocatedBlock> blocks = DFSTestUtil.getAllBlocks(fs, path);
+      assertTrue(blocks.size() > 0);
+      assertEquals(distribution, ZoneMover.getBlockDistribution(blocks.get(0)));
+
+      // start datanodes in dc1
+      final String[] hosts2 = {"host4", "host5", "host6"};
+      final String[] racks2 = {"/datacenter1/rack0", "/datacenter1/rack1", "/datacenter1/rack2"};
+      cluster.startDataNodes(conf, hosts2.length, true, null, racks2, hosts2,
+          null, false);
+
+      // do block move
+      Tool tool = new ZoneMover.Cli();
+      tool.setConf(conf);
+      final String[] args = {"-path", "/test", "-rule", "/datacenter1:2,/datacenter0:2"};
+      LOG.info("Try to do block move for path: /test ...");
+      assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args));
+      // sleep some time to wait datanode delete replicas
+      Thread.sleep(DFS_HEARTBEAT_INTERVAL * 10 * 1000);
+
+      // validate replica distribution after moving
+      Map<String, Short> mapRule = new HashMap<>();
+      mapRule.put("/datacenter0", (short) 2);
+      mapRule.put("/datacenter1", (short) 2);
+      blocks = DFSTestUtil.getAllBlocks(fs, path);
+      assertTrue(blocks.size() > 0);
+      assertEquals(mapRule, ZoneMover.getBlockDistribution(blocks.get(0)));
+
+      // set dfs.namenode.delete.redundant.datacenters is "/datacenter1",
+      // so it will set the selection of one of the nodes in /datacenter1 to be deleted.
+      fs.setReplication(path, (short) 3);
+      DFSTestUtil.waitReplication(fs, path, (short) 3);
+      mapRule = new HashMap<>();
+      mapRule.put("/datacenter0", (short) 2);
+      mapRule.put("/datacenter1", (short) 1);
+      blocks = DFSTestUtil.getAllBlocks(fs, path);
+      assertTrue(blocks.size() > 0);
+      assertEquals(mapRule, ZoneMover.getBlockDistribution(blocks.get(0)));
+
+      // set dfs.namenode.delete.redundant.datacenters is "",
+      // since the need for 2 racks will be considered here,
+      // so it will set the selection of one of the nodes /datacenter0 to delete.
+      namesystem.getBlockManager().setDelRedundantDataCenters("");
+      fs.setReplication(path, (short) 2);
+      DFSTestUtil.waitReplication(fs, path, (short) 2);
+      mapRule = new HashMap<>();
+      mapRule.put("/datacenter0", (short) 1);
+      mapRule.put("/datacenter1", (short) 1);
+      blocks = DFSTestUtil.getAllBlocks(fs, path);
+      assertTrue(blocks.size() > 0);
+      assertEquals(mapRule, ZoneMover.getBlockDistribution(blocks.get(0)));
+
+    } finally {
+      cluster.shutdown();
+    }
   }
 
   @After

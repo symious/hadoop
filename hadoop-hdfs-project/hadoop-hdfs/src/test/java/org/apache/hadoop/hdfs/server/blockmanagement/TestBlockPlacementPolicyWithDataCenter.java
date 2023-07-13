@@ -408,4 +408,107 @@ public class TestBlockPlacementPolicyWithDataCenter {
     }
     return dcMap;
   }
+
+  @Test
+  public void testChooseReplicasToDeleteByDelDataCenters() {
+    Collection<DatanodeStorageInfo> nonExcess = new ArrayList<>();
+    Collection<String> delDataCenters = new ArrayList<>();
+    delDataCenters.add("/datacenter1");
+    BlockPlacementPolicyWithDataCenter policy =
+        (BlockPlacementPolicyWithDataCenter) namesystem.getBlockManager()
+            .getBlockPlacementPolicy();
+    Set<DatanodeDescriptor> datanodeDescriptors =
+        namesystem.getBlockManager().getDatanodeManager().getDatanodes();
+
+    // Sort datanodeDescriptors by rack, and add the DatanodeStorageInfo to map.
+    Map<String, List<DatanodeStorageInfo>> dcMap = getDcMapFromDatanodes(datanodeDescriptors);
+
+    List<DatanodeStorageInfo> excessReplicas;
+    BlockStoragePolicySuite POLICY_SUITE = BlockStoragePolicySuite.createDefaultSuite();
+    BlockStoragePolicy storagePolicy = POLICY_SUITE.getDefaultPolicy();
+
+    // Add the DatanodeStorageInfo of dc0 & dc1 & dc2 to nonExcess.
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(0));
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(1));
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(2));
+    nonExcess.add(dcMap.get("/datacenter1/rack0").get(0));
+    nonExcess.add(dcMap.get("/datacenter2/rack0").get(0));
+
+    //set delDataCenters is null, random select deletion.
+    List<StorageType> excessTypes = storagePolicy.chooseExcess((short) 3,
+        DatanodeStorageInfo.toStorageTypes(nonExcess));
+    excessReplicas = policy.chooseReplicasToDelete(nonExcess,
+        nonExcess, 3, excessTypes,
+        dcMap.get("/datacenter0/rack1").get(1).getDatanodeDescriptor(),
+        null, null);
+    assertEquals(2, excessReplicas.size());
+
+    // Excess type deletion and select /datacenter1 deletion.
+    DatanodeDescriptor delHintNode = dcMap.get("/datacenter0/rack0")
+        .get(0).getDatanodeDescriptor();
+    DatanodeStorageInfo excessStorage = DFSTestUtil.createDatanodeStorageInfo(
+        "Storage-excess-ID", "localhost", delHintNode.getNetworkLocation(),
+        "foo.com", StorageType.ARCHIVE, null);
+    nonExcess.add(excessStorage);
+    excessTypes = storagePolicy.chooseExcess((short) 3,
+        DatanodeStorageInfo.toStorageTypes(nonExcess));
+    excessReplicas = policy.chooseReplicasToDelete(nonExcess,
+        nonExcess, 3, excessTypes,
+        dcMap.get("/datacenter0/rack1").get(1).getDatanodeDescriptor(),
+        null, delDataCenters);
+    assertEquals(3, excessReplicas.size());
+    assertTrue(excessReplicas.contains(excessStorage));
+    assertTrue(excessReplicas.contains(dcMap.get("/datacenter1/rack0").get(0)));
+
+    // Select /datacenter1 and other to delete.
+    nonExcess.clear();
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(0));
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(1));
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(2));
+    nonExcess.add(dcMap.get("/datacenter0/rack1").get(0));
+    nonExcess.add(dcMap.get("/datacenter1/rack0").get(0));
+    excessTypes = storagePolicy.chooseExcess((short) 3,
+        DatanodeStorageInfo.toStorageTypes(nonExcess));
+    excessReplicas = policy.chooseReplicasToDelete(nonExcess,
+        nonExcess, 3, excessTypes,
+        dcMap.get("/datacenter0/rack0").get(1).getDatanodeDescriptor(),
+        null, delDataCenters);
+    assertEquals(2, excessReplicas.size());
+    assertTrue(excessReplicas.contains(dcMap.get("/datacenter1/rack0").get(0)));
+
+    // Select /datacenter1 to delete.
+    nonExcess.clear();
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(0));
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(1));
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(2));
+    nonExcess.add(dcMap.get("/datacenter1/rack1").get(0));
+    nonExcess.add(dcMap.get("/datacenter1/rack0").get(0));
+    excessTypes = storagePolicy.chooseExcess((short) 3,
+        DatanodeStorageInfo.toStorageTypes(nonExcess));
+    excessReplicas = policy.chooseReplicasToDelete(nonExcess,
+        nonExcess, 3, excessTypes,
+        dcMap.get("/datacenter0/rack0").get(1).getDatanodeDescriptor(),
+        null, delDataCenters);
+    assertEquals(2, excessReplicas.size());
+    assertTrue(excessReplicas.contains(dcMap.get("/datacenter1/rack0").get(0)));
+    assertTrue(excessReplicas.contains(dcMap.get("/datacenter1/rack1").get(0)));
+
+    // Select /datacenter1 and /datacenter2 to delete.
+    nonExcess.clear();
+    delDataCenters.add("/datacenter2");
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(0));
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(1));
+    nonExcess.add(dcMap.get("/datacenter0/rack0").get(2));
+    nonExcess.add(dcMap.get("/datacenter2/rack0").get(0));
+    nonExcess.add(dcMap.get("/datacenter1/rack0").get(0));
+    excessTypes = storagePolicy.chooseExcess((short) 3,
+        DatanodeStorageInfo.toStorageTypes(nonExcess));
+    excessReplicas = policy.chooseReplicasToDelete(nonExcess,
+        nonExcess, 3, excessTypes,
+        dcMap.get("/datacenter0/rack0").get(1).getDatanodeDescriptor(),
+        null, delDataCenters);
+    assertEquals(2, excessReplicas.size());
+    assertTrue(excessReplicas.contains(dcMap.get("/datacenter1/rack0").get(0)));
+    assertTrue(excessReplicas.contains(dcMap.get("/datacenter2/rack0").get(0)));
+  }
 }

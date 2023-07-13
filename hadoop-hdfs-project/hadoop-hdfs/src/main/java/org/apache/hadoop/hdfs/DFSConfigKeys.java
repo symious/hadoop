@@ -1221,6 +1221,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY =
       "dfs.namenode.replication-rule.enable";
   public static final boolean DFS_NAMENODE_REPLICATION_RULE_ENABLE_DEFAULT = false;
+  public static final String  DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS =
+      "dfs.namenode.delete.redundant.datacenters";
   public static final String DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY = "dfs.block.placement.ec.classname";
   public static final Class<BlockPlacementPolicyRackFaultTolerant> DFS_BLOCK_PLACEMENT_EC_CLASSNAME_DEFAULT = BlockPlacementPolicyRackFaultTolerant.class;
 
