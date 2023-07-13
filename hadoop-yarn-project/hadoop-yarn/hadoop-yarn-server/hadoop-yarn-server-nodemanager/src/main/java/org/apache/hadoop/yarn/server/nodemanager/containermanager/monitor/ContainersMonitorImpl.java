@@ -977,8 +977,13 @@ public class ContainersMonitorImpl extends AbstractService implements
 
     private void elasticCheckLimit() {
       long totalMemoryUsage = 0;
+      ArrayList<ProcessTreeInfo> toBeSelected = new ArrayList<>();
       for (ProcessTreeInfo p : trackingContainers.values()) {
+        if (p.getProcessTree() == null) {
+          continue;
+        }
         totalMemoryUsage += p.getProcessTree().getRssMemorySize();
+        toBeSelected.add(p);
       }
       long limit = convertMBytesToBytes(conf.getLong(YarnConfiguration.NM_ELASTIC_PMEM_MB,
           maxPmemAllottedForContainers));
@@ -986,12 +991,9 @@ public class ContainersMonitorImpl extends AbstractService implements
       if (totalMemoryUsage <= limit) {
         return;
       }
-
       ArrayList<ContainerCandidate> candidates = new ArrayList<>();
-      for (Map.Entry<ContainerId, ProcessTreeInfo> entry : trackingContainers
-          .entrySet()) {
-        ContainerId containerId = entry.getKey();
-        ProcessTreeInfo p = entry.getValue();
+      for (ProcessTreeInfo p : toBeSelected) {
+        ContainerId containerId = p.getContainerId();
         Container container = context.getContainers().get(containerId);
         if (container == null) {
           continue;
