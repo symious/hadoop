@@ -47,7 +47,8 @@ final class BalancerParameters {
   /**
    * Data center constraint for balancer
    */
-  private final String dataCenterConstraint;
+  private String dataCenterConstraint;
+  private final String targetDataCenter;
   static final String ROOT_BASE = "/";
   static final String PATH_SEPARATOR = "/";
 
@@ -70,6 +71,7 @@ final class BalancerParameters {
     this.runDuringUpgrade = builder.runDuringUpgrade;
     this.runAsService = builder.runAsService;
     this.dataCenterConstraint = builder.dataCenterConstraint;
+    this.targetDataCenter = builder.targetDataCenter;
   }
 
   BalancingPolicy getBalancingPolicy() {
@@ -112,6 +114,13 @@ final class BalancerParameters {
     return this.dataCenterConstraint;
   }
 
+  void setDataCenterConstraint(String dataCenterConstraint) {
+    this.dataCenterConstraint = dataCenterConstraint;
+  }
+  String getTargetDataCenter() {
+    return this.targetDataCenter;
+  }
+
   @Override
   public String toString() {
     return String.format("%s.%s [%s," + " threshold = %s,"
@@ -136,6 +145,7 @@ final class BalancerParameters {
     private Set<String> blockpools = Collections.<String> emptySet();
     private boolean runDuringUpgrade = false;
     private String dataCenterConstraint = null;
+    private String targetDataCenter = null;
     private boolean runAsService = false;
 
     Builder() {
@@ -198,6 +208,22 @@ final class BalancerParameters {
       } else {
         this.dataCenterConstraint =
             ROOT_BASE + dataCenterConstraint;
+      }
+      return this;
+    }
+
+    Builder setTargeDataCenter(String targetDataCenter)
+        throws IllegalArgumentException{
+      if (targetDataCenter.substring(1).split(PATH_SEPARATOR).length != 1) {
+        throw new IllegalArgumentException(
+            "Please correct the data center format, like '/DC'");
+      }
+      if (targetDataCenter.startsWith(PATH_SEPARATOR)) {
+        this.targetDataCenter =
+            ROOT_BASE + targetDataCenter.substring(1);
+      } else {
+        this.targetDataCenter =
+            ROOT_BASE + targetDataCenter;
       }
       return this;
     }

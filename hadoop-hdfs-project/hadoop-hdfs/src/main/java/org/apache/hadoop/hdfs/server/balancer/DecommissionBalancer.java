@@ -94,6 +94,8 @@ public class DecommissionBalancer extends Balancer {
   /** historyMatcher will record the history target for the source */
   private final Map<Dispatcher.DDatanode.StorageGroup, List<Dispatcher.DDatanode.StorageGroup>>
       historyMatcher;
+  private String dataCenterConstraint = null;
+  private String targetDataCenter = null;
   static final Path DECOMMISSION_BALANCER_ID_PATH =
       new Path("/system/decommission_balancer.id");
 
@@ -117,6 +119,20 @@ public class DecommissionBalancer extends Balancer {
     this.historyMatcher =  historyMatcher;
   }
 
+  /**
+   * Construct a decommission balancer.
+   * Initialize balancer and constraint the source DC and target DC inside decommission balancer
+   */
+  DecommissionBalancer(NameNodeConnector nnc, BalancerParameters p,
+      Configuration conf, Map<Dispatcher.DDatanode.StorageGroup, List<Dispatcher.DDatanode.StorageGroup>>
+      historyMatcher, String dataCenterConstraint) {
+    super(nnc, p, conf);
+    this.policy = BalancingPolicy.Decommission.INSTANCE;
+    this.historyMatcher =  historyMatcher;
+    this.dataCenterConstraint = dataCenterConstraint;
+    this.targetDataCenter = p.getTargetDataCenter();
+  }
+
   @Override
   protected long init(List<DatanodeStorageReport> reports) {
     long sizeToMove = 0L;
@@ -132,6 +148,13 @@ public class DecommissionBalancer extends Balancer {
       for(StorageType t : StorageType.getMovableTypes()) {
         // decommissioning node will be considered as source
         if (isDecommissioning) {
+          // if data center is set inside DecommissionBalancer,
+          // filter the source according to the constraint
+          if (dataCenterConstraint != null) {
+            if (!dn.getDatanodeInfo().getNetworkLocation().startsWith(dataCenterConstraint)) {
+              continue;
+            }
+          }
           final Dispatcher.Source s = dn.addSource(t, getUsed(r, t), dispatcher);
           sizeToMove += getUsed(r, t);
 
@@ -140,6 +163,13 @@ public class DecommissionBalancer extends Balancer {
             dispatcher.getStorageGroupMap().put(s);
           }
           continue;
+        }
+
+        // If target data center is set, filter target nodes are not in the target DC
+        if (targetDataCenter != null) {
+          if (!dn.getDatanodeInfo().getNetworkLocation().startsWith(targetDataCenter)) {
+            continue;
+          }
         }
 
         final Double utilization = policy.getUtilization(r, t);
@@ -347,6 +377,7 @@ public class DecommissionBalancer extends Balancer {
     LOG.info("included nodes = " + p.getIncludedNodes());
     LOG.info("excluded nodes = " + p.getExcludedNodes());
     LOG.info("data center constraint = " + p.getDataCenterConstraint());
+    LOG.info("target data center = " + p.getTargetDataCenter());
     checkKeytabAndInit(conf);
     System.out.println("Time Stamp               Iteration#"
         + "  Bytes Already Moved  Bytes Left To Move  Bytes Being Moved"
@@ -389,7 +420,15 @@ public class DecommissionBalancer extends Balancer {
               || p.getBlockPools().contains(nnc.getBlockpoolID())) {
             // Check every block regardless of its size
             conf.setLong(DFSConfigKeys.DFS_BALANCER_GETBLOCKS_MIN_BLOCK_SIZE_KEY, 1);
-            final DecommissionBalancer b = new DecommissionBalancer(nnc, p, conf, historyMatcher);
+            final DecommissionBalancer b;
+            // If target DC is set, release the DC constraint
+            if (p.getTargetDataCenter() != null) {
+              String dcConstraint = p.getDataCenterConstraint();
+              p.setDataCenterConstraint("/");
+              b = new DecommissionBalancer(nnc, p, conf, historyMatcher, dcConstraint);
+            } else {
+              b = new DecommissionBalancer(nnc, p, conf, historyMatcher);
+            }
             final Result r = b.runOneIteration();
             r.print(iteration, nnc, System.out);
 
@@ -614,6 +653,17 @@ public class DecommissionBalancer extends Balancer {
                 isSetDataCenter = true;
               } catch(IllegalArgumentException e) {
                 System.err.println("Illegal data center constraint: " +
+                    args[i]);
+                throw e;
+              }
+            } else if ("-targetDataCenter".equalsIgnoreCase(args[i])) {
+              checkArgument(++i < args.length,
+                  "Target data center is missing: args = " +
+                      Arrays.toString(args));
+              try {
+                b.setTargeDataCenter(args[i]);
+              } catch(IllegalArgumentException e) {
+                System.err.println("Illegal target data center: " +
                     args[i]);
                 throw e;
               }
