@@ -18,11 +18,13 @@
 package org.apache.hadoop.hdfs.server.zoneservice;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
+import org.apache.hadoop.hdfs.server.zoneservice.utils.MigrationDataCenters;
 import org.apache.hadoop.hdfs.server.zoneservice.utils.ZoneServiceUtil;
 import org.apache.hadoop.hdfs.server.zoneservice.web.resources.ResultCode;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -218,6 +220,12 @@ public class ReplicationRuleManager {
           ResultCode.IO_EXCEPTION.getMsg(), MONITOR_MODE);
       return ResultCode.IO_EXCEPTION;
     }
+  }
+
+  /** Interface for ZoneService */
+  public int checkReplicaInDC(Configuration conf, URI namenode, List<Path> paths,
+      MigrationDataCenters dc) throws IOException, InterruptedException {
+    return ZoneMoverWithSetReplication.checkWithSetReplication(conf, namenode, paths, dc);
   }
 
   private static synchronized void createMonitorThread(String nameSpace, String threadName,

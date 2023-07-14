@@ -128,6 +128,27 @@ public class ReplicationRule {
     return replica;
   }
 
+  public short getReplica(String dataCenter) {
+    for (ReplicationRuleSection s: sections) {
+      if (s.getDataCenter().equals(dataCenter)) {
+        return s.getReplica();
+      }
+    }
+    return 0;
+  }
+
+  public String getMainDataCenter() {
+    short max = (short) 0;
+    String mainDC = null;
+    for (ReplicationRuleSection s: sections) {
+      if (s.getReplica() > max) {
+        max = s.getReplica();
+        mainDC = s.getDataCenter();
+      }
+    }
+    return mainDC;
+  }
+
   @Override
   public String toString() {
     return Joiner.on(",").join(sections);

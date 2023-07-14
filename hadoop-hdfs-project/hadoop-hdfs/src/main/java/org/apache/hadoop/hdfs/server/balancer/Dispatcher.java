@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.balancer;
 
 import static org.apache.hadoop.hdfs.protocolPB.PBHelperClient.vintPrefixed;
+import static org.apache.hadoop.hdfs.util.StripedBlockUtil.getInternalBlockLength;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -459,9 +460,73 @@ public class Dispatcher {
         newLocations.add(newLoc);
       }
     }
-    
+
     public long getNumBytes(StorageGroup storage) {
       return super.getNumBytes();
+    }
+  }
+
+  public static class DBlockStriped extends DBlock {
+
+    private byte[] indices;
+    final short dataBlockNum;
+    final int cellSize;
+
+    public DBlockStriped(Block block, byte[] indices, short dataBlockNum,
+        int cellSize) {
+      super(block);
+      this.indices = indices;
+      this.dataBlockNum = dataBlockNum;
+      this.cellSize = cellSize;
+    }
+
+    DBlock getInternalBlock(StorageGroup storage) {
+      int idxInLocs = locations.indexOf(storage);
+      if (idxInLocs == -1) {
+        return null;
+      }
+      byte idxInGroup = indices[idxInLocs];
+      long blkId = getBlock().getBlockId() + idxInGroup;
+      long numBytes = getInternalBlockLength(getNumBytes(), cellSize,
+          dataBlockNum, idxInGroup);
+      Block blk = new Block(getBlock());
+      blk.setBlockId(blkId);
+      blk.setNumBytes(numBytes);
+      DBlock dblk = new DBlock(blk);
+      dblk.addLocation(storage);
+      return dblk;
+    }
+
+    @Override
+    public long getNumBytes(StorageGroup storage) {
+      DBlock block = getInternalBlock(storage);
+      if (block == null) {
+        return 0;
+      }
+      return block.getNumBytes();
+    }
+
+    public void setIndices(byte[] indices) {
+      this.indices = indices;
+    }
+
+    /**
+     * Adjust EC block indices，it will remove the element of adjustList from indices.
+     * @param adjustList the list will be removed from indices
+     */
+    public void adjustIndices(List<Integer> adjustList) {
+      if (adjustList.isEmpty()) {
+        return;
+      }
+
+      byte[] newIndices = new byte[indices.length - adjustList.size()];
+      for (int i = 0, j = 0; i < indices.length; ++i) {
+        if (!adjustList.contains(i)) {
+          newIndices[j] = indices[i];
+          ++j;
+        }
+      }
+      this.indices = newIndices;
     }
   }
 
