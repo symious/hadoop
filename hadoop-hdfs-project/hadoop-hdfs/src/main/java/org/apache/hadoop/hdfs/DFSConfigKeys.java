@@ -949,6 +949,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   //ZoneChecker related keys
   public static final String  DFS_ZONECHECKER_DEFAULT_RATIO = "dfs.zonechecker.default.ratio";
   public static final float   DFS_ZONECHECKER_DEFAULT_RATIO_DEFAULT = 1.0f;
+
+  public static final String  DFS_ZONEMOVER_DISTRIBUTION_RULE_MAP_FILE_KEY = "dfs.zonemover.distribution.rule.map.file";
+  public static final String  DFS_ZONEMOVER_DEGRADE_RULE_MAP_FILE_KEY = "dfs.zonemover.degrade.rule.map.file";
+  public static final String  DFS_ZONEMOVER_DEFAULT_RULE_MAP_FILE_KEY = "dfs.zonemover.default.rule.map.file";
   //ZoneMover kafka trigger related keys
   public static final String  DFS_ZONEMOVER_KAFKA_BOOTSTRAP_SERVERS = "dfs.zonemover.kafka.bootstrap.servers";
   public static final String  DFS_ZONEMOVER_KAFKA_TOPIC = "dfs.zonemover.kafka.topic";

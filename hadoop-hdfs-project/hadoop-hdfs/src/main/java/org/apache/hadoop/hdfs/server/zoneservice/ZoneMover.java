@@ -99,25 +99,25 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_
  */
 public class ZoneMover {
   private static final Logger LOG = LoggerFactory.getLogger(ZoneMover.class);
-  private static final String ROOT = "/";
+  protected static final String ROOT = "/";
   private static final String ZONEMOVER_ID_PATH = "/system/zonemover.id";
-  private final ZoneDispatcher dispatcher;
-  private final StorageMap storages;
-  private final List<Path> targetPaths;
-  private final int retryMaxAttempts;
-  private ReplicationRule globalRule = null;
-  private Map<String, ReplicationRule> pathRuleMap = null;
-  private final AtomicInteger retryCount;
-  private final DFSClient dfs;
-  private static final long DELAY_AFTER_CHOOSE_FAIL = 2 * 1000;
-  private final Processor processor = new Processor();
+  protected final ZoneDispatcher dispatcher;
+  protected final StorageMap storages;
+  protected final List<Path> targetPaths;
+  protected final int retryMaxAttempts;
+  protected ReplicationRule globalRule = null;
+  protected Map<String, ReplicationRule> pathRuleMap = null;
+  protected final AtomicInteger retryCount;
+  protected final DFSClient dfs;
+  protected static final long DELAY_AFTER_CHOOSE_FAIL = 2 * 1000;
+  protected final Processor processor = new Processor();
   public final ReplicationRuleUtil ruleUtil;
-  private final boolean xattrSetEnable;
-  private final ZoneReplicationCoordinator coordinator;
-  private Result result;
-  private final Thread fetcher = new Thread(new Fetcher());
-  private static int checkUpdateInterval = 0;
-  private static final String DC_SEPARATOR = ",";
+  protected final boolean xattrSetEnable;
+  protected final ZoneReplicationCoordinator coordinator;
+  protected Result result;
+  protected final Thread fetcher = new Thread(new Fetcher());
+  protected static int checkUpdateInterval = 0;
+  protected static final String DC_SEPARATOR = ",";
 
   public ZoneMover(NameNodeConnector nnc,
       Configuration conf, AtomicInteger retryCount) {
@@ -178,8 +178,8 @@ public class ZoneMover {
    * Check if zonemover is compatible with the block placement policy
    * used by the NameNode.
    */
-  private static void checkReplicationPolicyCompatibility(Configuration conf
-  ) throws UnsupportedActionException {
+  protected static void checkReplicationPolicyCompatibility(Configuration conf)
+      throws UnsupportedActionException {
     String clazz = conf.get(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY);
     if (clazz == null || !clazz.equals(
         BlockPlacementPolicyWithDataCenter.class.getName())) {
@@ -552,7 +552,7 @@ public class ZoneMover {
         Time.now()));
   }
 
-  private static long calculateSleepTime(final Configuration conf) {
+  protected static long calculateSleepTime(final Configuration conf) {
     return conf.getTimeDuration(
             DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,
             DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_DEFAULT,
@@ -697,9 +697,9 @@ public class ZoneMover {
   }
 
   static class ZoneMoveItem {
-    private final String sourceDataCenter;
-    private final String targetDataCenter;
-    private final short num;
+    protected final String sourceDataCenter;
+    protected final String targetDataCenter;
+    protected final short num;
 
     /**
      * @param sourceDataCenter source data center
@@ -750,15 +750,14 @@ public class ZoneMover {
   }
 
   /* Keep StorageGroupMap for sources and targets */
-  private static class StorageMap {
-    private final StorageGroupMap<ZoneSource> sources
-        = new StorageGroupMap<>();
-    private final StorageGroupMap<StorageGroup> targets
-        = new StorageGroupMap<>();
-    private final HashMap<String, EnumMap<StorageType, List<StorageGroup>>>
-        dcTargetStorageTypeMap = new HashMap<>();
+  protected static class StorageMap {
+    public final StorageGroupMap<ZoneSource> sources = new StorageGroupMap<>();
+    public final StorageGroupMap<StorageGroup> targets = new StorageGroupMap<>();
+    public final HashMap<String, EnumMap<StorageType, List<StorageGroup>>> dcTargetStorageTypeMap =
+        new HashMap<>();
 
-    private StorageMap() {}
+    private StorageMap() {
+    }
 
     private void add(ZoneSource source, StorageGroup target) {
       sources.put(source);
@@ -770,11 +769,11 @@ public class ZoneMover {
       }
     }
 
-    private ZoneSource getSource(MLocation ml) {
+    public ZoneSource getSource(MLocation ml) {
       return get(sources, ml);
     }
 
-    private StorageGroup getTarget(MLocation ml) {
+    public StorageGroup getTarget(MLocation ml) {
       return get(targets, ml);
     }
 
@@ -782,12 +781,10 @@ public class ZoneMover {
       return map.get(ml.getDatanode().getDatanodeUuid(), ml.getStorageType());
     }
 
-    private List<StorageGroup> getTargetStorages(
-        StorageType st, String datacenter) {
+    protected List<StorageGroup> getTargetStorages(StorageType st, String datacenter) {
       if (!dcTargetStorageTypeMap.containsKey(datacenter)) {
-        EnumMap<StorageType, List<StorageGroup>> em =
-            new EnumMap<>(StorageType.class);
-        for(StorageType t : StorageType.getMovableTypes()) {
+        EnumMap<StorageType, List<StorageGroup>> em = new EnumMap<>(StorageType.class);
+        for (StorageType t : StorageType.getMovableTypes()) {
           em.put(t, new LinkedList<>());
         }
         dcTargetStorageTypeMap.put(datacenter, em);

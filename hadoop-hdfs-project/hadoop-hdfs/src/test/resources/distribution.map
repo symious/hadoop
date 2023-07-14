@@ -1,0 +1,15 @@
+/Telin-3:1           /STT:1
+/AirTrunk:1           /AirTrunk:1
+/Telin-3:1,/AirTrunk:1      /STT:1,/Telin-3:1,/AirTrunk:1
+/Telin-3:2           /STT:1,/Telin-3:1
+/AirTrunk:2           /AirTrunk:2
+/STT:1,/Telin-3:1     /STT:1,/Telin-3:1
+/STT:2               /STT:2
+/Telin-3:3           /STT:2,/Telin-3:2
+/Telin-3:2,/AirTrunk:1      /STT:2,/Telin-3:2,/AirTrunk:1
+/AirTrunk:2,/Telin-3:1      /STT:1,/Telin-3:1,/AirTrunk:2
+/AirTrunk:3           /AirTrunk:3
+/STT:3                /STT:3
+/STT:2,/Telin-3:2     /STT:2,/Telin-3:2
+/STT:1,/Telin-3:3     /STT:2,/Telin-3:2
+/STT:3,/Telin-3:1     /STT:2,/Telin-3:2
