@@ -576,7 +576,7 @@ public class Dispatcher {
     /** A group of storages in a datanode with the same storage type. */
     public class StorageGroup {
       final StorageType storageType;
-      final long maxSize2Move;
+      private long maxSize2Move;
       private long scheduledSize = 0L;
 
       private StorageGroup(StorageType storageType, long maxSize2Move) {
@@ -603,6 +603,14 @@ public class Dispatcher {
 
       synchronized boolean hasSpaceForScheduling(long size) {
         return availableSizeToMove() > size;
+      }
+
+      synchronized void resetMaxSize2Move(long maxSize2Move) {
+        this.maxSize2Move = maxSize2Move;
+      }
+
+      long getMaxSize2Move() {
+        return this.maxSize2Move;
       }
 
       /** @return the total number of bytes that need to be moved */
@@ -1214,6 +1222,7 @@ public class Dispatcher {
     Collections.shuffle(Arrays.asList(reports));
     for (DatanodeStorageReport r : reports) {
       final DatanodeInfo datanode = r.getDatanodeInfo();
+      LOG.debug("DataNode {} state {}.", datanode, datanode.getAdminState());
       if (shouldIgnore(datanode) && !(includeDecommission && datanode.isDecommissionInProgress())) {
         continue;
       }

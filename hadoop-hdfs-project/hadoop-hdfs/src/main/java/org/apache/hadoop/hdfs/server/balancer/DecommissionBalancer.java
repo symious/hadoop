@@ -141,11 +141,13 @@ public class DecommissionBalancer extends Balancer {
       policy.accumulateSpaces(r);
     }
     policy.initAvgUtilization();
+    long totalTargetSize = 0;
     for(DatanodeStorageReport r : reports) {
       final Dispatcher.DDatanode dn = dispatcher.newDatanode(r.getDatanodeInfo());
       boolean isDecommissioning = r.getDatanodeInfo().isDecommissionInProgress();
+      LOG.debug("Report {} state {}.", r.getDatanodeInfo(), r.getDatanodeInfo().getAdminState());
 
-      for(StorageType t : StorageType.getMovableTypes()) {
+      for (StorageType t : StorageType.getMovableTypes()) {
         // decommissioning node will be considered as source
         if (isDecommissioning) {
           // if data center is set inside DecommissionBalancer,
@@ -156,9 +158,16 @@ public class DecommissionBalancer extends Balancer {
             }
           }
           final Dispatcher.Source s = dn.addSource(t, getUsed(r, t), dispatcher);
-          sizeToMove += getUsed(r, t);
+          long usedSize = getUsed(r, t);
+          sizeToMove += usedSize;
+
+          if (usedSize == 0) {
+            LOG.info("{} does not store data on {} storage.", s.getDatanodeInfo(), t);
+            continue;
+          }
 
           if (!sourceList.contains(s)) {
+            LOG.info("Add {} into source.", s.getDatanodeInfo());
             sourceList.add(s);
             dispatcher.getStorageGroupMap().put(s);
           }
@@ -185,30 +194,37 @@ public class DecommissionBalancer extends Balancer {
               " Total capacity: {}", t, policy.totalUsedSpaces, policy.totalCapacities);
           continue;
         }
-        if (utilization >= average) {
-          LOG.warn(dn + "[" + t + "] has utilization=" + utilization
-              + " >= average=" + average);
-          // Still add the high utilization node into backup target list
-          leftNodes.add(dn.addTarget(t, getRemaining(r,t) / 10));
-          continue;
-        }
-
         final double utilizationDiff = utilization - average;
         final long capacity = getCapacity(r, t);
         final double thresholdDiff = Math.abs(utilizationDiff) - threshold;
         final long maxSize2Move = computeMaxSize2Move(capacity,
             getRemaining(r, t), utilizationDiff, maxSizeToMove);
 
-        final Dispatcher.DDatanode.StorageGroup g;
-
-        g = dn.addTarget(t, maxSize2Move);
-        if (thresholdDiff <= 0) { // within threshold
-          belowAvgUtilized.add(g);
+        Dispatcher.DDatanode.StorageGroup s = dn.addTarget(t, maxSize2Move);
+        LOG.info("{} [{}] has utilization={}, average={}, maxSize2Move={}.",
+            dn, t, utilization, average, maxSize2Move);
+        totalTargetSize += maxSize2Move;
+        if (utilization >= average) {
+          leftNodes.add(s);
+        } else if (thresholdDiff <= 0) {
+          belowAvgUtilized.add(s);
         } else {
-          underUtilized.add(g);
+          underUtilized.add(s);
         }
+        dispatcher.getStorageGroupMap().put(s);
+      }
+    }
 
-        dispatcher.getStorageGroupMap().put(g);
+    // TODO: consider heterogeneous storage
+    if (sizeToMove > totalTargetSize * 2) {
+      // Recompute the maxSize2Move for Sources, so that decommissionBalancer can
+      // currently decommission all source dataNodes.
+      // ascending order
+      long avgMaxSize2Move = (totalTargetSize + 1) / sourceList.size();
+      for (Dispatcher.Source source : sourceList) {
+        LOG.info("Reset the maxSize2Move for {} from {} to {}.", source.getDatanodeInfo(),
+            source.getMaxSize2Move(), avgMaxSize2Move);
+        source.resetMaxSize2Move(avgMaxSize2Move);
       }
     }
 
@@ -219,13 +235,16 @@ public class DecommissionBalancer extends Balancer {
   // TODO: When all replicas of one block is decommissioning at the same time,
   //  all the replicas may be moved to the same node;
   protected void chooseStorageGroups(final Matcher matcher) {
-    LOG.info("chooseStorageGroups for " + matcher + ": decommission => underUtilized" + " number is " + underUtilized.size());
+    LOG.info("chooseStorageGroups for {}: decommission => underUtilized number is {}.",
+        matcher, underUtilized.size());
     chooseStorageGroups(sourceList, underUtilized, matcher);
 
-    LOG.info("chooseStorageGroups for " + matcher + ": decommission => belowAvgUtilized" + " number is " + belowAvgUtilized.size());
+    LOG.info("chooseStorageGroups for {}: decommission => belowAvgUtilized number is {}.",
+        matcher, belowAvgUtilized.size());
     chooseStorageGroups(sourceList, belowAvgUtilized, matcher);
 
-    LOG.info("chooseStorageGroups for " + matcher + ": decommission => leftNodes" + " number is " + leftNodes.size());
+    LOG.info("chooseStorageGroups for {}: decommission => leftNodes number is {}.",
+        matcher, leftNodes.size());
     chooseStorageGroups(sourceList, leftNodes, matcher);
   }
 
@@ -314,9 +333,8 @@ public class DecommissionBalancer extends Balancer {
       }
       final List<DatanodeStorageReport> reports = dispatcher.init(true);
       final long bytesLeftToMove = init(reports);
-
-      LOG.info( "Need to decommission "+ decommissioningNodesCount
-          + " DNs to finish the current decommission." );
+      LOG.info("Need to move {} byte data to decommission {} DNs to finish current decommission.",
+          StringUtils.byteDesc(bytesLeftToMove), decommissioningNodesCount);
 
       /* Decide all the nodes that will participate in the block move and
        * the number of bytes that need to be moved from one node to another
@@ -328,7 +346,7 @@ public class DecommissionBalancer extends Balancer {
         System.out.println("No block can be moved. Exiting...");
         return newResult(ExitStatus.NO_MOVE_BLOCK, bytesLeftToMove, bytesBeingMoved);
       } else {
-        LOG.info("Will move {}  in this iteration for {}",
+        LOG.info("Will move {} in this iteration for {}",
             StringUtils.byteDesc(bytesBeingMoved), nnc.toString());
       }
 

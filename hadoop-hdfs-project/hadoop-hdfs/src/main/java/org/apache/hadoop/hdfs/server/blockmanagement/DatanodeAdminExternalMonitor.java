@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.blockmanagement;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.util.CyclicIteration;
+import org.apache.hadoop.hdfs.util.LightWeightLinkedSet;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -117,6 +118,8 @@ public class DatanodeAdminExternalMonitor extends DatanodeAdminDefaultMonitor {
                 blocksNum);
           }
         }
+        dn.getLeavingServiceStatus().set(0,
+            new LightWeightLinkedSet<>(), blocksNum, 0);
         final boolean isHealthy = blockManager.isNodeHealthyForDecommissionOrMaintenance(dn);
         if (!isHealthy) {
           unhealthyDns.add(dn);
