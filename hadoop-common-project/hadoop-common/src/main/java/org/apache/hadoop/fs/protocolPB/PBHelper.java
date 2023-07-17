@@ -19,7 +19,11 @@ package org.apache.hadoop.fs.protocolPB;
 
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.UnresolvedPathException;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.UnresolvedPathExceptionProto;
+import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.ResponseExceptionProto;
+import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.ResponseExceptionProto.ExceptionDetailsCase;
 import org.apache.hadoop.util.StringInterner;
 
 import java.io.IOException;
@@ -134,4 +138,17 @@ public final class PBHelper {
     return bld.build();
   }
 
+  public static ResponseExceptionProto convert(Throwable t) {
+    ResponseExceptionProto.Builder resBuilder = ResponseExceptionProto.newBuilder();
+    if (t instanceof UnresolvedPathException) {
+      UnresolvedPathException exception = (UnresolvedPathException)t;
+      UnresolvedPathExceptionProto.Builder builder = UnresolvedPathExceptionProto.newBuilder();
+      builder.setPath(exception.getPath())
+          .setPreceding(exception.getPreceding())
+          .setRemainder(exception.getRemainder())
+          .setLinkTarget(exception.getLinkTarget());
+      resBuilder.setUnresolvedPathException(builder);
+    }
+    return resBuilder.build();
+  }
 }

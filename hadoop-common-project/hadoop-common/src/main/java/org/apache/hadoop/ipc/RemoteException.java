@@ -32,7 +32,8 @@ public class RemoteException extends IOException {
   private final int errorCode;
 
   private final String className;
-  
+
+//  private final
   /**
    * @param className wrapped exception, may be null
    * @param msg may be null

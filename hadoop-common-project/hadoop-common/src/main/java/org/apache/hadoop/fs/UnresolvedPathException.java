@@ -56,4 +56,20 @@ public final class UnresolvedPathException extends UnresolvedLinkException {
         }
         return getResolvedPath().toString();
     }
+
+    public String getPath() {
+        return path;
+    }
+
+    public String getPreceding() {
+        return preceding;
+    }
+
+    public String getRemainder() {
+        return remainder;
+    }
+
+    public String getLinkTarget() {
+        return linkTarget;
+    }
 }

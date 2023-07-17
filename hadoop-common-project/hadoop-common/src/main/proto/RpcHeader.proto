@@ -165,6 +165,7 @@ message RpcResponseHeaderProto {
   // The client should not interpret these bytes, but only
   // forward them to the router using RpcRequestHeaderProto.routerFederatedState.
   optional bytes routerFederatedState = 10;
+  optional ResponseExceptionProto responseException= 11;
 }
 
 message RpcSaslProto {
@@ -189,4 +190,17 @@ message RpcSaslProto {
   required SaslState state = 2;
   optional bytes token     = 3;
   repeated SaslAuth auths  = 4;
+}
+
+message UnresolvedPathExceptionProto {
+  optional string path          = 1;        // The path containing the link
+  optional string preceding     = 2;        // The path part preceding the link
+  optional string remainder     = 3;        // The path part following the link
+  optional string linkTarget    = 4;        // The link's target
+}
+
+message ResponseExceptionProto {
+  oneof ExceptionDetails {
+    UnresolvedPathExceptionProto unresolvedPathException = 1;
+  }
 }

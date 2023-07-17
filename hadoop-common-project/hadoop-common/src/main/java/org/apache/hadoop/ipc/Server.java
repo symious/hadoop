@@ -85,6 +85,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configuration.IntegerRanges;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+import org.apache.hadoop.fs.protocolPB.PBHelper;
 import org.apache.hadoop.ha.HealthCheckFailedException;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.Writable;
@@ -95,6 +96,7 @@ import org.apache.hadoop.ipc.RPC.VersionMismatch;
 import org.apache.hadoop.ipc.metrics.RpcDetailedMetrics;
 import org.apache.hadoop.ipc.metrics.RpcMetrics;
 import org.apache.hadoop.ipc.protobuf.IpcConnectionContextProtos.IpcConnectionContextProto;
+import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.ResponseExceptionProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcKindProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcRequestHeaderProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcResponseHeaderProto;
@@ -1275,6 +1277,7 @@ public abstract class Server {
       }
       responseParams.errorClass = t.getClass().getName();
       responseParams.error = StringUtils.stringifyException(t);
+      responseParams.responseExceptionProto = PBHelper.convert(t);
       // Remove redundant error class name from the beginning of the
       // stack trace
       String exceptionHdr = responseParams.errorClass + ": ";
@@ -1381,6 +1384,7 @@ public abstract class Server {
       String errorClass = null;
       String error = null;
       RpcErrorCodeProto detailedErr = null;
+      ResponseExceptionProto responseExceptionProto = null;
       RpcStatusProto returnStatus = RpcStatusProto.SUCCESS;
     }
 
@@ -3483,7 +3487,7 @@ public abstract class Server {
    */
   private void setupResponse(
       RpcCall call, RpcStatusProto status, RpcErrorCodeProto erCode,
-      Writable rv, String errorClass, String error)
+      Writable rv, String errorClass, String error, ResponseExceptionProto responseExceptionProto)
           throws IOException {
     // fatal responses will cause the reader to close the connection.
     if (status == RpcStatusProto.FATAL) {
