@@ -17,12 +17,15 @@
  */
 package org.apache.hadoop.fs.protocolPB;
 
+import org.apache.hadoop.fs.ExtractExceptionDetails;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.ExceptionDetailsProto;
 import org.apache.hadoop.util.StringInterner;
 
 import java.io.IOException;
+import java.util.List;
 
 import static org.apache.hadoop.fs.FSProtos.*;
 
@@ -134,4 +137,23 @@ public final class PBHelper {
     return bld.build();
   }
 
+  public static ExceptionDetailsProto extractDetails(Throwable t) {
+    if (t instanceof ExtractExceptionDetails) {
+      ExtractExceptionDetails exception = (ExtractExceptionDetails) t;
+      List<String> paramNames = exception.getParamNames();
+      List<String> paramClasses = exception.getParamClasses();
+      List<String> paramValues = exception.getParamValues();
+      if (paramNames.size() != paramClasses.size() || paramNames.size() != paramValues.size()) {
+        return null;
+      }
+      ExceptionDetailsProto.Builder builder = ExceptionDetailsProto.newBuilder();
+      for (int i = 0; i < paramNames.size(); i++) {
+        builder.addParamName(paramNames.get(i));
+        builder.addClassName(paramClasses.get(i));
+        builder.addParamValue(paramValues.get(i));
+      }
+      return builder.build();
+    }
+    return null;
+  }
 }

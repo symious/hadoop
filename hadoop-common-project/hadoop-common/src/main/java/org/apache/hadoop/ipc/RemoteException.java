@@ -20,7 +20,9 @@ package org.apache.hadoop.ipc;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
+import java.util.List;
 
+import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.ExceptionDetailsProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcResponseHeaderProto.RpcErrorCodeProto;
 import org.xml.sax.Attributes;
 
@@ -32,13 +34,14 @@ public class RemoteException extends IOException {
   private final int errorCode;
 
   private final String className;
-  
+  private final ExceptionDetailsProto exceptionDetailsProto;
+
   /**
    * @param className wrapped exception, may be null
    * @param msg may be null
    */
   public RemoteException(String className, String msg) {
-    this(className, msg, null);
+    this(className, msg, null, null);
   }
   
   /**
@@ -46,13 +49,15 @@ public class RemoteException extends IOException {
    * @param msg may be null
    * @param erCode may be null
    */
-  public RemoteException(String className, String msg, RpcErrorCodeProto erCode) {
+  public RemoteException(String className, String msg, RpcErrorCodeProto erCode,
+                         ExceptionDetailsProto exceptionDetailsProto) {
     super(msg);
     this.className = className;
     if (erCode != null)
       errorCode = erCode.getNumber();
     else 
       errorCode = UNSPECIFIED_ERROR;
+    this.exceptionDetailsProto = exceptionDetailsProto;
   }
   
   /**
@@ -122,6 +127,30 @@ public class RemoteException extends IOException {
     ex.initCause(this);
     return ex;
   }
+
+  private void applyExceptionDetails(IOException ioe) {
+    List<String> paramNames = exceptionDetailsProto.getParamNameList();
+    List<String> paramClasses = exceptionDetailsProto.getClassNameList();
+    List<String> paramValues = exceptionDetailsProto.getParamValueList();
+    if (paramNames.size() != paramClasses.size() || paramNames.size() != paramValues.size()) {
+      return;
+    }
+    try {
+      for (int i = 0; i < paramNames.size(); i++) {
+        applyParam(ioe, paramNames.get(i), paramClasses.get(i), paramValues.get(i));
+      }
+    } catch (Exception e) {
+      // cannot enrich the original exception, just return;
+    }
+  }
+
+  private void applyParam(IOException e, String paramName, String paramClassStr, String paramValue)
+      throws ClassNotFoundException {
+    Class clazz = Class.forName(paramClassStr);
+
+
+  }
+
 
   /**
    * Create RemoteException from attributes.
