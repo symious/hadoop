@@ -210,4 +210,8 @@ public abstract class ProtoUtil {
 
     return result.build();
   }
+
+  public static Object toObject(ByteString bytes) {
+    return IOUtils.readObject(bytes.newInput(), Object.class);
+  }
 }

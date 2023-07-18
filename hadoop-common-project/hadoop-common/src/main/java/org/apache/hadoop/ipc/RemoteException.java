@@ -21,6 +21,8 @@ package org.apache.hadoop.ipc;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 
+import org.apache.hadoop.fs.protocolPB.PBHelper;
+import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.ResponseExceptionProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcResponseHeaderProto.RpcErrorCodeProto;
 import org.xml.sax.Attributes;
 
@@ -33,7 +35,7 @@ public class RemoteException extends IOException {
 
   private final String className;
 
-//  private final
+  private final ResponseExceptionProto responseExceptionProto;
   /**
    * @param className wrapped exception, may be null
    * @param msg may be null
@@ -48,12 +50,18 @@ public class RemoteException extends IOException {
    * @param erCode may be null
    */
   public RemoteException(String className, String msg, RpcErrorCodeProto erCode) {
+    this(className, msg, erCode, null);
+  }
+
+  public RemoteException(String className, String msg, RpcErrorCodeProto erCode,
+                         ResponseExceptionProto responseExceptionProto) {
     super(msg);
     this.className = className;
     if (erCode != null)
       errorCode = erCode.getNumber();
     else 
       errorCode = UNSPECIFIED_ERROR;
+    this.responseExceptionProto = responseExceptionProto;
   }
   
   /**
@@ -106,6 +114,10 @@ public class RemoteException extends IOException {
    * @return <code>Throwable</code>
    */
   public IOException unwrapRemoteException() {
+    IOException exception = extractExceptionFromProto();
+    if (exception != null) {
+      return exception;
+    }
     try {
       Class<?> realClass = Class.forName(getClassName());
       return instantiateException(realClass.asSubclass(IOException.class));
@@ -122,6 +134,17 @@ public class RemoteException extends IOException {
     IOException ex = cn.newInstance(this.getMessage());
     ex.initCause(this);
     return ex;
+  }
+
+  private IOException extractExceptionFromProto() {
+    if (responseExceptionProto != null) {
+      IOException exception = PBHelper.convert(responseExceptionProto);
+      if (exception != null) {
+        exception.initCause(this);
+        return exception;
+      }
+    }
+    return null;
   }
 
   /**

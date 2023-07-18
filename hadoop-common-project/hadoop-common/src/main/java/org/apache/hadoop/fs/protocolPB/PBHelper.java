@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.UnresolvedPathExceptionProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.ResponseExceptionProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.ResponseExceptionProto.ExceptionDetailsCase;
+import org.apache.hadoop.util.ProtoUtil;
 import org.apache.hadoop.util.StringInterner;
 
 import java.io.IOException;
@@ -150,5 +151,21 @@ public final class PBHelper {
       resBuilder.setUnresolvedPathException(builder);
     }
     return resBuilder.build();
+  }
+
+  public static IOException convert(ResponseExceptionProto exceptionProto) {
+    switch (exceptionProto.getExceptionDetailsCase()) {
+    case UNRESOLVEDPATHEXCEPTION:
+      UnresolvedPathExceptionProto proto = exceptionProto.getUnresolvedPathException();
+      UnresolvedPathException resException = new UnresolvedPathException(
+          proto.getPath(), proto.getPreceding(), proto.getRemainder(),
+          proto.getLinkTarget());
+      StackTraceElement[] stacktrace =
+          (StackTraceElement[]) ProtoUtil.toObject(proto.getStacktrace());
+      resException.setStackTrace(stacktrace);
+      return resException;
+    default:
+      return null;
+    }
   }
 }

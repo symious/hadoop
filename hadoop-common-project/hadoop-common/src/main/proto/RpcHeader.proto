@@ -197,6 +197,8 @@ message UnresolvedPathExceptionProto {
   optional string preceding     = 2;        // The path part preceding the link
   optional string remainder     = 3;        // The path part following the link
   optional string linkTarget    = 4;        // The link's target
+  optional bytes stacktrace     = 5;
+
 }
 
 message ResponseExceptionProto {

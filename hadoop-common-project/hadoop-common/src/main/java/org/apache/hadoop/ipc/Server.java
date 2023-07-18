@@ -1303,12 +1303,14 @@ public abstract class Server {
         // effectively discarded since the wait count won't hit zero
         call = new RpcCall(this);
         setupResponse(call, status, RpcErrorCodeProto.ERROR_RPC_SERVER,
-            null, t.getClass().getName(), StringUtils.stringifyException(t));
+            null, t.getClass().getName(), StringUtils.stringifyException(t),
+            PBHelper.convert(t));
       } else {
         setupResponse(call, call.responseParams.returnStatus,
             call.responseParams.detailedErr, call.rv,
             call.responseParams.errorClass,
-            call.responseParams.error);
+            call.responseParams.error,
+            call.responseParams.responseExceptionProto);
       }
       connection.sendResponse(call);
     }
@@ -1335,7 +1337,7 @@ public abstract class Server {
       if (this.connection.getServer().running) {
         try {
           setupResponse(this, RpcStatusProto.SUCCESS, null, response,
-              null, null);
+              null, null, null);
         } catch (IOException e) {
           // For synchronous calls, application code is done once it has
           // returned from a method. It does not expect to receive an error.
@@ -1362,7 +1364,8 @@ public abstract class Server {
           populateResponseParamsOnError(t, responseParams);
           setupResponse(this, responseParams.returnStatus,
               responseParams.detailedErr,
-              null, responseParams.errorClass, responseParams.error);
+              null, responseParams.errorClass, responseParams.error,
+              responseParams.responseExceptionProto);
         } catch (IOException e) {
           // For synchronous calls, application code is done once it has
           // returned from a method. It does not expect to receive an error.
@@ -2415,14 +2418,14 @@ public abstract class Server {
       final RpcCall saslCall = new RpcCall(this, AuthProtocol.SASL.callId);
       setupResponse(saslCall,
           RpcStatusProto.SUCCESS, null,
-          RpcWritable.wrap(message), null, null);
+          RpcWritable.wrap(message), null, null, null);
       sendResponse(saslCall);
     }
 
     private void doSaslReply(Exception ioe) throws IOException {
       setupResponse(authFailedCall,
           RpcStatusProto.FATAL, RpcErrorCodeProto.FATAL_UNAUTHORIZED,
-          null, ioe.getClass().getName(), ioe.getMessage());
+          null, ioe.getClass().getName(), ioe.getMessage(), PBHelper.convert(ioe));
       sendResponse(authFailedCall);
     }
 
@@ -2635,7 +2638,7 @@ public abstract class Server {
         RpcCall fakeCall = new RpcCall(this, -1);
         setupResponse(fakeCall,
             RpcStatusProto.FATAL, RpcErrorCodeProto.FATAL_VERSION_MISMATCH,
-            null, VersionMismatch.class.getName(), errMsg);
+            null, VersionMismatch.class.getName(), errMsg, null);
         sendResponse(fakeCall);
       } else if (clientVersion >= 3) {
         RpcCall fakeCall = new RpcCall(this, -1);
@@ -2809,7 +2812,7 @@ public abstract class Server {
         final RpcCall call = new RpcCall(this, callId, retry);
         setupResponse(call,
             rse.getRpcStatusProto(), rse.getRpcErrorCodeProto(), null,
-            t.getClass().getName(), t.getMessage());
+            t.getClass().getName(), t.getMessage(), PBHelper.convert(t));
         sendResponse(call);
       }
     }
@@ -3516,13 +3519,14 @@ public abstract class Server {
         setupResponse(call, RpcStatusProto.ERROR,
             RpcErrorCodeProto.ERROR_SERIALIZING_RESPONSE,
             null, t.getClass().getName(),
-            StringUtils.stringifyException(t));
+            StringUtils.stringifyException(t), responseExceptionProto);
         return;
       }
     } else { // Rpc Failure
       headerBuilder.setExceptionClassName(errorClass);
       headerBuilder.setErrorMsg(error);
       headerBuilder.setErrorDetail(erCode);
+      headerBuilder.setResponseException(responseExceptionProto);
       setupResponse(call, headerBuilder.build(), null);
     }
   }
