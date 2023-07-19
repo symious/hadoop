@@ -35,4 +35,13 @@ public enum MigrationDataCenters {
   public String toString() {
     return this.name;
   }
+
+  public static MigrationDataCenters fromName(String name) {
+    for (MigrationDataCenters dataCenter : MigrationDataCenters.values()) {
+      if (dataCenter.getName().equals(name)) {
+        return dataCenter;
+      }
+    }
+    throw new IllegalArgumentException("No enum constant with name: " + name);
+  }
 }
