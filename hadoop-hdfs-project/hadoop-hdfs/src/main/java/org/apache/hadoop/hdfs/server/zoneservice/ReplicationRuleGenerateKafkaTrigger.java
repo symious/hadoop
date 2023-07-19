@@ -257,7 +257,7 @@ public class ReplicationRuleGenerateKafkaTrigger {
               URI namenode = ZoneServiceUtil.getNamespaceUri(ns, conf);
               int code = replicationRuleManager.checkReplicaInDC(conf, namenode,
                   Collections.singletonList(new Path(path)),
-                  MigrationDataCenters.valueOf(clientDC));
+                  MigrationDataCenters.fromName(clientDC));
               LOG.info("check {} {} replica in dc: {} code: {} and cost {} ms.", ns, path, clientDC,
                   code, now() - start);
               return;
