@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.datanode;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_DU_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_DU_INTERVAL_KEY;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_GETSPACEUSED_CLASSNAME;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_GETSPACEUSED_JITTER_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_GETSPACEUSED_JITTER_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_BALANCE_MAX_NUM_CONCURRENT_MOVES_KEY;
@@ -79,6 +80,7 @@ public class TestDataNodeReconfiguration {
   private final int NUM_NAME_NODE = 1;
   private final int NUM_DATA_NODE = 10;
   private MiniDFSCluster cluster;
+  private static long counter = 0;
 
   @Before
   public void Setup() throws IOException {
@@ -585,5 +587,34 @@ public class TestDataNodeReconfiguration {
         }
       }
     }
+  }
+
+  public static class DummyCachingGetSpaceUsed extends CachingGetSpaceUsed {
+    public DummyCachingGetSpaceUsed(Builder builder) throws IOException {
+      super(builder.setInterval(1000).setJitter(0L));
+    }
+
+    @Override
+    protected void refresh() {
+      counter++;
+    }
+  }
+
+  @Test
+  public void testDfsUsageKlass() throws ReconfigurationException, InterruptedException {
+
+    long lastCounter = counter;
+    Thread.sleep(5000);
+    assertEquals(lastCounter, counter);
+
+    for (int i = 0; i < NUM_DATA_NODE; i++) {
+      DataNode dn = cluster.getDataNodes().get(i);
+      dn.reconfigurePropertyImpl(FS_GETSPACEUSED_CLASSNAME,
+          DummyCachingGetSpaceUsed.class.getName());
+    }
+
+    lastCounter = counter;
+    Thread.sleep(5000);
+    assertTrue(counter > lastCounter);
   }
 }
