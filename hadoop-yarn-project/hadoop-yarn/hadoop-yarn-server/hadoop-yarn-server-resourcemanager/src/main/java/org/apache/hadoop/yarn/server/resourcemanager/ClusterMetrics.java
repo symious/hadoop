@@ -78,6 +78,10 @@ public class ClusterMetrics {
     rmEventProcCPUAvg;
   @Metric("RM Event Processor CPU Usage 60 second Max") MutableGaugeLong
     rmEventProcCPUMax;
+  @Metric("RM Main Event Processor CPU Usage 60 second Avg") MutableGaugeLong
+    rmMainEventProcCPUAvg;
+  @Metric("RM Main Event Processor CPU Usage 60 second Max") MutableGaugeLong
+    rmMainEventProcCPUMax;
 
   private boolean rmEventProcMonitorEnable = false;
 
@@ -155,6 +159,12 @@ public class ClusterMetrics {
   }
   public void setRmEventProcCPUMax(long value) {
     rmEventProcCPUMax.set(value);
+  }
+  public void setRmMainEventProcCPUAvg(long value) {
+    rmMainEventProcCPUAvg.set(value);
+  }
+  public void setRmMainEventProcCPUMax(long value) {
+    rmMainEventProcCPUMax.set(value);
   }
 
   //Active Nodemanagers

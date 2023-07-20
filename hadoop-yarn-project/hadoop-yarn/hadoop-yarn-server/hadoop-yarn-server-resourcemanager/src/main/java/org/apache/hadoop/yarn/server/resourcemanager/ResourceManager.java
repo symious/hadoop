@@ -153,6 +153,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
 
 /**
  * The ResourceManager is the main class that is a set of components.
@@ -482,7 +484,16 @@ public class ResourceManager extends CompositeService
   }
 
   protected Dispatcher createDispatcher() {
-    return new AsyncDispatcher("RM Event dispatcher");
+    Dispatcher dispatcher;
+    int threadMonitorRate = conf.getInt(
+        YarnConfiguration.YARN_DISPATCHER_CPU_MONITOR_SAMPLES_PER_MIN,
+        YarnConfiguration.DEFAULT_YARN_DISPATCHER_CPU_MONITOR_SAMPLES_PER_MIN);
+    if (threadMonitorRate > 0) {
+      dispatcher = new MainEventDispatcher("RM Event dispatcher", threadMonitorRate);
+    } else {
+      dispatcher = new AsyncDispatcher("RM Event dispatcher");
+    }
+    return dispatcher;
   }
 
   protected ResourceScheduler createScheduler() {
@@ -1066,68 +1077,25 @@ public class ResourceManager extends CompositeService
 
     SchedulerEventDispatcher(String name, int samplesPerMin) {
       super(scheduler, name);
-      this.eventProcessorMonitor =
-          new Thread(new EventProcessorMonitor(getEventProcessorId(),
-              samplesPerMin));
+      this.eventProcessorMonitor = new Thread(
+          new EventProcessorMonitor(getEventProcessorId(), samplesPerMin,
+              new Function<ClusterMetrics, BiConsumer<Long, Long>>() {
+                @Override
+                public BiConsumer<Long, Long> apply(
+                    ClusterMetrics clusterMetrics) {
+                  return new BiConsumer<Long, Long>() {
+                    @Override
+                    public void accept(Long avg, Long max) {
+                      clusterMetrics.setRmEventProcCPUAvg(avg);
+                      clusterMetrics.setRmEventProcCPUMax(max);
+                    }
+                  };
+                }
+              }));
       this.eventProcessorMonitor
           .setName("ResourceManager Event Processor Monitor");
     }
-    // EventProcessorMonitor keeps track of how much CPU the EventProcessor
-    // thread is using. It takes a configurable number of samples per minute,
-    // and then reports the Avg and Max of previous 60 seconds as cluster
-    // metrics. Units are usecs per second of CPU used.
-    // Avg is not accurate until one minute of samples have been received.
-    private final class EventProcessorMonitor implements Runnable {
-      private final long tid;
-      private final boolean run;
-      private final ThreadMXBean tmxb;
-      private final ClusterMetrics clusterMetrics = ClusterMetrics.getMetrics();
-      private final int samples;
-      EventProcessorMonitor(long id, int samplesPerMin) {
-        assert samplesPerMin > 0;
-        this.tid = id;
-        this.samples = samplesPerMin;
-        this.tmxb = ManagementFactory.getThreadMXBean();
-        if (clusterMetrics != null &&
-            tmxb != null && tmxb.isThreadCpuTimeSupported()) {
-          this.run = true;
-          clusterMetrics.setRmEventProcMonitorEnable(true);
-        } else {
-          this.run = false;
-        }
-      }
-      public void run() {
-        int index = 0;
-        long[] values = new long[samples];
-        int sleepMs = (60 * 1000) / samples;
 
-        while (run && !isStopped() && !Thread.currentThread().isInterrupted()) {
-          try {
-            long cpuBefore = tmxb.getThreadCpuTime(tid);
-            long wallClockBefore = Time.monotonicNow();
-            Thread.sleep(sleepMs);
-            long wallClockDelta = Time.monotonicNow() - wallClockBefore;
-            long cpuDelta = tmxb.getThreadCpuTime(tid) - cpuBefore;
-
-            // Nanoseconds / Milliseconds = usec per second
-            values[index] = cpuDelta / wallClockDelta;
-
-            index = (index + 1) % samples;
-            long max = 0;
-            long sum = 0;
-            for (int i = 0; i < samples; i++) {
-              sum += values[i];
-              max = Math.max(max, values[i]);
-            }
-            clusterMetrics.setRmEventProcCPUAvg(sum / samples);
-            clusterMetrics.setRmEventProcCPUMax(max);
-          } catch (InterruptedException e) {
-            LOG.error("Returning, interrupted : " + e);
-            return;
-          }
-        }
-      }
-    }
     @Override
     protected void serviceStart() throws Exception {
       super.serviceStart();
@@ -1142,6 +1110,108 @@ public class ResourceManager extends CompositeService
         this.eventProcessorMonitor.join();
       } catch (InterruptedException e) {
         throw new YarnRuntimeException(e);
+      }
+    }
+  }
+
+  @Private
+  private class MainEventDispatcher extends AsyncDispatcher {
+    private Thread eventProcessorMonitor;
+    private final int samples;
+    MainEventDispatcher(String name, int samplesPerMin) {
+      super(name);
+      this.samples = samplesPerMin;
+    }
+
+    @Override
+    protected void serviceStart() throws Exception {
+      super.serviceStart();
+      this.eventProcessorMonitor = new Thread(
+          new EventProcessorMonitor(getEventHandlingThreadId(), samples,
+              new Function<ClusterMetrics, BiConsumer<Long, Long>>() {
+                @Override
+                public BiConsumer<Long, Long> apply(
+                    ClusterMetrics clusterMetrics) {
+                  return new BiConsumer<Long, Long>() {
+                    @Override
+                    public void accept(Long avg, Long max) {
+                      clusterMetrics.setRmMainEventProcCPUAvg(avg);
+                      clusterMetrics.setRmMainEventProcCPUMax(max);
+                    }
+                  };
+                }
+              }));
+      this.eventProcessorMonitor.start();
+    }
+
+    @Override
+    protected void serviceStop() throws Exception {
+      super.serviceStop();
+      this.eventProcessorMonitor.interrupt();
+      try {
+        this.eventProcessorMonitor.join();
+      } catch (InterruptedException e) {
+        throw new YarnRuntimeException(e);
+      }
+    }
+  }
+
+  // EventProcessorMonitor keeps track of how much CPU the EventProcessor
+  // thread is using. It takes a configurable number of samples per minute,
+  // and then reports the Avg and Max of previous 60 seconds as cluster
+  // metrics. Units are usecs per second of CPU used.
+  // Avg is not accurate until one minute of samples have been received.
+  private final class EventProcessorMonitor implements Runnable {
+    private final long tid;
+    private final boolean run;
+    private final ThreadMXBean tmxb;
+    private final ClusterMetrics clusterMetrics = ClusterMetrics.getMetrics();
+    private final int samples;
+    private final Function<ClusterMetrics, BiConsumer<Long, Long>> update;
+
+    EventProcessorMonitor(long id, int samplesPerMin,
+        Function<ClusterMetrics, BiConsumer<Long, Long>> update) {
+      assert samplesPerMin > 0;
+      this.tid = id;
+      this.samples = samplesPerMin;
+      this.tmxb = ManagementFactory.getThreadMXBean();
+      if (clusterMetrics != null && tmxb != null && tmxb
+          .isThreadCpuTimeSupported()) {
+        this.run = true;
+        clusterMetrics.setRmEventProcMonitorEnable(true);
+      } else {
+        this.run = false;
+      }
+      this.update = update;
+    }
+    public void run() {
+      int index = 0;
+      long[] values = new long[samples];
+      int sleepMs = (60 * 1000) / samples;
+
+      while (run && !Thread.currentThread().isInterrupted()) {
+        try {
+          long cpuBefore = tmxb.getThreadCpuTime(tid);
+          long wallClockBefore = Time.monotonicNow();
+          Thread.sleep(sleepMs);
+          long wallClockDelta = Time.monotonicNow() - wallClockBefore;
+          long cpuDelta = tmxb.getThreadCpuTime(tid) - cpuBefore;
+
+          // Nanoseconds / Milliseconds = usec per second
+          values[index] = cpuDelta / wallClockDelta;
+
+          index = (index + 1) % samples;
+          long max = 0;
+          long sum = 0;
+          for (int i = 0; i < samples; i++) {
+            sum += values[i];
+            max = Math.max(max, values[i]);
+          }
+          update.apply(clusterMetrics).accept(sum / samples, max);
+        } catch (InterruptedException e) {
+          LOG.error("Returning, interrupted : " + e);
+          return;
+        }
       }
     }
   }

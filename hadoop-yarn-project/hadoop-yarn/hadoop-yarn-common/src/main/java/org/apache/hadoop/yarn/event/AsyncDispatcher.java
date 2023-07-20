@@ -396,6 +396,10 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
     return stopped;
   }
 
+  protected long getEventHandlingThreadId() {
+    return this.eventHandlingThread.getId();
+  }
+
   public int getLastEventQueueSizeLogged(){
     return this.lastEventQueueSizeLogged;
   }
