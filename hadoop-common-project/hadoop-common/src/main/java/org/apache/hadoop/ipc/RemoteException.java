@@ -41,9 +41,18 @@ public class RemoteException extends IOException {
    * @param msg may be null
    */
   public RemoteException(String className, String msg) {
-    this(className, msg, null, null);
+    this(className, msg, null);
   }
   
+  /**
+   * @param className wrapped exception, may be null
+   * @param msg may be null
+   * @param erCode may be null
+   */
+  public RemoteException(String className, String msg, RpcErrorCodeProto erCode) {
+    this(className, msg, erCode, null);
+  }
+
   /**
    * @param className wrapped exception, may be null
    * @param msg may be null

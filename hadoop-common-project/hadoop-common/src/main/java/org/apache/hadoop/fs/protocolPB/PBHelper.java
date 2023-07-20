@@ -136,7 +136,7 @@ public final class PBHelper {
     return bld.build();
   }
 
-  public static ExceptionReconstructParamsProto convert(Throwable t) {
+  public static ExceptionReconstructParamsProto getReconstructParams(Throwable t) {
     if (t instanceof ReconstructableException) {
       ExceptionReconstructParamsProto.Builder builder = ExceptionReconstructParamsProto.newBuilder();
       for (String str: ((ReconstructableException<?>)t).getReconstructParams()) {

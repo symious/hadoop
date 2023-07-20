@@ -1277,7 +1277,7 @@ public abstract class Server {
       }
       responseParams.errorClass = t.getClass().getName();
       responseParams.error = StringUtils.stringifyException(t);
-      responseParams.exceptionReconstructParams = PBHelper.convert(t);
+      responseParams.exceptionReconstructParams = PBHelper.getReconstructParams(t);
       // Remove redundant error class name from the beginning of the
       // stack trace
       String exceptionHdr = responseParams.errorClass + ": ";
@@ -1303,7 +1303,7 @@ public abstract class Server {
         // effectively discarded since the wait count won't hit zero
         call = new RpcCall(this);
         setupResponse(call, status, RpcErrorCodeProto.ERROR_RPC_SERVER,
-            null, t.getClass().getName(), StringUtils.stringifyException(t), PBHelper.convert(t));
+            null, t.getClass().getName(), StringUtils.stringifyException(t), PBHelper.getReconstructParams(t));
       } else {
         setupResponse(call, call.responseParams.returnStatus,
             call.responseParams.detailedErr, call.rv,
@@ -2425,7 +2425,7 @@ public abstract class Server {
     private void doSaslReply(Exception ioe) throws IOException {
       setupResponse(authFailedCall,
           RpcStatusProto.FATAL, RpcErrorCodeProto.FATAL_UNAUTHORIZED,
-          null, ioe.getClass().getName(), ioe.getMessage(), PBHelper.convert(ioe));
+          null, ioe.getClass().getName(), ioe.getMessage(), PBHelper.getReconstructParams(ioe));
       sendResponse(authFailedCall);
     }
 
@@ -2812,7 +2812,7 @@ public abstract class Server {
         final RpcCall call = new RpcCall(this, callId, retry);
         setupResponse(call,
             rse.getRpcStatusProto(), rse.getRpcErrorCodeProto(), null,
-            t.getClass().getName(), t.getMessage(), PBHelper.convert(t));
+            t.getClass().getName(), t.getMessage(), PBHelper.getReconstructParams(t));
         sendResponse(call);
       }
     }
@@ -3519,7 +3519,7 @@ public abstract class Server {
         setupResponse(call, RpcStatusProto.ERROR,
             RpcErrorCodeProto.ERROR_SERIALIZING_RESPONSE,
             null, t.getClass().getName(),
-            StringUtils.stringifyException(t), PBHelper.convert(t));
+            StringUtils.stringifyException(t), PBHelper.getReconstructParams(t));
         return;
       }
     } else { // Rpc Failure
