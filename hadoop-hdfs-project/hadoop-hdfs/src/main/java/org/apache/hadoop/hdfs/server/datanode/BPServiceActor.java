@@ -42,6 +42,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.hadoop.hdfs.server.protocol.InvalidBlockReportLeaseException;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -782,6 +783,9 @@ class BPServiceActor implements Runnable {
           LOG.warn(this + " is shutting down", re);
           shouldServiceRun = false;
           return;
+        }
+        if (InvalidBlockReportLeaseException.class.getName().equals(reClass)) {
+          fullBlockReportLeaseId = 0;
         }
         LOG.warn("RemoteException in offerService", re);
         sleepAfterException();

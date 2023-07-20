@@ -61,6 +61,7 @@ import java.util.TreeSet;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.hdfs.server.protocol.InvalidBlockReportLeaseException;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 
 import org.apache.hadoop.HadoopIllegalArgumentException;
@@ -1904,6 +1905,8 @@ public class NameNodeRpcServer implements NamenodeProtocols {
             bm.processReport(nodeReg, reports[index].getStorage(),
                 blocks, context));
         }
+      } else {
+        throw new InvalidBlockReportLeaseException(context.getReportId(), context.getLeaseId());
       }
     } catch (UnregisteredNodeException une) {
       LOG.warn("Datanode {} is attempting to report but not register yet.",
