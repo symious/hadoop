@@ -20,7 +20,9 @@ package org.apache.hadoop.ipc;
 
 import java.io.IOException;
 import java.lang.reflect.Constructor;
+import java.util.List;
 
+import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.ExceptionReconstructParamsProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcResponseHeaderProto.RpcErrorCodeProto;
 import org.xml.sax.Attributes;
 
@@ -32,13 +34,14 @@ public class RemoteException extends IOException {
   private final int errorCode;
 
   private final String className;
+  private final ExceptionReconstructParamsProto exceptionReconstructParams;
   
   /**
    * @param className wrapped exception, may be null
    * @param msg may be null
    */
   public RemoteException(String className, String msg) {
-    this(className, msg, null);
+    this(className, msg, null, null);
   }
   
   /**
@@ -46,13 +49,15 @@ public class RemoteException extends IOException {
    * @param msg may be null
    * @param erCode may be null
    */
-  public RemoteException(String className, String msg, RpcErrorCodeProto erCode) {
+  public RemoteException(String className, String msg, RpcErrorCodeProto erCode,
+                         ExceptionReconstructParamsProto paramsProto) {
     super(msg);
     this.className = className;
     if (erCode != null)
       errorCode = erCode.getNumber();
     else 
       errorCode = UNSPECIFIED_ERROR;
+    this.exceptionReconstructParams = paramsProto;
   }
   
   /**
@@ -119,6 +124,16 @@ public class RemoteException extends IOException {
     Constructor<? extends IOException> cn = cls.getConstructor(String.class);
     cn.setAccessible(true);
     IOException ex = cn.newInstance(this.getMessage());
+    if (exceptionReconstructParams != null) {
+      List<String> params = exceptionReconstructParams.getParamList();
+      if (params.size() != 0 && ex instanceof ReconstructableException) {
+        IOException reconstructed = ((ReconstructableException<?>) ex).
+            reconstruct(params.toArray(new String[0]));
+        if (reconstructed != null) {
+          ex = reconstructed;
+        }
+      }
+    }
     ex.initCause(this);
     return ex;
   }
