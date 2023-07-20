@@ -37,6 +37,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.server.common.AutoCloseDataSetLock;
 import org.apache.hadoop.hdfs.server.common.DataNodeLockManager;
+import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.FsVolumeImpl;
 import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.protocol.Block;
@@ -684,4 +685,9 @@ public interface FsDatasetSpi<V extends FsVolumeSpi> extends FSDatasetMBean {
    */
   public void hardLinkOneBlock(ExtendedBlock srcBlock, ExtendedBlock dstBlock)
       throws IOException;
+
+  /**
+   * Get the volume list.
+   */
+  List<FsVolumeImpl> getVolumeList();
 }

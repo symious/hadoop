@@ -3567,6 +3567,7 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     volumeMap.add(dstBlock.getBlockPoolId(), replicaInfo);
   }
 
+  @Override
   public List<FsVolumeImpl> getVolumeList() {
     return volumes.getVolumes();
   }
