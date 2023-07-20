@@ -1261,7 +1261,8 @@ public class Dispatcher {
     });
   }
 
-  public boolean dispatchAndCheckContinue() throws InterruptedException {
+  public boolean dispatchAndCheckContinue()
+      throws InterruptedException {
     return nnc.shouldContinue(dispatchBlockMoves());
   }
 
@@ -1330,7 +1331,6 @@ public class Dispatcher {
     LOG.info("Total bytes (blocks) moved in this iteration {} ({})",
         StringUtils.byteDesc(getBytesMoved() - bytesLastMoved),
         (getBblocksMoved() - blocksLastMoved));
-
     return getBytesMoved() - bytesLastMoved;
   }
 

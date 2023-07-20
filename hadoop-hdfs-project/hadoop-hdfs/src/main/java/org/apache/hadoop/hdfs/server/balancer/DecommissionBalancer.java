@@ -25,6 +25,7 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.hdfs.server.balancer.Dispatcher.DDatanode.StorageGroup;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
 import org.apache.hadoop.hdfs.server.protocol.StorageReport;
 import org.apache.hadoop.io.IOUtils;
@@ -50,7 +51,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -84,25 +84,16 @@ public class DecommissionBalancer extends Balancer {
       + "\n\t[-asService]\tRun as a long running service.";
   private final BalancingPolicy policy;
 
-  private final Collection<Dispatcher.Source> sourceList = new LinkedList<Dispatcher.Source>();
-  private final Collection<Dispatcher.DDatanode.StorageGroup> belowAvgUtilized
-      = new LinkedList<Dispatcher.DDatanode.StorageGroup>();
-  private final Collection<Dispatcher.DDatanode.StorageGroup> underUtilized
-      = new LinkedList<Dispatcher.DDatanode.StorageGroup>();
-  private final Collection<Dispatcher.DDatanode.StorageGroup> leftNodes
-      = new LinkedList<Dispatcher.DDatanode.StorageGroup>();
-  /** historyMatcher will record the history target for the source */
-  private final Map<Dispatcher.DDatanode.StorageGroup, List<Dispatcher.DDatanode.StorageGroup>>
-      historyMatcher;
+  private final List<Dispatcher.Source> sourceList = new LinkedList<>();
+  private final List<StorageGroup> belowAvgUtilized = new LinkedList<>();
+  private final List<StorageGroup> underUtilized = new LinkedList<>();
+  private final List<StorageGroup> overUtilized = new LinkedList<>();
+  private final List<StorageGroup> targetNodes = new LinkedList<>();
+
   private String dataCenterConstraint = null;
   private String targetDataCenter = null;
   static final Path DECOMMISSION_BALANCER_ID_PATH =
       new Path("/system/decommission_balancer.id");
-
-  DecommissionBalancer(NameNodeConnector nnc, BalancerParameters p,
-      Configuration conf) {
-    this(nnc, p, conf, new HashMap<>());
-  }
 
   /**
    * Construct a decommission balancer.
@@ -111,24 +102,19 @@ public class DecommissionBalancer extends Balancer {
    * namenode as a client and a secondary namenode and retry proxies
    * when connection fails.
    */
-  DecommissionBalancer(NameNodeConnector nnc, BalancerParameters p,
-      Configuration conf, Map<Dispatcher.DDatanode.StorageGroup, List<Dispatcher.DDatanode.StorageGroup>>
-      historyMatcher) {
+  DecommissionBalancer(NameNodeConnector nnc, BalancerParameters p, Configuration conf) {
     super(nnc, p, conf);
     this.policy = BalancingPolicy.Decommission.INSTANCE;
-    this.historyMatcher =  historyMatcher;
   }
 
   /**
    * Construct a decommission balancer.
    * Initialize balancer and constraint the source DC and target DC inside decommission balancer
    */
-  DecommissionBalancer(NameNodeConnector nnc, BalancerParameters p,
-      Configuration conf, Map<Dispatcher.DDatanode.StorageGroup, List<Dispatcher.DDatanode.StorageGroup>>
-      historyMatcher, String dataCenterConstraint) {
+  DecommissionBalancer(NameNodeConnector nnc, BalancerParameters p, Configuration conf,
+      String dataCenterConstraint) {
     super(nnc, p, conf);
     this.policy = BalancingPolicy.Decommission.INSTANCE;
-    this.historyMatcher =  historyMatcher;
     this.dataCenterConstraint = dataCenterConstraint;
     this.targetDataCenter = p.getTargetDataCenter();
   }
@@ -141,7 +127,6 @@ public class DecommissionBalancer extends Balancer {
       policy.accumulateSpaces(r);
     }
     policy.initAvgUtilization();
-    long totalTargetSize = 0;
     for(DatanodeStorageReport r : reports) {
       final Dispatcher.DDatanode dn = dispatcher.newDatanode(r.getDatanodeInfo());
       boolean isDecommissioning = r.getDatanodeInfo().isDecommissionInProgress();
@@ -203,124 +188,74 @@ public class DecommissionBalancer extends Balancer {
         Dispatcher.DDatanode.StorageGroup s = dn.addTarget(t, maxSize2Move);
         LOG.info("{} [{}] has utilization={}, average={}, maxSize2Move={}.",
             dn, t, utilization, average, maxSize2Move);
-        totalTargetSize += maxSize2Move;
         if (utilization >= average) {
-          leftNodes.add(s);
+          overUtilized.add(s);
         } else if (thresholdDiff <= 0) {
           belowAvgUtilized.add(s);
         } else {
           underUtilized.add(s);
         }
+        targetNodes.add(s);
         dispatcher.getStorageGroupMap().put(s);
       }
     }
 
-    // TODO: consider heterogeneous storage
-    if (sizeToMove > totalTargetSize * 2) {
-      // Recompute the maxSize2Move for Sources, so that decommissionBalancer can
-      // currently decommission all source dataNodes.
-      // ascending order
-      long avgMaxSize2Move = (totalTargetSize + 1) / sourceList.size();
-      for (Dispatcher.Source source : sourceList) {
-        LOG.info("Reset the maxSize2Move for {} from {} to {}.", source.getDatanodeInfo(),
-            source.getMaxSize2Move(), avgMaxSize2Move);
-        source.resetMaxSize2Move(avgMaxSize2Move);
-      }
+    int sourceCount = sourceList.size();
+    long defaultSize = 1024 * 1024 * 256;
+    for (StorageGroup target : targetNodes) {
+      long targetMaxSize2Move = Math.max((target.getMaxSize2Move() + 1) / sourceCount, defaultSize);
+      target.resetMaxSize2Move(targetMaxSize2Move);
     }
 
     return sizeToMove;
   }
 
+
   @Override
-  // TODO: When all replicas of one block is decommissioning at the same time,
-  //  all the replicas may be moved to the same node;
-  protected void chooseStorageGroups(final Matcher matcher) {
+  protected long chooseStorageGroups() {
+    // TODO: match nodes on the same node group if cluster is node group aware
+
     LOG.info("chooseStorageGroups for {}: decommission => underUtilized number is {}.",
-        matcher, underUtilized.size());
-    chooseStorageGroups(sourceList, underUtilized, matcher);
+        Matcher.SAME_RACK, underUtilized.size());
+    Collections.shuffle(underUtilized);
+    chooseStorageGroups(sourceList, underUtilized);
 
     LOG.info("chooseStorageGroups for {}: decommission => belowAvgUtilized number is {}.",
-        matcher, belowAvgUtilized.size());
-    chooseStorageGroups(sourceList, belowAvgUtilized, matcher);
+        Matcher.SAME_RACK, belowAvgUtilized.size());
+    Collections.shuffle(belowAvgUtilized);
+    chooseStorageGroups(sourceList, belowAvgUtilized);
 
-    LOG.info("chooseStorageGroups for {}: decommission => leftNodes number is {}.",
-        matcher, leftNodes.size());
-    chooseStorageGroups(sourceList, leftNodes, matcher);
-  }
+    LOG.info("chooseStorageGroups for {}: decommission => overUtilized number is {}.",
+        Matcher.ANY_OTHER, overUtilized.size());
+    Collections.shuffle(overUtilized);
+    chooseStorageGroups(sourceList, overUtilized);
 
-  <G extends Dispatcher.DDatanode.StorageGroup, C extends Dispatcher.DDatanode.StorageGroup>
-  void chooseStorageGroups(Collection<G> groups, Collection<C> candidates,
-      Matcher matcher) {
-    for(final Iterator<G> i = groups.iterator(); i.hasNext();) {
-      final G g = i.next();
-      for(; choose4One(g, candidates, matcher); );
-      if (!g.hasSpaceForScheduling()) {
-        i.remove();
-      }
-    }
+    return dispatcher.bytesToMove();
   }
 
   /**
-   * For the given datanode, choose a candidate and then schedule it.
-   * @return true if a candidate is chosen; false if no candidates is chosen.
+   * For each datanode, choose matching nodes from the candidates. Either the
+   * datanodes or the candidates are source nodes with (utilization > Avg), and
+   * the others are target nodes with (utilization < Avg).
    */
-  @Override
-  protected <C extends Dispatcher.DDatanode.StorageGroup> boolean choose4One(
-      Dispatcher.DDatanode.StorageGroup g,
-      Collection<C> candidates, Matcher matcher) {
-    final Iterator<C> i = candidates.iterator();
-    final C chosen = chooseCandidate(g, i, matcher);
-
-    if (chosen == null) {
-      return false;
-    }
-    if (g instanceof Dispatcher.Source) {
-      if (!historyMatcher.containsKey(g)) {
-        historyMatcher.put(g, new ArrayList<>());
+  void chooseStorageGroups(List<Dispatcher.Source> groups, List<StorageGroup> candidates) {
+    for (Dispatcher.Source g : groups) {
+      for (StorageGroup c : candidates) {
+        if (matchStorageGroups(c, g, Matcher.ANY_OTHER)) {
+          matchSourceWithTargetToMove(g, c);
+        }
       }
-      historyMatcher.get(g).add(chosen);
-      matchSourceWithTargetToMove((Dispatcher.Source)g, chosen);
-    } else {
-      if (!historyMatcher.containsKey(chosen)) {
-        historyMatcher.put(chosen, new ArrayList<>());
-      }
-      historyMatcher.get(chosen).add(g);
-      matchSourceWithTargetToMove((Dispatcher.Source)chosen, g);
     }
-    if (!chosen.hasSpaceForScheduling()) {
-      i.remove();
-    }
-    return true;
   }
 
-  /** Choose a candidate for the given datanode. */
   @Override
-  protected <G extends Dispatcher.DDatanode.StorageGroup, C extends Dispatcher.DDatanode.StorageGroup>
-  C chooseCandidate(G g, Iterator<C> candidates, Matcher matcher) {
-    if (g.hasSpaceForScheduling()) {
-      for(; candidates.hasNext(); ) {
-        final C c = candidates.next();
-        if (g instanceof Dispatcher.Source) {
-          if (historyMatcher.get(g) != null) {
-            if (historyMatcher.get(g).contains(c)) {
-              continue;
-            }
-          }
-        } else {
-          if (historyMatcher.get(c) != null) {
-            if (historyMatcher.get(c).contains(g)) {
-              continue;
-            }
-          }
-        }
-        if (!c.hasSpaceForScheduling()) {
-          candidates.remove();
-        } else if (matchStorageGroups(c, g, matcher)) {
-          return c;
-        }
-      }
-    }
-    return null;
+  protected void matchSourceWithTargetToMove(Dispatcher.Source source, StorageGroup target) {
+    long size = Math.min(source.availableSizeToMove(), target.availableSizeToMove());
+    final Dispatcher.Task task = new Dispatcher.Task(target, size);
+    source.addTask(task);
+    dispatcher.add(source, target);
+    LOG.info("Decided to move "+StringUtils.byteDesc(size)+" bytes from "
+        + source.getDisplayName() + " to " + target.getDisplayName());
   }
 
   @Override
@@ -428,14 +363,11 @@ public class DecommissionBalancer extends Balancer {
 
       LOG.debug("Namenode list is {}", connectors);
       boolean done = false;
-      final Map<Dispatcher.DDatanode.StorageGroup, List<Dispatcher.DDatanode.StorageGroup>>
-          historyMatcher = new HashMap();
-      for(int iteration = 0; !done; iteration++) {
+      for (int iteration = 0; !done; iteration++) {
         done = true;
         Collections.shuffle(connectors);
-        for(NameNodeConnector nnc : connectors) {
-          if (p.getBlockPools().size() == 0
-              || p.getBlockPools().contains(nnc.getBlockpoolID())) {
+        for (NameNodeConnector nnc : connectors) {
+          if (p.getBlockPools().size() == 0 || p.getBlockPools().contains(nnc.getBlockpoolID())) {
             // Check every block regardless of its size
             conf.setLong(DFSConfigKeys.DFS_BALANCER_GETBLOCKS_MIN_BLOCK_SIZE_KEY, 1);
             final DecommissionBalancer b;
@@ -443,9 +375,9 @@ public class DecommissionBalancer extends Balancer {
             if (p.getTargetDataCenter() != null) {
               String dcConstraint = p.getDataCenterConstraint();
               p.setDataCenterConstraint("/");
-              b = new DecommissionBalancer(nnc, p, conf, historyMatcher, dcConstraint);
+              b = new DecommissionBalancer(nnc, p, conf, dcConstraint);
             } else {
-              b = new DecommissionBalancer(nnc, p, conf, historyMatcher);
+              b = new DecommissionBalancer(nnc, p, conf);
             }
             final Result r = b.runOneIteration();
             r.print(iteration, nnc, System.out);
@@ -458,10 +390,9 @@ public class DecommissionBalancer extends Balancer {
             } else {
               if (r.getExitStatus() == ExitStatus.IN_PROGRESS) {
                 done = false;
-              } // no block can be moved but decommissioning hasn't done, try the previous match
-              else if (r.getExitStatus() == ExitStatus.NO_MOVE_BLOCK) {
+              } else if (r.getExitStatus() == ExitStatus.NO_MOVE_BLOCK) {
+                // no block can be moved but decommissioning hasn't done, try the previous match
                 LOG.info("Clean all the history matcher, retry all the possibility");
-                historyMatcher.clear();
                 done = false;
               } else {
                 return r.getExitStatus().getExitCode();

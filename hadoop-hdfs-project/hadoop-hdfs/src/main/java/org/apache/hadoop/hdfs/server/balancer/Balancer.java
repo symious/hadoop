@@ -484,7 +484,7 @@ public class Balancer {
    * min(1 Band worth of bytes,  MAX_SIZE_TO_MOVE).
    * @return total number of bytes to move in this iteration
    */
-  long chooseStorageGroups() {
+  protected long chooseStorageGroups() {
     // First, match nodes on the same node group if cluster is node group aware
     if (dispatcher.getCluster().isNodeGroupAware()) {
       chooseStorageGroups(Matcher.SAME_NODE_GROUP);
