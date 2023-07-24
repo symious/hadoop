@@ -44,8 +44,9 @@ public class ReplicaMigrationRuleMap {
     String defaultPath = conf.get(DFSConfigKeys.DFS_ZONEMOVER_DEFAULT_RULE_MAP_FILE_KEY);
     load(mapPath, degradePath, defaultPath);
     LOG.info("ZoneMover migration will follow the following rule map:\n" +
-        "Distribution and rule map:\n {}\nDegrade rule map:\n {}\n Default rule map:\n {}\n",
-        ruleMap, degradeRuleMap, defaultRuleMap);
+        "Distribution and rule map:\n {}\nDegrade rule map:\n {}\n Upgrade rule map:\n {}\n" +
+        "Default rule map:\n {}\n",
+        ruleMap, degradeRuleMap, upgradeRuleMap, defaultRuleMap);
   }
 
   /**
@@ -272,7 +273,7 @@ public class ReplicaMigrationRuleMap {
   }
 
   public ReplicationRule getUpgradeRule(String rule, short replication, ReplicationRule dis) {
-    if (replication == 2) {
+    if (replication == 3) {
       return getUpgradeRule(rule);
     } else {
       return getRuleFromDistribution(dis, replication);
@@ -290,16 +291,16 @@ public class ReplicaMigrationRuleMap {
     }
     if (rule.getReplica() == 4 || rule.getReplica() == 5 ||
         (rule.getReplica() == 3 && rule.getDatacenters().size() < 3)) {
-      if (replication == 3) {
+      if (replication == 3 && dis.getDatacenters().size() < 3) {
         return rule;
       } else {
         return getDegradeRule(rule.toString(), replication, dis);
       }
     } else if (rule.getReplica() == 3 || rule.getReplica() == 2) {
-      if (replication == 2) {
-        return rule;
-      } else {
+      if (replication == 3 && dis.getDatacenters().size() < 3) {
         return getUpgradeRule(rule.toString(), replication, dis);
+      } else {
+        return rule;
       }
     } else {
       LOG.warn("The setting rule is inconsistent! Will use distribution to generate rule!");

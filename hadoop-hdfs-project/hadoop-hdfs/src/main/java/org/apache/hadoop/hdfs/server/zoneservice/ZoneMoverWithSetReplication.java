@@ -45,11 +45,9 @@ import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
 import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
 import org.apache.hadoop.hdfs.server.mover.Mover;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
-import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.hdfs.server.zoneservice.utils.MigrationDataCenters;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
-import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Tool;
@@ -74,9 +72,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT;
 
 public class ZoneMoverWithSetReplication extends ZoneMover {
   private static final Logger LOG = LoggerFactory.getLogger(ZoneMoverWithSetReplication.class);
@@ -205,8 +200,8 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
   private static int runWithSetReplication(ZoneMoverTrigger zoneMoverTrigger,
       Configuration conf, URI namenode, List<Path> paths,
       ReplicationRule rule, Map<String, ReplicationRule> pathRuleMap,
-      boolean loadMapFromStore) throws IOException {
-    if (!loadMapFromStore) {
+      boolean startBatch) throws IOException {
+    if (startBatch) {
       try {
         if (ExitStatus.SUCCESS.getExitCode() != run(conf, namenode, paths, rule, pathRuleMap)) {
           LOG.error("Move the original data for {} in {} fail.", paths, namenode.getAuthority());
@@ -216,25 +211,15 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
       }
     }
     checkDataCenterValues(conf, rule, pathRuleMap);
-    if (paths.isEmpty() && !loadMapFromStore) {
+    if (paths.isEmpty()) {
       return ExitStatus.SUCCESS.getExitCode();
     }
     // Initialize ZoneService Metrics
     ZoneServiceMetrics zoneServiceMetrics;
-    if (loadMapFromStore) {
-      zoneServiceMetrics = ZoneService.getMetrics();
-    } else {
-      zoneServiceMetrics = ZoneServiceMetrics.create();
-    }
+    zoneServiceMetrics = ZoneServiceMetrics.create();
 
-    Class<? extends StoreDriver> driverClass = conf.getClass(
-        DFS_ZONESERVICE_STORE_DRIVER_CLASS,
-        DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT,
-        StoreDriver.class);
     NameNodeConnector nnc = null;
     ZoneMoverWithSetReplication zs = null;
-    Thread mapUpdaterThread;
-    StoreDriver driver;
     String ns = namenode.getAuthority();
     LOG.info("Initializing NameNodeConnector");
     try {
@@ -247,16 +232,7 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
         zs = new ZoneMoverWithSetReplication(nnc, conf, pathRuleMap, new AtomicInteger(0), true);
       }
       zs.init(RunMode.MONITOR);
-      // Monitor if the path rule map is update or not when zk enable
-      if (loadMapFromStore) {
-        LOG.info("Initializing MapUpdater");
-        driver = ReflectionUtils.newInstance(driverClass, conf);
-        driver.init(conf, "ZoneMover_" + namenode.getAuthority());
-        MapUpdater mapUpdater =
-            zs.new MapUpdater(namenode, driver, zoneMoverTrigger);
-        mapUpdaterThread = new Thread(mapUpdater, "Updater" + namenode.getAuthority());
-        mapUpdaterThread.start();
-      }
+
       while (zoneMoverTrigger.hasNext()) {
         try {
           String curPath = zoneMoverTrigger.getNext();
@@ -368,6 +344,18 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
       System.out.println(e + ".  Exiting ...");
       return ExitStatus.ILLEGAL_ARGUMENTS;
     }
+  }
+
+  ExitStatus run(String path) throws IllegalArgumentException {
+    Mover.Result result = new Mover.Result();
+    this.result = result;
+    if (this.globalRule != null) {
+      processor.processPath(path, this.globalRule, result, null);
+    } else {
+      processor.processPath(path, getPathRule(path), result, null);
+    }
+
+    return result.getExitStatus();
   }
 
   ExitStatus run(MigrationDataCenters dc) {
@@ -501,30 +489,7 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
 
       ReplicationRule appliedRule;
 
-      if (xattrSetEnable) {
-        boolean needSet = true;
-        try {
-          if (ruleUtil.hasRuleInXAttr(fullPath)) {
-            try {
-              if (ruleUtil.getRuleFromXAttr(fullPath).equals(rule)) {
-                LOG.info("This file already has the replicationRule: " + fullPath);
-                needSet = false;
-              }
-            } catch (IllegalArgumentException e) {
-              LOG.warn("Found an invalid rule in NameNode, will update it: file={}, content={}",
-                  fullPath, ruleUtil.getStringFromRuleKey(fullPath));
-            }
-          }
-
-          if (needSet) {
-            ruleUtil.setRuleToXAttr(fullPath, rule);
-            LOG.info("Added replicationRule to: " + fullPath);
-          }
-        } catch (IOException e) {
-          LOG.warn(e.toString());
-          return;
-        }
-      } if (allowChangeReplication) {
+      if (allowChangeReplication) {
         ReplicationRule dis =
             ReplicationRule.parseFromMap(getBlockDistribution(status.getBlockLocations().get(0)));
         if (runMode == RunMode.BATCH) {
@@ -541,7 +506,11 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
         } else {
           appliedRule =
               migrationRuleMap.generateRule(rule, status.getReplication(), dis);
+          if (appliedRule == null) {
+            appliedRule = migrationRuleMap.getDefaultRule(dis, status.getReplication());
+          }
         }
+
         LOG.info("Will apply the rule: {} to {}", appliedRule, fullPath);
         try {
           if (appliedRule.getReplica() != status.getReplication()) {
@@ -554,6 +523,31 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
       } else {
         LOG.warn("Ignore replica not consistent file: {}", fullPath);
         return;
+      }
+
+      if (xattrSetEnable) {
+        boolean needSet = true;
+        try {
+          if (ruleUtil.hasRuleInXAttr(fullPath)) {
+            try {
+              if (ruleUtil.getRuleFromXAttr(fullPath).equals(appliedRule)) {
+                LOG.info("This file already has the replicationRule: " + fullPath);
+                needSet = false;
+              }
+            } catch (IllegalArgumentException e) {
+              LOG.warn("Found an invalid rule in NameNode, will update it: file={}, content={}",
+                  fullPath, ruleUtil.getStringFromRuleKey(fullPath));
+            }
+          }
+
+          if (needSet) {
+            ruleUtil.setRuleToXAttr(fullPath, appliedRule);
+            LOG.info("Added replicationRule to: " + fullPath);
+          }
+        } catch (IOException e) {
+          LOG.warn(e.toString());
+          return;
+        }
       }
 
 
@@ -825,7 +819,7 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
   }
 
   static class Cli extends Configured implements Tool {
-    private static final String USAGE = "Usage: hdfs zonemoverwithsetreplication"
+    private static final String USAGE = "Usage: hdfs zoneenhancedmover"
         + "\n\t[-namespace <namespace>]\tthe namespace to apply the rule"
         + "\n\t-path <path>\tthe path to apply the rule"
         + "\n\t-pathFile <pathFile>\t the file contains paths to apply the rule"
@@ -834,7 +828,9 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
         + "\n\t               Path and rule are separated by space in each line."
         + "\n\t-monitor\tenable monitor mode"
         + "\n\t-monitorByTrigger\tenable monitor mode with trigger"
-        + "\n\t-dc\tenable check mode to check if the files under the given directory has replica in specific DC";
+        + "\n\t-startBatch\tenable batch mode before monitor mode"
+        + "\n\t-dc\tenable check mode to check if the files"
+        + "\n\t               under the given directory has replica in specific DC";
 
     private static Options buildCliOptions() {
       Options options = new Options();
@@ -865,6 +861,9 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
       options.addOption(option);
 
       option = new Option(null, "monitorByTrigger", false, "enable monitor by trigger");
+      options.addOption(option);
+
+      option = new Option(null, "startBatch", false, "enable batch mode before monitor");
       options.addOption(option);
 
       option = new Option(null, "dc", true, "DataCenter will be checked");
@@ -1020,10 +1019,11 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
         } else if (commandLine.hasOption("monitorByTrigger")) {
           ZoneMoverTrigger zoneMoverTrigger =
               new ZoneMoverKafkaTrigger(conf, paths, namenode);
+          boolean startBatch = commandLine.hasOption("startBatch");
           if (rule != null) {
-            return run(zoneMoverTrigger, conf, namenode, paths, rule);
+            return run(zoneMoverTrigger, conf, namenode, paths, rule, startBatch);
           } else {
-            return run(zoneMoverTrigger, conf, namenode, paths, pathRuleMap);
+            return run(zoneMoverTrigger, conf, namenode, paths, pathRuleMap, startBatch);
           }
         } else if (commandLine.hasOption("monitor")) {
           //noinspection InfiniteLoopStatement
@@ -1072,18 +1072,21 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
      * Run with ZoneMoverTrigger for monitorByTrigger mode
      */
     int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
-        URI namenode, List<Path> paths, ReplicationRule rule)
+        URI namenode, List<Path> paths, ReplicationRule rule, boolean startBatch)
         throws IOException {
-      return ZoneMoverWithSetReplication.runWithSetReplication(zoneMoverTrigger, conf, namenode, paths, rule, null, false);
+      return ZoneMoverWithSetReplication.runWithSetReplication(
+          zoneMoverTrigger, conf, namenode, paths, rule, null, startBatch);
     }
 
     /**
      * Run with ZoneMoverTrigger for monitorByTrigger mode
      */
     int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf,
-        URI namenode, List<Path> paths, Map<String, ReplicationRule> pathRuleMap)
+        URI namenode, List<Path> paths, Map<String, ReplicationRule> pathRuleMap,
+        boolean startBatch)
         throws IOException, InterruptedException {
-      return ZoneMoverWithSetReplication.runWithSetReplication(zoneMoverTrigger, conf, namenode, paths, null, pathRuleMap, false);
+      return ZoneMoverWithSetReplication.runWithSetReplication(
+          zoneMoverTrigger, conf, namenode, paths, null, pathRuleMap, startBatch);
     }
   }
 
