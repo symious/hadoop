@@ -28,6 +28,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 public class ReplicaMigrationRuleMap {
   private static final Logger LOG = LoggerFactory.getLogger(ReplicaMigrationRuleMap.class);
@@ -359,11 +360,20 @@ public class ReplicaMigrationRuleMap {
             return ruleMap.get(ruleAlias.get(30));
           }
         }
+        // The distribution is one of the 3-replica rules, consider the file as 3-replica file.
+        else if (degradeRuleMap.containsKey(dis)) {
+          if (Objects.equals(dis.getMainDataCenter(), MigrationDataCenters.AT.getName())) {
+            return ruleMap.get(ruleAlias.get(12));
+          } else {
+            return ruleMap.get(ruleAlias.get(21));
+          }
+        }
         return ruleMap.get(ruleAlias.get(11));
       } else if (!(dis.getDatacenters().contains(MigrationDataCenters.AT.getName())
           || dc == MigrationDataCenters.AT)) {
         return ruleMap.get(ruleAlias.get(30));
-      } else if (dc == MigrationDataCenters.AT) {
+      } else if (dc == MigrationDataCenters.AT ||
+          !Objects.equals(dis.getMainDataCenter(), MigrationDataCenters.AT.getName())) {
         return ruleMap.get(ruleAlias.get(21));
       } else {
         return ruleMap.get(ruleAlias.get(12));
