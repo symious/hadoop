@@ -383,9 +383,12 @@ public class CapacityScheduler extends
       if (scheduleAsynchronously) {
         asyncSchedulerThreads = new ArrayList<>();
         for (int i = 0; i < maxAsyncSchedulingThreads; i++) {
-          asyncSchedulerThreads.add(new AsyncScheduleThread(this));
+          AsyncScheduleThread asyncScheduleThread = new AsyncScheduleThread(this);
+          asyncScheduleThread.setName("AsyncSchedule-" + i);
+          asyncSchedulerThreads.add(asyncScheduleThread);
         }
         resourceCommitterService = new ResourceCommitterService(this);
+        resourceCommitterService.setName("ResourceCommitter");
         asyncMaxPendingBacklogs = this.conf.getInt(
             CapacitySchedulerConfiguration.
                 SCHEDULE_ASYNCHRONOUSLY_MAXIMUM_PENDING_BACKLOGS,
