@@ -68,6 +68,7 @@ import org.apache.hadoop.hdfs.server.balancer.Dispatcher.DDatanode.StorageGroup;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
 import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations;
 import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations.BlockWithLocations;
+import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations.StripedBlockWithLocations;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
@@ -176,16 +177,15 @@ public class Dispatcher {
     private final Map<Block, DBlock> map = new HashMap<Block, DBlock>();
 
     /**
-     * Get the block from the map;
-     * if the block is not found, create a new block and put it in the map.
+     * Put block in the map if it's not found
+     * @return the block which be put in the map the first time
      */
-    private DBlock get(Block b) {
-      DBlock block = map.get(b);
-      if (block == null) {
-        block = new DBlock(b);
-        map.put(b, block);
+    private DBlock putIfAbsent(Block blk, DBlock dblk) {
+      if (!map.containsKey(blk)) {
+        map.put(blk, dblk);
+        return dblk;
       }
-      return block;
+      return map.get(blk);
     }
     
     /** Remove all blocks except for the moved blocks. */
@@ -276,7 +276,17 @@ public class Dispatcher {
       synchronized (block) {
         synchronized (movedBlocks) {
           if (isGoodBlockCandidate(source, target, targetStorageType, block)) {
-            this.block = block;
+            if (block instanceof DBlockStriped) {
+              this.block = ((DBlockStriped) block).getInternalBlock(source);
+              if (this.block == null) {
+                LOG.info(
+                    "No striped internal block on source {}, block {}. Skipping.",
+                    source, block);
+                return false;
+              }
+            } else {
+              this.block = block;
+            }
             if (chooseProxySource()) {
               movedBlocks.put(block);
               if (LOG.isDebugEnabled()) {
@@ -344,6 +354,7 @@ public class Dispatcher {
       DataOutputStream out = null;
       DataInputStream in = null;
       try {
+        assert !(block instanceof DBlockStriped);
         sock.connect(
             NetUtils.createSocketAddr(target.getDatanodeInfo().
                 getXferAddr(Dispatcher.this.connectToDnViaHostname)),
@@ -818,13 +829,33 @@ public class Dispatcher {
           continue;
         }
 
-        bytesReceived += blk.getBlock().getNumBytes();
+        DBlock block;
+        if (blk instanceof StripedBlockWithLocations) {
+          StripedBlockWithLocations sblkLocs =
+              (StripedBlockWithLocations) blk;
+          // approximate size
+          bytesReceived += sblkLocs.getBlock().getNumBytes() /
+              sblkLocs.getDataBlockNum();
+          block = new DBlockStriped(sblkLocs.getBlock(), sblkLocs.getIndices(),
+              sblkLocs.getDataBlockNum(), sblkLocs.getCellSize());
+        } else {
+          bytesReceived += blk.getBlock().getNumBytes();
+          block = new DBlock(blk.getBlock());
+        }
+
         synchronized (globalBlocks) {
-          final DBlock block = globalBlocks.get(blk.getBlock());
+          block = globalBlocks.putIfAbsent(blk.getBlock(), block);
           synchronized (block) {
             block.clearLocations();
 
+            if (blk instanceof StripedBlockWithLocations) {
+              // EC block may adjust indices before, avoid repeated adjustments
+              ((DBlockStriped) block).setIndices(
+                  ((StripedBlockWithLocations) blk).getIndices());
+            }
+
             // update locations
+            List<Integer> adjustList = new ArrayList<>();
             final String[] datanodeUuids = blk.getDatanodeUuids();
             final StorageType[] storageTypes = blk.getStorageTypes();
             for (int i = 0; i < datanodeUuids.length; i++) {
@@ -832,7 +863,19 @@ public class Dispatcher {
                   datanodeUuids[i], storageTypes[i]);
               if (g != null) { // not unknown
                 block.addLocation(g);
+              } else if (blk instanceof StripedBlockWithLocations) {
+                // some datanode may not in storageGroupMap due to decommission operation
+                // or balancer cli with "-exclude" parameter
+                adjustList.add(i);
               }
+            }
+
+            if (!adjustList.isEmpty()) {
+              // block.locations mismatch with block.indices
+              // adjust indices to get correct internalBlock for Datanode in #getInternalBlock
+              ((DBlockStriped) block).adjustIndices(adjustList);
+              Preconditions.checkArgument(((DBlockStriped) block).indices.length
+                  == block.locations.size());
             }
           }
           if (!srcBlocks.contains(block) && isGoodBlockCandidate(block)) {

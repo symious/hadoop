@@ -62,6 +62,10 @@ message BlockWithLocationsProto {
   repeated string datanodeUuids = 2; // Datanodes with replicas of the block
   repeated string storageUuids = 3;  // Storages with replicas of the block
   repeated StorageTypeProto storageTypes = 4;
+
+  optional bytes indices = 5;
+  optional uint32 dataBlockNum = 6;
+  optional uint32 cellSize = 7;
 }
 
 /**

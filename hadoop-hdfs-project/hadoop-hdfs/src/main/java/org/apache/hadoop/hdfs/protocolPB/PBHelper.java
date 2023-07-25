@@ -176,22 +176,34 @@ public class PBHelper {
   }
 
   public static BlockWithLocationsProto convert(BlockWithLocations blk) {
-    return BlockWithLocationsProto.newBuilder()
+    BlockWithLocationsProto.Builder builder = BlockWithLocationsProto.newBuilder()
         .setBlock(PBHelperClient.convert(blk.getBlock()))
         .addAllDatanodeUuids(Arrays.asList(blk.getDatanodeUuids()))
         .addAllStorageUuids(Arrays.asList(blk.getStorageIDs()))
-        .addAllStorageTypes(PBHelperClient.convertStorageTypes(blk.getStorageTypes()))
-        .build();
+        .addAllStorageTypes(PBHelperClient.convertStorageTypes(blk.getStorageTypes()));
+    if (blk instanceof BlocksWithLocations.StripedBlockWithLocations) {
+      BlocksWithLocations.StripedBlockWithLocations
+          sblk = (BlocksWithLocations.StripedBlockWithLocations) blk;
+      builder.setIndices(PBHelperClient.getByteString(sblk.getIndices()));
+      builder.setDataBlockNum(sblk.getDataBlockNum());
+      builder.setCellSize(sblk.getCellSize());
+    }
+    return builder.build();
   }
 
   public static BlockWithLocations convert(BlockWithLocationsProto b) {
     final List<String> datanodeUuids = b.getDatanodeUuidsList();
     final List<String> storageUuids = b.getStorageUuidsList();
     final List<StorageTypeProto> storageTypes = b.getStorageTypesList();
-    return new BlockWithLocations(PBHelperClient.convert(b.getBlock()),
+    BlockWithLocations blk = new BlockWithLocations(PBHelperClient.convert(b.getBlock()),
         datanodeUuids.toArray(new String[datanodeUuids.size()]),
         storageUuids.toArray(new String[storageUuids.size()]),
         PBHelperClient.convertStorageTypes(storageTypes, storageUuids.size()));
+    if (b.hasIndices()) {
+      blk = new BlocksWithLocations.StripedBlockWithLocations(blk, b.getIndices().toByteArray(),
+          (short) b.getDataBlockNum(), b.getCellSize());
+    }
+    return blk;
   }
 
   public static BlocksWithLocationsProto convert(BlocksWithLocations blks) {
