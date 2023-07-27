@@ -13,6 +13,7 @@ import org.apache.hadoop.hdfs.server.balancer.Dispatcher;
 import org.apache.hadoop.hdfs.server.balancer.KeyManager;
 import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
 import org.apache.hadoop.hdfs.server.balancer.Dispatcher.DDatanode.StorageGroup;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.token.Token;
@@ -85,8 +86,15 @@ public class ZoneDispatcher extends Dispatcher {
   /** This class keeps track of a scheduled block move */
   public class ZonePendingMove extends PendingMove {
 
-    private ZonePendingMove(Source source, StorageGroup target) {
+    private final String fullPath;
+
+    private ZonePendingMove(String fullPath, Source source, StorageGroup target) {
       super(source, target);
+      this.fullPath = fullPath;
+    }
+
+    public String getFullPath() {
+      return fullPath;
     }
 
     /**
@@ -205,6 +213,9 @@ public class ZoneDispatcher extends Dispatcher {
       } finally {
         proxySource.removePendingBlock(this);
         target.getDDatanode().removePendingBlock(this);
+        ZoneProgressTracker.addByteCount(block.getNumBytes());
+        ZoneProgressTracker.incrBlockCount();
+        ZoneProgressTracker.dequeueFile(fullPath);
 
         synchronized (this) {
           reset();
@@ -273,9 +284,8 @@ public class ZoneDispatcher extends Dispatcher {
       super(storageType, maxSize2Move, dn);
     }
 
-    @Override
-    public PendingMove addPendingMove(DBlock block, StorageGroup target) {
-      return target.addPendingMove(block, new ZonePendingMove(this, target));
+    public PendingMove addPendingMove(String fullPath, DBlock block, StorageGroup target) {
+      return target.addPendingMove(block, new ZonePendingMove(fullPath, this, target));
     }
   }
 
@@ -357,6 +367,8 @@ public class ZoneDispatcher extends Dispatcher {
       throw new IllegalArgumentException("ZonePendingMove instance is needed!");
     }
     final ZonePendingMove zpv = (ZonePendingMove) p;
+    ZoneProgressTracker.queueFile(zpv.getFullPath());
+
     dispatchExecutor.execute(new Runnable() {
       @Override
       public void run() {

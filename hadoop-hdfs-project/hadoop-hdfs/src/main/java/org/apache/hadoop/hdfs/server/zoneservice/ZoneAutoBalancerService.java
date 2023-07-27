@@ -212,7 +212,7 @@ public class ZoneAutoBalancerService {
             new ArrayList<Path>(), conf, 1);
         nnc.getKeyManager().startBlockKeyUpdater();
         zs = new ZoneMover(nnc, conf, new ReplicationRule(), new AtomicInteger(0));
-        zs.init();
+        zs.init(conf);
       } catch (Throwable e) {
         LOG.error("Initialize the ZoneMover failed!" , e);
         return;

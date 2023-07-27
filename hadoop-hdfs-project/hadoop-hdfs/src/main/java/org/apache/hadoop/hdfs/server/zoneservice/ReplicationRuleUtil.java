@@ -51,7 +51,7 @@ public class ReplicationRuleUtil {
   public ReplicationRuleUtil(FileSystem fs) {
     Preconditions.checkNotNull(fs);
     this.fs = fs;
-    String dc = fs.getConf().get(DFSConfigKeys.DFS_ZONESERVICE_AUTO_BALANCER_DATACENTERS_KEY);
+    String dc = fs.getConf().get(DFSConfigKeys.DFS_ZONESERVICE_AUTO_BALANCER_DATACENTERS_KEY, "");
     dcPool = Arrays.asList(dc.split(","));
   }
 
