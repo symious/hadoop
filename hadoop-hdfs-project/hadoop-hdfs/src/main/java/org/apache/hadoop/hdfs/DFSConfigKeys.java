@@ -861,7 +861,7 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_MAX_RATE_LIMIET_KEY =
       "dfs.zone.generate.replicationrule.max-rate.limit";
 
-  public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_MAX_RATE_LIMIET_DEFAULT = 100;
+  public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_MAX_RATE_LIMIET_DEFAULT = 50;
 
   // ZoneProgressTracker configs
   public static final String DFS_ZONE_PROGRESS_TRACKER_PRINT_PERIOD_KEY =
