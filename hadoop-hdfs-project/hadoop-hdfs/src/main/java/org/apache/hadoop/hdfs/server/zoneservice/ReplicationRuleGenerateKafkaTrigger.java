@@ -90,7 +90,7 @@ public class ReplicationRuleGenerateKafkaTrigger {
     properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
         StringDeserializer.class.getName());
     properties.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
-    properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
+    properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
     properties.put(ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG, requestTimeOut);
     properties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPollRecords);
 
@@ -123,6 +123,7 @@ public class ReplicationRuleGenerateKafkaTrigger {
 
   public void shutdown() {
     if (consumer != null) {
+      consumer.commitSync();
       consumer.close();
     }
     if (monitorServer != null) {
@@ -148,6 +149,11 @@ public class ReplicationRuleGenerateKafkaTrigger {
           // to avoid program OOM.
           rateLimiter.acquire();
           processRecord(record.value());
+        }
+
+        // After the current batch is processed, the offset can be committed.
+        if (rateLimiter.availablePermits() == this.maxRateLimit) {
+          consumer.commitSync();
         }
       }
     } catch (Exception e) {
