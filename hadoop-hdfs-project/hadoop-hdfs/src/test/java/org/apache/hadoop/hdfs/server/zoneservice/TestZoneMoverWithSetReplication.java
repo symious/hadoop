@@ -53,27 +53,12 @@ public class TestZoneMoverWithSetReplication {
   private static final short REPLICATION = 3;
   private static final Logger LOG =
       LoggerFactory.getLogger(TestZoneMoverWithSetReplication.class);
-  private static final long DFS_HEARTBEAT_INTERVAL = 2;
   public static final String TEST_CACHE_DATA_DIR =
       System.getProperty("test.cache.data", "build/test/cache");
 
-  private Configuration getConf() {
-    Configuration conf = new HdfsConfiguration();
-    conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
-        BlockPlacementPolicyWithDataCenter.class,
-        BlockPlacementPolicy.class);
-    conf.setBoolean(DFSConfigKeys.DFS_USE_DFS_NETWORK_TOPOLOGY_KEY, true);
-    conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY,
-        DFSNetworkTopologyWithDataCenter.class,
-        DFSNetworkTopology.class);
-    conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,
-        DFS_HEARTBEAT_INTERVAL);
-    conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY, true);
-    conf.set(DFSConfigKeys.DFS_ZONEMOVER_VALID_DATACENTERS_KEY,
-        MigrationDataCenters.AT.getName() + "," + MigrationDataCenters.TL.getName() + "," +
-        MigrationDataCenters.STT.getName());
-    return conf;
-  }
+  private static final String DCs =
+      MigrationDataCenters.AT.getName() + "," + MigrationDataCenters.TL.getName() + ","
+          + MigrationDataCenters.STT.getName();
 
   private final Map<Integer, ReplicationRule> ruleAlias = new HashMap<>();
   Map<ReplicationRule, ReplicationRule> referMap = new HashMap<>();
@@ -155,7 +140,7 @@ public class TestZoneMoverWithSetReplication {
         MigrationDataCenters.AT + "/rack1", MigrationDataCenters.STT + "/rack2",
         MigrationDataCenters.STT + "/rack0", MigrationDataCenters.STT + "/rack1",
         MigrationDataCenters.STT + "/rack0", MigrationDataCenters.STT + "/rack1"};
-    Configuration conf = getConf();
+    Configuration conf = TestUtils.getConf(DCs);
     conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, REPLICATION);
     conf.set(DFSConfigKeys.DFS_ZONEMOVER_DISTRIBUTION_RULE_MAP_FILE_KEY, TEST_CACHE_DATA_DIR + "/distribution.map");
     conf.set(DFSConfigKeys.DFS_ZONEMOVER_DEGRADE_RULE_MAP_FILE_KEY, TEST_CACHE_DATA_DIR + "/degrade.map");
@@ -185,7 +170,7 @@ public class TestZoneMoverWithSetReplication {
       ZoneMover.run(conf, cluster.getURI(), Collections.singletonList(path), ruleAlias.get(disNum));
       LOG.info("LEO check the first step will apply the rule {} on {}", ruleAlias.get(disNum), path);
     }
-    Thread.sleep(DFS_HEARTBEAT_INTERVAL * 10 * 1000);
+    Thread.sleep(TestUtils.DFS_HEARTBEAT_INTERVAL * 10 * 1000);
 
     for (int disNum: listTest) {
       LOG.info("Precheck file: " + disNum);
@@ -197,7 +182,7 @@ public class TestZoneMoverWithSetReplication {
     }
     // Run the batch mode for the directory
     ZoneMoverWithSetReplication.runWithSetReplication(conf, cluster.getURI(), pathList);
-    Thread.sleep(DFS_HEARTBEAT_INTERVAL * 10 * 1000);
+    Thread.sleep(TestUtils.DFS_HEARTBEAT_INTERVAL * 10 * 1000);
 
     // Check the move result
     for (int disNum: listTest) {
@@ -226,7 +211,7 @@ public class TestZoneMoverWithSetReplication {
         MigrationDataCenters.AT + "/rack1", MigrationDataCenters.STT + "/rack2",
         MigrationDataCenters.STT + "/rack0", MigrationDataCenters.STT + "/rack1",
         MigrationDataCenters.STT + "/rack0", MigrationDataCenters.STT + "/rack3"};
-    Configuration conf = getConf();
+    Configuration conf = TestUtils.getConf(DCs);
     conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, REPLICATION);
     conf.set(DFSConfigKeys.DFS_ZONEMOVER_DISTRIBUTION_RULE_MAP_FILE_KEY, TEST_CACHE_DATA_DIR + "/distribution.map");
     conf.set(DFSConfigKeys.DFS_ZONEMOVER_DEGRADE_RULE_MAP_FILE_KEY, TEST_CACHE_DATA_DIR + "/degrade.map");
@@ -260,7 +245,7 @@ public class TestZoneMoverWithSetReplication {
         System.out.println("Leo check the null disNum is " + disNum);
       }
     }
-    Thread.sleep(DFS_HEARTBEAT_INTERVAL * 10 * 1000);
+    Thread.sleep(TestUtils.DFS_HEARTBEAT_INTERVAL * 10 * 1000);
 
     for (int disNum: listTest) {
       LOG.info("Precheck file: " + disNum);
@@ -273,7 +258,7 @@ public class TestZoneMoverWithSetReplication {
     // Run the check mode for the directory
     ZoneMoverWithSetReplication.checkWithSetReplication(conf, cluster.getURI(),
         pathList, MigrationDataCenters.AT);
-    Thread.sleep(DFS_HEARTBEAT_INTERVAL * 10 * 1000);
+    Thread.sleep(TestUtils.DFS_HEARTBEAT_INTERVAL * 10 * 1000);
 
     // Check the move result
     for (int disNum: listTest) {

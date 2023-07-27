@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.hdfs;
 
+import java.util.concurrent.TimeUnit;
+
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.XAttr;
@@ -34,14 +36,13 @@ import org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationMasterPolicy;
 import org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationMasterPolicyNoCalibration;
 import org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationSlavePolicy;
 import org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationSlavePolicyNoCalibration;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.hdfs.server.zoneservice.store.impl.StoreDriverZooKeeperImpl;
 import org.apache.hadoop.hdfs.web.URLConnectionFactory;
 import org.apache.hadoop.http.HttpConfig;
 
-import java.util.concurrent.TimeUnit;
-
-/** 
+/**
  * This class contains constants for configuration keys and default values
  * used in hdfs.
  */
@@ -861,6 +862,22 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.zone.generate.replicationrule.max-rate.limit";
 
   public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_MAX_RATE_LIMIET_DEFAULT = 100;
+
+  // ZoneProgressTracker configs
+  public static final String DFS_ZONE_PROGRESS_TRACKER_PRINT_PERIOD_KEY =
+      "dfs.zone.progress.tracker.print.period";
+  public static final long DFS_ZONE_PROGRESS_TRACKER_PRINT_PERIOD_DEFAULT = 1000;
+  public static final String DFS_ZONE_PROGRESS_TRACKER_FILES_PER_PRINT_KEY =
+      "dfs.zone.progress.tracker.files.per.print";
+  public static final int DFS_ZONE_PROGRESS_TRACKER_FILES_PER_PRINT_DEFAULT = 1;
+  public static final String DFS_ZONE_PROGRESS_TRACKER_ESTIMATE_COMPLETION_TIME_KEY =
+      "dfs.zone.progress.tracker.estimate.completion.time";
+  public static final boolean DFS_ZONE_PROGRESS_TRACKER_ESTIMATE_COMPLETION_TIME_DEFAULT = true;
+  public static final String DFS_ZONE_PROGRESS_TRACKER_PRINT_MODE_KEY =
+      "dfs.zone.progress.tracker.print.mode";
+  public static final ZoneProgressTracker.ZoneProgressPrintModes
+      DFS_ZONE_PROGRESS_TRACKER_PRINT_MODE_DEFAULT =
+      ZoneProgressTracker.ZoneProgressPrintModes.EVERY_N_FILES;
 
   public static final String  DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_KEY =
       "dfs.namenode.audit.log.with.remote.port";

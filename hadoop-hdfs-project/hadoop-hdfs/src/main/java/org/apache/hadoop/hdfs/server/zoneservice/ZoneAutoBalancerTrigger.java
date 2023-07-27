@@ -116,7 +116,7 @@ public class ZoneAutoBalancerTrigger {
 
   public void monitorPaths(Map<String, ArrayBlockingQueue<MoverPathInfo>> pathQueue,
       Map<Integer, List<Long>> offsetMap) {
-    Map<TopicPartition, OffsetAndMetadata> offsetAndMetadataMap = new HashMap();
+    Map<TopicPartition, OffsetAndMetadata> offsetAndMetadataMap = new HashMap<>();
     while (true) {
       //Set offset for every partition
       if ((System.currentTimeMillis() - timestamp) > setOffsetInterval) {
@@ -173,7 +173,7 @@ public class ZoneAutoBalancerTrigger {
             if (offsetMap.containsKey(par)) {
               offsetMap.get(par).add(offset);
             } else {
-              offsetMap.put(par, new CopyOnWriteArrayList());
+              offsetMap.put(par, new CopyOnWriteArrayList<>());
               offsetMap.get(par).add(offset);
             }
           }

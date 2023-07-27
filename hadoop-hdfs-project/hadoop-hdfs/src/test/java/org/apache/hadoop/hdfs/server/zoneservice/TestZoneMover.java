@@ -66,23 +66,6 @@ public class TestZoneMover {
   private static final short REPLICATION = 3;
   private static final Logger LOG =
       LoggerFactory.getLogger(TestZoneMover.class);
-  private static final long DFS_HEARTBEAT_INTERVAL = 2;
-
-  private Configuration getConf() {
-    Configuration conf = new HdfsConfiguration();
-    conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
-        BlockPlacementPolicyWithDataCenter.class,
-        BlockPlacementPolicy.class);
-    conf.setBoolean(DFSConfigKeys.DFS_USE_DFS_NETWORK_TOPOLOGY_KEY, true);
-    conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY,
-        DFSNetworkTopologyWithDataCenter.class,
-        DFSNetworkTopology.class);
-    conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,
-        DFS_HEARTBEAT_INTERVAL);
-    conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY, true);
-    conf.set(DFSConfigKeys.DFS_ZONEMOVER_VALID_DATACENTERS_KEY, "/dc0,/dc1,/sg_dc");
-    return conf;
-  }
 
   @Test
   public void testZoneMoverCli() throws Exception {
@@ -105,7 +88,7 @@ public class TestZoneMover {
     assertEquals(ExitStatus.IO_EXCEPTION.getExitCode(), tool.run(args));
 
     // Unable to match namespace
-    cluster = new MiniDFSCluster.Builder(getConf()).numDataNodes(0).build();
+    cluster = new MiniDFSCluster.Builder(TestUtils.getConf()).numDataNodes(0).build();
     tool.setConf(cluster.getConfiguration(0));
     assertEquals(ExitStatus.ILLEGAL_ARGUMENTS.getExitCode(), tool.run(args));
 
@@ -120,7 +103,7 @@ public class TestZoneMover {
 
   @Test
   public void testZoneMoverCliWithHAConf() throws Exception {
-    Configuration conf = getConf();
+    Configuration conf = TestUtils.getConf();
     cluster = new MiniDFSCluster
         .Builder(conf)
         .nnTopology(MiniDFSNNTopology.simpleHATopology())
@@ -153,7 +136,7 @@ public class TestZoneMover {
 
   @Test
   public void testZoneMover() throws Exception {
-    Configuration conf = getConf();
+    Configuration conf = TestUtils.getConf();
     conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, REPLICATION);
     cluster = new MiniDFSCluster
         .Builder(conf)
@@ -332,7 +315,7 @@ public class TestZoneMover {
     StaticMapping.resetMap();
     final String[] hosts1 = {"host0", "host1", "host2"};
     final String[] racks1 = {"/dc0/rack0", "/dc0/rack0", "/dc0/rack1"};
-    Configuration conf = getConf();
+    Configuration conf = TestUtils.getConf();
     conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, REPLICATION);
     cluster = new MiniDFSCluster
         .Builder(conf)
@@ -366,7 +349,7 @@ public class TestZoneMover {
     LOG.info("Try to do block move for path: /test ...");
     assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args));
     // sleep some time to wait datanode delete replicas
-    Thread.sleep(DFS_HEARTBEAT_INTERVAL * 10 * 1000);
+    Thread.sleep(TestUtils.DFS_HEARTBEAT_INTERVAL * 10 * 1000);
 
     // validate replica distribution after moving
     Map<String, Short> mapRule = new HashMap<>();
