@@ -588,6 +588,7 @@ public class DFSInputStream extends FSInputStream
       // Compute desired block
       //
       LocatedBlock targetBlock = getBlockAt(target);
+      avoidSlowDatanodes(targetBlock);
 
       // update current position
       this.pos = target;
@@ -804,6 +805,7 @@ public class DFSInputStream extends FSInputStream
           if (pos > blockEnd || currentNode == null) {
             currentNode = blockSeekTo(pos);
           }
+          long startTime = Time.monotonicNow();
           int realLen = (int) Math.min(len, (blockEnd - pos + 1L));
           synchronized(infoLock) {
             if (locatedBlocks.isLastBlockComplete()) {
@@ -819,6 +821,8 @@ public class DFSInputStream extends FSInputStream
             // got a EOS from reader though we expect more data on it.
             throw new IOException("Unexpected EOS from the reader");
           }
+          long endTime = Time.monotonicNow();
+          checkReadDataNodeExceedThreshold(startTime, endTime, currentNode);
           IOUtilsClient.updateReadStatistics(readStatistics, result, blockReader);
           dfsClient.updateFileSystemReadStats(blockReader.getNetworkDistance(), result,
               blockReader.getInterDCRead());
@@ -1086,7 +1090,7 @@ public class DFSInputStream extends FSInputStream
         actualGetFromOneDataNode(addressPair, start, end, buf,
             corruptedBlocks);
         long endTime = Time.monotonicNow();
-        checkReadDataNodeExceedThreshold(startTime, endTime, addressPair);
+        checkReadDataNodeExceedThreshold(startTime, endTime, addressPair.info);
         return;
       } catch (IOException e) {
         checkInterrupted(e); // check if the read has been interrupted
@@ -1097,11 +1101,11 @@ public class DFSInputStream extends FSInputStream
   }
 
   private void checkReadDataNodeExceedThreshold(long startTime, long endTime,
-      DNAddrPair addressPair){
+      DatanodeInfo datanodeInfo){
     final DfsClientConf conf = dfsClient.getConf();
     if (dfsClient.isAvoidSlowDataNodeForReadEnabled() && (
         (endTime - startTime - conf.getSlowNodeCacheThresholdMillis()) > 0)) {
-      dfsClient.addSlowNode(addressPair.info);
+      dfsClient.addSlowNode(datanodeInfo);
     }
   }
 

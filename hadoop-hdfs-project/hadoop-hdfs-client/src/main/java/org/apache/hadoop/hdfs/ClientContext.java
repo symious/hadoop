@@ -246,6 +246,7 @@ public class ClientContext {
     }
     this.avoidSlowDataNodesForRead = conf.isAvoidSlowDataNodesForReadEnabled();
     if(avoidSlowDataNodesForRead && slowNodeCache == null) {
+      LOG.info("Initialize SowNodeCache:");
       slowNodeCache = new SlowNodeCacheImpl(conf.getSlowNodeCacheExpiryMillis(),
           conf.getSlowNodeCacheSize());
     }
