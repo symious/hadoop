@@ -65,7 +65,7 @@ public class ZoneChecker {
   private static final int MIN_FILE_NUM = 1;
   private static final String BLOCK_SUMMARY_FORMAT = "DC:%-15sBlocks Number:%-20d" +
       "Data Size:%-20d";
-  private static final String SUMMARY_FORMAT = "Distribution:%-30sBlocks Number:%-15dTotal Size:%d";
+  private static final String SUMMARY_FORMAT = "Distribution:%-30sBlocks Number:%9d (%5.2f%%)    Total Size:%d";
 
   public ZoneChecker(NameNodeConnector nnc, Configuration conf) {
     Dispatcher dispatcher = new ZoneDispatcher(
@@ -467,9 +467,13 @@ public class ZoneChecker {
 
   private static void printFileCount(Map<String, List<Long>> dcBlockStat) {
     System.out.println("Summary:");
+    long totalBlocks = 0;
     for (String distribution: dcBlockStat.keySet()) {
-      System.out.printf(
-          (SUMMARY_FORMAT) + "%n", distribution, dcBlockStat.get(distribution).get(0),
+      totalBlocks += dcBlockStat.get(distribution).get(0);
+    }
+    for (String distribution: dcBlockStat.keySet()) {
+      System.out.printf((SUMMARY_FORMAT) + "%n", distribution, dcBlockStat.get(distribution).get(0),
+          (double) dcBlockStat.get(distribution).get(0) / totalBlocks * 100,
           dcBlockStat.get(distribution).get(1));
     }
   }
