@@ -547,6 +547,5 @@ public interface HdfsClientConfigKeys {
   int DFS_CLIENT_SLOW_NODE_CACHE_SIZE_DEFAULT = 512;
   String DFS_CLIENT_SLOW_NODE_CACHE_THRESHOLD_MS_KEY =
       "dfs.client.slownodecache.threshold.ms";
-  long DFS_CLIENT_SLOW_NODE_CACHE_THRESHOLD_MS_DEFAULT =
-      HedgedRead.THRESHOLD_MILLIS_DEFAULT;
+  long DFS_CLIENT_SLOW_NODE_CACHE_THRESHOLD_MS_DEFAULT = 5000;
 }
