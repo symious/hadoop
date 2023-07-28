@@ -3577,6 +3577,9 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   }
 
   public void addSlowNode(DatanodeInfo datanodeInfo) {
+    if (!isSlowNode(datanodeInfo)) {
+      LOG.info("Added node {} to slownode cache.", datanodeInfo.getName());
+    }
     this.clientContext.getSlowNodeCache().addSlowNode(datanodeInfo);
   }
 
