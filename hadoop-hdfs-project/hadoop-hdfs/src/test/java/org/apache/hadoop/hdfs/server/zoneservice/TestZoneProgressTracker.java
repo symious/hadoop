@@ -32,6 +32,7 @@ import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
 import org.apache.hadoop.net.StaticMapping;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.FakeTimer;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Tool;
 import org.junit.After;
 import org.junit.Before;
@@ -134,8 +135,10 @@ public class TestZoneProgressTracker {
   @Test
   public void testZoneMoverTracker() throws Exception {
     int FILE_COUNT = 10;
-    int FILE_LEN = 1024;
+    int FILE_LEN = 1 << 20;
     short REPLICAS = 3;
+    long ESTIMATED_THROTTLED_RUNTIME = 15;
+    long totalBytes = REPLICAS * FILE_COUNT * (FILE_COUNT + 1) / 2 * FILE_LEN;
     String TEST_PATH = "/testZoneMoverTracker";
 
     StaticMapping.resetMap();
@@ -144,8 +147,12 @@ public class TestZoneProgressTracker {
     Configuration conf = TestUtils.getConf();
     conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, REPLICAS);
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, FILE_LEN * FILE_COUNT / 4);
+    // Limit bandwidth so the process take around 30 seconds
+    conf.setLong(DFSConfigKeys.DFS_ZONEMOVER_DISPATCHER_THROTTLER_BANDWIDTH_KEY,
+        totalBytes / ESTIMATED_THROTTLED_RUNTIME);
     cluster =
-        new MiniDFSCluster.Builder(conf).numDataNodes(hosts1.length).hosts(hosts1).racks(racks1).build();
+        new MiniDFSCluster.Builder(conf).numDataNodes(hosts1.length).hosts(hosts1).racks(racks1)
+            .build();
     cluster.waitActive();
     DistributedFileSystem fs = cluster.getFileSystem();
     fs.mkdir(new Path(TEST_PATH), new FsPermission("777"));
@@ -162,12 +169,14 @@ public class TestZoneProgressTracker {
     final String[] racks2 = { "/dc1/rack0", "/dc1/rack1", "/dc1/rack2" };
     cluster.startDataNodes(conf, hosts2.length, true, null, racks2, hosts2, null, false);
 
+    long start = Time.monotonicNow();
     Tool tool = new ZoneMover.Cli();
     tool.setConf(conf);
     final String[] args = { "-path", TEST_PATH, "-rule", "/dc1:3" };
     assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args));
+    double runtime = (double) (Time.monotonicNow() - start) / 1000;
 
-    long totalBytes = REPLICAS * FILE_COUNT * (FILE_COUNT + 1) / 2 * FILE_LEN;
+    assertTrue(Math.abs(runtime / ESTIMATED_THROTTLED_RUNTIME - 1) < 0.2);
     assertEquals(FILE_COUNT, ZoneProgressTracker.getFileCount());
     assertEquals(expectedBlocks, ZoneProgressTracker.getBlockCount());
     assertEquals(totalBytes, ZoneProgressTracker.getByteCount());

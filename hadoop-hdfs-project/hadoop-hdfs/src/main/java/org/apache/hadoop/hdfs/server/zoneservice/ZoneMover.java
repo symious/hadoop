@@ -108,10 +108,14 @@ public class ZoneMover {
     final long dispatcherKeepAliveTime = conf.getLong(
         DFSConfigKeys.DFS_ZONEMOVER_DISPATCHER_KEEP_ALIVE_TIME_KEY,
         DFSConfigKeys.DFS_ZONEMOVER_DISPATCHER_KEEP_ALIVE_TIME_DEFAULT);
+    final long dispatcherThrottlerBandwidth = conf.getLong(
+        DFSConfigKeys.DFS_ZONEMOVER_DISPATCHER_THROTTLER_BANDWIDTH_KEY,
+        DFSConfigKeys.DFS_ZONEMOVER_DISPATCHER_THROTTLER_BANDWIDTH_DEFAULT);
     this.dispatcher = new ZoneDispatcher(nnc, Collections.<String> emptySet(),
         Collections.<String> emptySet(), movedWinWidth, dispatcherThreads,
         maxConcurrentMovesPerNode, conf,
-        blockDispatchAttempts, blockDispatchRetryInterval, dispatcherKeepAliveTime);
+        blockDispatchAttempts, blockDispatchRetryInterval, dispatcherKeepAliveTime,
+        dispatcherThrottlerBandwidth);
     this.dfs = this.dispatcher.getDistributedFileSystem().getClient();
     this.storages = new StorageMap();
     this.targetPaths = nnc.getTargetPaths();

@@ -14,6 +14,7 @@ import org.apache.hadoop.hdfs.server.balancer.KeyManager;
 import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
 import org.apache.hadoop.hdfs.server.balancer.Dispatcher.DDatanode.StorageGroup;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
+import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.token.Token;
@@ -41,6 +42,7 @@ public class ZoneDispatcher extends Dispatcher {
   private final long dispatcherKeepAliveTime;
   private static final long DELAY_AFTER_DATANODE_ERRORS = 10 * 60 * 1000;
   protected final ExecutorService dispatchExecutor;
+  private final DataTransferThrottler throttler;
 
   /** Constructor called by ZoneMover. */
   public ZoneDispatcher(NameNodeConnector nnc, Set<String> includedNodes,
@@ -51,18 +53,19 @@ public class ZoneDispatcher extends Dispatcher {
     this(nnc, includedNodes, excludedNodes, movedWinWidth,
         0, dispatcherThreads, maxConcurrentMovesPerNode,
         0L, 0L, 0, 0, conf,
-        blockDispatchAttempts, blockDispatchRetryInterval, 0);
+        blockDispatchAttempts, blockDispatchRetryInterval, 0, 0);
   }
 
   public ZoneDispatcher(NameNodeConnector nnc, Set<String> includedNodes,
       Set<String> excludedNodes, long movedWinWidth,
       int dispatcherThreads, int maxConcurrentMovesPerNode,
       Configuration conf, int blockDispatchAttempts,
-      long blockDispatchRetryInterval, long dispatcherKeepAliveTime) {
+      long blockDispatchRetryInterval, long dispatcherKeepAliveTime,
+      long dispatcherThrottlerBandwidth) {
     this(nnc, includedNodes, excludedNodes, movedWinWidth,
         0, dispatcherThreads, maxConcurrentMovesPerNode,
-        0L, 0L, 0, 0, conf,
-        blockDispatchAttempts, blockDispatchRetryInterval, dispatcherKeepAliveTime);
+        0L, 0L, 0, 0, conf, blockDispatchAttempts, blockDispatchRetryInterval,
+        dispatcherKeepAliveTime, dispatcherThrottlerBandwidth);
   }
 
   ZoneDispatcher(NameNodeConnector nnc, Set<String> includedNodes,
@@ -71,7 +74,8 @@ public class ZoneDispatcher extends Dispatcher {
       long getBlocksSize, long getBlocksMinBlockSize,
       int blockMoveTimeout, int maxNoMoveInterval,
       Configuration conf, int blockDispatchAttempts,
-      long blockDispatchRetryInterval, long dispatcherKeepAliveTime) {
+      long blockDispatchRetryInterval, long dispatcherKeepAliveTime,
+      long dispatcherThrottlerBandwidth) {
     super(nnc, includedNodes, excludedNodes,
         movedWinWidth, moverThreads, 0,
         maxConcurrentMovesPerNode, getBlocksSize, getBlocksMinBlockSize,
@@ -81,6 +85,11 @@ public class ZoneDispatcher extends Dispatcher {
     this.dispatcherKeepAliveTime = dispatcherKeepAliveTime;
     this.dispatchExecutor = dispatcherThreads == 0? null
         : HadoopExecutors.newFixedThreadPool(dispatcherThreads, dispatcherKeepAliveTime);
+    if (dispatcherThrottlerBandwidth <= 0) {
+      this.throttler = null;
+    } else {
+      this.throttler = new DataTransferThrottler(dispatcherThrottlerBandwidth);
+    }
   }
 
   /** This class keeps track of a scheduled block move */
@@ -263,6 +272,9 @@ public class ZoneDispatcher extends Dispatcher {
 
         sendRequest(out, eb, accessToken);
         receiveResponse(in);
+        if (throttler != null) {
+          throttler.throttle(block.getNumBytes());
+        }
       } finally {
         IOUtils.closeStream(out);
         IOUtils.closeStream(in);
