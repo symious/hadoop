@@ -878,6 +878,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final ZoneProgressTracker.ZoneProgressPrintModes
       DFS_ZONE_PROGRESS_TRACKER_PRINT_MODE_DEFAULT =
       ZoneProgressTracker.ZoneProgressPrintModes.EVERY_N_FILES;
+  public static final String  DFS_ZONEMOVER_DISPATCHER_THROTTLER_BANDWIDTH_KEY =
+      "dfs.zonemover.dispatcher.throttler.bandwidth";
+  public static final long    DFS_ZONEMOVER_DISPATCHER_THROTTLER_BANDWIDTH_DEFAULT = 0;
 
   public static final String  DFS_NAMENODE_AUDIT_LOG_WITH_REMOTE_PORT_KEY =
       "dfs.namenode.audit.log.with.remote.port";
