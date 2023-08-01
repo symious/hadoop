@@ -664,6 +664,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final boolean DFS_ZONE_SUPPORT_MIGRATE_REPLICA_ENABLED_KEY_DEFAULT =
       false;
 
+  public static final String  DFS_ZONE_SUPPORT_MIGRATE_REPLICA_RULES_KEY =
+      "dfs.zone.support.migrate-replica-rules";
+
   public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_MAX_RATE_LIMIET_KEY =
       "dfs.zone.generate.replicationrule.max-rate.limit";
 

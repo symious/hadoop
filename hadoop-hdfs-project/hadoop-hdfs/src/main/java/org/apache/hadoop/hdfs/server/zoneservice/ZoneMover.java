@@ -1,6 +1,7 @@
 package org.apache.hadoop.hdfs.server.zoneservice;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import org.apache.commons.cli.*;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -31,6 +32,7 @@ import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
+import org.apache.hadoop.hdfs.server.zoneservice.utils.RunMode;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -71,7 +73,7 @@ public class ZoneMover {
   protected final List<Path> targetPaths;
   protected final int retryMaxAttempts;
   protected ReplicationRule globalRule = null;
-  protected Map<String, ReplicationRule> pathRuleMap = null;
+  protected Map<String, ReplicationRule> pathRuleMap = Maps.newHashMap();
   protected final AtomicInteger retryCount;
   protected final DFSClient dfs;
   protected static final long DELAY_AFTER_CHOOSE_FAIL = 2 * 1000;
@@ -760,8 +762,6 @@ public class ZoneMover {
       return dcTargetStorageTypeMap.get(datacenter).get(st);
     }
   }
-
-  enum RunMode {BATCH, MONITOR}
 
   class Processor {
 

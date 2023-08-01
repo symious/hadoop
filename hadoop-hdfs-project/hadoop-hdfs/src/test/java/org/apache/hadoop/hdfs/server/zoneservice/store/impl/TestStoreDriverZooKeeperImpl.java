@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.hdfs.server.zoneservice.store.BaseRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
+import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.hdfs.server.zoneservice.store.TestStoreDriverBase;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -36,6 +37,8 @@ import java.io.IOException;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 public class TestStoreDriverZooKeeperImpl extends TestStoreDriverBase {
   private static TestingServer curatorTestingServer;
@@ -99,4 +102,37 @@ public class TestStoreDriverZooKeeperImpl extends TestStoreDriverBase {
         driver.deserializeString(new String(data), MigrationRecord.class);
     assertEquals(record, deserializeRecord);
   }
+
+  @Test
+  public void testMigrationRecord() throws Exception {
+    // Validate no set client idc.
+    MigrationRecord record = new MigrationRecord("ns0", "/test/path", "dc0:2,dc1:1");
+    MigrationRecord existedRecord =
+        driver.get(new Query<>(record), MigrationRecord.class);
+    assertNull(existedRecord);
+    assertTrue(driver.put(record, true, false));
+
+    existedRecord =
+        driver.get(new Query<>(record), MigrationRecord.class);
+    assertEquals(record, existedRecord);
+    assertEquals("", existedRecord.getClientIDC());
+
+    // Validate set cross idc, to update exist record.
+    record = new MigrationRecord("ns0", "/test/path", "dc0:2,dc1:1", "monitor",
+        "/dc3");
+    assertTrue(driver.put(record, true, false));
+    existedRecord =
+        driver.get(new Query<>(record), MigrationRecord.class);
+    assertEquals(record, existedRecord);
+    assertEquals("/dc3", existedRecord.getClientIDC());
+
+    // Validate no set cross idc , to update exist record.
+    record = new MigrationRecord("ns0", "/test/path", "dc0:2,dc1:1", "monitor");
+    assertTrue(driver.put(record, true, false));
+    existedRecord =
+        driver.get(new Query<>(record), MigrationRecord.class);
+    assertEquals(record, existedRecord);
+    assertEquals("", existedRecord.getClientIDC());
+  }
 }
+

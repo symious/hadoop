@@ -26,6 +26,7 @@ import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
 import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.StartupProgress;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneAutoBalancerMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.utils.RunMode;
 import org.apache.hadoop.hdfs.server.zoneservice.utils.ZoneServiceUtil;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.net.NetUtils;
@@ -208,7 +209,7 @@ public class ZoneAutoBalancerService {
       final ZoneMover zs;
       try {
         NameNodeConnector nnc = new NameNodeConnector(ZoneMover.class.getSimpleName(),
-            namenode, ZoneMover.getIdPath(ZoneMover.RunMode.MONITOR),
+            namenode, ZoneMover.getIdPath(RunMode.MONITOR),
             new ArrayList<Path>(), conf, 1);
         nnc.getKeyManager().startBlockKeyUpdater();
         zs = new ZoneMover(nnc, conf, new ReplicationRule(), new AtomicInteger(0));

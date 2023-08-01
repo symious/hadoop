@@ -17,9 +17,10 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice;
 
+import com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
-import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
@@ -30,6 +31,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Date;
+import java.util.Map;
 
 public class MonitorThread extends Thread {
   private static final Logger LOG = LoggerFactory.getLogger(
@@ -40,6 +42,8 @@ public class MonitorThread extends Thread {
   private ZoneServiceMetrics metrics;
   private final StoreDriver driver;
   private final SignalRecord signalRecord;
+  private boolean supportMigrateReplica = false;
+  private final Map<String, ReplicationRule> replicationRuleMap;
 
   public MonitorThread(String name, Configuration conf, URI nameSpace, StoreDriver driver,
       SignalRecord signalRecord) {
@@ -48,6 +52,24 @@ public class MonitorThread extends Thread {
     this.nameSpace = nameSpace;
     this.driver = driver;
     this.signalRecord = signalRecord;
+    this.supportMigrateReplica = conf.getBoolean(
+        DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_ENABLED_KEY,
+        DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_ENABLED_KEY_DEFAULT);
+    this.replicationRuleMap = Maps.newHashMap();
+    metrics = ZoneService.getMetrics();
+  }
+
+  public MonitorThread(String name, Configuration conf, URI nameSpace, StoreDriver driver,
+      SignalRecord signalRecord, Map<String, ReplicationRule> replicationRuleMap) {
+    super(name);
+    this.conf = conf;
+    this.nameSpace = nameSpace;
+    this.driver = driver;
+    this.signalRecord = signalRecord;
+    this.supportMigrateReplica = conf.getBoolean(
+        DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_ENABLED_KEY,
+        DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_ENABLED_KEY_DEFAULT);
+    this.replicationRuleMap = replicationRuleMap;
     metrics = ZoneService.getMetrics();
   }
 
@@ -60,13 +82,18 @@ public class MonitorThread extends Thread {
   }
 
   public void run() {
-    LOG.info("start run monitor thread for {}", this.getName());
     metrics.startMonitorThread();
     Date startTime = new Date();
     try {
-      ZoneMover.run(conf, nameSpace, true);
-    } catch (IOException e) {
-      e.printStackTrace();
+      if (supportMigrateReplica) {
+        LOG.info("start run monitor thread for {} use zone enhanced mover.", this.getName());
+        ZoneMoverWithSetReplication.run(conf, nameSpace, driver, replicationRuleMap);
+      } else {
+        LOG.info("start run monitor thread for {} use zone mover.", this.getName());
+        ZoneMover.run(conf, nameSpace, true);
+      }
+    } catch (Exception e) {
+      LOG.error("failed to run monitor thread {}", nameSpace, e);
       AuditLogger.logRuleProcess("monitorThread", nameSpace.getAuthority(),
           "", "", startTime, new Date(),
           ResultCode.IO_EXCEPTION.getMsg(), "monitor");

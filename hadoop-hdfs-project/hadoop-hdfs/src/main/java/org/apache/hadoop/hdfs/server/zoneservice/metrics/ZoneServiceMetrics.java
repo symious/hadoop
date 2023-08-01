@@ -36,6 +36,7 @@ public class ZoneServiceMetrics {
 
   @Metric MutableGaugeInt monitorThreadCount;
   @Metric MutableGaugeInt batchThreadCount;
+  @Metric MutableGaugeInt checkThreadCount;
   @Metric MutableRate checkRecordCostTime;
   @Metric MutableCounterLong successTotalMoveCount;
   @Metric MutableCounterLong failTotalMoveCount;
@@ -48,6 +49,10 @@ public class ZoneServiceMetrics {
       = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, MutableCounterLong> nsBatchFailMoveCount
       = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, MutableCounterLong> nsCheckSuccessMoveCount
+      = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, MutableCounterLong> nsCheckFailMoveCount
+      = new ConcurrentHashMap<>();
 
   public static ZoneServiceMetrics create() {
     return DefaultMetricsSystem.instance().register(new ZoneServiceMetrics());
@@ -57,76 +62,52 @@ public class ZoneServiceMetrics {
   public void stopMonitorThread() { monitorThreadCount.decr(); }
   public void startBatchThread() { batchThreadCount.incr(); }
   public void stopBatchThread() { batchThreadCount.decr(); }
+  public void startCheckThread() { checkThreadCount.incr(); }
+  public void stopCheckThread() { checkThreadCount.decr(); }
   public void addCheckRecordCostTime(long costTime) { checkRecordCostTime.add(costTime); }
   public void incrSuccessMoveCount() { successTotalMoveCount.incr(); }
   public void incrFailMoveCount() { failTotalMoveCount.incr(); }
 
   public void incrNSMonitorSuccessMoveCount(String ns) {
-    if (ns != null) {
-      MutableCounterLong mutableCounterLong =
-          nsMonitorSuccessMoveCount.get(ns);
-      if (mutableCounterLong == null) {
-        synchronized (this) {
-          String metricName =
-              StringUtils.capitalize(ns + "nsMonitorSuccessMoveCount");
-          mutableCounterLong = registry.newCounter(
-              Interns.info(metricName, metricName), 0L);
-          nsMonitorSuccessMoveCount.putIfAbsent(ns, mutableCounterLong);
-        }
-      }
-      nsMonitorSuccessMoveCount.get(ns).incr();
-    }
+    incrNSMoveCount(ns, nsMonitorSuccessMoveCount, "nsMonitorSuccessMoveCount");
   }
 
   public void incrNSMonitorFailMoveCount(String ns) {
-    if (ns != null) {
-      MutableCounterLong mutableCounterLong =
-          nsMonitorFailMoveCount.get(ns);
-      if (mutableCounterLong == null) {
-        synchronized (this) {
-          String metricName =
-              StringUtils.capitalize(ns + "nsMonitorFailMoveCount");
-          mutableCounterLong = registry.newCounter(
-              Interns.info(metricName, metricName), 0L);
-          nsMonitorFailMoveCount.putIfAbsent(ns, mutableCounterLong);
-        }
-      }
-      nsMonitorFailMoveCount.get(ns).incr();
-    }
+    incrNSMoveCount(ns, nsMonitorFailMoveCount, "nsMonitorFailMoveCount");
   }
 
   public void incrNSBatchSuccessMoveCount(String ns) {
-    if (ns != null) {
-      MutableCounterLong mutableCounterLong =
-          nsBatchSuccessMoveCount.get(ns);
-      if (mutableCounterLong == null) {
-        synchronized (this) {
-          String metricName =
-              StringUtils.capitalize(ns + "NSBatchSuccessMoveCount");
-          mutableCounterLong = registry.newCounter(
-              Interns.info(metricName, metricName), 0L);
-          nsBatchSuccessMoveCount.putIfAbsent(ns, mutableCounterLong);
-        }
-      }
-      nsBatchSuccessMoveCount.get(ns).incr();
-    }
+    incrNSMoveCount(ns, nsBatchSuccessMoveCount, "NSBatchSuccessMoveCount");
   }
 
   public void incrNSBatchFailMoveCount(String ns) {
-    if (ns != null) {
-      MutableCounterLong mutableCounterLong =
-          nsBatchFailMoveCount.get(ns);
-      if (mutableCounterLong == null) {
-        synchronized (this) {
-          String metricName =
-              StringUtils.capitalize(ns + "NSBatchFailMoveCount");
-          mutableCounterLong = registry.newCounter(
-              Interns.info(metricName, metricName), 0L);
-          nsBatchFailMoveCount.putIfAbsent(ns, mutableCounterLong);
+    incrNSMoveCount(ns, nsBatchFailMoveCount, "NSBatchFailMoveCount");
+  }
+
+  public void incrNSCheckSuccessMoveCount(String ns) {
+    incrNSMoveCount(ns, nsCheckSuccessMoveCount, "NSCheckSuccessMoveCount");
+  }
+
+  public void incrNSCheckFailMoveCount(String ns) {
+    incrNSMoveCount(ns, nsCheckFailMoveCount, "NSCheckFailMoveCount");
+  }
+
+  public void incrNSMoveCount(String ns, ConcurrentHashMap<String, MutableCounterLong>
+      counterLongMap, String name) {
+    if (ns == null || counterLongMap == null) {
+      return;
+    }
+
+    if (!counterLongMap.containsKey(ns)) {
+      synchronized (this) {
+        if (!counterLongMap.containsKey(ns)) {
+          String metricName = StringUtils.capitalize(ns + name);
+          counterLongMap.put(ns,
+              registry.newCounter(Interns.info(metricName, metricName), 0L));
         }
       }
-      nsBatchFailMoveCount.get(ns).incr();
     }
+    counterLongMap.get(ns).incr();
   }
 
   public void shutdown() { DefaultMetricsSystem.shutdown(); }
