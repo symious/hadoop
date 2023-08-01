@@ -53,9 +53,11 @@ import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
+import org.apache.hadoop.hdfs.server.zoneservice.utils.RunMode;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
+import org.apache.hadoop.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
@@ -107,7 +109,7 @@ public class ZoneMover {
   protected final List<Path> targetPaths;
   protected final int retryMaxAttempts;
   protected ReplicationRule globalRule = null;
-  protected Map<String, ReplicationRule> pathRuleMap = null;
+  protected Map<String, ReplicationRule> pathRuleMap = Maps.newHashMap();
   protected final AtomicInteger retryCount;
   protected final DFSClient dfs;
   protected static final long DELAY_AFTER_CHOOSE_FAIL = 2 * 1000;
@@ -804,7 +806,6 @@ public class ZoneMover {
     }
   }
 
-  enum RunMode {BATCH, MONITOR}
   class Processor {
     private Result processPath() {
       ZoneProgressTracker.resetTracker();

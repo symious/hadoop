@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice;
 
+import org.apache.hadoop.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.conf.Configuration;
@@ -25,9 +26,8 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
-import org.apache.hadoop.hdfs.server.zoneservice.utils.MigrationDataCenters;
-import org.apache.hadoop.hdfs.server.zoneservice.utils.ZoneServiceUtil;
 import org.apache.hadoop.hdfs.server.zoneservice.web.resources.ResultCode;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -41,9 +41,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.URI;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -70,6 +71,8 @@ public class ReplicationRuleGenerateKafkaTrigger {
   private int maxRateLimit;
   // Whether to enable the operation of migrating the replication of dc.
   private boolean supportMigrateReplica = false;
+  // Definition migrate replica rules.
+  private Map<String, String> migrateReplicaRules;
   private Set<String> validDataCenters;
   // "," is the separator of pattern "/dc1:replica1,/dc2:replica2"
   private final static String SECTION_SEPARATOR = ",";
@@ -209,6 +212,8 @@ public class ReplicationRuleGenerateKafkaTrigger {
         DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_ENABLED_KEY,
         DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_ENABLED_KEY_DEFAULT);
 
+    parseReplicaRules();
+
     validDataCenters = new HashSet<>(
         conf.getTrimmedStringCollection(DFSConfigKeys.DFS_ZONEMOVER_VALID_DATACENTERS_KEY));
 
@@ -217,9 +222,25 @@ public class ReplicationRuleGenerateKafkaTrigger {
 
     LOG.info("Init ReplicationRuleParam with ruleGenerateKey = {}, pathSizeLimit = {}, "
             + "minCrossReadSize = {}, pollTimeOut = {}, capacityLimit = {} , "
-            + "supportMigrateReplica = {}, validDataCenters = {}, maxRateLimit = {} ", ruleGenerateKey,
-        pathSizeLimit, minCrossReadSize, pollTimeOut, capacityLimit, supportMigrateReplica,
-        validDataCenters, maxRateLimit);
+            + "supportMigrateReplica = {}, validDataCenters = {}, migrateReplicaRules = {}, "
+            + "maxRateLimit = {} ", ruleGenerateKey, pathSizeLimit, minCrossReadSize, pollTimeOut,
+        capacityLimit, supportMigrateReplica, validDataCenters, migrateReplicaRules, maxRateLimit);
+  }
+
+  private void parseReplicaRules() {
+    Collection<String> replicaRuleCollections = StringUtils.getTrimmedStringCollection(
+        conf.get(DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_RULES_KEY), ";");
+
+    Map<String, String> migrateReplicasMap = Maps.newHashMap();
+    for (String replica : replicaRuleCollections) {
+      String[] keyValue = replica.split("=");
+      if (keyValue.length == 2) {
+        String dataCenter = keyValue[0].trim();
+        String rule = keyValue[1].trim();
+        migrateReplicasMap.put(dataCenter, rule);
+      }
+    }
+    this.migrateReplicaRules = migrateReplicasMap;
   }
 
   private class Monitor implements Runnable {
@@ -256,15 +277,30 @@ public class ReplicationRuleGenerateKafkaTrigger {
 
         if (pathSize <= pathSizeLimit && crossReadSize >= minCrossReadSize) {
           if (supportMigrateReplica) {
-            // Such as validDataCenters is [/AT,/TL,/STT]
+            // If `supportMigrateReplica` is enabled,
+            // and `validDataCenters` as  [/STT,/TL,/AT]
+            // if client dc is "/STT" or "/TL" will generation rule "/AT:2,/STT:1,/TL:1".
+            // if client dc is "/ATT" will generation rule "/STT:2,/TL:1,/AT:1".
+            if (validDataCenters.size() < 3) {
+              LOG.warn("Can not add replication rule: {} due validDataCenters {} is invalid.",
+                  record, validDataCenters);
+              return;
+            }
+
             if (validDataCenters.contains(clientDC) && validDataCenters.contains(dnDC)) {
-              LOG.info("check {} {} replica in dc: {} start.", ns, path, clientDC);
-              URI namenode = ZoneServiceUtil.getNamespaceUri(ns, conf);
-              int code = replicationRuleManager.checkReplicaInDC(conf, namenode,
-                  Collections.singletonList(new Path(path)),
-                  MigrationDataCenters.fromName(clientDC));
-              LOG.info("check {} {} replica in dc: {} code: {} and cost {} ms.", ns, path, clientDC,
-                  code, now() - start);
+              String replicationRule = migrateReplicaRules.get(clientDC);
+              if (StringUtils.isNullOrEmpty(replicationRule)) {
+                LOG.warn("Can not add invalid replication rule: {} in dc: {}.", record, clientDC);
+                return;
+              }
+
+              LOG.info("{} {} add replication rule: {} in dc: {} start.", ns, path, replicationRule,
+                  clientDC);
+              ResultCode resultCode =
+                  replicationRuleManager.updateReplicaRulesByClientIDC(ns, path, replicationRule,
+                      true, clientDC);
+              LOG.info("{} {} add replication rule: {} in dc: {} code: {} and cost {} ms.", ns,
+                  path, replicationRule, clientDC, resultCode.getMsg(), now() - start);
               return;
             }
           } else {

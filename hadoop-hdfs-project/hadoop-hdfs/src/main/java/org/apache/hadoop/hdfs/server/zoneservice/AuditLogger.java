@@ -27,7 +27,7 @@ public class AuditLogger {
   private static final Log LOG = LogFactory.getLog(AuditLogger.class);
 
   enum Keys {METHOD, NAMESPACE, PATH, RULE, STARTTIME, ENDTIME,
-    STATUS, MODE, IP}
+    STATUS, MODE, IP, SOURCE}
 
   static class Constants {
     static final String KEY_VAL_SEPARATOR = "=";

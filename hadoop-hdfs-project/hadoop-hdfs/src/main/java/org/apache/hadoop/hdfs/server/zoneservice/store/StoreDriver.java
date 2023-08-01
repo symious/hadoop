@@ -21,7 +21,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public abstract class StoreDriver implements RecordOperations{
+public abstract class StoreDriver implements RecordOperations {
   private static final Logger LOG =
       LoggerFactory.getLogger(StoreDriver.class);
 

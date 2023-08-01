@@ -31,6 +31,7 @@ import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
+import org.apache.hadoop.hdfs.server.zoneservice.utils.RunMode;
 import org.apache.hadoop.hdfs.server.zoneservice.utils.ZoneServiceUtil;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.net.NetUtils;
@@ -94,6 +95,9 @@ public class ZoneService extends ReconfigurableBase  {
 
   protected final Tracer tracer;
   protected final TracerConfigurationManager tracerConfigurationManager;
+  private boolean replicationRuleGenerateEnabled = false;
+  // Whether to enable the operation of migrating the replication of dc.
+  private boolean supportMigrateReplica = false;
   private ReplicationRuleGenerateKafkaTrigger replicationRuleGenerateKafkaTrigger;
 
   public ZoneService(Configuration conf) throws IOException {
@@ -108,6 +112,10 @@ public class ZoneService extends ReconfigurableBase  {
     this.batchRefreshInterval = conf.getLong(
         DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_REFRESH_INTERVAL_KEY,
         DFSConfigKeys.DFS_ZONESERVICE_BATCH_THREAD_REFRESH_INTERVAL_DEFAULT);
+    supportMigrateReplica = conf.getBoolean(
+        DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_ENABLED_KEY,
+        DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_ENABLED_KEY_DEFAULT);
+
     try {
       initialize(getConf());
     } catch (IOException | HadoopIllegalArgumentException e) {
@@ -197,7 +205,9 @@ public class ZoneService extends ReconfigurableBase  {
    * Stop all ZoneService threads and wait for all to finish.
    */
   public void stop() {
-    batchManager.interrupt();
+    if (batchManager != null) {
+      batchManager.interrupt();
+    }
     stopHttpServer();
     tracer.close();
     stopReplicationRuleGenerateKafkaTrigger();
@@ -229,6 +239,7 @@ public class ZoneService extends ReconfigurableBase  {
     List<MigrationRecord> records =
         driver.getAll(MigrationRecord.class).getRecords();
     for (MigrationRecord record : records) {
+      LOG.debug("recoverZMProcess record: {}.", record.toString());
       try {
         if (record.getNs().equals("null")) {
           driver.remove(new Query<>(record), MigrationRecord.class);
@@ -248,9 +259,11 @@ public class ZoneService extends ReconfigurableBase  {
     for (String ns: nsRuleMap.keySet()) {
       SignalRecord signalRecord = new SignalRecord(ns, true);
       driver.put(signalRecord, true, false);
+      Map<String, ReplicationRule> replicationRuleMap = nsRuleMap.get(ns);
       LOG.info("Starting monitor thread for {}.", ns);
       Thread monitorThread = new MonitorThread("monitor_" + ns,
-          conf, ZoneServiceUtil.getNamespaceUri(ns, conf), driver, signalRecord);
+          conf, ZoneServiceUtil.getNamespaceUri(ns, conf), driver, signalRecord,
+          replicationRuleMap);
       monitorThread.start();
     }
     // Restart batch manager
@@ -259,34 +272,24 @@ public class ZoneService extends ReconfigurableBase  {
   }
 
   class BatchManagerThread extends Thread {
+    private static final long SLEEP_INTERVAL = 10;
     public BatchManagerThread() {
       super("BatchManager");
     }
 
     @Override
     public void run() {
-      while (true) {
+      while (!Thread.currentThread().isInterrupted()) {
         try {
           long start = System.currentTimeMillis();
+
           List<MigrationRecord> records = driver.getAll(MigrationRecord.class).getRecords();
           for (MigrationRecord record : records) {
-            if (record.getMode().equals("monitor")) continue;
-            String ns = record.getNs();
-            String path = record.getPath();
-            if (!nsSemaphore.containsKey(ns)) {
-              nsSemaphore.put(ns, new Semaphore(nsThreadLimit));
-              inProcessPaths.put(ns, Collections.synchronizedList(new ArrayList<String>()));
+            if (shouldProcessRecord(record)) {
+              processRecord(record);
             }
-            if (nsSemaphore.get(ns).availablePermits() > 0
-                && !inProcessPaths.get(ns).contains(path)) {
-              nsSemaphore.get(ns).acquire();
-              inProcessPaths.get(ns).add(path);
-              (new BatchThread(path, record.getRule(),
-                  ns, getConf(), driver, nsSemaphore.get(ns), inProcessPaths.get(ns))).start();
-            }
-            // The same timestamp will cause that the ZoneMover cannot work
-            Thread.sleep(10);
           }
+
           metrics.addCheckRecordCostTime(System.currentTimeMillis() - start);
           Thread.sleep(batchRefreshInterval);
         } catch (IOException e) {
@@ -295,6 +298,43 @@ public class ZoneService extends ReconfigurableBase  {
           break;
         }
       }
+    }
+
+    private boolean shouldProcessRecord(MigrationRecord record) {
+      RunMode mode = RunMode.fromName(record.getMode());
+      if (mode == null) {
+        LOG.warn("Invalid mode in migration record: {}", record);
+        return false;
+      }
+      // If supportMigrateReplica as true will process CHECK record,
+      // otherwise process BATCH record.
+      return (mode == RunMode.CHECK && supportMigrateReplica) || (mode == RunMode.BATCH
+          && !supportMigrateReplica);
+    }
+
+    private void processRecord(MigrationRecord record) throws InterruptedException {
+      String ns = record.getNs();
+      String path = record.getPath();
+      if (!nsSemaphore.containsKey(ns)) {
+        nsSemaphore.put(ns, new Semaphore(nsThreadLimit));
+        inProcessPaths.put(ns, Collections.synchronizedList(new ArrayList<String>()));
+      }
+
+      if (nsSemaphore.get(ns).availablePermits() > 0 && !inProcessPaths.get(ns).contains(path)) {
+        nsSemaphore.get(ns).acquire();
+        inProcessPaths.get(ns).add(path);
+
+        // Use check thread to update historical file replication rules
+        // during the migration process of replicas within zone service.
+        Runnable thread = supportMigrateReplica ?
+            new CheckThread(path, record.getRule(), ns, getConf(), driver, nsSemaphore.get(ns),
+                inProcessPaths.get(ns), record.getClientIDC()) :
+            new BatchThread(path, record.getRule(), ns, getConf(), driver, nsSemaphore.get(ns),
+                inProcessPaths.get(ns));
+        new Thread(thread).start();
+      }
+      // The same timestamp will cause that the ZoneMover cannot work
+      Thread.sleep(SLEEP_INTERVAL);
     }
   }
 

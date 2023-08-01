@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice.store;
 
+import org.apache.hadoop.hdfs.server.zoneservice.utils.RunMode;
+
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
@@ -25,6 +27,7 @@ public class MigrationRecord extends BaseRecord{
   private String path;
   private String rule;
   private String mode;
+  private String clientIDC = "";
   private long dateCreated;
   private long dateModified;
   private static final String PATHSUFFIX = "/";
@@ -32,7 +35,7 @@ public class MigrationRecord extends BaseRecord{
       new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 
   public MigrationRecord(String ns, String path, String rule) {
-    this(ns, path, rule, "batch");
+    this(ns, path, rule, RunMode.BATCH.getName());
   }
 
   public MigrationRecord(String ns, String path, String rule, String mode) {
@@ -41,6 +44,16 @@ public class MigrationRecord extends BaseRecord{
     this.path = unifyPath(path);
     this.rule = rule;
     this.mode = mode;
+    this.clientIDC = "";
+  }
+
+  public MigrationRecord(String ns, String path, String rule, String mode, String clientIDC) {
+    init();
+    this.ns = ns;
+    this.path = unifyPath(path);
+    this.rule = rule;
+    this.mode = mode;
+    this.clientIDC = clientIDC;
   }
 
   public void setNs(String ns) {
@@ -95,6 +108,10 @@ public class MigrationRecord extends BaseRecord{
     return this.dateCreated;
   }
 
+  public String getClientIDC() {
+    return clientIDC;
+  }
+
   @Override
   public String getPrimaryKey() {
     return ns + "_" + mode + "_" + path;
@@ -117,6 +134,7 @@ public class MigrationRecord extends BaseRecord{
         ", path='" + path + '\'' +
         ", rule='" + rule + '\'' +
         ", mode='" + mode + '\'' +
+        ", clientIDC='" + clientIDC + '\'' +
         ", dateCreated=" + dateFormat.format(ms2Date(dateCreated)) +
         ", dateModified=" + dateFormat.format(ms2Date(dateModified)) +
         '}';
