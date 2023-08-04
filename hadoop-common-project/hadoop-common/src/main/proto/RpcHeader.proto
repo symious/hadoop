@@ -159,6 +159,8 @@ message RpcResponseHeaderProto {
   optional bytes clientId = 7; // Globally unique client ID
   optional sint32 retryCount = 8 [default = -1];
   optional int64 stateId = 9; // The last written Global State ID
+  // Used to rebuild exceptions on client side.
+  optional ExceptionReconstructProto exceptionReconstruct = 100;
 }
 
 message RpcSaslProto {
@@ -183,4 +185,9 @@ message RpcSaslProto {
   required SaslState state = 2;
   optional bytes token     = 3;
   repeated SaslAuth auths  = 4;
+}
+
+message ExceptionReconstructProto {
+  repeated string param = 1;
+  optional bytes stacktrace = 2;
 }
