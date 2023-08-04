@@ -126,9 +126,9 @@ ENV PATH "${PATH}:/opt/protobuf/bin"
 # Install ISA-L library
 ######
 RUN curl -s -S -L \
-    http://ftp.de.debian.org/debian/pool/main/libi/libisal/libisal2_2.17.0-1_amd64.deb \
-    -o /opt/libisal2_2.17.0-1_amd64.deb \
-    && dpkg -i /opt/libisal2_2.17.0-1_amd64.deb
+    http://ftp.de.debian.org/debian/pool/main/libi/libisal/libisal2_2.30.0-5_amd64.deb \
+    -o /opt/libisal2_2.30.0-5_amd64.deb \
+    && dpkg -i /opt/libisal2_2.30.0-5_amd64.deb
 
 ######
 # Install Apache Maven 3.3.9 (3.3.9 ships with Xenial)
