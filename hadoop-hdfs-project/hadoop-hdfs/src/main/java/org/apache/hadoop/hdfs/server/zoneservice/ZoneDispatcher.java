@@ -245,7 +245,7 @@ public class ZoneDispatcher extends Dispatcher {
       } finally {
         proxySource.removePendingBlock(this);
         target.getDDatanode().removePendingBlock(this);
-        ZoneProgressTracker.addByteCount(block.getNumBytes());
+        ZoneProgressTracker.addByteCount(reportedBlock.getNumBytes());
         ZoneProgressTracker.incrBlockCount();
         ZoneProgressTracker.dequeueFile(fullPath);
 
@@ -297,7 +297,7 @@ public class ZoneDispatcher extends Dispatcher {
         sendRequest(out, eb, accessToken);
         receiveResponse(in);
         if (throttler != null) {
-          throttler.throttle(block.getNumBytes());
+          throttler.throttle(reportedBlock.getNumBytes());
         }
       } finally {
         IOUtils.closeStream(out);

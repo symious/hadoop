@@ -28,6 +28,7 @@ import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -125,11 +126,14 @@ public class ZoneReplicationCoordinator {
    * Block until finish all files.
    */
   public void waitForCheckCompletion() {
+    ZoneProgressTracker.startCountingCoordinatorWaitTime();
     this.isWaitingCompletion.set(true);
     try {
       checker.join();
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
+    } finally {
+      ZoneProgressTracker.finishCountingCoordinatorWaitTimeAndLog();
     }
   }
 
