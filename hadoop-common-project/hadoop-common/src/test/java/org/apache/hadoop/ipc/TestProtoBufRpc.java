@@ -48,6 +48,8 @@ import static org.apache.hadoop.test.MetricsAsserts.assertCounterGt;
 import static org.apache.hadoop.test.MetricsAsserts.getMetrics;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeFalse;
+import static org.junit.Assert.*;
 
 /**
  * Test for testing protocol buffer based RPC mechanism.
@@ -268,5 +270,26 @@ public class TestProtoBufRpc extends TestRpcBase {
 
     // make sure we never called into Log slow RPC routine.
     assertEquals(before, after);
+  }
+
+
+  @Test
+  public void testProtoBufReconstructibleException() throws Exception {
+    TestRpcService client = getClient(addr, conf);
+
+    try {
+      client.error3(null, newEmptyRequest());
+    } catch (ServiceException se) {
+      assertTrue(se.getCause() instanceof RemoteException);
+      RemoteException re = (RemoteException) se.getCause();
+      assertTrue(re.getClassName().equals(ReconstructibleExceptionTestImpl.class.getName()));
+      IOException ex = re.unwrapRemoteException(ReconstructibleExceptionTestImpl.class);
+      assertTrue(ex instanceof ReconstructibleExceptionTestImpl);
+      assertEquals(1, ((ReconstructibleExceptionTestImpl) ex).getField1());
+      assertEquals("field2", ((ReconstructibleExceptionTestImpl) ex).getField2());
+      assertTrue(ex.getMessage().contains("1field2"));
+      assertNotNull(ex.getStackTrace());
+      assertEquals(re.getErrorCode(), RpcErrorCodeProto.ERROR_APPLICATION);
+    }
   }
 }

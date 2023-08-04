@@ -78,6 +78,8 @@ import javax.security.sasl.SaslServer;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheStats;
+import org.apache.hadoop.fs.protocolPB.PBHelper;
+import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.ExceptionReconstructProto;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceAudience.Public;
@@ -973,7 +975,8 @@ public abstract class Server {
 
         setupResponse(this, responseParams.returnStatus,
             responseParams.detailedErr,
-            value, responseParams.errorClass, responseParams.error);
+            value, responseParams.errorClass, responseParams.error,
+            responseParams.exceptionReconstruct);
         sendResponse();
 
         deltaNanos = Time.monotonicNowNanos() - startNanos;
@@ -1007,6 +1010,7 @@ public abstract class Server {
       }
       responseParams.errorClass = t.getClass().getName();
       responseParams.error = StringUtils.stringifyException(t);
+      responseParams.exceptionReconstruct = PBHelper.getReconstructProto(t);
       // Remove redundant error class name from the beginning of the
       // stack trace
       String exceptionHdr = responseParams.errorClass + ": ";
@@ -1030,7 +1034,8 @@ public abstract class Server {
         call = new RpcCall(this);
         setupResponse(call,
             RpcStatusProto.FATAL, RpcErrorCodeProto.ERROR_RPC_SERVER,
-            null, t.getClass().getName(), StringUtils.stringifyException(t));
+            null, t.getClass().getName(), StringUtils.stringifyException(t),
+            PBHelper.getReconstructProto(t));
       }
       connection.sendResponse(call);
     }
@@ -1057,7 +1062,7 @@ public abstract class Server {
       if (this.connection.getServer().running) {
         try {
           setupResponse(this, RpcStatusProto.SUCCESS, null, response,
-              null, null);
+              null, null, null);
         } catch (IOException e) {
           // For synchronous calls, application code is done once it has
           // returned from a method. It does not expect to receive an error.
@@ -1084,7 +1089,9 @@ public abstract class Server {
           populateResponseParamsOnError(t, responseParams);
           setupResponse(this, responseParams.returnStatus,
               responseParams.detailedErr,
-              null, responseParams.errorClass, responseParams.error);
+              null, responseParams.errorClass, responseParams.error,
+              responseParams.exceptionReconstruct);
+
         } catch (IOException e) {
           // For synchronous calls, application code is done once it has
           // returned from a method. It does not expect to receive an error.
@@ -1102,11 +1109,13 @@ public abstract class Server {
      * Holds response parameters. Defaults set to work for successful
      * invocations
      */
+    @SuppressWarnings("checkstyle:VisibilityModifier")
     private class ResponseParams {
       String errorClass = null;
       String error = null;
       RpcErrorCodeProto detailedErr = null;
       RpcStatusProto returnStatus = RpcStatusProto.SUCCESS;
+      ExceptionReconstructProto exceptionReconstruct = null;
     }
 
     @Override
@@ -2079,14 +2088,15 @@ public abstract class Server {
       final RpcCall saslCall = new RpcCall(this, AuthProtocol.SASL.callId);
       setupResponse(saslCall,
           RpcStatusProto.SUCCESS, null,
-          RpcWritable.wrap(message), null, null);
+          RpcWritable.wrap(message), null, null, null);
       sendResponse(saslCall);
     }
 
     private void doSaslReply(Exception ioe) throws IOException {
       setupResponse(authFailedCall,
           RpcStatusProto.FATAL, RpcErrorCodeProto.FATAL_UNAUTHORIZED,
-          null, ioe.getClass().getName(), ioe.getLocalizedMessage());
+          null, ioe.getClass().getName(), ioe.getLocalizedMessage(),
+          PBHelper.getReconstructProto(ioe));
       sendResponse(authFailedCall);
     }
 
@@ -2294,7 +2304,7 @@ public abstract class Server {
         RpcCall fakeCall = new RpcCall(this, -1);
         setupResponse(fakeCall,
             RpcStatusProto.FATAL, RpcErrorCodeProto.FATAL_VERSION_MISMATCH,
-            null, VersionMismatch.class.getName(), errMsg);
+            null, VersionMismatch.class.getName(), errMsg, null);
         sendResponse(fakeCall);
       } else if (clientVersion >= 3) {
         RpcCall fakeCall = new RpcCall(this, -1);
@@ -2478,7 +2488,7 @@ public abstract class Server {
         final RpcCall call = new RpcCall(this, callId, retry);
         setupResponse(call,
             rse.getRpcStatusProto(), rse.getRpcErrorCodeProto(), null,
-            t.getClass().getName(), t.getMessage());
+            t.getClass().getName(), t.getMessage(), PBHelper.getReconstructProto(t));
         sendResponse(call);
       }
     }
@@ -3108,7 +3118,7 @@ public abstract class Server {
    */
   private void setupResponse(
       RpcCall call, RpcStatusProto status, RpcErrorCodeProto erCode,
-      Writable rv, String errorClass, String error)
+      Writable rv, String errorClass, String error, ExceptionReconstructProto paramsProto)
           throws IOException {
     // fatal responses will cause the reader to close the connection.
     if (status == RpcStatusProto.FATAL) {
@@ -3134,13 +3144,16 @@ public abstract class Server {
         setupResponse(call, RpcStatusProto.ERROR,
             RpcErrorCodeProto.ERROR_SERIALIZING_RESPONSE,
             null, t.getClass().getName(),
-            StringUtils.stringifyException(t));
+            StringUtils.stringifyException(t), PBHelper.getReconstructProto(t));
         return;
       }
     } else { // Rpc Failure
       headerBuilder.setExceptionClassName(errorClass);
       headerBuilder.setErrorMsg(error);
       headerBuilder.setErrorDetail(erCode);
+      if (paramsProto != null) {
+        headerBuilder.setExceptionReconstruct(paramsProto);
+      }
       setupResponse(call, headerBuilder.build(), null);
     }
   }
