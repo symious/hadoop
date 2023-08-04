@@ -305,6 +305,99 @@ public class TestQuotaForSpecialReplica {
         dfs.getQuotaUsage(testDir).getSpaceConsumed());
   }
 
+  @Test
+  public void testSetReplication() throws Exception {
+
+    // Create dir and set quota.
+    Path dir = new Path("/testSetReplication");
+    dfs.mkdirs(dir);
+    dfs.setQuota(dir, 100, DEFAULT_BLOCK_SIZE * 5 + 100);
+
+    // Create 3 replication file.
+    Path file = new Path("/testSetReplication/file");
+    short replication_3 = 3;
+    long spaceUsage = replication_3 * DEFAULT_BLOCK_SIZE ;
+    DFSTestUtil.createFile(dfs, file, DEFAULT_BLOCK_SIZE, replication_3, 0);
+    // Validate dir spaceConsumed.
+    QuotaUsage quotaUsage = dfs.getQuotaUsage(dir);
+    Assert.assertEquals(spaceUsage, quotaUsage.getSpaceConsumed());
+    ContentSummary contentSummary = dfs.getContentSummary(dir);
+    Assert.assertEquals(spaceUsage, contentSummary.getSpaceConsumed());
+
+    // Increasing replication from 3 to 4.
+    short replication_4 = 4;
+    dfs.setReplication(file, replication_4);
+    assertEquals(replication_4, dfs.getFileStatus(file).getReplication());
+    // Validate dir spaceConsumed will not update.
+    quotaUsage = dfs.getQuotaUsage(dir);
+    Assert.assertEquals(spaceUsage, quotaUsage.getSpaceConsumed());
+    contentSummary = dfs.getContentSummary(dir);
+    Assert.assertEquals(spaceUsage, contentSummary.getSpaceConsumed());
+
+    // Decreasing replication from 4 to 3.
+    dfs.setReplication(file, replication_3);
+    assertEquals(replication_3, dfs.getFileStatus(file).getReplication());
+    // Validate dir spaceConsumed will not update.
+    quotaUsage = dfs.getQuotaUsage(dir);
+    Assert.assertEquals(spaceUsage, quotaUsage.getSpaceConsumed());
+    contentSummary = dfs.getContentSummary(dir);
+    Assert.assertEquals(spaceUsage, contentSummary.getSpaceConsumed());
+
+    // Increasing replication from 3 to 5.
+    short replication_5 = 5;
+    dfs.setReplication(file, replication_5);
+    assertEquals(replication_5, dfs.getFileStatus(file).getReplication());
+    // Validate dir spaceConsumed will not update.
+    quotaUsage = dfs.getQuotaUsage(dir);
+    Assert.assertEquals(spaceUsage, quotaUsage.getSpaceConsumed());
+    contentSummary = dfs.getContentSummary(dir);
+    Assert.assertEquals(spaceUsage, contentSummary.getSpaceConsumed());
+
+    // Decreasing replication from 5 to 3.
+    dfs.setReplication(file, replication_3);
+    assertEquals(replication_3, dfs.getFileStatus(file).getReplication());
+    // Validate dir spaceConsumed will not update.
+    quotaUsage = dfs.getQuotaUsage(dir);
+    Assert.assertEquals(spaceUsage, quotaUsage.getSpaceConsumed());
+    contentSummary = dfs.getContentSummary(dir);
+    Assert.assertEquals(spaceUsage, contentSummary.getSpaceConsumed());
+
+
+    // Test Normal set replication from 3 to 2 and 2 to 3.
+    // Create dir1 and set quota.
+    Path dir1 = new Path("/testSetReplication1");
+    dfs.mkdirs(dir1);
+    dfs.setQuota(dir1, 100, DEFAULT_BLOCK_SIZE * 5 + 100);
+
+    // Create 2 replication file.
+    short replication_2 = 2;
+    Path file1 = new Path("/testSetReplication1/file");
+    DFSTestUtil.createFile(dfs, file1, DEFAULT_BLOCK_SIZE, replication_2, 0);
+    // Validate dir1 spaceConsumed.
+    QuotaUsage quotaUsage1 = dfs.getQuotaUsage(dir1);
+    Assert.assertEquals(DEFAULT_BLOCK_SIZE * 2, quotaUsage1.getSpaceConsumed());
+    ContentSummary contentSummary1 = dfs.getContentSummary(dir1);
+    Assert.assertEquals(DEFAULT_BLOCK_SIZE * 2, contentSummary1.getSpaceConsumed());
+
+    // Increasing replication from 2 to 3.
+    dfs.setReplication(file1, replication_3);
+    assertEquals(replication_3, dfs.getFileStatus(file1).getReplication());
+    // Verification Increasing replication from 2 to 3, dir spaceConsumed will update.
+    quotaUsage1 = dfs.getQuotaUsage(dir1);
+    Assert.assertEquals(DEFAULT_BLOCK_SIZE * 3, quotaUsage1.getSpaceConsumed());
+    contentSummary1 = dfs.getContentSummary(dir1);
+    Assert.assertEquals(DEFAULT_BLOCK_SIZE * 3, contentSummary1.getSpaceConsumed());
+
+    // Decreasing replication from 3 to 2.
+    dfs.setReplication(file1, replication_2);
+    assertEquals(replication_2, dfs.getFileStatus(file1).getReplication());
+    // Verification Decreasing replication from 3 to 2, dir spaceConsumed will update.
+    quotaUsage1 = dfs.getQuotaUsage(dir1);
+    Assert.assertEquals(DEFAULT_BLOCK_SIZE * 2, quotaUsage1.getSpaceConsumed());
+    contentSummary1 = dfs.getContentSummary(dir1);
+    Assert.assertEquals(DEFAULT_BLOCK_SIZE * 2, contentSummary1.getSpaceConsumed());
+  }
+
   private void scanDirsWithQuota(INodeDirectory dir,
       HashMap<String, Long> nsMap,
       HashMap<String, Long> dsMap, boolean verify) {

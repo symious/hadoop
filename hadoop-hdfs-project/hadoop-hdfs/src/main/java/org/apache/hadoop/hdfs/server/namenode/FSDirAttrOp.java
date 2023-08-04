@@ -403,16 +403,24 @@ public class FSDirAttrOp {
     short oldBR = file.getPreferredBlockReplication();
 
     long size = file.computeFileSize(true, true);
+
+    // Compatible with SPDI-91887. if there increasing replication from 3 to 4 or 5
+    // during the migration replica, it will not update quota.
+    short fileReplication = FSDirectory.getTargetFileReplica(replication);
+
     // Ensure the quota does not exceed
-    if (oldBR < replication) {
-      fsd.updateCount(iip, 0L, size, oldBR, replication, true);
+    if (oldBR < fileReplication) {
+      fsd.updateCount(iip, 0L, size, oldBR, fileReplication, true);
     }
 
     file.setFileReplication(replication, iip.getLatestSnapshotId());
     short targetReplication = (short) Math.max(
         replication, file.getPreferredBlockReplication());
 
-    if (oldBR > replication) {
+    // Compatible with SPDI-91887. if there decreasing replication from 4 or 5 to 3
+    // during the migration replica, it will not update quota.
+    short oldFileReplication = FSDirectory.getTargetFileReplica(oldBR);
+    if (oldFileReplication > replication) {
       fsd.updateCount(iip, 0L, size, oldBR, targetReplication, true);
     }
     for (BlockInfo b : file.getBlocks()) {
