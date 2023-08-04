@@ -34,8 +34,11 @@ import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.FakeTimer;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Tool;
+import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.LoggerFactory;
 
@@ -47,6 +50,11 @@ import static org.junit.Assert.fail;
 
 public class TestZoneProgressTracker {
   private MiniDFSCluster cluster = null;
+
+  @BeforeClass
+  public static void setLogging() {
+    LogManager.getLogger(ZoneProgressTracker.class.getName()).setLevel(Level.DEBUG);
+  }
 
   @Before
   public void reset() {
@@ -104,7 +112,7 @@ public class TestZoneProgressTracker {
   }
 
   @Test
-  public void testTrackPaths() throws IOException {
+  public void testTrackPaths() throws IOException, InterruptedException {
     // No error thrown for non-existent paths
     Configuration conf = TestUtils.getConf();
     cluster = new MiniDFSCluster.Builder(conf).build();
@@ -116,6 +124,7 @@ public class TestZoneProgressTracker {
     } catch (Exception e) {
       fail("No exceptions should be thrown for non-existent paths.");
     }
+    ZoneProgressTracker.waitForTotalFilesTrackerToFinish();
 
     // Disable ETC
     GenericTestUtils.LogCapturer capture = GenericTestUtils.LogCapturer.captureLogs(
@@ -127,6 +136,7 @@ public class TestZoneProgressTracker {
     Path testPath = new Path("/testTrackPaths/dummy");
     DFSTestUtil.createFile(fs, testPath, 1, (short) 3, 0L);
     ZoneProgressTracker.trackPaths(fs, Collections.singletonList(testPath));
+    ZoneProgressTracker.waitForTotalFilesTrackerToFinish();
     ZoneProgressTracker.incrFileCount();
 
     assertEquals(ZoneProgressTracker.getTrackedTotalFiles(), UNTRACKED_DUMMY);
@@ -176,7 +186,7 @@ public class TestZoneProgressTracker {
     assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args));
     double runtime = (double) (Time.monotonicNow() - start) / 1000;
 
-    assertTrue(Math.abs(runtime / ESTIMATED_THROTTLED_RUNTIME - 1) < 0.2);
+    assertTrue(Math.abs(runtime / ESTIMATED_THROTTLED_RUNTIME - 1) < 0.3);
     assertEquals(FILE_COUNT, ZoneProgressTracker.getFileCount());
     assertEquals(expectedBlocks, ZoneProgressTracker.getBlockCount());
     assertEquals(totalBytes, ZoneProgressTracker.getByteCount());

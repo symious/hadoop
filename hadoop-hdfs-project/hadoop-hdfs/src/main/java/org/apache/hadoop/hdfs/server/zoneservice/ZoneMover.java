@@ -296,9 +296,11 @@ public class ZoneMover {
   public static int run(Configuration conf, URI namenode, List<Path> paths,
       ReplicationRule rule, Map<String, ReplicationRule> pathRuleMap)
       throws IOException, InterruptedException {
+    ZoneProgressTracker.startCountingInitTime();
     checkDataCenterValues(conf, rule, pathRuleMap);
     LOG.info("Start to apply rule: " + rule + " to namenode:" + namenode + ", path: " + paths);
     if (paths.isEmpty()) {
+      ZoneProgressTracker.finishCountingInitTimeAndLog();
       return ExitStatus.SUCCESS.getExitCode();
     }
 
@@ -323,6 +325,8 @@ public class ZoneMover {
       }
       zs.init(conf);
       int round = 0;
+
+      ZoneProgressTracker.finishCountingInitTimeAndLog();
 
       while (true) {
         round += 1;
@@ -764,6 +768,7 @@ public class ZoneMover {
     private Result processPath() {
       ZoneProgressTracker.resetTracker();
       ZoneProgressTracker.trackPaths(dispatcher.getDistributedFileSystem(), targetPaths);
+      ZoneProgressTracker.startCountingProcessPathTime();
 
       result = new Result();
       for (Path target: targetPaths) {
@@ -774,24 +779,32 @@ public class ZoneMover {
           processor.processPath(path, getPathRule(path), result);
         }
       }
+      ZoneProgressTracker.finishCountingProcessPathTimeAndLog();
 
       coordinator.waitForCheckCompletion();
+      ZoneProgressTracker.startCountingFetcherWaitTime();
       try {
         fetcher.join();
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
+      } finally {
+        ZoneProgressTracker.finishCountingFetcherWaitTimeAndLog();
       }
 
       // wait for pending move to finish and retry the failed migration
+      ZoneProgressTracker.startCountingMoveCompletionWaitTime();
       boolean hasFailed = Dispatcher.waitForMoveCompletion(storages.targets.values());
-      boolean hasSuccess = Dispatcher.checkForSuccess(storages.targets.values());
+      ZoneProgressTracker.finishCountingMoveCompletionWaitTimeAndLog();
 
+      ZoneProgressTracker.startCountingPostProcessingTime();
+      boolean hasSuccess = Dispatcher.checkForSuccess(storages.targets.values());
       // check and update retryCount
       if (hasFailed && !hasSuccess) {
         if (retryCount.get() == retryMaxAttempts) {
           result.setRetryFailed();
           LOG.error("Failed to move some block's after "
               + retryMaxAttempts + " retries.");
+          ZoneProgressTracker.finishCountingPostProcessingTimeAndLog();
           return result;
         } else {
           retryCount.incrementAndGet();
@@ -804,6 +817,7 @@ public class ZoneMover {
       if (hasFailed) {
         result.updateHasRemaining(true);
       }
+      ZoneProgressTracker.finishCountingPostProcessingTimeAndLog();
 
       return result;
     }
@@ -997,6 +1011,11 @@ public class ZoneMover {
         return;
       }
       List<ZoneMoveItem> moveItems = getZoneMoveItems(firstBlock, rule);
+
+      // Do a dummy queue here to ensure the last dequeue of this path
+      // is either the last dispatch executed or the end of this method, whichever happens later
+      ZoneProgressTracker.queueFile(fullPath);
+
       int n = locatedBlocks.locatedBlockCount();
       for (int i=0; i<n; i++) {
         LocatedBlock block = locatedBlocks.get(i);
@@ -1006,6 +1025,7 @@ public class ZoneMover {
           result.updateHasRemaining(true);
         }
       }
+      ZoneProgressTracker.dequeueFile(fullPath);
     }
 
     /**
@@ -1013,8 +1033,12 @@ public class ZoneMover {
      */
     private void processInconsistentBlocks(String fullPath,
         LocatedBlocks locatedBlocks, ReplicationRule rule, Result result) {
-      boolean allSkipped = true;
       int n = locatedBlocks.locatedBlockCount();
+
+      // Do a dummy queue here to ensure the last dequeue of this path
+      // is either the last dispatch executed or the end of this method, whichever happens later
+      ZoneProgressTracker.queueFile(fullPath);
+
       for (int i=0; i<n; i++) {
         LocatedBlock block = locatedBlocks.get(i);
         if (isBlockSatisfyRule(block, rule)) {
@@ -1025,55 +1049,44 @@ public class ZoneMover {
         } else {
           result.updateHasRemaining(true);
         }
-        allSkipped = false;
       }
-      if (allSkipped) {
-        ZoneProgressTracker.incrFileCount();;
-      }
+      ZoneProgressTracker.dequeueFile(fullPath);
     }
 
     boolean scheduleMoves4Block(String fullPath, LocatedBlock lb, List<ZoneMoveItem> moveItems) {
-      // Do an extra queue here to ensure the last dequeue of this path
-      // is either the last dispatch executed or the end of this method, whichever happens later
-      ZoneProgressTracker.queueFile(fullPath);
-
-      try {
-        final List<MLocation> locations = MLocation.toLocations(lb);
-        // put locations to a map with datacenter as the key
-        final Map<String, List<MLocation>> locationMap = new HashMap<>();
-        for (MLocation ml : locations) {
-          String dc = DFSNetworkTopologyWithDataCenter.getDataCenter(ml.getDatanode().getNetworkLocation());
-          if (locationMap.containsKey(dc)) {
-            locationMap.get(dc).add(ml);
-          } else {
-            locationMap.put(dc, new ArrayList<>(Collections.singletonList(ml)));
-          }
+      final List<MLocation> locations = MLocation.toLocations(lb);
+      // put locations to a map with datacenter as the key
+      final Map<String, List<MLocation>> locationMap = new HashMap<>();
+      for (MLocation ml : locations) {
+        String dc = DFSNetworkTopologyWithDataCenter.getDataCenter(ml.getDatanode().getNetworkLocation());
+        if (locationMap.containsKey(dc)) {
+          locationMap.get(dc).add(ml);
+        } else {
+          locationMap.put(dc, new ArrayList<>(Collections.singletonList(ml)));
         }
-
-        final DBlock db = newDBlock(lb.getBlock().getLocalBlock(), locations);
-        Set<StorageType> targetTypes = new HashSet<>(Arrays.asList(lb.getStorageTypes()));
-        Set<StorageGroup> excluded = getExcluded(locations, moveItems);
-        // get MLocation according to datacenter and select source
-        for (ZoneMoveItem moveItem : moveItems) {
-          for (short i = 0; i < moveItem.getNum(); i++) {
-            List<MLocation> sourceLocations = locationMap.get(moveItem.getSourceDataCenter());
-            MLocation location = sourceLocations.get(0);
-            sourceLocations.remove(0);
-            ZoneSource source = storages.getSource(location);
-            if (source != null) {
-              if (!scheduleMoveReplica(fullPath, db, source, moveItem.getTargetDataCenter(),
-                  targetTypes, excluded)) {
-                return false;
-              }
-            } else {
-              LOG.warn("Failed to get a source for : " + location + ", will skip this replica");
-            }
-          }
-        }
-        return true;
-      } finally {
-        ZoneProgressTracker.dequeueFile(fullPath);
       }
+
+      final DBlock db = newDBlock(lb.getBlock().getLocalBlock(), locations);
+      Set<StorageType> targetTypes = new HashSet<>(Arrays.asList(lb.getStorageTypes()));
+      Set<StorageGroup> excluded = getExcluded(locations, moveItems);
+      // get MLocation according to datacenter and select source
+      for (ZoneMoveItem moveItem : moveItems) {
+        for (short i = 0; i < moveItem.getNum(); i++) {
+          List<MLocation> sourceLocations = locationMap.get(moveItem.getSourceDataCenter());
+          MLocation location = sourceLocations.get(0);
+          sourceLocations.remove(0);
+          ZoneSource source = storages.getSource(location);
+          if (source != null) {
+            if (!scheduleMoveReplica(fullPath, db, source, moveItem.getTargetDataCenter(),
+                targetTypes, excluded)) {
+              return false;
+            }
+          } else {
+            LOG.warn("Failed to get a source for : " + location + ", will skip this replica");
+          }
+        }
+      }
+      return true;
     }
 
     private Set<StorageGroup> getExcluded(

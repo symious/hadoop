@@ -46,6 +46,7 @@ public class ZoneProgressTracker {
   private static final AtomicLong blockCount = new AtomicLong();
   private static final ConcurrentMap<String, AtomicInteger> dispatches = new ConcurrentHashMap<>();
   private static int totalFiles = UNTRACKED_DUMMY;
+  private static Thread totalFilesTrackerThread = null;
   private static long start = -1;
   private static long lastByteLogged = -1;
   private static long lastFileLogged = -1;
@@ -53,12 +54,20 @@ public class ZoneProgressTracker {
 
   private static long lastTrackerPrint = -1;
   private static long printPeriod = DFSConfigKeys.DFS_ZONE_PROGRESS_TRACKER_PRINT_PERIOD_DEFAULT;
-  private static long filesPerPrint = DFSConfigKeys.DFS_ZONE_PROGRESS_TRACKER_FILES_PER_PRINT_DEFAULT;
+  private static long filesPerPrint =
+      DFSConfigKeys.DFS_ZONE_PROGRESS_TRACKER_FILES_PER_PRINT_DEFAULT;
   private static boolean doEstimateCompletionTime =
       DFSConfigKeys.DFS_ZONE_PROGRESS_TRACKER_ESTIMATE_COMPLETION_TIME_DEFAULT;
   private static ZoneProgressPrintModes printMode =
       DFSConfigKeys.DFS_ZONE_PROGRESS_TRACKER_PRINT_MODE_DEFAULT;
   private static Timer timer = new Timer();
+  // Various debug timestamps below
+  private static long initTimeStart;
+  private static long processPathStartTime;
+  private static long coordinatorWaitStartTime;
+  private static long fetcherWaitStartTime;
+  private static long moveCompletionWaitStartTime;
+  private static long postProcessingStartTime;
 
   public static void initConf(Configuration conf) {
     printPeriod = conf.getLong(DFSConfigKeys.DFS_ZONE_PROGRESS_TRACKER_PRINT_PERIOD_KEY,
@@ -77,13 +86,65 @@ public class ZoneProgressTracker {
     timer = newTimer;
   }
 
-  public enum ZoneProgressPrintModes {
-    EVERY_N_FILES,
-    PERIODICALLY
+  public synchronized static void startCountingInitTime() {
+    initTimeStart = timer.monotonicNow();
   }
 
-  @VisibleForTesting
+  public synchronized static void startCountingProcessPathTime() {
+    processPathStartTime = timer.monotonicNow();
+  }
+
+  public synchronized static void startCountingCoordinatorWaitTime() {
+    coordinatorWaitStartTime = timer.monotonicNow();
+  }
+
+  public synchronized static void startCountingFetcherWaitTime() {
+    fetcherWaitStartTime = timer.monotonicNow();
+  }
+
+  public synchronized static void startCountingMoveCompletionWaitTime() {
+    moveCompletionWaitStartTime = timer.monotonicNow();
+  }
+
+  public synchronized static void startCountingPostProcessingTime() {
+    postProcessingStartTime = timer.monotonicNow();
+  }
+
+  public synchronized static void finishCountingInitTimeAndLog() {
+    LOG.debug("ZoneMover initialization time: {}ms", timer.monotonicNow() - initTimeStart);
+  }
+
+  public synchronized static void finishCountingProcessPathTimeAndLog() {
+    LOG.debug("Time to initialize all dispatchers: {}ms",
+        timer.monotonicNow() - processPathStartTime);
+  }
+
+  public synchronized static void finishCountingCoordinatorWaitTimeAndLog() {
+    LOG.debug("ZoneReplicationCoordinator finished: {}ms",
+        timer.monotonicNow() - coordinatorWaitStartTime);
+  }
+
+  public synchronized static void finishCountingFetcherWaitTimeAndLog() {
+    LOG.debug("ZoneMover.Fetcher finished: {}ms", timer.monotonicNow() - fetcherWaitStartTime);
+  }
+
+  public synchronized static void finishCountingMoveCompletionWaitTimeAndLog() {
+    LOG.debug("All moves finished in {}ms", timer.monotonicNow() - moveCompletionWaitStartTime);
+  }
+
+  public synchronized static void finishCountingPostProcessingTimeAndLog() {
+    LOG.debug("Post processing finished in {}ms", timer.monotonicNow() - postProcessingStartTime);
+  }
+
+  public enum ZoneProgressPrintModes {
+    EVERY_N_FILES, PERIODICALLY
+  }
+
   public synchronized static void resetTracker() {
+    if (totalFilesTrackerThread != null) {
+      totalFilesTrackerThread.interrupt();
+      totalFilesTrackerThread = null;
+    }
     fileCount.set(0);
     byteCount.set(0);
     blockCount.set(0);
@@ -92,6 +153,11 @@ public class ZoneProgressTracker {
     start = -1;
     lastByteLogged = -1;
     lastFileLogged = -1;
+    processPathStartTime = 0;
+    coordinatorWaitStartTime = 0;
+    fetcherWaitStartTime = 0;
+    moveCompletionWaitStartTime = 0;
+    postProcessingStartTime = 0;
   }
 
   /**
@@ -182,28 +248,42 @@ public class ZoneProgressTracker {
    * @param fs filesystem object
    * @param targetPaths paths to track
    */
-  public synchronized static void trackPaths(FileSystem fs, List<Path> targetPaths) {
+  public synchronized static void trackPaths(final FileSystem fs, final List<Path> targetPaths) {
     start = timer.monotonicNow();
     if (!doEstimateCompletionTime) {
       return;
     }
+    assert totalFilesTrackerThread == null;
 
-    totalFiles = 0;
-    for (Path targetPath : targetPaths) {
-      try {
-        RemoteIterator<LocatedFileStatus> files = fs.listFiles(targetPath, true);
-        while (files.hasNext()) {
-          totalFiles++;
-          files.next();
+    totalFilesTrackerThread = new Thread(new Runnable() {
+      @Override
+      public void run() {
+        totalFiles = 0;
+        for (Path targetPath : targetPaths) {
+          try {
+            RemoteIterator<LocatedFileStatus> files = fs.listFiles(targetPath, true);
+            while (files.hasNext()) {
+              totalFiles++;
+              files.next();
+            }
+          } catch (FileNotFoundException fnfe) {
+            // Just ignore non existent paths
+          } catch (IOException ioe) {
+            throw new RuntimeException(ioe);
+          }
         }
-      } catch (FileNotFoundException fnfe) {
-        // Just ignore non existent paths
-      } catch (IOException ioe) {
-        throw new RuntimeException(ioe);
+        if (totalFiles <= 0) {
+          totalFiles = UNTRACKED_DUMMY;
+        }
       }
-    }
-    if (totalFiles <= 0) {
-      totalFiles = UNTRACKED_DUMMY;
+    });
+    totalFilesTrackerThread.start();
+  }
+
+  @VisibleForTesting
+  public static void waitForTotalFilesTrackerToFinish() throws InterruptedException {
+    if (totalFilesTrackerThread != null) {
+      totalFilesTrackerThread.join();
     }
   }
 
