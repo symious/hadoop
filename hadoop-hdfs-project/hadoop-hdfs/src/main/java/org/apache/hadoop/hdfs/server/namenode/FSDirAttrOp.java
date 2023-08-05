@@ -35,6 +35,7 @@ import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockStoragePolicySuite;
 import org.apache.hadoop.hdfs.server.namenode.FSDirectory.DirOp;
+import org.apache.hadoop.hdfs.server.namenode.snapshot.FileWithSnapshotFeature;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.hdfs.util.EnumCounters;
 import org.apache.hadoop.security.AccessControlException;
@@ -403,25 +404,31 @@ public class FSDirAttrOp {
     short oldBR = file.getPreferredBlockReplication();
 
     long size = file.computeFileSize(true, true);
-
-    // Compatible with SPDI-91887. if there increasing replication from 3 to 4 or 5
+    FileWithSnapshotFeature sf = file.getFileWithSnapshotFeature();
+    // Compatible with SPDI-91887. if there increasing replication from 3 to 4 or 5, from 4 to 5
     // during the migration replica, it will not update quota.
-    short fileReplication = FSDirectory.getTargetFileReplica(replication);
-
+    short targetFileReplica = replication;
+    short targetOldReplica = oldBR;
+    if (sf == null) {
+      targetFileReplica = FSDirectory.getTargetFileReplica(replication);
+      targetOldReplica = FSDirectory.getTargetFileReplica(oldBR);
+    }
     // Ensure the quota does not exceed
-    if (oldBR < fileReplication) {
-      fsd.updateCount(iip, 0L, size, oldBR, fileReplication, true);
+    if (targetOldReplica < targetFileReplica) {
+      fsd.updateCount(iip, 0L, size, targetOldReplica, targetFileReplica, true);
     }
 
     file.setFileReplication(replication, iip.getLatestSnapshotId());
     short targetReplication = (short) Math.max(
         replication, file.getPreferredBlockReplication());
 
-    // Compatible with SPDI-91887. if there decreasing replication from 4 or 5 to 3
+    // Compatible with SPDI-91887. if there decreasing replication from 4 or 5 to 3, from 5 to 4
     // during the migration replica, it will not update quota.
-    short oldFileReplication = FSDirectory.getTargetFileReplica(oldBR);
-    if (oldFileReplication > replication) {
-      fsd.updateCount(iip, 0L, size, oldBR, targetReplication, true);
+    if (sf == null) {
+      targetFileReplica = FSDirectory.getTargetFileReplica(targetReplication);
+    }
+    if (targetOldReplica > targetFileReplica) {
+      fsd.updateCount(iip, 0L, size, targetOldReplica, targetFileReplica, true);
     }
     for (BlockInfo b : file.getBlocks()) {
       bm.setReplication(oldBR, targetReplication, b, delRedundantDataCenters);
