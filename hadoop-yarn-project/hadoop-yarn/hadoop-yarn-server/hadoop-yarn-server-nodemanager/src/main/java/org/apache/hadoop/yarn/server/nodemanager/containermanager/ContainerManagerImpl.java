@@ -232,12 +232,15 @@ public class ContainerManagerImpl extends CompositeService implements
   private final ContainerScheduler containerScheduler;
 
   private long waitForContainersOnShutdownMillis;
+  private long waitForContainerRecoverDuringKillMillis;
 
   // NM metrics publisher is set only if the timeline service v.2 is enabled
   private NMTimelinePublisher nmMetricsPublisher;
   private boolean timelineServiceV2Enabled;
 
   private DynamicResourcePublisher dynamicResourcePublisher;
+
+  private final long startTime = System.currentTimeMillis();
 
   public ContainerManagerImpl(Context context, ContainerExecutor exec,
       DeletionService deletionContext, NodeStatusUpdater nodeStatusUpdater,
@@ -335,6 +338,13 @@ public class ContainerManagerImpl extends CompositeService implements
         conf.getLong(YarnConfiguration.NM_PROCESS_KILL_WAIT_MS,
             YarnConfiguration.DEFAULT_NM_PROCESS_KILL_WAIT_MS) +
         SHUTDOWN_CLEANUP_SLOP_MS;
+
+    waitForContainerRecoverDuringKillMillis =
+        conf.getLong(
+            YarnConfiguration.NM_RETRY_RESEND_KILL_RECOVERING_CONTAINER_BEFORE_DROP_MS,
+            YarnConfiguration.DEFAULT_NM_RETRY_RESEND_KILL_RECOVERING_CONTAINER_BEFORE_DROP_MS);
+    LOG.info("waitForContainerRecoverDuringKillMillis: " +
+        waitForContainerRecoverDuringKillMillis);
 
     super.serviceInit(conf);
     recover();
@@ -1695,106 +1705,153 @@ public class ContainerManagerImpl extends CompositeService implements
   @Override
   public void handle(ContainerManagerEvent event) {
     switch (event.getType()) {
-    case FINISH_APPS:
-      CMgrCompletedAppsEvent appsFinishedEvent =
-          (CMgrCompletedAppsEvent) event;
-      for (ApplicationSimpleReport appReport : appsFinishedEvent.getAppsToCleanup()) {
-        ApplicationId appID = appReport.getApplicationId();
-        Application app = this.context.getApplications().get(appID);
+      case FINISH_APPS:
+        CMgrCompletedAppsEvent appsFinishedEvent =
+            (CMgrCompletedAppsEvent) event;
+        List<ApplicationSimpleReport> appsToCleanList =
+            appsFinishedEvent.getAppsToCleanup();
+        for (int i = 0; i < appsToCleanList.size(); i++) {
+          ApplicationSimpleReport appReport = appsToCleanList.get(i);
+          ApplicationId appID = appReport.getApplicationId();
+          Application app = this.context.getApplications().get(appID);
 
-        if (app == null) {
-          LOG.info("couldn't find application " + appID + " while processing"
-              + " FINISH_APPS event. The ResourceManager allocated resources"
-              + " for this application to the NodeManager but no active"
-              + " containers were found to process.");
-          continue;
-        }
-
-        boolean shouldDropEvent = false;
-        for (Container container : app.getContainers().values()) {
-          if (container.isRecovering()) {
-            LOG.info("drop FINISH_APPS event to " + appID + " because "
-                + "container " + container.getContainerId()
-                + " is recovering");
-            shouldDropEvent = true;
-            break;
+          if (app == null) {
+            LOG.info("couldn't find application " + appID + " while processing"
+                + " FINISH_APPS event. The ResourceManager allocated resources"
+                + " for this application to the NodeManager but no active"
+                + " containers were found to process.");
+            continue;
           }
-        }
-        if (shouldDropEvent) {
-          continue;
-        }
 
-        String diagnostic = "";
-        if (appsFinishedEvent.getReason() == CMgrCompletedAppsEvent.Reason.ON_SHUTDOWN) {
-          diagnostic = "Application killed on shutdown";
-        } else if (appsFinishedEvent.getReason() == CMgrCompletedAppsEvent.Reason.BY_RESOURCEMANAGER) {
-          diagnostic = "Application killed by ResourceManager";
-        }
-        this.dispatcher.getEventHandler().handle(
-            new ApplicationFinishEvent(appID,
-                diagnostic, appReport.getYarnApplicationState()));
-      }
-      break;
-    case FINISH_CONTAINERS:
-      CMgrCompletedContainersEvent containersFinishedEvent =
-          (CMgrCompletedContainersEvent) event;
-      for (ContainerId containerId : containersFinishedEvent
-          .getContainersToCleanup()) {
-        ApplicationId appId =
-            containerId.getApplicationAttemptId().getApplicationId();
-        Application app = this.context.getApplications().get(appId);
-        if (app == null) {
-          LOG.warn("couldn't find app " + appId + " while processing"
-              + " FINISH_CONTAINERS event");
-          continue;
-        }
+          boolean shouldDropEvent = false;
+          ContainerId recoverContainerId = null;
+          for (Container container : app.getContainers().values()) {
+            if (container.isRecovering()) {
+              recoverContainerId = container.getContainerId();
+              shouldDropEvent = true;
+              break;
+            }
+          }
+          long curTime = System.currentTimeMillis();
+          long dis = curTime - startTime;
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("FINISH_APPS dis: " + dis);
+          }
+          if (shouldDropEvent &&
+              (dis <= waitForContainerRecoverDuringKillMillis)) {
+            List<ApplicationSimpleReport> applicationSimpleReportList =
+                new ArrayList<>();
+            for (int j = i; j < appsToCleanList.size(); j++) {
+              applicationSimpleReportList.add(appsToCleanList.get(j));
+            }
+            context.getDispatcher().getEventHandler().handle(
+                new CMgrCompletedAppsEvent(applicationSimpleReportList,
+                    CMgrCompletedAppsEvent.Reason.BY_RESOURCEMANAGER));
+            LOG.info("resend FINISH_APPS event to " + appID + " because "
+                + "container " + recoverContainerId + " is recovering");
+            break;
+          } else if (shouldDropEvent) {
+            LOG.info("drop FINISH_APPS event to " + appID + " because "
+                + "container " + recoverContainerId
+                + " is recovering beyond " +
+                waitForContainerRecoverDuringKillMillis + " ms!");
+            continue;
+          }
 
-        Container container = app.getContainers().get(containerId);
-        if (container == null) {
-          LOG.warn("couldn't find container " + containerId
-              + " while processing FINISH_CONTAINERS event");
-          continue;
+          String diagnostic = "";
+          if (appsFinishedEvent.getReason() ==
+              CMgrCompletedAppsEvent.Reason.ON_SHUTDOWN) {
+            diagnostic = "Application killed on shutdown";
+          } else if (appsFinishedEvent.getReason() ==
+              CMgrCompletedAppsEvent.Reason.BY_RESOURCEMANAGER) {
+            diagnostic = "Application killed by ResourceManager";
+          }
+          this.dispatcher.getEventHandler().handle(
+              new ApplicationFinishEvent(appID,
+                  diagnostic, appReport.getYarnApplicationState()));
         }
+        break;
+      case FINISH_CONTAINERS:
+        CMgrCompletedContainersEvent containersFinishedEvent =
+            (CMgrCompletedContainersEvent) event;
+        List<ContainerId> containerCleanIds = containersFinishedEvent
+            .getContainersToCleanup();
+        for (int i = 0; i < containerCleanIds.size(); i++) {
+          ContainerId containerId = containerCleanIds.get(i);
+          ApplicationId appId =
+              containerId.getApplicationAttemptId().getApplicationId();
+          Application app = this.context.getApplications().get(appId);
+          if (app == null) {
+            LOG.warn("couldn't find app " + appId + " while processing"
+                + " FINISH_CONTAINERS event");
+            continue;
+          }
 
-        if (container.isRecovering()) {
-          LOG.info("drop FINISH_CONTAINERS event to " + containerId
-              + " because container is recovering");
-          continue;
-        }
+          Container container = app.getContainers().get(containerId);
+          if (container == null) {
+            LOG.warn("couldn't find container " + containerId
+                + " while processing FINISH_CONTAINERS event");
+            continue;
+          }
 
-        this.dispatcher.getEventHandler().handle(
+          long curTime = System.currentTimeMillis();
+          long dis = curTime - startTime;
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("FINISH_CONTAINERS dis: " + dis);
+          }
+          if (container.isRecovering() &&
+              (dis <= waitForContainerRecoverDuringKillMillis)) {
+            List<ContainerId> containersToCleanup = new ArrayList<>();
+            for (int j = i; j < containerCleanIds.size(); j++) {
+              containersToCleanup.add(containerId);
+            }
+            context.getDispatcher().getEventHandler()
+                .handle(
+                    new CMgrCompletedContainersEvent(containersToCleanup,
+                        CMgrCompletedContainersEvent.Reason
+                            .BY_RESOURCEMANAGER));
+            LOG.info("resend FINISH_CONTAINERS event to " + containerId
+                + " because container is recovering");
+            break;
+          } else if (container.isRecovering()) {
+            LOG.info("drop FINISH_CONTAINERS event to " + containerId
+                + " because container is recovering beyond " +
+                waitForContainerRecoverDuringKillMillis + " ms!");
+            continue;
+          }
+          this.dispatcher.getEventHandler().handle(
               new ContainerKillEvent(containerId,
                   ContainerExitStatus.KILLED_BY_RESOURCEMANAGER,
                   "Container Killed by ResourceManager"));
-      }
-      break;
-    case UPDATE_CONTAINERS:
-      CMgrUpdateContainersEvent containersDecreasedEvent =
-          (CMgrUpdateContainersEvent) event;
-      for (org.apache.hadoop.yarn.api.records.Container container
-          : containersDecreasedEvent.getContainersToUpdate()) {
-        try {
-          ContainerTokenIdentifier containerTokenIdentifier =
-              BuilderUtils.newContainerTokenIdentifier(
-                  container.getContainerToken());
-          updateContainerInternal(container.getId(),
-              containerTokenIdentifier);
-        } catch (YarnException e) {
-          LOG.error("Unable to decrease container resource", e);
-        } catch (IOException e) {
-          LOG.error("Unable to update container resource in store", e);
         }
-      }
-      break;
-    case SIGNAL_CONTAINERS:
-      CMgrSignalContainersEvent containersSignalEvent =
-          (CMgrSignalContainersEvent) event;
-      for (SignalContainerRequest request : containersSignalEvent
-          .getContainersToSignal()) {
-        internalSignalToContainer(request, "ResourceManager");
-      }
-      break;
-    default:
+        break;
+      case UPDATE_CONTAINERS:
+        CMgrUpdateContainersEvent containersDecreasedEvent =
+            (CMgrUpdateContainersEvent) event;
+        for (org.apache.hadoop.yarn.api.records.Container container
+            : containersDecreasedEvent.getContainersToUpdate()) {
+          try {
+            ContainerTokenIdentifier containerTokenIdentifier =
+                BuilderUtils.newContainerTokenIdentifier(
+                    container.getContainerToken());
+            updateContainerInternal(container.getId(),
+                containerTokenIdentifier);
+          } catch (YarnException e) {
+            LOG.error("Unable to decrease container resource", e);
+          } catch (IOException e) {
+            LOG.error("Unable to update container resource in store", e);
+          }
+        }
+        break;
+      case SIGNAL_CONTAINERS:
+        CMgrSignalContainersEvent containersSignalEvent =
+            (CMgrSignalContainersEvent) event;
+        for (SignalContainerRequest request : containersSignalEvent
+            .getContainersToSignal()) {
+          internalSignalToContainer(request, "ResourceManager");
+        }
+        break;
+      default:
         throw new YarnRuntimeException(
             "Got an unknown ContainerManagerEvent type: " + event.getType());
     }

@@ -3200,6 +3200,16 @@ public class YarnConfiguration extends Configuration {
   public static final long DEFAULT_NM_SLEEP_DELAY_BEFORE_SIGKILL_MS =
       250;
 
+  /**
+   * Max time to wait to drop kill request for recovering container
+   */
+  public static final String
+      NM_RETRY_RESEND_KILL_RECOVERING_CONTAINER_BEFORE_DROP_MS =
+      NM_PREFIX + "retry-kill-recovering-container-before-drop.ms";
+  public static final long
+      DEFAULT_NM_RETRY_RESEND_KILL_RECOVERING_CONTAINER_BEFORE_DROP_MS =
+      60000;
+
   /** Max time to wait for a process to come up when trying to cleanup
    * container resources */
   public static final String NM_PROCESS_KILL_WAIT_MS =
