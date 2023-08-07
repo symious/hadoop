@@ -70,6 +70,9 @@ public final class RouterMetrics {
           "appAttempt reports and latency(ms)")
   private MutableRate totalSucceededAppAttemptsRetrieved;
 
+  @Metric("Total number of successful Retrieved getQueueInfo and latency(ms)")
+  private MutableRate totalSucceededGetQueueInfoRetrieved;
+
   @Metric("Number of operations to hit permit limits")
   private MutableCounterLong proxyOpPermitRejected;
 
@@ -82,6 +85,8 @@ public final class RouterMetrics {
   @Metric("Number of concurrent operation cluster running threads")
   private MutableGaugeInt numRunningThreads;
 
+  @Metric("# of getQueueInfo failed to be retrieved")
+  private MutableGaugeInt numGetQueueInfoFailedRetrieved;
 
   /**
    * Provide quantile counters for all latencies.
@@ -92,6 +97,7 @@ public final class RouterMetrics {
   private MutableQuantiles getApplicationReportLatency;
   private MutableQuantiles getApplicationsReportLatency;
   private MutableQuantiles getApplicationAttemptReportLatency;
+  private MutableQuantiles getQueueInfoLatency;
 
   private static volatile RouterMetrics INSTANCE = null;
   private static MetricsRegistry registry;
@@ -115,6 +121,9 @@ public final class RouterMetrics {
         registry.newQuantiles("getApplicationAttemptReportLatency",
                     "latency of get applicationattempt " +
                             "report", "ops", "latency", 10);
+    getQueueInfoLatency =
+        registry.newQuantiles("getQueueInfoLatency",
+            "latency of get queue info timeouts", "ops", "latency", 10);
   }
 
   public static RouterMetrics getMetrics() {
@@ -226,6 +235,10 @@ public final class RouterMetrics {
     return numMultipleAppsFailedRetrieved.value();
   }
 
+  public int getQueueInfoFailedRetrieved() {
+    return numGetQueueInfoFailedRetrieved.value();
+  }
+
   public void succeededAppsCreated(long duration) {
     totalSucceededAppsCreated.add(duration);
     getNewApplicationLatency.add(duration);
@@ -254,6 +267,11 @@ public final class RouterMetrics {
   public void succeededAppAttemptsRetrieved(long duration) {
     totalSucceededAppAttemptsRetrieved.add(duration);
     getApplicationAttemptReportLatency.add(duration);
+  }
+
+  public void succeededGetQueueInfoRetrieved(long duration) {
+    totalSucceededGetQueueInfoRetrieved.add(duration);
+    getQueueInfoLatency.add(duration);
   }
 
   public void incrAppsFailedCreated() {
@@ -310,5 +328,9 @@ public final class RouterMetrics {
 
   public int getNumRunningThreads() {
     return numRunningThreads.value();
+  }
+
+  public void incrGetQueueInfoFailedRetrieved() {
+    numGetQueueInfoFailedRetrieved.incr();
   }
 }

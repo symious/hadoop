@@ -19,14 +19,21 @@ package org.apache.hadoop.yarn.server.router.clientrm;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationsResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetClusterMetricsResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.GetClusterNodesResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.GetQueueInfoResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import org.apache.hadoop.yarn.api.records.NodeReport;
+import org.apache.hadoop.yarn.api.records.QueueInfo;
 import org.apache.hadoop.yarn.api.records.YarnClusterMetrics;
+import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
+import org.apache.hadoop.yarn.util.Records;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,4 +96,53 @@ public final class RouterYarnClientUtils {
     return GetClusterNodesResponse.newInstance(sumNodeReportList);
   }
 
+  /**
+   * Merges a list of GetQueueInfoResponse.
+   *
+   * @param responses a map of GetQueueInfoResponse to merge.
+   * @return the merged GetQueueInfoResponse.
+   */
+  public static GetQueueInfoResponse mergeQueues(
+      Map<SubClusterId, GetQueueInfoResponse> responses) {
+    GetQueueInfoResponse queueResponse = Records.newRecord(
+        GetQueueInfoResponse.class);
+
+    QueueInfo queueInfo = null;
+    for (GetQueueInfoResponse response : responses.values()) {
+      if (response != null && response.getQueueInfo() != null) {
+        if (queueInfo == null) {
+          queueInfo = response.getQueueInfo();
+        } else {
+          // set Capacity\MaximumCapacity\CurrentCapacity
+          queueInfo.setCapacity(queueInfo.getCapacity() + response.getQueueInfo().getCapacity());
+          queueInfo.setMaximumCapacity(
+              queueInfo.getMaximumCapacity() + response.getQueueInfo().getMaximumCapacity());
+          queueInfo.setCurrentCapacity(
+              queueInfo.getCurrentCapacity() + response.getQueueInfo().getCurrentCapacity());
+
+          // set childQueues
+          List<QueueInfo> childQueues = new ArrayList<>(queueInfo.getChildQueues());
+          childQueues.addAll(response.getQueueInfo().getChildQueues());
+          queueInfo.setChildQueues(childQueues);
+
+          // set applications
+          List<ApplicationReport> applicationReports = new ArrayList<>(queueInfo.getApplications());
+          applicationReports.addAll(response.getQueueInfo().getApplications());
+          queueInfo.setApplications(applicationReports);
+
+          // set accessibleNodeLabels
+          Set<String> accessibleNodeLabels = new HashSet<>();
+          if (queueInfo.getAccessibleNodeLabels() != null) {
+            accessibleNodeLabels.addAll(queueInfo.getAccessibleNodeLabels());
+          }
+          if (response.getQueueInfo() != null) {
+            accessibleNodeLabels.addAll(response.getQueueInfo().getAccessibleNodeLabels());
+          }
+          queueInfo.setAccessibleNodeLabels(accessibleNodeLabels);
+        }
+      }
+    }
+    queueResponse.setQueueInfo(queueInfo);
+    return queueResponse;
+  }
 }

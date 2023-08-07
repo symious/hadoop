@@ -56,6 +56,7 @@ import org.apache.hadoop.yarn.server.federation.store.records.SubClusterInfo;
 import org.apache.hadoop.yarn.server.federation.utils.CacheUtil;
 import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade;
 import org.apache.hadoop.yarn.server.metrics.ApplicationMetricsConstants;
+import org.apache.hadoop.yarn.server.router.RouterAuditLogger;
 import org.apache.hadoop.yarn.server.router.RouterMetrics;
 import org.apache.hadoop.yarn.server.router.RouterServerUtil;
 import org.apache.hadoop.yarn.server.router.utils.FederationUtil;
@@ -79,6 +80,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static org.apache.hadoop.yarn.server.router.RouterAuditLogger.AuditConstants.GET_QUEUEINFO;
+import static org.apache.hadoop.yarn.server.router.RouterAuditLogger.AuditConstants.TARGET_CLIENT_RM_SERVICE;
+import static org.apache.hadoop.yarn.server.router.RouterAuditLogger.AuditConstants.UNKNOWN;
 
 /**
  * A custom class to Add the missing FederationClientInterceptor method
@@ -497,55 +502,43 @@ public class EnhancedFederationClientInterceptor
   public GetQueueInfoResponse getQueueInfo(GetQueueInfoRequest request)
       throws YarnException, IOException {
 
-    long startTime = clock.getTime();
+    String requestId = RandomStringUtils.randomAlphabetic(8);
 
-    QueueInfo queueInfo = null;
-
-    LOG.info("GetQueueInfo request info -> QueueName: " +
-        request.getQueueName() + ", IncludeApplications: " +
-        request.getIncludeApplications() + ", IncludeChildQueues: " +
-        request.getIncludeChildQueues() + ", Recursive: " +
-        request.getRecursive());
-
-    Map<SubClusterId, SubClusterInfo> subClustersActive =
-        federationFacade.getSubClusters(true);
-
-    for(Map.Entry<SubClusterId, SubClusterInfo> entry :
-        subClustersActive.entrySet()){
-      SubClusterId subClusterId = entry.getKey();
-      ApplicationClientProtocol clientRMProxy =
-          getClientRMProxyForSubCluster(subClusterId);
-      GetQueueInfoResponse response = null;
-      try {
-        acquirePermit(subClusterId.getId());
-        response = clientRMProxy.getQueueInfo(request);
-      } catch (Exception e) {
-        LOG.warn("Unable to getQueueInfo in SubCluster "
-            + subClusterId.getId(), e);
-      } finally {
-        releasePermit(subClusterId.getId());
-      }
-
-      if (response != null) {
-        QueueInfo tmpQueueInfo = response.getQueueInfo();
-        LOG.info("GetQueueInfo response info -> QueueName: " +
-            tmpQueueInfo.getQueueName());
-        if (tmpQueueInfo.getQueueName() != null &&
-            request.getQueueName().equals(tmpQueueInfo.getQueueName())) {
-          queueInfo = tmpQueueInfo;
-          long stopTime = clock.getTime();
-          LOG.info(
-              "Get cluster queueInfo from cluster [" + subClusterId + "]," +
-                  "cost time: " + (stopTime - startTime) + "ms");
-          break;
-        }
-      }
+    if (request == null || request.getQueueName() == null) {
+      routerMetrics.incrGetQueueInfoFailedRetrieved();
+      String msg = "Missing getQueueInfo request or queueName.";
+      RouterAuditLogger
+          .logFailure(user.getShortUserName(), GET_QUEUEINFO, UNKNOWN,
+              TARGET_CLIENT_RM_SERVICE, msg);
+      RouterServerUtil.logAndThrowException(msg, null);
     }
 
-    GetQueueInfoResponse response =
-        Records.newRecord(GetQueueInfoResponse.class);
-    response.setQueueInfo(queueInfo);
-    return response;
+    long startTime = clock.getTime();
+    ClientMethod remoteMethod = new ClientMethod("getQueueInfo",
+        new Class[] {GetQueueInfoRequest.class}, new Object[] {request});
+    Map<SubClusterId, GetQueueInfoResponse> queues = null;
+    try {
+      Map<SubClusterId, SubClusterInfo> subclusters =
+          federationFacade.getSubClusters(true);
+      ArrayList<SubClusterId> clusterList =
+          new ArrayList<>(subclusters.keySet());
+      queues = invokeConcurrent(clusterList, remoteMethod,
+          GetQueueInfoResponse.class, requestId);
+    } catch (Exception ex) {
+      routerMetrics.incrGetQueueInfoFailedRetrieved();
+      String msg =
+          "Unable to get queue [" + request.getQueueName() + "] to exception.";
+      RouterAuditLogger
+          .logFailure(user.getShortUserName(), GET_QUEUEINFO, UNKNOWN,
+              TARGET_CLIENT_RM_SERVICE, msg);
+      RouterServerUtil.logAndThrowException(msg, ex);
+    }
+    long stopTime = clock.getTime();
+    routerMetrics.succeededGetQueueInfoRetrieved(stopTime - startTime);
+    RouterAuditLogger.logSuccess(user.getShortUserName(), GET_QUEUEINFO,
+        TARGET_CLIENT_RM_SERVICE, null);
+    // Merge the GetQueueInfoResponse
+    return RouterYarnClientUtils.mergeQueues(queues);
   }
 
   @Override
