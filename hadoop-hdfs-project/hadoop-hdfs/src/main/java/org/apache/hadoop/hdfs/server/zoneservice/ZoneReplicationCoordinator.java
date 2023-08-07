@@ -212,7 +212,7 @@ public class ZoneReplicationCoordinator {
 
           fileState.setFileStatus(status);
           if (areAllBlocksHaveCorrectReplicas(fileState)) {
-            boolean successOffered = finishedFiles.add(fileState);
+            boolean successOffered = finishedFiles.offer(fileState);
             if (!successOffered) {
               LOG.info("Checker failed to offer the file to finishedFiles." +
                   "the size of finishedFiles is {}.", finishedFiles.size());
