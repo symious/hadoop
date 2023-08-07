@@ -539,7 +539,8 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
           }
         }
 
-        LOG.info("Will apply the rule: {} to {}", appliedRule, fullPath);
+        LOG.info("Will apply the rule from {} to {} with replication {} on {}", dis, appliedRule,
+            appliedRule.getReplica(), fullPath);
         try {
           if (appliedRule.getReplica() != status.getReplication()) {
             dfs.setReplication(fullPath, appliedRule.getReplica());

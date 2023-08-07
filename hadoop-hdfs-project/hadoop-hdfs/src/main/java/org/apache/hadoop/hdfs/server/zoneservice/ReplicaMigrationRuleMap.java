@@ -160,9 +160,9 @@ public class ReplicaMigrationRuleMap {
   }
 
   /**
-   * When replication = distribution replica,
-   *         then get rule from map file
-   * When replication != distribution replica
+   * When replication != distribution replica,
+   *         then get rule from map file based on replication
+   * When replication == distribution replica
    * rep = 1 -> dis contains AT -> map of AT:1
    *         -> dis not contains AT -> map of TL:1
    * rep = 2 -> dis all in STT -> STT:2
@@ -185,9 +185,8 @@ public class ReplicaMigrationRuleMap {
    * */
   protected ReplicationRule getRuleFromDistribution(ReplicationRule distribution,
       short replication) {
-    if (distribution.getReplica() == replication) {
-      return ruleMap.get(distribution) == null ?
-          getDefaultRule(distribution, replication) : ruleMap.get(distribution);
+    if (distribution.getReplica() != replication) {
+      return getDefaultRule(distribution, replication);
     } else {
       if (replication == 1) {
         if (distribution.getDatacenters().contains(MigrationDataCenters.AT.getName())) {
@@ -234,7 +233,12 @@ public class ReplicaMigrationRuleMap {
             return ruleMap.get(ruleAlias.get(21));
           }
         }
-      } else if (replication == 4) {
+      } else if (replication >= 4 & replication < 10) {
+        // To handle abnormal cases.
+        if (distribution.getDatacenters().size() == 1
+            && distribution.getDatacenters().contains(MigrationDataCenters.AT.getName())){
+          return ruleMap.get(ruleAlias.get(3));
+        }
         if (distribution.getMainDataCenter().equals(MigrationDataCenters.AT.getName())) {
           return ruleMap.get(ruleAlias.get(12));
         } else if (distribution.getDatacenters().contains(MigrationDataCenters.AT.getName())) {
@@ -242,8 +246,6 @@ public class ReplicaMigrationRuleMap {
         } else {
           return ruleMap.get(ruleAlias.get(30));
         }
-      } else if (replication == 5) {
-        return ruleMap.get(ruleAlias.get(21));
       } else {
         short replica = (short)
             Math.ceil((distribution.getReplica(MigrationDataCenters.TL.getName()) +
