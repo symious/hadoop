@@ -66,8 +66,8 @@ public class ZoneReplicationCoordinator {
     this.maxConcurrentReplications = conf.getInt(
         DFSConfigKeys.DFS_ZONE_COORDINATOR_MAX_CONCURRENT_REPLICATIONS_KEY,
         DFSConfigKeys.DFS_ZONE_COORDINATOR_MAX_CONCURRENT_REPLICATIONS_DEFAULT);
-    this.waitFiles = new LinkedBlockingQueue<>(100000);
-    this.finishedFiles = new LinkedBlockingQueue<>(100000);
+    this.waitFiles = new LinkedBlockingQueue<>(10000);
+    this.finishedFiles = new LinkedBlockingQueue<>(10000);
     this.minCheckInterval = conf.getLong(
         DFSConfigKeys.DFS_ZONE_COORDINATOR_MIN_CHECK_INTERVAL_KEY,
         DFSConfigKeys.DFS_ZONE_COORDINATOR_MIN_CHECK_INTERVAL_DEFAULT);
