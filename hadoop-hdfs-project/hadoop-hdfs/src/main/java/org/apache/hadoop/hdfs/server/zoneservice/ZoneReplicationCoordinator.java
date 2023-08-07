@@ -123,7 +123,11 @@ public class ZoneReplicationCoordinator {
     if (!successOffered) {
       LOG.info("addFile failed to offer the file to waitFiles." +
           "The size of waitFiles is {}.", waitFiles.size());
-      waitFiles.add(new FileState(filePath, fileId, rule, maxCheckTimes, replicaDelta));
+      try {
+        waitFiles.put(new FileState(filePath, fileId, rule, maxCheckTimes, replicaDelta));
+      } catch (InterruptedException e) {
+        LOG.error("Failed to put fileState to waitFiles", e);
+      }
     }
   }
 
@@ -216,7 +220,11 @@ public class ZoneReplicationCoordinator {
             if (!successOffered) {
               LOG.info("Checker failed to offer the file to finishedFiles." +
                   "the size of finishedFiles is {}.", finishedFiles.size());
-              finishedFiles.add(fileState);
+              try {
+                finishedFiles.put(fileState);
+              } catch (InterruptedException e) {
+                LOG.error("Failed to put fileState to finishedFiles", e);
+              }
             }
             minusReplicaDeltaFromRunning(replicaDelta);
           } else {
@@ -234,7 +242,11 @@ public class ZoneReplicationCoordinator {
               if (!successOffered) {
                 LOG.info("Checker failed to offer the file to waitFiles." +
                     "the size of waitFiles is {}.", waitFiles.size());
-                waitFiles.add(fileState);
+                try {
+                  waitFiles.put(fileState);
+                } catch (InterruptedException e) {
+                  LOG.error("Failed to put fileState to waitFiles.", e);
+                }
               }
             }
           }
