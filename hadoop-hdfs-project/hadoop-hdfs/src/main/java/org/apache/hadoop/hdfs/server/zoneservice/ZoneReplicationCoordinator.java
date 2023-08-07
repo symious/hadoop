@@ -66,8 +66,8 @@ public class ZoneReplicationCoordinator {
     this.maxConcurrentReplications = conf.getInt(
         DFSConfigKeys.DFS_ZONE_COORDINATOR_MAX_CONCURRENT_REPLICATIONS_KEY,
         DFSConfigKeys.DFS_ZONE_COORDINATOR_MAX_CONCURRENT_REPLICATIONS_DEFAULT);
-    this.waitFiles = new LinkedBlockingQueue<>();
-    this.finishedFiles = new LinkedBlockingQueue<>();
+    this.waitFiles = new LinkedBlockingQueue<>(10000);
+    this.finishedFiles = new LinkedBlockingQueue<>(10000);
     this.minCheckInterval = conf.getLong(
         DFSConfigKeys.DFS_ZONE_COORDINATOR_MIN_CHECK_INTERVAL_KEY,
         DFSConfigKeys.DFS_ZONE_COORDINATOR_MIN_CHECK_INTERVAL_DEFAULT);
@@ -118,7 +118,17 @@ public class ZoneReplicationCoordinator {
       int n = runningReplications.addAndGet(replicaDelta);
       LOG.debug("Added {} replicas, now runningReplications is: {}", replicaDelta, n);
     }
-    this.waitFiles.add(new FileState(filePath, fileId, rule, maxCheckTimes, replicaDelta));
+    boolean successOffered = waitFiles.offer(new FileState(filePath, fileId, rule, maxCheckTimes,
+        replicaDelta));
+    if (!successOffered) {
+      LOG.info("addFile failed to offer the file to waitFiles." +
+          "The size of waitFiles is {}.", waitFiles.size());
+      try {
+        waitFiles.put(new FileState(filePath, fileId, rule, maxCheckTimes, replicaDelta));
+      } catch (InterruptedException e) {
+        LOG.error("Failed to put fileState to waitFiles", e);
+      }
+    }
   }
 
   /**
@@ -206,7 +216,16 @@ public class ZoneReplicationCoordinator {
 
           fileState.setFileStatus(status);
           if (areAllBlocksHaveCorrectReplicas(fileState)) {
-            finishedFiles.add(fileState);
+            boolean successOffered = finishedFiles.offer(fileState);
+            if (!successOffered) {
+              LOG.info("Checker failed to offer the file to finishedFiles." +
+                  "the size of finishedFiles is {}.", finishedFiles.size());
+              try {
+                finishedFiles.put(fileState);
+              } catch (InterruptedException e) {
+                LOG.error("Failed to put fileState to finishedFiles", e);
+              }
+            }
             minusReplicaDeltaFromRunning(replicaDelta);
           } else {
             int leftCheckTimes = fileState.getLeftCheckTimes() - 1;
@@ -219,7 +238,16 @@ public class ZoneReplicationCoordinator {
                   fileState.filePath, leftCheckTimes);
               fileState.setLeftCheckTimes(leftCheckTimes);
               fileState.setLastCheckTime(Time.monotonicNow());
-              waitFiles.add(fileState);
+              boolean successOffered = waitFiles.offer(fileState);
+              if (!successOffered) {
+                LOG.info("Checker failed to offer the file to waitFiles." +
+                    "the size of waitFiles is {}.", waitFiles.size());
+                try {
+                  waitFiles.put(fileState);
+                } catch (InterruptedException e) {
+                  LOG.error("Failed to put fileState to waitFiles.", e);
+                }
+              }
             }
           }
         } else if (!isWaitingCompletion.get()) {
