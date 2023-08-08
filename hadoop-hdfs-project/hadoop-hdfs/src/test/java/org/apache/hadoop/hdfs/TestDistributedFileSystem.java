@@ -2242,4 +2242,36 @@ public class TestDistributedFileSystem {
       }
     }
   }
+
+  @Test
+  public void testSymbollinkStat() throws IOException {
+    FileSystem.getStatistics(HdfsConstants.HDFS_URI_SCHEME,
+        DistributedFileSystem.class).reset();
+    @SuppressWarnings("unchecked")
+    ThreadLocal<StatisticsData> data = (ThreadLocal<StatisticsData>)
+        Whitebox.getInternalState(
+            FileSystem.getStatistics(HdfsConstants.HDFS_URI_SCHEME,
+                DistributedFileSystem.class), "threadData");
+    data.set(null);
+
+    int lsLimit = 2;
+    final Configuration conf = getTestConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_LIST_LIMIT, lsLimit);
+    final MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).build();
+    try {
+      cluster.waitActive();
+      final FileSystem fs = cluster.getFileSystem();
+      Path dir = new Path("/test");
+
+      fs.mkdirs(dir);
+      Path sub1 = new Path(dir, "sub1");
+      fs.mkdirs(sub1);
+      Path sub2 = new Path(dir, "sub2");
+      fs.createSymlink(sub1, sub2, false);
+      fs.getFileStatus(sub2);
+      checkOpStatistics(OpType.RESOLVE_LINK, 0);
+    } finally {
+      if (cluster != null) cluster.shutdown();
+    }
+  }
 }
