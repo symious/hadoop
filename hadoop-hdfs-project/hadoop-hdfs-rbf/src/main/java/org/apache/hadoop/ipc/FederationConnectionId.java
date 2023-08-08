@@ -31,7 +31,7 @@ public class FederationConnectionId extends Client.ConnectionId {
   public FederationConnectionId(InetSocketAddress address, Class<?> protocol,
       UserGroupInformation ticket, int rpcTimeout,
       RetryPolicy connectionRetryPolicy, Configuration conf, int index) {
-    super(address, protocol, ticket, rpcTimeout, connectionRetryPolicy, conf);
+    super(address, protocol, ticket, rpcTimeout, connectionRetryPolicy, conf, true);
     this.connectionIndex = index;
   }
 

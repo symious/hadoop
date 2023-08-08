@@ -35,7 +35,6 @@ import org.junit.Test;
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
 
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_IP_PROXY_USERS;
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.NAMENODES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
@@ -54,7 +53,6 @@ public class TestRouterRetryCache {
     conf.set("hadoop.proxyuser." + adminUser + ".groups", "*");
     conf.set("hadoop.proxyuser.fake_joe.hosts", "*");
     conf.set("hadoop.proxyuser.fake_joe.groups", "*");
-    conf.set(DFS_NAMENODE_IP_PROXY_USERS, routerUser.getShortUserName());
     cluster = new MiniRouterDFSCluster(true, 1);
     cluster.addNamenodeOverrides(conf);
 

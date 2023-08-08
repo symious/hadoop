@@ -92,6 +92,7 @@ message RpcRequestHeaderProto { // the header for the RpcRequest
   optional RPCCallerContextProto callerContext = 7; // call context
   optional int64 stateId = 8; // The last seen Global State ID
   optional string proxyHostname = 20;
+  optional bool fromRBF = 100 [default = false];
 }
 
 

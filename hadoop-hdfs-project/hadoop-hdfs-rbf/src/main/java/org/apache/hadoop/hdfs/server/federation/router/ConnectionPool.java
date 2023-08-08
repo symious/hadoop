@@ -469,18 +469,11 @@ public class ConnectionPool {
     }
     InetSocketAddress socket = NetUtils.createSocketAddr(nnAddress);
     final long version = RPC.getProtocolVersion(classes.protoPb);
-    Object proxy = null;
-    if (enableMultiSocket) {
-      FederationConnectionId connectionId = new FederationConnectionId(
-          socket, ClientNamenodeProtocolPB.class, ugi, RPC.getRpcTimeout(conf),
-          defaultPolicy, conf, socketIndex);
-      proxy = RPC.getProtocolProxy(classes.protoPb, version, connectionId,
-          conf, factory, alignmentContext).getProxy();
-    } else {
-      proxy = RPC.getProtocolProxy(classes.protoPb, version, socket, ugi,
-          conf, factory, RPC.getRpcTimeout(conf), defaultPolicy, null, alignmentContext)
-          .getProxy();
-    }
+    FederationConnectionId connectionId = new FederationConnectionId(
+        socket, classes.protoPb, ugi, RPC.getRpcTimeout(conf),
+        defaultPolicy, conf, enableMultiSocket ? socketIndex : 0);
+    Object proxy = RPC.getProtocolProxy(classes.protoPb, version, connectionId,
+        conf, factory, alignmentContext).getProxy();
     T client = newProtoClient(proto, classes, proxy);
     Text dtService = SecurityUtil.buildTokenService(socket);
 

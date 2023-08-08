@@ -29,7 +29,6 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_SPECIAL_T
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_SPECIAL_TRASH_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HANDLER_COUNT_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_IP_PROXY_USERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_RATIO_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_HANDLER_RATIO_KEY;
@@ -292,9 +291,6 @@ public class NameNodeRpcServer implements NamenodeProtocols {
   
   private final String minimumDataNodeVersion;
 
-  // Users who can override the client info
-  private final String[] ipProxyUsers;
-
   private final String defaultECPolicyName;
   private final boolean enableSpecialTrash;
 
@@ -321,8 +317,6 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     boolean serviceRPCSdiAuthEnabled = conf.getBoolean(
         HADOOP_SERVICE_RPC_SDI_AUTHENTICATION_ENABLED_KEY,
         HADOOP_SERVICE_RPC_SDI_AUTHENTICATION_ENABLED_DEFAULT);
-
-    ipProxyUsers = conf.getStrings(DFS_NAMENODE_IP_PROXY_USERS);
 
     RPC.setProtocolEngine(conf, ClientNamenodeProtocolPB.class,
         ProtobufRpcEngine2.class);
@@ -854,7 +848,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
    * Return the current CacheEntry.
    */
   private CacheEntry getCacheEntry() {
-    Pair<byte[], Integer> clientInfo = NameNode.getClientIdAndCallId(this.ipProxyUsers);
+    Pair<byte[], Integer> clientInfo = NameNode.getClientIdAndCallId();
     return RetryCache.waitForCompletion(retryCache, clientInfo.getLeft(), clientInfo.getRight());
   }
 
@@ -862,7 +856,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
    * Return the current CacheEntryWithPayload.
    */
   private CacheEntryWithPayload getCacheEntryWithPayload(Object payload) {
-    Pair<byte[], Integer> clientInfo = NameNode.getClientIdAndCallId(this.ipProxyUsers);
+    Pair<byte[], Integer> clientInfo = NameNode.getClientIdAndCallId();
     return RetryCache.waitForCompletion(retryCache, payload,
         clientInfo.getLeft(), clientInfo.getRight());
   }
@@ -2196,7 +2190,7 @@ public class NameNodeRpcServer implements NamenodeProtocols {
    * Get the actual client's machine.
    */
   private String getClientMachine() {
-    return NameNode.getClientMachine(this.ipProxyUsers);
+    return NameNode.getClientMachine();
   }
 
   @Override

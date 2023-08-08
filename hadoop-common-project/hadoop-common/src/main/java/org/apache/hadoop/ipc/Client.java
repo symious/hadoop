@@ -419,7 +419,7 @@ public class Client implements AutoCloseable {
             .makeRpcRequestHeader(RpcKind.RPC_PROTOCOL_BUFFER,
                 OperationProto.RPC_FINAL_PACKET, PING_CALL_ID,
                 RpcConstants.INVALID_RETRY_COUNT, clientId,
-                PROXY_HOSTNAME.get(), null);
+                PROXY_HOSTNAME.get(), null, remoteId.fromRBF);
         try {
           pingHeader.writeDelimitedTo(buf);
         } catch (IOException e) {
@@ -999,7 +999,7 @@ public class Client implements AutoCloseable {
           .makeRpcRequestHeader(RpcKind.RPC_PROTOCOL_BUFFER,
               OperationProto.RPC_FINAL_PACKET, CONNECTION_CONTEXT_CALL_ID,
               RpcConstants.INVALID_RETRY_COUNT, clientId,
-              PROXY_HOSTNAME.get(), null);
+              PROXY_HOSTNAME.get(), null, remoteId.fromRBF);
       // do not flush.  the context and first ipc call request must be sent
       // together to avoid possibility of broken pipes upon authz failure.
       // see writeConnectionHeader
@@ -1156,7 +1156,7 @@ public class Client implements AutoCloseable {
       // Items '1' and '2' are prepared here. 
       RpcRequestHeaderProto header = ProtoUtil.makeRpcRequestHeader(
           call.rpcKind, OperationProto.RPC_FINAL_PACKET, call.id, call.retry,
-          clientId, PROXY_HOSTNAME.get(), call.alignmentContext);
+          clientId, PROXY_HOSTNAME.get(), call.alignmentContext, remoteId.fromRBF);
 
       final ResponseBuffer buf = new ResponseBuffer();
       header.writeDelimitedTo(buf);
@@ -1679,15 +1679,21 @@ public class Client implements AutoCloseable {
     private final int pingInterval; // how often sends ping to the server in msecs
     private String saslQop; // here for testing
     private final Configuration conf; // used to get the expected kerberos principal name
+    private final boolean fromRBF;
+
+    public ConnectionId(InetSocketAddress address, Class<?> protocol, UserGroupInformation ticket,
+        int rpcTimeout, RetryPolicy connectionRetryPolicy, Configuration conf) {
+      this(address, protocol, ticket, rpcTimeout, connectionRetryPolicy, conf, false);
+    }
     
-    public ConnectionId(InetSocketAddress address, Class<?> protocol,
-                 UserGroupInformation ticket, int rpcTimeout,
-                 RetryPolicy connectionRetryPolicy, Configuration conf) {
+    public ConnectionId(InetSocketAddress address, Class<?> protocol, UserGroupInformation ticket,
+        int rpcTimeout, RetryPolicy connectionRetryPolicy, Configuration conf, boolean fromRBF) {
       this.protocol = protocol;
       this.address = address;
       this.ticket = ticket;
       this.rpcTimeout = rpcTimeout;
       this.connectionRetryPolicy = connectionRetryPolicy;
+      this.fromRBF = fromRBF;
 
       this.maxIdleTime = conf.getInt(
           CommonConfigurationKeysPublic.IPC_CLIENT_CONNECTION_MAXIDLETIME_KEY,

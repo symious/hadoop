@@ -392,6 +392,14 @@ public abstract class Server {
     Call call = CurCall.get();
     return call != null ? call.callId : RpcConstants.INVALID_CALL_ID;
   }
+
+  /**
+   * Return true if this call is sent from RBF, else return false.
+   */
+  public static boolean callFromRBF() {
+    Call call = CurCall.get();
+    return call != null ? call.fromRBF : false;
+  }
   
   /**
    * @return The current active RPC call's retry count. -1 indicates the retry
@@ -900,6 +908,7 @@ public abstract class Server {
     private boolean isCallCoordinated;
     private final String proxyHostname;
     private boolean canPassToDeepQueue;
+    private boolean fromRBF = false;
 
     Call() {
       this(RpcConstants.INVALID_CALL_ID, RpcConstants.INVALID_RETRY_COUNT,
@@ -942,6 +951,10 @@ public abstract class Server {
       this.isCallCoordinated = false;
       this.proxyHostname = proxyHostname;
       this.canPassToDeepQueue = false;
+    }
+
+    void setFromRBF(boolean fromRBF) {
+      this.fromRBF = fromRBF;
     }
 
     /**
@@ -1135,15 +1148,16 @@ public abstract class Server {
         Writable param, RPC.RpcKind kind, byte[] clientId,
         TraceScope traceScope, CallerContext context) {
       this(connection, id, retryCount, param, kind, clientId, traceScope,
-          context, null);
+          context, null, false);
     }
 
     RpcCall(Connection connection, int id, int retryCount,
         Writable param, RPC.RpcKind kind, byte[] clientId,
-        TraceScope traceScope, CallerContext context, String proxyHostname) {
+        TraceScope traceScope, CallerContext context, String proxyHostname, boolean fromRBF) {
       super(id, retryCount, kind, clientId, traceScope, context, proxyHostname);
       this.connection = connection;
       this.rpcRequest = param;
+      setFromRBF(fromRBF);
     }
 
     @Override
@@ -2978,7 +2992,7 @@ public abstract class Server {
           header.getRetryCount(), rpcRequest,
           ProtoUtil.convert(header.getRpcKind()),
           header.getClientId().toByteArray(), traceScope,
-          callerContext, proxyHostname);
+          callerContext, proxyHostname, header.getFromRBF());
 
       // Save the priority level assignment by the scheduler
       call.setPriorityLevel(callQueue.getPriorityLevel(call));

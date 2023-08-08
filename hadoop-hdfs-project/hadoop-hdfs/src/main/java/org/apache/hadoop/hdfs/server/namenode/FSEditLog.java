@@ -17,7 +17,6 @@
  */
 package org.apache.hadoop.hdfs.server.namenode;
 
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_IP_PROXY_USERS;
 import static org.apache.hadoop.util.ExitUtil.terminate;
 import static org.apache.hadoop.util.Time.monotonicNow;
 
@@ -195,9 +194,6 @@ public class FSEditLog implements LogsPurgeable {
 
   protected final OpInstanceCache cache = new OpInstanceCache();
 
-  // Users who can override the client ip
-  private final String[] ipProxyUsers;
-
   /**
    * The edit directories that are shared between primary and secondary.
    */
@@ -249,7 +245,6 @@ public class FSEditLog implements LogsPurgeable {
    * @param editsDirs List of journals to use
    */
   FSEditLog(Configuration conf, NNStorage storage, List<URI> editsDirs) {
-    ipProxyUsers = conf.getStrings(DFS_NAMENODE_IP_PROXY_USERS);
     isSyncRunning = false;
     this.conf = conf;
     this.storage = storage;
@@ -803,7 +798,7 @@ public class FSEditLog implements LogsPurgeable {
   /** Record the RPC IDs if necessary */
   private void logRpcIds(FSEditLogOp op, boolean toLogRpcIds) {
     if (toLogRpcIds) {
-      Pair<byte[], Integer> clientIdAndCallId = NameNode.getClientIdAndCallId(this.ipProxyUsers);
+      Pair<byte[], Integer> clientIdAndCallId = NameNode.getClientIdAndCallId();
       op.setRpcClientId(clientIdAndCallId.getLeft());
       op.setRpcCallId(clientIdAndCallId.getRight());
     }

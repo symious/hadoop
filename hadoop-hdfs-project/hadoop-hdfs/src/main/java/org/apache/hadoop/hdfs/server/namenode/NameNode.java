@@ -578,19 +578,12 @@ public class NameNode extends ReconfigurableBase implements
 
   /**
    * Try to obtain the actual client info according to the current user.
-   * @param ipProxyUsers Users who can override client infos
    */
-  private static String clientInfoFromContext(
-      final String[] ipProxyUsers) {
-    if (ipProxyUsers != null) {
-      UserGroupInformation user =
-          UserGroupInformation.getRealUserOrSelf(Server.getRemoteUser());
-      if (user != null &&
-          ArrayUtils.contains(ipProxyUsers, user.getShortUserName())) {
-        CallerContext context = CallerContext.getCurrent();
-        if (context != null && context.isContextValid()) {
-          return context.getContext();
-        }
+  private static String clientInfoFromContext() {
+    if (canParseInfoFromCallerContext()) {
+      CallerContext context = CallerContext.getCurrent();
+      if (context != null && context.isContextValid()) {
+        return context.getContext();
       }
     }
     return null;
@@ -614,14 +607,17 @@ public class NameNode extends ReconfigurableBase implements
     return null;
   }
 
+  public static boolean canParseInfoFromCallerContext() {
+    return Server.callFromRBF();
+  }
+
   /**
    * Try to obtain the actual client's machine according to the current user.
-   * @param ipProxyUsers Users who can override client infos.
    * @return The actual client's machine.
    */
-  public static String getClientMachine(final String[] ipProxyUsers) {
+  public static String getClientMachine() {
     String clientMachine = null;
-    String cc = clientInfoFromContext(ipProxyUsers);
+    String cc = clientInfoFromContext();
     if (cc != null) {
       // if the rpc has a caller context of "clientIp:1.2.3.4,CLI",
       // return "1.2.3.4" as the client machine.
@@ -647,14 +643,12 @@ public class NameNode extends ReconfigurableBase implements
   /**
    * Try to obtain the actual client's id and call id
    * according to the current user.
-   * @param ipProxyUsers Users who can override client infos
    * @return The actual client's id and call id.
    */
-  public static Pair<byte[], Integer> getClientIdAndCallId(
-      final String[] ipProxyUsers) {
+  public static Pair<byte[], Integer> getClientIdAndCallId() {
     byte[] clientId = Server.getClientId();
     int callId = Server.getCallId();
-    String cc = clientInfoFromContext(ipProxyUsers);
+    String cc = clientInfoFromContext();
     if (cc != null) {
       String clientIdKey = CallerContext.CLIENT_ID_STR +
           CallerContext.Builder.KEY_VALUE_SEPARATOR;

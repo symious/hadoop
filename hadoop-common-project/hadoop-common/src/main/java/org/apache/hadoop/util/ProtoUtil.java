@@ -186,16 +186,19 @@ public abstract class ProtoUtil {
       RpcRequestHeaderProto.OperationProto operation, int callId,
       int retryCount, byte[] uuid) {
     return makeRpcRequestHeader(rpcKind, operation, callId, retryCount, uuid,
-        null, null);
+        null, null, false);
   }
 
   public static RpcRequestHeaderProto makeRpcRequestHeader(RPC.RpcKind rpcKind,
       RpcRequestHeaderProto.OperationProto operation, int callId,
       int retryCount, byte[] uuid, String proxyHostname,
-      AlignmentContext alignmentContext) {
+      AlignmentContext alignmentContext, boolean fromRBF) {
     RpcRequestHeaderProto.Builder result = RpcRequestHeaderProto.newBuilder();
     result.setRpcKind(convert(rpcKind)).setRpcOp(operation).setCallId(callId)
         .setRetryCount(retryCount).setClientId(ByteString.copyFrom(uuid));
+    if (fromRBF) {
+      result.setFromRBF(true);
+    }
 
     // Add tracing info if we are currently tracing.
     Span span = Tracer.getCurrentSpan();
