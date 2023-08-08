@@ -33,19 +33,32 @@ public class ContainerLogContext {
   private final ContainerType containerType;
   private int exitCode;
   private YarnApplicationState state;
+  private long containerLaunchTime;
 
   public ContainerLogContext(ContainerId containerId,
       ContainerType containerType, int exitCode) {
-    this(containerId, containerType, exitCode, null);
+    this.containerId = containerId;
+    this.containerType = containerType;
+    this.exitCode = exitCode;
+  }
+
+  public ContainerLogContext(ContainerId containerId,
+      ContainerType containerType, int exitCode, long containerLaunchTime) {
+    this.containerId = containerId;
+    this.containerType = containerType;
+    this.exitCode = exitCode;
+    this.containerLaunchTime = containerLaunchTime;
   }
 
   @Public
   @Unstable
   public ContainerLogContext(ContainerId containerId,
-      ContainerType containerType, int exitCode, YarnApplicationState state) {
+      ContainerType containerType, int exitCode, long containerLaunchTime,
+      YarnApplicationState state) {
     this.containerId = containerId;
     this.containerType = containerType;
     this.exitCode = exitCode;
+    this.containerLaunchTime = containerLaunchTime;
     this.state = state;
   }
 
@@ -82,5 +95,9 @@ public class ContainerLogContext {
 
   public void setYarnApplicationState(YarnApplicationState state) {
     this.state = state;
+  }
+
+  public long getContainerLaunchTime() {
+    return containerLaunchTime;
   }
 }

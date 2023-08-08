@@ -326,8 +326,9 @@ public class AppLogAggregatorImpl implements AppLogAggregator {
             container.getContainerTokenIdentifier().getContainerType();
         if (shouldUploadLogs(
             new ContainerLogContext(container.getContainerId(), containerType,
-                0, this.context.getApplications().get(this.appId)
-                .getYarnApplicationState()))) {
+                0, container.getContainerLaunchTime(),
+                this.context.getApplications().get(this.appId)
+                    .getYarnApplicationState()))) {
           pendingContainerInThisCycle.add(container.getContainerId());
         }
       }
