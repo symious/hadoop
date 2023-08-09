@@ -392,6 +392,11 @@ public class ZoneChecker {
           }
           LocatedBlock lb = lbs.get(i);
           Map<String, Short> mapDCReplica = ZoneMover.getBlockDistribution(lb);
+          if (lb.getLocations().length != status.getReplication()
+              || lb.getLocations().length > 5) {
+            LOG.warn("Found the abnormal file with replication {} and the distribution {}",
+                status.getReplication(), ReplicationRule.parseFromMap(mapDCReplica));
+          }
           if (blockSummaryFlag) {
             for (String dc : mapDCReplica.keySet()) {
               if (dcBlockStat.containsKey(dc)) {
