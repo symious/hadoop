@@ -2873,6 +2873,13 @@ public class YarnConfiguration extends Configuration {
   public static final String NM_WEB_TERMINAL_SHELL_PATH =
     NM_PREFIX + "web-terminal.shell-path";
 
+  /** The ban commands to the web terminal. */
+  public static final String NM_WEB_TERMINAL_BAN_COMMANDS =
+    NM_PREFIX + "web-terminal.ban.commands";
+
+  public static final String DEFAULT_NM_WEB_TERMINAL_BAN_COMMANDS =
+      "rm,cp,mv,rmdir,mkdir,touch,tee,chmod,chown,chgrp,tar,zip,unzip,wget,curl,unalias,bash,sh,ln,kill,killall,sed,python,chsh,nohup";
+
   /**
    * True if linux-container-executor should limit itself to one user
    * when running in non-secure mode.

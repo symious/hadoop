@@ -83,6 +83,7 @@ public class ContainerShellWebSocket {
   private String shellPath;
   private File commandFile;
   private File profileFile;
+  private String[] banCommands;
   private Thread inThread;
   private Thread errThread;
 
@@ -148,7 +149,10 @@ public class ContainerShellWebSocket {
       this.shellPath = nmContext.getConf()
           .get(YarnConfiguration.NM_WEB_TERMINAL_SHELL_PATH,
               "/usr/bin:/usr/local/bin:/etc/alternatives/bin");
-
+      this.banCommands = nmContext.getConf()
+          .get(YarnConfiguration.NM_WEB_TERMINAL_BAN_COMMANDS,
+              YarnConfiguration.DEFAULT_NM_WEB_TERMINAL_BAN_COMMANDS).trim()
+          .split(",");
       String commandFilePath = writeCommandToTempFile(execContext);
       this.termCommand = (PrivilegedOperationExecutor
           .getContainerExecutorExecutablePath(nmContext.getConf())
@@ -300,12 +304,9 @@ public class ContainerShellWebSocket {
       Writer profileWriter = new OutputStreamWriter(
           new FileOutputStream(profileFile.toString()), "UTF-8");
       PrintWriter pw = new PrintWriter(profileWriter);
-      pw.println("alias kill=\"printf 'command not supported\\n'\"");
-      pw.println("alias rm=\"printf 'command not supported\\n'\"");
-      pw.println("alias rmdir=\"printf 'command not supported\\n'\"");
-      pw.println("alias mkdir=\"printf 'command not supported\\n'\"");
-      pw.println("alias touch=\"printf 'command not supported\\n'\"");
-      pw.println("alias yum=\"printf 'command not supported\\n'\"");
+      for (String cmd : banCommands) {
+        pw.println("alias " + cmd + "=\"printf 'command not supported\\n'\"");
+      }
       pw.println("alias vim=\"vim -M\"");
       pw.println("alias vi=\"vi -M\"");
       pw.println("alias alias=\"printf ''\"");
