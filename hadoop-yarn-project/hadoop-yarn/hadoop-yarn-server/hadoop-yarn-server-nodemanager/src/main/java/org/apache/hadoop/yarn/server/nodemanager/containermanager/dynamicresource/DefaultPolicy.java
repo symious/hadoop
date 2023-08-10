@@ -28,7 +28,7 @@ public class DefaultPolicy implements Policy {
   private long launchTimeThresold;
 
   @Override
-  public UpdateContainerRequest apply(Container container) {
+  public ContainerAdjustment apply(Container container) {
     ContainerId containerId = container.getContainerId();
     ContainerMetrics containerMetrics =
         ContainerMetrics.getContainerMetrics(containerId);
@@ -38,51 +38,53 @@ public class DefaultPolicy implements Policy {
     }
 
     long max = (long) containerMetrics.minMax.max();
-    long latest = containerMetrics.latestMemoryMbs;
-    long init = containerMetrics.initMemoryMbs;
-    long deserved = containerMetrics.pMemLimitMbs.value();
+    long latest = containerMetrics.latestMemoryMbs.value();
+    long init = containerMetrics.initMemoryMbs.value();
+    long limit = containerMetrics.pMemLimitMbs.value();
 
     LOG.debug("MemoryUsage for container: " + containerId + ". max: " + max
-        + " latest: " + latest + " init: " + init + " deserved: " + deserved);
+        + " latest: " + latest + " init: " + init + " limit: " + limit);
 
     if (latest <= max) {
       if (cache.getIfPresent(containerId) != null) {
         return null;
       }
-      if (deserved < max) {
+      if (limit < max) {
         long target = Math.min(init, max);
-        if (target == deserved) {
+        if (target == limit) {
           return null;
         }
+        long normalized = ResourceCalculator
+            .roundUp(Math.max(minAllocationMb, target), minAllocationMb);
+
         cache.put(containerId, System.currentTimeMillis());
-        LOG.info("Increase resource from " + deserved + " to " + target
+        LOG.info("Increase resource from " + limit + " to " + normalized
             + " for container: " + containerId);
-        return UpdateContainerRequest
-            .newInstance(container.getContainerTokenIdentifier().getVersion(),
-                containerId, ContainerUpdateType.INCREASE_RESOURCE, Resource
-                    .newInstance(target, containerMetrics.cpuVcoreLimit.value()),
-                container.getContainerTokenIdentifier().getExecutionType());
+
+        return new ContainerAdjustment(containerId, container,
+            ContainerUpdateType.INCREASE_RESOURCE,
+            container.getContainerTokenIdentifier().getResource(),
+            normalized - limit);
       } else {
-        if ((double)max / (double)deserved > 0.8) {
+        if ((double)max / (double)limit > 0.8) {
           return null;
         } else {
-          long target = deserved - (deserved - max) / 2;
+          long target = limit - (limit - max) / 2;
           long normalized = ResourceCalculator
               .roundUp(Math.max(minAllocationMb, target), minAllocationMb);
           LOG.debug("Before normalized: " + target + " After normalized: " + normalized
               + " for container: " + containerId);
-          if (normalized == deserved) {
+          if (normalized == limit) {
             return null;
           }
           cache.put(containerId, System.currentTimeMillis());
-          LOG.info("Decrease resource from " + deserved + " to " + normalized
+          LOG.info("Decrease resource from " + limit + " to " + normalized
               + " for container: " + containerId);
-          return UpdateContainerRequest
-              .newInstance(container.getContainerTokenIdentifier().getVersion(),
-                  containerId, ContainerUpdateType.DECREASE_RESOURCE, Resource
-                      .newInstance(normalized,
-                          containerMetrics.cpuVcoreLimit.value()),
-                  container.getContainerTokenIdentifier().getExecutionType());
+
+          return new ContainerAdjustment(containerId, container,
+              ContainerUpdateType.DECREASE_RESOURCE,
+              container.getContainerTokenIdentifier().getResource(),
+              normalized - limit);
         }
       }
     } else {

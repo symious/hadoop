@@ -6,7 +6,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Cont
 
 public interface Policy {
 
-  UpdateContainerRequest apply(Container container);
+  ContainerAdjustment apply(Container container);
 
   void init(Configuration conf);
 }

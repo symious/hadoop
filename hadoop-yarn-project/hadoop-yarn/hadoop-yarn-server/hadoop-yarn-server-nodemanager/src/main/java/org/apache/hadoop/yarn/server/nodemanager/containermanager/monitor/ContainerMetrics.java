@@ -119,10 +119,10 @@ public class ContainerMetrics implements MetricsSource {
   public SampleStat.MinMax minMax= new SampleStat.MinMax();
 
   @Metric
-  public int latestMemoryMbs;
+  public MutableGaugeInt latestMemoryMbs;
 
   @Metric
-  public int initMemoryMbs;
+  public MutableGaugeInt initMemoryMbs;
 
   static final MetricsInfo RECORD_INFO =
       info("ContainerResource", "Resource limit and usage by container");
@@ -281,7 +281,7 @@ public class ContainerMetrics implements MetricsSource {
       this.pMemMBsStat.add(memoryMBs);
       this.pMemMBQuantiles.add(memoryMBs);
       this.minMax.add(memoryMBs);
-      this.latestMemoryMbs = memoryMBs;
+      this.latestMemoryMbs.set(memoryMBs);
     }
   }
 
@@ -307,7 +307,7 @@ public class ContainerMetrics implements MetricsSource {
   }
 
   public void recordInitMemory(int memoryMBs) {
-    this.initMemoryMbs = memoryMBs;
+    this.initMemoryMbs.set(memoryMBs);
   }
 
   public void recordStateChangeDurations(long launchDuration,
