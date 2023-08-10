@@ -115,6 +115,8 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.DEFAULT_NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT;
+
 public class NodeStatusUpdaterImpl extends AbstractService implements
     NodeStatusUpdater {
 
@@ -226,7 +228,7 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
       }
       int cpuPercentage = context.getConf()
           .getInt(YarnConfiguration.NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT,
-              YarnConfiguration.DEFAULT_NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT);
+              DEFAULT_NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT);
       String nmResourceData =
           this.totalResource.getMemorySize() + "," + this.totalResource.getVirtualCores() + "," +
               cpuPercentage;
@@ -263,6 +265,14 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     LOG.info("Nodemanager resources is set to: " + totalResource);
 
     metrics.addResource(totalResource);
+
+    // Add cpu core number metrics
+    float cpuPercentage = this.context.getConf()
+        .getInt(YarnConfiguration.NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT,
+            DEFAULT_NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT) / 100.0f;
+    metrics.setTotalCpuCore(Math.round(SysInfo.newInstance().getNumProcessors() * cpuPercentage));
+    metrics.setTotalVCore(virtualCores);
+    metrics.setTotalMemoryInGB(Math.max(Math.round(memoryMb / 1024), 1));
 
     // Get actual node physical resources
     long physicalMemoryMb = memoryMb;
@@ -549,7 +559,6 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     LOG.info(successfullRegistrationMsg.toString());
     long registerCostTime = Time.monotonicNow() - registerStartTime;
     LOG.info("registerWithRM cost time: " + registerCostTime + " ms!");
-
     this.metrics.setPassedTimeAfterStartup(
         System.currentTimeMillis() - NodeManager.getNMStartupTime());
   }

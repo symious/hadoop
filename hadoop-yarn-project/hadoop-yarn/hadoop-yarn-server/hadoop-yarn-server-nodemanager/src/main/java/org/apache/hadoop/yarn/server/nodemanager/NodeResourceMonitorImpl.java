@@ -19,6 +19,7 @@
 package org.apache.hadoop.yarn.server.nodemanager;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.SysInfo;
 import org.apache.hadoop.yarn.api.records.NodeId;
@@ -341,6 +342,10 @@ public class NodeResourceMonitorImpl extends AbstractService implements
     conf.setInt(YarnConfiguration.NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT, coreRatio);
     conf.setInt(YarnConfiguration.NM_PMEM_MB, Long.valueOf(memory).intValue());
     conf.setInt(YarnConfiguration.NM_VCORES, vcoreNumber);
+    NodeManagerMetrics metric = this.nmContext.getNodeManagerMetrics();
+    metric.setTotalCpuCore(coreNumber);
+    metric.setTotalVCore(vcoreNumber);
+    metric.setTotalMemoryInGB(Math.max(Math.round(memory/1024),1));
     if (LOG.isDebugEnabled()) {
       LOG.debug("New Resources: Mem-" + memory + ", Vcore-" + vcoreNumber + ", core-" + coreNumber +
           ", Ratio-" + coreRatio);

@@ -138,6 +138,15 @@ public class NodeManagerMetrics {
   @Metric("Total failed operation of resource data persistence")
   MutableGaugeLong resourceDataPersistenceFailed;
 
+  @Metric("Total nm memory in GB")
+  MutableGaugeInt totalMemoryInGB;
+
+  @Metric("Total nm vcores")
+  MutableGaugeInt totalVCore;
+
+  @Metric("Total physic cpu core")
+  MutableGaugeInt totalCpuCore;
+
   private NodeManagerMetrics(JvmMetrics jvmMetrics) {
     this.jvmMetrics = jvmMetrics;
   }
@@ -520,5 +529,28 @@ public class NodeManagerMetrics {
 
   public void setSlowNode(int slowNode) {
     this.slowNode.set(slowNode);
+  }
+
+  public int getTotalMemoryInGB() {
+    return this.totalMemoryInGB.value();
+  }
+
+  public void setTotalMemoryInGB(int mem) {
+    this.totalMemoryInGB.set(mem);
+  }
+
+  public int getTotalVCore() {
+    return this.totalVCore.value();
+  }
+
+  public void setTotalVCore(int vcores) {
+    this.totalVCore.set(vcores);
+  }
+  public int getTotalCpuCore() {
+    return this.totalCpuCore.value();
+  }
+
+  public void setTotalCpuCore(int totalCpuCore) {
+    this.totalCpuCore.set(totalCpuCore);
   }
 }
