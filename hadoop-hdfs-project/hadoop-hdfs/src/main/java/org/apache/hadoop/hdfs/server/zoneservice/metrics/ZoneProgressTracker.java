@@ -69,6 +69,10 @@ public class ZoneProgressTracker {
   private static long moveCompletionWaitStartTime;
   private static long postProcessingStartTime;
 
+  private static int fileCountLastPrint;
+  private static long byteCountLastPrint;
+  private static long blockCountLastPrint;
+
   public static void initConf(Configuration conf) {
     printPeriod = conf.getLong(DFSConfigKeys.DFS_ZONE_PROGRESS_TRACKER_PRINT_PERIOD_KEY,
         DFSConfigKeys.DFS_ZONE_PROGRESS_TRACKER_PRINT_PERIOD_DEFAULT);
@@ -165,10 +169,12 @@ public class ZoneProgressTracker {
    */
   public static void printProgress() {
     int fileCountSnapshot = fileCount.get();
+    long timeSinceLastPrint = -1;
 
+    long now = timer.monotonicNow();
     if (printMode == ZoneProgressPrintModes.PERIODICALLY) {
-      long now = timer.monotonicNow();
       if (now - lastTrackerPrint > printPeriod) {
+        timeSinceLastPrint = now - lastTrackerPrint;
         lastTrackerPrint = now;
       } else {
         return;
@@ -176,6 +182,9 @@ public class ZoneProgressTracker {
     } else if (printMode == ZoneProgressPrintModes.EVERY_N_FILES) {
       if (fileCountSnapshot % filesPerPrint != 0) {
         return ;
+      } else {
+        timeSinceLastPrint = now - lastTrackerPrint;
+        lastTrackerPrint = now;
       }
     }
 
@@ -184,12 +193,18 @@ public class ZoneProgressTracker {
     double elapsedForBlock = lastBlockLogged - start;
     long byteCountSnapshot = byteCount.get();
     long blockCountSnapshot = blockCount.get();
+    int fileCountSinceLastPrint = fileCountSnapshot - fileCountLastPrint;
+    long byteCountSinceLastPrint = byteCountSnapshot - byteCountLastPrint;
+    long blockCountSinceLastPrint = blockCountSnapshot - blockCountLastPrint;
 
     String msg = "Zoneservice progress\n"
-        + "Elapsed time: %f ms\n"
+        + "Elapsed time: %f ms; Since last report: %d ms\n"
         + "Files: %d/%d (%5.2f%%), rate: %f files/s\n"
         + "Blocks: %d, rate: %f blocks/s\n"
         + "Bytes: %d, rate: %f bytes/s\n"
+        + "Files since last report: %d, rate: %f files/s\n"
+        + "Blocks since last report: %d, rate: %f blocks/s\n"
+        + "Bytes since last report: %d, rate: %f bytes/s\n"
         + "ETC: %fs.\n";
     double filesRate = fileCountSnapshot / elapsedForFile * 1000;
     double blocksRate = blockCountSnapshot / elapsedForByte * 1000;
@@ -197,11 +212,17 @@ public class ZoneProgressTracker {
     double estimatedTimeToComplete =
         totalFiles == UNTRACKED_DUMMY ? -1 : (totalFiles - fileCountSnapshot) / filesRate;
     LOG.info(String.format(msg,
-        elapsedForFile,
+        elapsedForFile, timeSinceLastPrint,
         fileCountSnapshot, totalFiles, (double) 100 * fileCountSnapshot / totalFiles, filesRate,
         blockCountSnapshot, blocksRate,
         byteCountSnapshot, bytesRate,
+        fileCountSinceLastPrint, (double) fileCountSinceLastPrint / timeSinceLastPrint * 1000,
+        blockCountSinceLastPrint, (double) blockCountSinceLastPrint / timeSinceLastPrint * 1000,
+        byteCountSinceLastPrint, (double) byteCountSinceLastPrint / timeSinceLastPrint * 1000,
         estimatedTimeToComplete));
+    fileCountLastPrint = fileCountSnapshot;
+    byteCountLastPrint = byteCountSnapshot;
+    blockCountLastPrint = blockCountSnapshot;
   }
 
   public static void incrFileCount() {
