@@ -116,7 +116,7 @@ public class ZoneMover {
   protected final boolean xattrSetEnable;
   protected final ZoneReplicationCoordinator coordinator;
   protected Result result;
-  protected final Thread fetcher = new Thread(new Fetcher());
+  protected final Thread fetcher = new Thread(new Fetcher(), "ZoneMover-Fetcher");
   protected static int checkUpdateInterval = 0;
   protected static final String DC_SEPARATOR = ",";
 
@@ -1210,16 +1210,17 @@ public class ZoneMover {
   class Fetcher implements Runnable {
     @Override
     public void run() {
-      ZoneReplicationCoordinator.FileState fileState;
+      ZoneReplicationCoordinator.FileState fileState = null;
       while (true) {
         try {
           fileState = coordinator.getNextFinishedFile();
+          processor.processFileBlocks(fileState.getFilePath(), fileState.getFileStatus(),
+              fileState.getRule(), result);
         } catch (NoSuchElementException e) {
-          LOG.info("No more files!");
-          return;
+          LOG.warn("No more files!", e);
+        } catch (Exception e) {
+          LOG.warn("Fetcher encountered the exception!", e);
         }
-        processor.processFileBlocks(fileState.getFilePath(),
-            fileState.getFileStatus(), fileState.getRule(), result);
       }
     }
   }
