@@ -1175,6 +1175,7 @@ public class ZoneMover {
               fileState.getFileStatus(), fileState.getRule(), result);
         } catch (NoSuchElementException e) {
           LOG.warn("No more files!", e);
+          break;
         } catch (Exception e) {
           LOG.warn("Fetcher encountered the exception!", e);
         }
