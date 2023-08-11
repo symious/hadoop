@@ -23,6 +23,7 @@ import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.Option;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.hadoop.classification.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
@@ -79,7 +80,7 @@ public class ZoneChecker {
 
   private static int run(Configuration conf, URI nameNode,
       String path, Float ratio, boolean blockSummary) {
-    return run(conf, nameNode, path, ratio, blockSummary, false);
+    return run(conf, nameNode, path, ratio, blockSummary, false, 0);
   }
 
   /**
@@ -89,9 +90,10 @@ public class ZoneChecker {
    * @param ratio          the ratio to check the files under the directory
    * @param blockSummary   flag to check replica and storage size under every DataCenter
    * @param countOnly      flag to count the block number and size for every distribution
+   * @param countDepth     the depth at which block distribution is printed
    */
   private static int run(Configuration conf, URI nameNode,
-      String path, Float ratio, boolean blockSummary, boolean countOnly) {
+      String path, Float ratio, boolean blockSummary, boolean countOnly, int countDepth) {
     NameNodeConnector nnc;
     try {
       nnc = new NameNodeConnector(nameNode,
@@ -102,7 +104,7 @@ public class ZoneChecker {
       if (blockSummary) {
         LOG.info("Start to summary the blocks of {}", path);
       } else if (countOnly) {
-        LOG.info("Start to count the block number only for {}", path);
+        LOG.info("Start to count the block number for {} at depth {}", path, countDepth);
       } else {
         if (ratio <= 0.0f) {
           LOG.info("Start to check path: " + path + " with default ratio.");
@@ -113,11 +115,12 @@ public class ZoneChecker {
       }
       Map<ReplicationRule, Set<String>> rulePathMap = new HashMap<>();
       Map<String, List<Long>> dcStatMap = new HashMap<>();
-      zch.getReplicaInfo(path, rulePathMap, dcStatMap, blockSummary, countOnly);
+      ZoneCheckerCountTree zcct = new ZoneCheckerCountTree(path, countDepth);
+      zch.getReplicaInfo(path, rulePathMap, dcStatMap, zcct, blockSummary, countOnly);
       if (blockSummary) {
         printBlockSummary(dcStatMap);
       } else if (countOnly) {
-        printFileCount(dcStatMap);
+        printFileCount(zcct);
       } else {
         printResult(rulePathMap);
       }
@@ -142,7 +145,7 @@ public class ZoneChecker {
         zch.setRatio(ratio);
       }
       Map<ReplicationRule, Set<String>> rulePathMap = new HashMap<>();
-      zch.getReplicaInfo(path, rulePathMap, new HashMap<String, List<Long>>(), false, false);
+      zch.getReplicaInfo(path, rulePathMap, new HashMap<String, List<Long>>(), null, false, false);
       return rulePathMap;
     } catch (IOException e) {
       LOG.error("ZoneChecker meets the IOException: ", e);
@@ -160,7 +163,7 @@ public class ZoneChecker {
       nnc = new NameNodeConnector(namenode,
           Collections.singletonList(new Path(path)), conf, 1);
       final ZoneChecker zch = new ZoneChecker(nnc, conf);
-      zch.getReplicaInfo(path, new HashMap<ReplicationRule, Set<String>>(), dcBlockStat, true, false);
+      zch.getReplicaInfo(path, new HashMap<ReplicationRule, Set<String>>(), dcBlockStat, null, true, false);
       return dcBlockStat;
     } catch (IOException e) {
       LOG.error("ZoneChecker meets the IOException: ", e);
@@ -178,8 +181,9 @@ public class ZoneChecker {
       nnc = new NameNodeConnector(namenode,
           Collections.singletonList(new Path(path)), conf, 1);
       final ZoneChecker zch = new ZoneChecker(nnc, conf);
-      zch.getReplicaInfo(path, new HashMap<ReplicationRule, Set<String>>(), dcBlockStat, false, true);
-      return dcBlockStat;
+      ZoneCheckerCountTree zcct = new ZoneCheckerCountTree(path, 0);
+      zch.getReplicaInfo(path, new HashMap<ReplicationRule, Set<String>>(), dcBlockStat, zcct, false, true);
+      return zcct.getMap();
     } catch (IOException e) {
       LOG.error("ZoneChecker meets the IOException: ", e);
       return null;
@@ -193,7 +197,8 @@ public class ZoneChecker {
         + "\n\t[-ratio <ratio>]\tif the path is a directory, the ratio of "
         + "files will be checked"
         + "\n\t[-blockSummary]\tCheck data size and blocks number of DCs"
-        + "\n\t[-count]\tCount the number of blocks under the every distribution";
+        + "\n\t[-count]\tCount the number of blocks under the every distribution"
+        + "\n\t[-depth depth]\tthe depth at which block distribution is printed";
 
     private static Options buildCliOptions() {
       Options options = new Options();
@@ -220,6 +225,11 @@ public class ZoneChecker {
       option = new Option(
           null, "count", false,
           "Count the number of block under the every distribution");
+      options.addOption(option);
+
+      option = new Option(
+          null, "depth", true,
+          "the depth at which block distribution is printed");
       options.addOption(option);
       return options;
     }
@@ -294,6 +304,19 @@ public class ZoneChecker {
       return line.hasOption("count");
     }
 
+
+    private static int getCountDepth(CommandLine commandLine) {
+      if (!commandLine.hasOption("depth")) {
+        return 0;
+      }
+      if (!commandLine.hasOption("count")) {
+        System.out.println("-depth option doesn't work without -count option");
+        return 0;
+      } else {
+        return Integer.parseInt(commandLine.getOptionValue("depth"));
+      }
+    }
+
     @Override
     public int run(String[] args) {
       long startTime = Time.monotonicNow();
@@ -309,7 +332,7 @@ public class ZoneChecker {
         }
         return run(conf, getNamespaceUri(commandLine, conf),
             getPath(commandLine), getRatio(commandLine), getBlockSummary(commandLine),
-            getCountOnly(commandLine));
+            getCountOnly(commandLine), getCountDepth(commandLine));
       } catch (ParseException | IllegalArgumentException e) {
         System.out.println(e + ".  Exiting ...");
         return ExitStatus.ILLEGAL_ARGUMENTS.getExitCode();
@@ -323,15 +346,15 @@ public class ZoneChecker {
      * Run with given ratio.
      */
     int run(Configuration conf, URI namenodeURI,
-        String path, Float ratio, boolean blockSummary, boolean countOnly) {
-      return ZoneChecker.run(conf, namenodeURI, path, ratio, blockSummary, countOnly);
+        String path, Float ratio, boolean blockSummary, boolean countOnly, int countDepth) {
+      return ZoneChecker.run(conf, namenodeURI, path, ratio, blockSummary, countOnly, countDepth);
     }
   }
 
-  public void getReplicaInfo(
-      String fullPath, Map<ReplicationRule, Set<String>> rulePathMap,
-      Map<String, List<Long>> dcBlockStat, boolean blockSummaryFlag, boolean countOnly) {
-    for (byte[] lastReturnedName = HdfsFileStatus.EMPTY_NAME;;) {
+  public void getReplicaInfo(String fullPath, Map<ReplicationRule, Set<String>> rulePathMap,
+      Map<String, List<Long>> dcBlockStat, ZoneCheckerCountTree zcct, boolean blockSummaryFlag,
+      boolean countOnly) {
+    for (byte[] lastReturnedName = HdfsFileStatus.EMPTY_NAME; ; ) {
       final DirectoryListing children;
       try {
         children = dfs.listPaths(fullPath, lastReturnedName, true);
@@ -349,7 +372,8 @@ public class ZoneChecker {
       for (HdfsFileStatus child : getRandomList(partialList, threshold)) {
         // To make sure when the sub-dir is merged in rulePathMap, sub result is fully merged
         Map<ReplicationRule, Set<String>> subRulePathMap = new HashMap<>();
-        getReplicaInfoRecursively(fullPath, child, subRulePathMap, dcBlockStat, blockSummaryFlag, countOnly);
+        getReplicaInfoRecursively(fullPath, child, subRulePathMap, dcBlockStat, zcct,
+            blockSummaryFlag, countOnly);
         if (!blockSummaryFlag && !countOnly) {
           mergeRules(rulePathMap, subRulePathMap);
         }
@@ -369,16 +393,16 @@ public class ZoneChecker {
   }
 
   /** @return whether the check requires next round */
-  private void getReplicaInfoRecursively(
-      String parent, HdfsFileStatus status, Map<ReplicationRule, Set<String>> rulePathMap,
-      Map<String, List<Long>> dcBlockStat, boolean blockSummaryFlag, boolean countOnly) {
+  private void getReplicaInfoRecursively(String parent, HdfsFileStatus status,
+      Map<ReplicationRule, Set<String>> rulePathMap, Map<String, List<Long>> dcBlockStat,
+      ZoneCheckerCountTree zcct, boolean blockSummaryFlag, boolean countOnly) {
     String fullPath = status.getFullName(parent);
     if (status.isDir()) {
       if (!fullPath.endsWith(Path.SEPARATOR)) {
         fullPath = fullPath + Path.SEPARATOR;
       }
 
-      getReplicaInfo(fullPath, rulePathMap, dcBlockStat, blockSummaryFlag, countOnly);
+      getReplicaInfo(fullPath, rulePathMap, dcBlockStat, zcct, blockSummaryFlag, countOnly);
     } else if (!status.isSymlink()) { // file
       try {
         HdfsLocatedFileStatus locStatus = (HdfsLocatedFileStatus) status;
@@ -410,15 +434,11 @@ public class ZoneChecker {
               }
             }
           } else if (countOnly) {
-            String replicationRule =
-                ReplicationRule.parseFromMap(mapDCReplica).toString();
-            if (dcBlockStat.containsKey(replicationRule)) {
-              dcBlockStat.get(replicationRule).set(0, dcBlockStat.get(replicationRule).get(0) + 1);
-              dcBlockStat.get(replicationRule).set(1, dcBlockStat.get(replicationRule).get(1) +
-                  lb.getBlockSize());
-            } else {
-              dcBlockStat.put(replicationRule, Arrays.asList(1L, lb.getBlockSize()));
+            if (zcct == null) {
+              continue;
             }
+            String replicationRule = ReplicationRule.parseFromMap(mapDCReplica).toString();
+            zcct.addNode(fullPath, replicationRule, 1, lb.getBlockSize());
           } else {
             ReplicationRule replicationRule =
                 ReplicationRule.parseFromMap(mapDCReplica);
@@ -470,16 +490,30 @@ public class ZoneChecker {
     }
   }
 
-  private static void printFileCount(Map<String, List<Long>> dcBlockStat) {
+  @VisibleForTesting
+  public static void printFileCount(ZoneCheckerCountTree zcct) {
     System.out.println("Summary:");
     long totalBlocks = 0;
-    for (String distribution: dcBlockStat.keySet()) {
-      totalBlocks += dcBlockStat.get(distribution).get(0);
+    for (long blocks : zcct.root.blockCounts.values()) {
+      totalBlocks += blocks;
     }
-    for (String distribution: dcBlockStat.keySet()) {
-      System.out.printf((SUMMARY_FORMAT) + "%n", distribution, dcBlockStat.get(distribution).get(0),
-          (double) dcBlockStat.get(distribution).get(0) / totalBlocks * 100,
-          dcBlockStat.get(distribution).get(1));
+    recursivelyPrintFileCount(zcct.root, "", totalBlocks);
+  }
+
+  /**
+   * Traverses through the {@link ZoneCheckerCountTree} in BFS, prints all the stuff
+   */
+  private static void recursivelyPrintFileCount(ZoneCheckerCountTreeNode node, String pathPrefix,
+      long totalBlocks) {
+    pathPrefix += Path.SEPARATOR_CHAR + node.name;
+    System.out.printf("Path: %s%n", pathPrefix);
+    for (String distribution: node.blockCounts.keySet()) {
+      System.out.printf((SUMMARY_FORMAT) + "%n", distribution, node.blockCounts.get(distribution),
+          (double) node.blockCounts.get(distribution) / totalBlocks * 100,
+          node.byteCounts.get(distribution));
+    }
+    for (ZoneCheckerCountTreeNode child: node.children.values()) {
+      recursivelyPrintFileCount(child, pathPrefix, totalBlocks);
     }
   }
 
@@ -516,6 +550,121 @@ public class ZoneChecker {
       LOG.error("Exiting " + ZoneChecker.class.getSimpleName()
           + " due to an exception", e);
       System.exit(-1);
+    }
+  }
+
+  /**
+   * Simple augmented tree that updates file and byte counts for internal nodes during additions.
+   */
+  static class ZoneCheckerCountTree {
+    private final int prefixLength;
+    int countDepth;
+    ZoneCheckerCountTreeNode root;
+    ZoneCheckerCountTree(String basePath, int countDepth) {
+      this.countDepth = countDepth;
+      this.prefixLength = basePath.length();
+      this.root = new ZoneCheckerCountTreeNode(null, basePath.substring(1), null, 0, 0);
+    }
+
+    void addNode(String path, String replicationRule, long blockCount, long byteCount) {
+      String[] components = StringUtils.split(path.substring(prefixLength + 1), Path.SEPARATOR_CHAR);
+      // Trim until only countDepth left
+      components = Arrays.copyOfRange(components, 0, countDepth);
+      this.root.addNode(components, replicationRule, blockCount, byteCount);
+    }
+
+    public Map<String, List<Long>> getMap() {
+      Map<String, List<Long>> res = new HashMap<>();
+      for (String distribution : root.blockCounts.keySet()) {
+        res.put(distribution,
+            Arrays.asList(root.byteCounts.get(distribution), root.blockCounts.get(distribution)));
+      }
+      return res;
+    }
+  }
+
+  /**
+   * A tree node for {@link ZoneCheckerCountTree}.
+   * Augmented with block and byte count of all its children, recursively.
+   */
+  static class ZoneCheckerCountTreeNode {
+    Map<String, Long> blockCounts;
+    Map<String, Long> byteCounts;
+    ZoneCheckerCountTreeNode parent;
+    Map<String, ZoneCheckerCountTreeNode> children = new HashMap<>();
+    String name;
+    ZoneCheckerCountTreeNode(ZoneCheckerCountTreeNode parent, String name, String replicationRule, long blockCount, long byteCount) {
+      this.parent = parent;
+      this.blockCounts = new HashMap<>();
+      this.byteCounts = new HashMap<>();
+      this.name = name;
+      if (replicationRule != null) {
+        this.blockCounts.put(replicationRule, blockCount);
+        this.byteCounts.put(replicationRule, byteCount);
+      }
+    }
+
+    void updateCounters(String replicationRule, long blockCount, long byteCount) {
+      Long currentBlockCount = blockCounts.get(replicationRule);
+      if (currentBlockCount == null) {
+        currentBlockCount = 0L;
+      }
+      currentBlockCount += blockCount;
+      blockCounts.put(replicationRule, currentBlockCount);
+      Long currentByteCount = byteCounts.get(replicationRule);
+      if (currentByteCount == null) {
+        currentByteCount = 0L;
+      }
+      currentByteCount += byteCount;
+      byteCounts.put(replicationRule, currentByteCount);
+    }
+
+    void addChild(ZoneCheckerCountTreeNode child) {
+      children.put(child.name, child);
+    }
+
+    void addNode(String[] components, String replRule, long blockCount, long byteCount) {
+      // No recursion case
+      if (components.length == 0) {
+        this.updateCounters(replRule, blockCount, byteCount);
+        return;
+      }
+
+      String childName = components[0];
+      // Leaf node
+      if (components.length == 1) {
+        // Existing leaf node
+        if (children.containsKey(childName)) {
+          children.get(childName).updateCounters(replRule, blockCount, byteCount);
+        } else {
+          // New leaf node
+          addChild(new ZoneCheckerCountTreeNode(this, childName, replRule, blockCount, byteCount));
+        }
+        this.updateCounters(replRule, blockCount, byteCount);
+        return;
+      }
+      // Internal node
+      // New subtree, add from bottom up
+      if (!children.containsKey(childName)) {
+        ZoneCheckerCountTreeNode last = null;
+        for (int i = components.length - 1; i >= 0; i--) {
+          ZoneCheckerCountTreeNode node =
+              new ZoneCheckerCountTreeNode(last, components[i], replRule, blockCount, byteCount);
+          if (last != null) {
+            node.addChild(last);
+            node.updateCounters(replRule, blockCount, byteCount);
+          }
+          last = node;
+        }
+        addChild(last);
+        updateCounters(replRule, blockCount, byteCount);
+      } else {
+        // Existing node, just add the block and byte count then pass the job to child
+        updateCounters(replRule, blockCount, byteCount);
+        children.get(childName)
+            .addNode(Arrays.copyOfRange(components, 1, components.length), replRule, blockCount,
+                byteCount);
+      }
     }
   }
 }
