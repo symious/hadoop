@@ -562,14 +562,17 @@ public class ZoneChecker {
     ZoneCheckerCountTreeNode root;
     ZoneCheckerCountTree(String basePath, int countDepth) {
       this.countDepth = countDepth;
+      while (basePath.endsWith(String.valueOf(Path.SEPARATOR_CHAR))) {
+        basePath = basePath.substring(0, basePath.length() - 1);
+      }
       this.prefixLength = basePath.length();
-      this.root = new ZoneCheckerCountTreeNode(null, basePath.substring(1), null, 0, 0);
+      this.root = new ZoneCheckerCountTreeNode(null, basePath, null, 0, 0);
     }
 
     void addNode(String path, String replicationRule, long blockCount, long byteCount) {
       String[] components = StringUtils.split(path.substring(prefixLength + 1), Path.SEPARATOR_CHAR);
       // Trim until only countDepth left
-      components = Arrays.copyOfRange(components, 0, countDepth);
+      components = Arrays.copyOfRange(components, 0, Math.min(countDepth, components.length));
       this.root.addNode(components, replicationRule, blockCount, byteCount);
     }
 
