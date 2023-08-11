@@ -39,13 +39,19 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.ThreadPoolExecutor;
 
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
+import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -105,7 +111,7 @@ public class Dispatcher {
   /** Restrict to the following nodes. */
   private final Set<String> includedNodes;
 
-  private final String dataCenterConstraint;
+  protected final String dataCenterConstraint;
 
   private final Collection<Source> sources = new HashSet<Source>();
   private final Collection<StorageGroup> targets = new HashSet<StorageGroup>();
@@ -142,6 +148,9 @@ public class Dispatcher {
   private BlockPlacementPolicies placementPolicies;
 
   private long maxIterationTime;
+  private final int preferSourcePercent;
+  private volatile boolean supportCrossDC = false;
+  private volatile DataTransferThrottler crossDCThrottler = null;
 
   static class Allocator {
     private final int max;
@@ -336,8 +345,77 @@ public class Dispatcher {
           return true;
         }
       }
+
+      return internalChooseProxy(reportedBlock.getLocations());
+    }
+
+    /**
+     * Case1: one replica: source node
+     * Case2: three replica: source node, replica node 1 in the source DC, replica node 2 in the source DC
+     * Case3: three replica: source node, replica node 1 in the source DC, replica node 2 in other DC
+     * Case4: three replica: source node, replica node 1 in other DC, replica node 2 in other DC
+     * Case5: three replica: source node, replica node 1 in the source rack, replica node 2 in other rack
+     */
+    private boolean internalChooseProxy(List<StorageGroup> originalLocs) {
+      List<StorageGroup> expectedLocs = originalLocs;
+      if (originalLocs.size() > 1) {
+        expectedLocs = new ArrayList<>();
+
+        // Split locations by DC
+        List<StorageGroup> otherRackLocs = new ArrayList<>();
+        List<StorageGroup> otherSameRackLocs = new ArrayList<>();
+        List<StorageGroup> replicasInOtherDC = new ArrayList<>();
+        for (StorageGroup g : originalLocs) {
+          if (Util.isInDataCenter(dataCenterConstraint, g.getDatanodeInfo())) {
+            if (g != source) {
+              if (!Objects.equals(g.getDatanodeInfo().getNetworkLocation(),
+                  source.getDatanodeInfo().getNetworkLocation())) {
+                otherRackLocs.add(g);
+              } else {
+                otherSameRackLocs.add(g);
+              }
+            }
+          } else {
+            replicasInOtherDC.add(g);
+          }
+        }
+
+        if (otherRackLocs.size() > 1) {
+          Collections.shuffle(otherRackLocs);
+        }
+        if (otherSameRackLocs.size() > 1) {
+          Collections.shuffle(otherSameRackLocs);
+        }
+        if (replicasInOtherDC.size() > 1) {
+          Collections.shuffle(replicasInOtherDC);
+        }
+        boolean preferSource = ThreadLocalRandom.current().nextInt(0, 100) <= preferSourcePercent;
+        boolean preferSameRack = ThreadLocalRandom.current().nextInt(0, 100) <= preferSourcePercent;
+        if (preferSource) {
+          expectedLocs.add(source);
+          if (preferSameRack) {
+            expectedLocs.addAll(otherSameRackLocs);
+            expectedLocs.addAll(otherRackLocs);
+          } else {
+            expectedLocs.addAll(otherRackLocs);
+            expectedLocs.addAll(otherSameRackLocs);
+          }
+          expectedLocs.addAll(replicasInOtherDC);
+        } else {
+          if (preferSameRack) {
+            expectedLocs.addAll(otherSameRackLocs);
+            expectedLocs.addAll(otherRackLocs);
+          } else {
+            expectedLocs.addAll(otherRackLocs);
+            expectedLocs.addAll(otherSameRackLocs);
+          }
+          expectedLocs.addAll(replicasInOtherDC);
+          expectedLocs.add(source);
+        }
+      }
+
       // find out a non-busy replica
-      for (StorageGroup loc : reportedBlock.getLocations()) {
+      for (StorageGroup loc : expectedLocs) {
         if (addTo(loc)) {
           return true;
         }
@@ -357,6 +435,16 @@ public class Dispatcher {
 
     /** Dispatch the move to the proxy source & wait for the response. */
     public void dispatch() {
+      LOG.debug("Dispatch dataCenterConstraint is {} and proxySource is {}.",
+          dataCenterConstraint, proxySource.getDatanodeInfo());
+      if (!Util.isInDataCenter(dataCenterConstraint, proxySource.getDatanodeInfo())) {
+        // here means this replace block operations may cross dc.
+        if (crossDCThrottler != null) {
+          LOG.debug("Dispatch throttle for {} with dataSize {}.",
+              proxySource.getDatanodeInfo(), reportedBlock.getNumBytes());
+          crossDCThrottler.throttle(reportedBlock.getNumBytes());
+        }
+      }
       Socket sock = new Socket();
       DataOutputStream out = null;
       DataInputStream in = null;
@@ -1105,8 +1193,6 @@ public class Dispatcher {
     this.movedBlocks = new MovedBlocks<StorageGroup>(movedWinWidth);
     this.dataCenterConstraint = dataCenterConstraint;
 
-    this.cluster = NetworkTopology.getInstance(conf);
-
     this.dispatchExecutor = dispatcherThreads == 0? null
         : Executors.newFixedThreadPool(dispatcherThreads);
     this.moverThreadAllocator = new Allocator(moverThreads);
@@ -1126,14 +1212,16 @@ public class Dispatcher {
         HdfsClientConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME,
         HdfsClientConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME_DEFAULT);
     Configuration newConf = new Configuration(conf);
-    if ("org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter"
-        .equals(conf.get(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY))) {
-      newConf.set(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
-          "org.apache.hadoop.hdfs.server.blockmanagement." +
-              "BlockPlacementPolicyDefault");
-    }
+    newConf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+        DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_DEFAULT,
+        BlockPlacementPolicy.class);
+    newConf.setClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_IMPL_KEY,
+        NetworkTopology.class, NetworkTopology.class);
+    this.cluster = NetworkTopology.getInstance(newConf);
     placementPolicies = new BlockPlacementPolicies(newConf, null, cluster, null);
     this.maxIterationTime = maxIterationTime;
+    this.preferSourcePercent = conf.getInt(DFSConfigKeys.DFS_DISPATCHER_PRE_SOURCE_PERCENT_KEY,
+        DFSConfigKeys.DFS_DISPATCHER_PRE_SOURCE_PERCENT_DEFAULT);
   }
 
   public DistributedFileSystem getDistributedFileSystem() {
@@ -1183,6 +1271,14 @@ public class Dispatcher {
     return b;
   }
 
+  public void resetSupportCrossDC(boolean supportCrossDC) {
+    this.supportCrossDC = supportCrossDC;
+  }
+
+  public void resetCrossDCThrottler(DataTransferThrottler throttler) {
+    this.crossDCThrottler = throttler;
+  }
+
   private boolean shouldIgnore(DatanodeInfo dn) {
     // ignore nodes not in specific data center
     final boolean outOfDataCenter = !Util.isInDataCenter(
@@ -1194,12 +1290,13 @@ public class Dispatcher {
     // ignore nodes not in the include list (if include list is not empty)
     final boolean notIncluded = !Util.isIncluded(includedNodes, dn);
 
-    if (outOfDataCenter || outOfService || excluded || notIncluded) {
+    if ((!this.supportCrossDC && outOfDataCenter) || outOfService || excluded || notIncluded) {
       if (LOG.isTraceEnabled()) {
         LOG.trace("Excluding datanode " + dn
             + ": outOfService=" + outOfService
             + ", excluded=" + excluded
-            + ", notIncluded=" + notIncluded);
+            + ", notIncluded=" + notIncluded
+            + ", supportCrossDC=" + this.supportCrossDC);
       }
       return true;
     }
@@ -1266,8 +1363,8 @@ public class Dispatcher {
     return nnc.shouldContinue(dispatchBlockMoves());
   }
 
-  public int countDecommissioningNode() throws IOException {
-    return nnc.getLiveAndDecommissionDatanodeStorageReport().size();
+  public List<DatanodeInfo> getDecommissioningNode() throws IOException {
+    return nnc.getLiveAndDecommissionDatanodeStorageReport();
   }
 
   /**

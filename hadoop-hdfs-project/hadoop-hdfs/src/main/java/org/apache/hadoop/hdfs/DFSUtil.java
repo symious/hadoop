@@ -849,6 +849,13 @@ public class DFSUtil {
         DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY);
   }
 
+  public static Collection<URI> getInternalNsRpcUris(
+      Configuration conf, Collection<String> namespaces) {
+    return getNameServiceUris(conf, namespaces,
+        DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY,
+        DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY);
+  }
+
   /**
    * Get a URI for each configured nameservice. If a nameservice is
    * HA-enabled, and the configured failover proxy provider supports logical

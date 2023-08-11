@@ -354,9 +354,8 @@ public class NameNodeConnector implements Closeable {
 
   /** @return live&decommission datanode storage reports. */
   public List<DatanodeInfo> getLiveAndDecommissionDatanodeStorageReport() throws IOException {
-    DatanodeInfo[] live =
-        namenode.getDatanodeReport(DatanodeReportType.LIVE);
-    List<DatanodeInfo> reports = new ArrayList();
+    DatanodeInfo[] live = namenode.getDatanodeReport(DatanodeReportType.LIVE);
+    List<DatanodeInfo> reports = new ArrayList<>();
     for (DatanodeInfo dsr : live) {
       if (dsr.isDecommissionInProgress()) {
         reports.add(dsr);

@@ -233,8 +233,8 @@ public class Balancer {
   /* Check that this Balancer is compatible with the Block Placement Policy
    * used by the Namenode.
    */
-  static void checkReplicationPolicyCompatibility(Configuration conf
-  ) throws UnsupportedActionException {
+  static void checkReplicationPolicyCompatibility(Configuration conf)
+      throws UnsupportedActionException {
     BlockPlacementPolicies placementPolicies =
         new BlockPlacementPolicies(conf, null, NetworkTopology.getInstance(conf), null);
     BlockPlacementPolicy contiguousPolicy = placementPolicies.getPolicy(CONTIGUOUS);
@@ -242,8 +242,7 @@ public class Balancer {
       LOG.info("Block placement policy of Namenode is " +
           "BlockPlacementPolicyWithDataCenter, " +
           "balancer will use BlockPlacementPolicyWithDefault.");
-    } else if (!(contiguousPolicy instanceof
-        BlockPlacementPolicyDefault)) {
+    } else if (!(contiguousPolicy instanceof BlockPlacementPolicyDefault)) {
       throw new UnsupportedActionException(
           "Balancer without BlockPlacementPolicyDefault");
     }

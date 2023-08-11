@@ -25,9 +25,11 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.server.balancer.Dispatcher.DDatanode.StorageGroup;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
 import org.apache.hadoop.hdfs.server.protocol.StorageReport;
+import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.SecurityUtil;
@@ -52,7 +54,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -89,23 +90,16 @@ public class DecommissionBalancer extends Balancer {
   private final List<StorageGroup> underUtilized = new LinkedList<>();
   private final List<StorageGroup> overUtilized = new LinkedList<>();
   private final List<StorageGroup> targetNodes = new LinkedList<>();
+  private final long miniMaxSize2Move = 1024 * 1024 * 1024;
 
+  // Source DC
   private String dataCenterConstraint = null;
+  // Target DC
   private String targetDataCenter = null;
   static final Path DECOMMISSION_BALANCER_ID_PATH =
       new Path("/system/decommission_balancer.id");
-
-  /**
-   * Construct a decommission balancer.
-   * Initialize balancer. It sets the value of the threshold, and
-   * builds the communication proxies to
-   * namenode as a client and a secondary namenode and retry proxies
-   * when connection fails.
-   */
-  DecommissionBalancer(NameNodeConnector nnc, BalancerParameters p, Configuration conf) {
-    super(nnc, p, conf);
-    this.policy = BalancingPolicy.Decommission.INSTANCE;
-  }
+  private final boolean supportCrossDC;
+  private final DataTransferThrottler crossDCThrottler;
 
   /**
    * Construct a decommission balancer.
@@ -117,6 +111,25 @@ public class DecommissionBalancer extends Balancer {
     this.policy = BalancingPolicy.Decommission.INSTANCE;
     this.dataCenterConstraint = dataCenterConstraint;
     this.targetDataCenter = p.getTargetDataCenter();
+    this.supportCrossDC = conf.getBoolean(
+        DFSConfigKeys.DFS_DECOMMISSION_BALANCER_ENABLE_CROSS_DC_KEY,
+        DFSConfigKeys.DFS_DECOMMISSION_BALANCER_ENABLE_CROSS_DC_DEFAULT);
+    long crossDCBandwidth = conf.getLong(
+        DFSConfigKeys.DFS_DECOMMISSION_BALANCER_CROSS_DC_BANDWIDTH_KEY,
+        DFSConfigKeys.DFS_DECOMMISSION_BALANCER_CROSS_DC_BANDWIDTH_DEFAULT);
+    if (crossDCBandwidth > 0) {
+      crossDCThrottler = new DataTransferThrottler(crossDCBandwidth);
+    } else {
+      crossDCThrottler = null;
+    }
+    if (supportCrossDC) {
+      dispatcher.resetSupportCrossDC(true);
+    }
+    if (crossDCThrottler != null) {
+      dispatcher.resetCrossDCThrottler(crossDCThrottler);
+    }
+    LOG.info("DecommissionBalancer, supportCrossDC {}, crossDCBandwidth {}.",
+        supportCrossDC, crossDCBandwidth);
   }
 
   @Override
@@ -127,7 +140,7 @@ public class DecommissionBalancer extends Balancer {
       policy.accumulateSpaces(r);
     }
     policy.initAvgUtilization();
-    for(DatanodeStorageReport r : reports) {
+    for (DatanodeStorageReport r : reports) {
       final Dispatcher.DDatanode dn = dispatcher.newDatanode(r.getDatanodeInfo());
       boolean isDecommissioning = r.getDatanodeInfo().isDecommissionInProgress();
       LOG.debug("Report {} state {}.", r.getDatanodeInfo(), r.getDatanodeInfo().getAdminState());
@@ -159,13 +172,6 @@ public class DecommissionBalancer extends Balancer {
           continue;
         }
 
-        // If target data center is set, filter target nodes are not in the target DC
-        if (targetDataCenter != null) {
-          if (!dn.getDatanodeInfo().getNetworkLocation().startsWith(targetDataCenter)) {
-            continue;
-          }
-        }
-
         final Double utilization = policy.getUtilization(r, t);
         if (utilization == null) { // datanode does not have such storage type
           // TODO: Need to handle the case that datanode does not have such storage type
@@ -180,33 +186,38 @@ public class DecommissionBalancer extends Balancer {
           continue;
         }
         final double utilizationDiff = utilization - average;
-        final long capacity = getCapacity(r, t);
         final double thresholdDiff = Math.abs(utilizationDiff) - threshold;
-        final long maxSize2Move = computeMaxSize2Move(capacity,
-            getRemaining(r, t), utilizationDiff, maxSizeToMove);
+        final long maxSize2Move = getRemaining(r, t);
 
-        Dispatcher.DDatanode.StorageGroup s = dn.addTarget(t, maxSize2Move);
-        LOG.info("{} [{}] has utilization={}, average={}, maxSize2Move={}.",
-            dn, t, utilization, average, maxSize2Move);
-        if (utilization >= average) {
-          overUtilized.add(s);
-        } else if (thresholdDiff <= 0) {
-          belowAvgUtilized.add(s);
-        } else {
-          underUtilized.add(s);
+        StorageGroup s = dn.addTarget(t, maxSize2Move);
+        boolean canMarkAsTarget = true;
+        if (this.supportCrossDC) {
+          // target DC is null && support cross DC read
+          if (targetDataCenter != null) {
+            if (!Dispatcher.Util.isInDataCenter(targetDataCenter, dn.getDatanodeInfo())) {
+              canMarkAsTarget = false;
+            }
+          } else if (!Dispatcher.Util.isInDataCenter(dataCenterConstraint, dn.getDatanodeInfo())) {
+            canMarkAsTarget = false;
+          }
         }
-        targetNodes.add(s);
+        if (canMarkAsTarget) {
+          LOG.info("{} [{}] has utilization={}, average={}, maxSize2Move={}.",
+              dn, t, utilization, average, maxSize2Move);
+          if (utilization >= average) {
+            overUtilized.add(s);
+          } else if (thresholdDiff <= 0) {
+            belowAvgUtilized.add(s);
+          } else {
+            underUtilized.add(s);
+          }
+          targetNodes.add(s);
+        } else {
+          LOG.info("{} is only used as proxy node.", dn);
+        }
         dispatcher.getStorageGroupMap().put(s);
       }
     }
-
-    int sourceCount = sourceList.size();
-    long defaultSize = 1024 * 1024 * 256;
-    for (StorageGroup target : targetNodes) {
-      long targetMaxSize2Move = Math.max((target.getMaxSize2Move() + 1) / sourceCount, defaultSize);
-      target.resetMaxSize2Move(targetMaxSize2Move);
-    }
-
     return sizeToMove;
   }
 
@@ -240,28 +251,48 @@ public class DecommissionBalancer extends Balancer {
    */
   void chooseStorageGroups(List<Dispatcher.Source> groups, List<StorageGroup> candidates) {
     for (Dispatcher.Source g : groups) {
+      long sourceMaxSize2Move = g.getMaxSize2Move();
+      long avgTargetMaxSize2Move = Math.max(miniMaxSize2Move,
+          (sourceMaxSize2Move + 1) / targetNodes.size());
       for (StorageGroup c : candidates) {
         if (matchStorageGroups(c, g, Matcher.ANY_OTHER)) {
-          matchSourceWithTargetToMove(g, c);
+          matchSourceWithTargetToMove(g, c, avgTargetMaxSize2Move);
         }
       }
     }
   }
 
-  @Override
-  protected void matchSourceWithTargetToMove(Dispatcher.Source source, StorageGroup target) {
-    long size = Math.min(source.availableSizeToMove(), target.availableSizeToMove());
+  protected void matchSourceWithTargetToMove(Dispatcher.Source source,
+      StorageGroup target, long avgTargetSize) {
+    long targetMoveSize = Math.min(target.availableSizeToMove(), avgTargetSize);
+    if (targetMoveSize <= 0) {
+      LOG.warn("{} cannot receive more data.", target);
+      return;
+    }
+
+    long size = Math.min(source.availableSizeToMove(), targetMoveSize);
     final Dispatcher.Task task = new Dispatcher.Task(target, size);
     source.addTask(task);
     dispatcher.add(source, target);
-    LOG.info("Decided to move "+StringUtils.byteDesc(size)+" bytes from "
-        + source.getDisplayName() + " to " + target.getDisplayName());
+    LOG.info("Decided to move {} bytes from {} to {}.", StringUtils.byteDesc(size),
+        source.getDisplayName(), target.getDisplayName());
+  }
+
+  private int getDecommissioningNodeCount() throws IOException {
+    List<DatanodeInfo> allDecommissioningNodes = dispatcher.getDecommissioningNode();
+    int count = 0;
+    for (DatanodeInfo dn : allDecommissioningNodes) {
+      if (Dispatcher.Util.isInDataCenter(dataCenterConstraint, dn)) {
+        count++;
+      }
+    }
+    return count;
   }
 
   @Override
   Result runOneIteration() {
     try {
-      int decommissioningNodesCount = dispatcher.countDecommissioningNode();
+      int decommissioningNodesCount = getDecommissioningNodeCount();
       if (decommissioningNodesCount == 0) {
         LOG.info("There is no node in decommissioning!");
         return newResult(ExitStatus.SUCCESS, 0, 0);
@@ -317,14 +348,13 @@ public class DecommissionBalancer extends Balancer {
     boolean checkAllNNs = conf.getBoolean(
         DFSConfigKeys.DFS_DECOMMISSION_BALANCER_CHECK_ALL_NAMENODE_KEY,
         DFSConfigKeys.DFS_DECOMMISSION_BALANCER_CHECK_ALL_NAMENODE_DEFAULT);
-    final long sleeptime =
-        conf.getTimeDuration(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,
-            DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_DEFAULT,
-            TimeUnit.SECONDS, TimeUnit.MILLISECONDS) * 2 +
-            conf.getTimeDuration(
-                DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY,
-                DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_DEFAULT,
-                TimeUnit.SECONDS, TimeUnit.MILLISECONDS);
+    final long sleeptime = conf.getTimeDuration(
+        DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_DEFAULT,
+        TimeUnit.SECONDS, TimeUnit.MILLISECONDS) * 2 +
+        conf.getTimeDuration(
+            DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY,
+            DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_DEFAULT,
+            TimeUnit.SECONDS, TimeUnit.MILLISECONDS);
     LOG.info("namenodes  = " + namenodes);
     LOG.info("parameters = " + p);
     LOG.info("included nodes = " + p.getIncludedNodes());
@@ -370,15 +400,12 @@ public class DecommissionBalancer extends Balancer {
           if (p.getBlockPools().size() == 0 || p.getBlockPools().contains(nnc.getBlockpoolID())) {
             // Check every block regardless of its size
             conf.setLong(DFSConfigKeys.DFS_BALANCER_GETBLOCKS_MIN_BLOCK_SIZE_KEY, 1);
-            final DecommissionBalancer b;
             // If target DC is set, release the DC constraint
+            String dcConstraint = p.getDataCenterConstraint();
             if (p.getTargetDataCenter() != null) {
-              String dcConstraint = p.getDataCenterConstraint();
-              p.setDataCenterConstraint("/");
-              b = new DecommissionBalancer(nnc, p, conf, dcConstraint);
-            } else {
-              b = new DecommissionBalancer(nnc, p, conf);
+              conf.setBoolean(DFSConfigKeys.DFS_DECOMMISSION_BALANCER_ENABLE_CROSS_DC_KEY, true);
             }
+            final DecommissionBalancer b = new DecommissionBalancer(nnc, p, conf, dcConstraint);
             final Result r = b.runOneIteration();
             r.print(iteration, nnc, System.out);
 
@@ -410,7 +437,7 @@ public class DecommissionBalancer extends Balancer {
         }
       }
     } finally {
-      for(NameNodeConnector nnc : connectors) {
+      for (NameNodeConnector nnc : connectors) {
         IOUtils.cleanupWithLogger(LOG, nnc);
       }
     }
@@ -513,11 +540,14 @@ public class DecommissionBalancer extends Balancer {
       final Configuration conf = getConf();
 
       try {
-        checkReplicationPolicyCompatibility(conf);
-
-        final Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
-        final Collection<String> nsIds = DFSUtilClient.getNameServiceIds(conf);
-        return DecommissionBalancer.run(namenodes, nsIds, parse(args), conf);
+        BalancerParameters balancerParameters = parse(args);
+        Collection<String> namespaces = new ArrayList<>(conf.getStringCollection("namespaces"));
+        if (namespaces.isEmpty()) {
+          namespaces = DFSUtilClient.getNameServiceIds(conf);
+        }
+        final Collection<String> nsIds = namespaces;
+        final Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf, nsIds);
+        return DecommissionBalancer.run(namenodes, nsIds, balancerParameters, conf);
       } catch (IOException e) {
         System.out.println(e + ".  Exiting ...");
         return ExitStatus.IO_EXCEPTION.getExitCode();

@@ -2229,4 +2229,28 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.throttler.first.come.first.served.policy.calibrate.interval";
   public static final long
       DFS_THROTTLER_FIRST_COME_FIRST_SERVED_POLICY_CALIBRATION_INTERVAL_DEFAULT = 4 * 3600 * 1000;
+
+  // Decommission Tool
+  public static final String DFS_DECOMMISSION_ENABLE_CROSS_DC_KEY = "dfs.decommission.enable.cross-dc";
+  public static final boolean DFS_DECOMMISSION_ENABLE_CROSS_DC_DEFAULT = false;
+  public static final String DFS_DECOMMISSION_CROSS_DC_BANDWIDTH_KEY = "dfs.decommission.cross-dc.bandwidth";
+  public static final long DFS_DECOMMISSION_CROSS_DC_BANDWIDTH_DEFAULT = 0;
+  public static final String DFS_DECOMMISSION_TARGET_DC_KEY = "dfs.decommission.target.dc";
+  public static final String DFS_DECOMMISSION_RETRY_TIMEOUT_KEY = "dfs.decommission.retry.timeout";
+  public static final int DFS_DECOMMISSION_RETRY_TIMEOUT_DEFAULT = 30 * 1000;
+  public static final String DFS_DECOMMISSION_QUEUE_SIZE_KEY = "dfs.decommission.queue.size";
+  public static final int DFS_DECOMMISSION_QUEUE_SIZE_DEFAULT = 50000;
+  public static final String DFS_DECOMMISSION_HANDLER_COUNT_KEY = "dfs.decommission.handler.count";
+  public static final int DFS_DECOMMISSION_HANDLER_COUNT_DEFAULT = 1024;
+
+  //Decommission Balancer
+
+  public static final String DFS_DECOMMISSION_BALANCER_ENABLE_CROSS_DC_KEY =
+      "dfs.decommission.balancer.enable.cross-dc";
+  public static final boolean DFS_DECOMMISSION_BALANCER_ENABLE_CROSS_DC_DEFAULT = false;
+  public static final String DFS_DECOMMISSION_BALANCER_CROSS_DC_BANDWIDTH_KEY =
+      "dfs.decommission.balancer.cross-dc.bandwidth";
+  public static final long DFS_DECOMMISSION_BALANCER_CROSS_DC_BANDWIDTH_DEFAULT = 0;
+  public static final String  DFS_DISPATCHER_PRE_SOURCE_PERCENT_KEY = "dfs.dispatcher.pre.source.percent";
+  public static final int DFS_DISPATCHER_PRE_SOURCE_PERCENT_DEFAULT = 20;
 }
