@@ -57,7 +57,7 @@ public class ZoneReplicationCoordinator {
   private final AtomicInteger runningDeletions = new AtomicInteger(0);
   private final long minCheckInterval;
   private final int maxCheckTimes;
-  private final Thread checker = new Thread(new Checker());
+  private final Thread checker = new Thread(new Checker(), "Coordinator-Checker");
   private static final Logger LOG =
       LoggerFactory.getLogger(ZoneReplicationCoordinator.class);
 
