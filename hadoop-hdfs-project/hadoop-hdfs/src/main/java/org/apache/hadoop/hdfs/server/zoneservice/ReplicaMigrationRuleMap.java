@@ -160,9 +160,9 @@ public class ReplicaMigrationRuleMap {
   }
 
   /**
-   * When replication != distribution replica,
-   *         then get rule from map file based on replication
-   * When replication == distribution replica
+   * When replication = distribution replica,
+   *         then get rule from map file
+   * When replication != distribution replica
    * rep = 1 -> dis contains AT -> map of AT:1
    *         -> dis not contains AT -> map of TL:1
    * rep = 2 -> dis all in STT -> STT:2
@@ -185,8 +185,9 @@ public class ReplicaMigrationRuleMap {
    * */
   protected ReplicationRule getRuleFromDistribution(ReplicationRule distribution,
       short replication) {
-    if (distribution.getReplica() != replication) {
-      return getDefaultRule(distribution, replication);
+    if (distribution.getReplica() == replication) {
+      return ruleMap.get(distribution) == null ?
+          getDefaultRule(distribution, replication) : ruleMap.get(distribution);
     } else {
       if (replication == 1) {
         if (distribution.getDatacenters().contains(MigrationDataCenters.AT.getName())) {
