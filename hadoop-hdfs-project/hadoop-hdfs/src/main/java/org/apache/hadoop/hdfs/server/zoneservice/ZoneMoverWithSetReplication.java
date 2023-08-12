@@ -93,7 +93,6 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
   private static ReplicaMigrationRuleMap migrationRuleMap;
   private StoreDriver driver;
   private boolean fromZS = false;
-
   private RunMode runMode = RunMode.BATCH;
   public static final ReplicationRule DEFAULT_RULE =
       ReplicationRule.parseFromString(String.format("%s:2,%s:2,%s:1",
@@ -149,7 +148,7 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
       ZoneMoverTrigger zoneMoverTrigger) throws IOException {
     init(conf);
 
-    if (mode == RunMode.MONITOR && fromZS) {
+    if (mode == RunMode.MONITOR) {
       intZkDriver(conf, driver);
       createTriggerRuleMapUpdater(namenode, zoneMoverTrigger);
     }
@@ -437,6 +436,12 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
   ExitStatus run(String path) throws IllegalArgumentException {
     Mover.Result result = new Mover.Result();
     this.result = result;
+
+    // Filters path rules from "ZoneService" for ZoneMover.
+    if (!fromZS && getFilteredPathRulesFromZS(path) != null) {
+      LOG.info("ZoneMover will filter the monitor path {} from zone service.", path);
+      return result.getExitStatus();
+    }
 
     if (this.globalRule != null) {
       processor.processPath(path, this.globalRule, result, null);
@@ -1234,6 +1239,9 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
           if (fromZS) {
             // For Zone Service: Update records to the pathRuleMap.
             updatePathRuleForZoneService();
+          } else {
+            // For Zone Mover: Update records to the filteredPathRuleMap.
+            updatePathRuleForZoneMover();
           }
           // Wait for the specified interval before continuing execution.
           Thread.sleep(checkUpdateInterval * 1000L);
@@ -1256,10 +1264,15 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
       }
     }
 
+    private void updatePathRuleForZoneMover() throws IOException {
+      updatePathRuleMap(driver, namenode.getAuthority(), zoneMoverTrigger);
+    }
+
     private void updatePathRuleMap(StoreDriver driver, String nameSpace,
         ZoneMoverTrigger zoneMoverTrigger) throws IOException {
 
       Map<String, ReplicationRule> pathRuleMapTmp = new HashMap<>();
+      Map<String, ReplicationRule> filterPathRuleMapTmp = new HashMap<>();
 
       List<MigrationRecord> records =
           driver.getAll(MigrationRecord.class).getRecords();
@@ -1267,11 +1280,20 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
         // Process only records in "monitor" mode and the specified name space.
         if (record.getMode().equals(RunMode.MONITOR.getName()) &&
             record.getNs().equals(nameSpace)) {
+          String rule = record.getRule();
+          if (StringUtils.isNullOrEmpty(rule)) {
+            LOG.warn("Failed adding record: {} , due replication rule as null will skip.", record);
+            continue;
+          }
           ReplicationRule parsedRule = ReplicationRule.parseFromString(record.getRule());
           if (fromZS) {
             // For Zone Service: Add records to the pathRuleMap.
-            LOG.info("Adding records to the pathRuleMap for Zone Service.");
+            LOG.debug("Adding record: {} to the pathRuleMap for Zone Service.", record);
             pathRuleMapTmp.put(record.getPath(), parsedRule);
+          } else {
+            // For Zone Mover: Add records to the filteredPathRuleMap.
+            LOG.debug("Adding record: {} to the filteredPathRuleMap for Zone Mover.", record);
+            filterPathRuleMapTmp.put(record.getPath(), parsedRule);
           }
         }
       }
@@ -1281,6 +1303,10 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
         pathRuleMap.clear();
         pathRuleMap = pathRuleMapTmp;
         zoneMoverTrigger.updatePaths(ZoneMover.Cli.getPaths(pathRuleMap));
+      } else {
+        // Update the filteredPathRulesFromZS for Zone Mover.
+        filteredPathRulesFromZS.clear();
+        filteredPathRulesFromZS = filterPathRuleMapTmp;
       }
     }
   }

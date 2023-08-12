@@ -74,6 +74,8 @@ public class ZoneMover {
   protected final int retryMaxAttempts;
   protected ReplicationRule globalRule = null;
   protected Map<String, ReplicationRule> pathRuleMap = Maps.newHashMap();
+  // Filtered path rules from ZoneService for ZoneMover.
+  protected Map<String, ReplicationRule> filteredPathRulesFromZS = Maps.newHashMap();
   protected final AtomicInteger retryCount;
   protected final DFSClient dfs;
   protected static final long DELAY_AFTER_CHOOSE_FAIL = 2 * 1000;
@@ -245,6 +247,31 @@ public class ZoneMover {
       return pathRuleMap.get(matchPath);
     } else {
       throw new IllegalArgumentException("No rule for path: " + path);
+    }
+  }
+
+  /**
+   * Filters path rules from "ZoneService" for ZoneMover.
+   * @param path
+   * @return
+   */
+  ReplicationRule getFilteredPathRulesFromZS(String path) {
+    String matchPath = "";
+    for (Map.Entry<String, ReplicationRule> entry: filteredPathRulesFromZS.entrySet()) {
+      String key = entry.getKey();
+      if (path.startsWith(key)) {
+        // A sub path may have different a rule with its parent path.
+        // For example, if "/test" and "/test/abc" have different rules,
+        // "/test/abc/1.txt" should use the rule of "/test/abc".
+        if (key.length() > matchPath.length()) {
+          matchPath = key;
+        }
+      }
+    }
+    if (matchPath.length() > 0) {
+      return filteredPathRulesFromZS.get(matchPath);
+    } else {
+      return null;
     }
   }
 

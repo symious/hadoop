@@ -67,6 +67,7 @@ public class ReplicationRuleGenerateKafkaTrigger {
   private final Set<String> filterPaths = Collections.synchronizedSet(new HashSet<String>());
   private Semaphore rateLimiter;
   private final Configuration conf;
+  private static final long SLEEP_INTERVAL = 1000;
 
   public ReplicationRuleGenerateKafkaTrigger(Configuration conf) throws IOException {
     final String username =
@@ -148,15 +149,20 @@ public class ReplicationRuleGenerateKafkaTrigger {
     try {
       while (true) {
         ConsumerRecords<String, String> records = consumer.poll(pollTimeOut);
-        for (ConsumerRecord<String, String> record : records) {
-          // Limit the number of concurrent processing threads for kafka messages,
-          // to avoid program OOM.
-          rateLimiter.acquire();
-          processRecord(record.value());
-        }
+        if (!records.isEmpty()) {
+          for (ConsumerRecord<String, String> record : records) {
+            // Limit the number of concurrent processing threads for kafka messages,
+            // to avoid program OOM.
+            rateLimiter.acquire();
+            processRecord(record.value());
+          }
 
-        // After the current batch is processed, the offset can be committed.
-        if (rateLimiter.availablePermits() == this.maxRateLimit) {
+          // After the current batch is processed, the offset can be committed.
+          while (!isMaxRateReached()) {
+            Thread.sleep(SLEEP_INTERVAL);
+          }
+
+          LOG.debug("Commit the kafka offset.");
           consumer.commitSync();
         }
       }
@@ -165,6 +171,10 @@ public class ReplicationRuleGenerateKafkaTrigger {
     } finally {
       shutdown();
     }
+  }
+
+  private boolean isMaxRateReached() {
+    return rateLimiter.availablePermits() == this.maxRateLimit;
   }
 
   private void processRecord(String record) {
