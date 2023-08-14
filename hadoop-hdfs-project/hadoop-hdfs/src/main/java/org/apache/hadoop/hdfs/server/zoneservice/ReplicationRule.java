@@ -139,7 +139,7 @@ public class ReplicationRule {
 
   public String getMainDataCenter() {
     short max = (short) 0;
-    String mainDC = null;
+    String mainDC = "";
     for (ReplicationRuleSection s: sections) {
       if (s.getReplica() > max) {
         max = s.getReplica();
