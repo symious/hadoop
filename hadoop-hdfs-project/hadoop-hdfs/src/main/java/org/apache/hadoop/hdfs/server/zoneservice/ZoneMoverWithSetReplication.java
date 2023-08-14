@@ -516,8 +516,13 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
       ReplicationRule appliedRule;
 
       if (allowChangeReplication) {
-        ReplicationRule dis =
-            ReplicationRule.parseFromMap(getBlockDistribution(status.getBlockLocations().get(0)));
+        LocatedBlock firstBlock = status.getBlockLocations().get(0);
+        Map<String, Short> blockDistribution = getBlockDistribution(firstBlock);
+        if(blockDistribution.size() == 0) {
+          LOG.error("There are no replicas for the missing block {}", firstBlock);
+          return;
+        }
+        ReplicationRule dis = ReplicationRule.parseFromMap(blockDistribution);
         if (runMode == RunMode.BATCH) {
           appliedRule = migrationRuleMap.getRuleFromDistribution(dis, status.getReplication());
         } else if (runMode == RunMode.CHECK) {
