@@ -133,6 +133,7 @@ public class TestZoneChecker {
       ZoneChecker.ZoneCheckerCountTree zcct =
           new ZoneChecker.ZoneCheckerCountTree(basePath.toString(), trackedDepth);
       zc.getReplicaInfo(basePath.toString(), rulePathMap, dcStatMap, zcct, false, true);
+      checkCountTree(zcct.root);
       ZoneChecker.printFileCount(zcct);
     }
 
@@ -160,5 +161,29 @@ public class TestZoneChecker {
     fs.mkdir(rPath, new FsPermission("777"));
     createChildAndSubdirsRecursively(fs, depth, maxDepth, lPath);
     createChildAndSubdirsRecursively(fs, depth, maxDepth, rPath);
+  }
+
+  private void checkCountTree(ZoneChecker.ZoneCheckerCountTreeNode root) {
+    ZoneChecker.ZoneCheckerCountTreeNode node = root;
+    if (node != null && node.children.size() != 0) {
+      long currentNodeBlockCounts = 0;
+      long currentNodeByteCounts = 0;
+      for (String rule: node.blockCounts.keySet()) {
+        currentNodeBlockCounts += node.blockCounts.get(rule);
+        currentNodeByteCounts += node.byteCounts.get(rule);
+      }
+
+      long childBlockCounts = 0;
+      long childByteCounts = 0;
+      for (String child: node.children.keySet()) {
+        ZoneChecker.ZoneCheckerCountTreeNode childNode = node.children.get(child);
+        for (String rule: childNode.blockCounts.keySet()) {
+          childBlockCounts += childNode.blockCounts.get(rule);
+          childByteCounts += childNode.byteCounts.get(rule);
+        }
+      }
+      assertEquals(childBlockCounts, currentNodeBlockCounts);
+      assertEquals(childByteCounts, currentNodeByteCounts);
+    }
   }
 }
