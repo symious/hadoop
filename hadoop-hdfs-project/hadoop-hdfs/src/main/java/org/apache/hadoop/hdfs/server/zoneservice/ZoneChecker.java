@@ -504,7 +504,11 @@ public class ZoneChecker {
    */
   private static void recursivelyPrintFileCount(ZoneCheckerCountTreeNode node, String pathPrefix,
       long totalBlocks) {
-    pathPrefix += Path.SEPARATOR_CHAR + node.name;
+    if (pathPrefix == null || pathPrefix.isEmpty()) {
+      pathPrefix = node.name;
+    } else {
+      pathPrefix += Path.SEPARATOR_CHAR + node.name;
+    }
     System.out.printf("Path: %s%n", pathPrefix);
     for (String distribution: node.blockCounts.keySet()) {
       System.out.printf((SUMMARY_FORMAT) + "%n", distribution, node.blockCounts.get(distribution),
@@ -579,7 +583,7 @@ public class ZoneChecker {
       Map<String, List<Long>> res = new HashMap<>();
       for (String distribution : root.blockCounts.keySet()) {
         res.put(distribution,
-            Arrays.asList(root.byteCounts.get(distribution), root.blockCounts.get(distribution)));
+            Arrays.asList(root.blockCounts.get(distribution), root.byteCounts.get(distribution)));
       }
       return res;
     }
@@ -654,7 +658,6 @@ public class ZoneChecker {
               new ZoneCheckerCountTreeNode(last, components[i], replRule, blockCount, byteCount);
           if (last != null) {
             node.addChild(last);
-            node.updateCounters(replRule, blockCount, byteCount);
           }
           last = node;
         }
