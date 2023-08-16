@@ -321,7 +321,7 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
         try {
           String curPath = zoneMoverTrigger.getNext();
           // process the path
-          LOG.debug("Check path: " + curPath);
+          LOG.info("Check path: " + curPath);
           ExitStatus exitStatus = zs.run(curPath);
           if (exitStatus != ExitStatus.SUCCESS) {
             zoneServiceMetrics.incrFailMoveCount();
