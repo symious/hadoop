@@ -650,19 +650,16 @@ public class ZoneChecker {
         return;
       }
       // Internal node
-      // New subtree, add from bottom up
+      // New subtree
       if (!children.containsKey(childName)) {
-        ZoneCheckerCountTreeNode last = null;
-        for (int i = components.length - 1; i >= 0; i--) {
-          ZoneCheckerCountTreeNode node =
-              new ZoneCheckerCountTreeNode(last, components[i], replRule, blockCount, byteCount);
-          if (last != null) {
-            node.addChild(last);
-          }
-          last = node;
-        }
-        addChild(last);
         updateCounters(replRule, blockCount, byteCount);
+        ZoneCheckerCountTreeNode parent = this;
+        for (String component : components) {
+          ZoneCheckerCountTreeNode node =
+              new ZoneCheckerCountTreeNode(parent, component, replRule, blockCount, byteCount);
+          parent.addChild(node);
+          parent = node;
+        }
       } else {
         // Existing node, just add the block and byte count then pass the job to child
         updateCounters(replRule, blockCount, byteCount);

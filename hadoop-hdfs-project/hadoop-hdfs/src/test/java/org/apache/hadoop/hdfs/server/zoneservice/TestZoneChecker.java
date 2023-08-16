@@ -31,7 +31,6 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -42,6 +41,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
 
 public class TestZoneChecker {
   private static final long FILE_LEN = 1024;
@@ -203,5 +203,24 @@ public class TestZoneChecker {
       assertEquals(childBlockCounts, currentNodeBlockCounts);
       assertEquals(childByteCounts, currentNodeByteCounts);
     }
+  }
+
+  @Test
+  public void testZoneCheckerCountTreeNodeSingleFile() {
+    int DEPTH = 5;
+    ZoneChecker.ZoneCheckerCountTree zcct = new ZoneChecker.ZoneCheckerCountTree("/", DEPTH);
+    zcct.addNode("/1/2/3/4/5/6/7/8.file", null, 1, 1);
+
+    int currentDepth = 0;
+    ZoneChecker.ZoneCheckerCountTreeNode parent = null;
+    ZoneChecker.ZoneCheckerCountTreeNode cursor = zcct.root;
+    while (currentDepth < DEPTH) {
+      assertEquals(1, cursor.children.size());
+      assertSame(cursor.parent, parent);
+      parent = cursor;
+      cursor = cursor.children.values().iterator().next();
+      currentDepth++;
+    }
+    assertEquals(0, cursor.children.size());
   }
 }
