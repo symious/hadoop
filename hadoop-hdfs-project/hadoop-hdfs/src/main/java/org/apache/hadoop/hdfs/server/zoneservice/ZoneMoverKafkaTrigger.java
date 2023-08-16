@@ -117,7 +117,7 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
       if (jsonMessage.get("allowed").equals("true")) {
         if (checkPaths(jsonMessage.get("src").toString())) {
           pathQueue.put(jsonMessage.get("src").toString());
-          LOG.debug("New create file: " +
+          LOG.info("New create file: " +
               jsonMessage.get("src").toString());
         }
       }
@@ -126,7 +126,7 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
       if (jsonMessage.get("allowed").equals("true")) {
         if (checkPaths(jsonMessage.get("dst").toString())) {
           pathQueue.put(jsonMessage.get("dst").toString());
-          LOG.debug("New create file: " +
+          LOG.info("New rename file: " +
               jsonMessage.get("dst").toString());
         }
       }
