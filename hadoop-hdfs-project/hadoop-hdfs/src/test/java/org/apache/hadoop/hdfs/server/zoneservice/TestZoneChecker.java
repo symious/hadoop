@@ -186,4 +186,23 @@ public class TestZoneChecker {
       assertEquals(childByteCounts, currentNodeByteCounts);
     }
   }
+
+  @Test
+  public void testZoneCheckerCountTreeNodeSingleFile() {
+    int DEPTH = 5;
+    ZoneChecker.ZoneCheckerCountTree zcct = new ZoneChecker.ZoneCheckerCountTree("/", DEPTH);
+    zcct.addNode("/1/2/3/4/5/6/7/8.file", null, 1, 1);
+
+    int currentDepth = 0;
+    ZoneChecker.ZoneCheckerCountTreeNode parent = null;
+    ZoneChecker.ZoneCheckerCountTreeNode cursor = zcct.root;
+    while (currentDepth < DEPTH) {
+      assertEquals(1, cursor.children.size());
+      assertSame(cursor.parent, parent);
+      parent = cursor;
+      cursor = cursor.children.values().iterator().next();
+      currentDepth++;
+    }
+    assertEquals(0, cursor.children.size());
+  }
 }
