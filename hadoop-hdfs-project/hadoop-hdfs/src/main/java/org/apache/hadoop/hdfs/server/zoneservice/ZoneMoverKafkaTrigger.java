@@ -44,8 +44,11 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
         conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_PASSWORD);
     final String bootstrapServers =
         conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_BOOTSTRAP_SERVERS);
-    final String topic =
+    final String nsTopic =
         conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_TOPIC_WITH_NAMESPACE_PREFIX + nameSpace);
+    final String topic = nsTopic != null ? nsTopic :
+        conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_TOPIC);
+
     final String groupId =
         conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_GROUP_ID);
 
@@ -199,8 +202,6 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
             JSONObject jsonObject = new JSONObject(rawMessage);
             //Filter the record doesn't belong to this namespace
             if (!jsonObject.get("ns").equals(nameSpace)) {
-              LOG.error("The topic with ns is {}, but ns field is {}",
-                  topic, jsonObject.get("ns"));
               continue;
             }
             String message = jsonObject.get("message").toString();
