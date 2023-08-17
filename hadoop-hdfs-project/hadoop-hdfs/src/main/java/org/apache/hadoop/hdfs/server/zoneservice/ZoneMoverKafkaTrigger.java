@@ -18,15 +18,20 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
 
 public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   private static final Logger LOG = LoggerFactory.getLogger(ZoneMover.class);
 
   private final String nameSpace;
-  private final Consumer<String, String> consumer;
+
   private List<Path> monitorPaths;
   private final int consumerThreadsNum;
+  private ExecutorService executorService;
+
   private final BlockingQueue<String> pathQueue;
 
   //Init HDFS audit log kafka consumer
@@ -42,7 +47,6 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
         conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_TOPIC);
     final String groupId =
         conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_GROUP_ID);
-
 
     Properties properties = new Properties();
     properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
@@ -64,17 +68,24 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
         conf.getInt(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_KEY,
             DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_DEFAULT);
     pathQueue = new LinkedBlockingQueue<>(queueSize);
+
     consumerThreadsNum =
         conf.getInt(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_KAFKA_CONSUMER_THREADS_KEY,
             DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_KAFKA_CONSUMER_THREADS_DEFAULT);
-    consumer = new KafkaConsumer<>(properties);
-    consumer.subscribe(Collections.singletonList(topic));
+    executorService = Executors.newFixedThreadPool(consumerThreadsNum,
+        new ThreadFactory() {
+          @Override
+          public Thread newThread(Runnable r) {
+            Thread thread = new Thread(r);
+            thread.setName("KafkaConsumerPool-Thread-" + thread.getId());
+            return thread;
+          }
+        });
+    for (int i = 0; i < consumerThreadsNum; ++i) {
+      executorService.submit(new MonitorTask(properties, topic));
+    }
 
     monitorPaths = paths;
-    for (int i = 0; i < consumerThreadsNum; ++i) {
-      new MonitorThread(this.getClass().getSimpleName() + "_" +
-          nameSpace + "_" + i).start();
-    }
     LOG.info("ZoneMover trigger for {} has been started!", nameSpace);
   }
 
@@ -86,55 +97,6 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   @Override
   public String getNext() throws InterruptedException {
     return pathQueue.take();
-  }
-
-  public void monitorPaths() {
-    while (true) {
-      ConsumerRecords<String, String> records = consumer.poll(100);
-      try {
-        for (ConsumerRecord<String, String> record: records) {
-          String rawMessage = record.value();
-          JSONObject jsonObject = new JSONObject(rawMessage);
-          //Filter the record doesn't belong to this namespace
-          if (!jsonObject.get("ns").equals(nameSpace)) {
-            continue;
-          }
-          String message = jsonObject.get("message").toString();
-
-          processMessage(message);
-        }
-      } catch (JSONException e) {
-        e.printStackTrace();
-      } catch (InterruptedException e) {
-        LOG.info("ZoneMover trigger thread is interrupted!");
-        break;
-      }
-    }
-  }
-
-  /**
-   * Choose new files from HDFS audit log
-   */
-  private void processMessage(String message) throws JSONException, InterruptedException {
-    if (message.contains("cmd=complete")) {
-      JSONObject jsonMessage = message2json(message);
-      if (jsonMessage.get("allowed").equals("true")) {
-        if (checkPaths(jsonMessage.get("src").toString())) {
-          pathQueue.put(jsonMessage.get("src").toString());
-          LOG.info("New create file: " +
-              jsonMessage.get("src").toString());
-        }
-      }
-    } else if (message.contains("cmd=rename")) {
-      JSONObject jsonMessage = message2json(message);
-      if (jsonMessage.get("allowed").equals("true")) {
-        if (checkPaths(jsonMessage.get("dst").toString())) {
-          pathQueue.put(jsonMessage.get("dst").toString());
-          LOG.info("New rename file: " +
-              jsonMessage.get("dst").toString());
-        }
-      }
-    }
   }
 
   /**
@@ -212,17 +174,69 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
 
   @Override
   public void shutdown() {
-    monitorThread.interrupt();
+    executorService.shutdown();
   }
 
-  class MonitorThread extends Thread {
-    public MonitorThread(String name) {
-      super(name);
+  class MonitorTask implements Runnable {
+    private Consumer<String, String> consumer;
+    private String topic;
+    public MonitorTask(Properties properties, String topic) {
+      consumer = new KafkaConsumer<>(properties);
+      this.topic = topic;
+      consumer.subscribe(Collections.singletonList(this.topic));
     }
-
     @Override
     public void run() {
       monitorPaths();
+    }
+
+    public void monitorPaths() {
+      while (true) {
+        ConsumerRecords<String, String> records = consumer.poll(100);
+        try {
+          for (ConsumerRecord<String, String> record: records) {
+            String rawMessage = record.value();
+            JSONObject jsonObject = new JSONObject(rawMessage);
+            //Filter the record doesn't belong to this namespace
+            if (!jsonObject.get("ns").equals(nameSpace)) {
+              continue;
+            }
+            String message = jsonObject.get("message").toString();
+
+            processMessage(message);
+          }
+        } catch (JSONException e) {
+          e.printStackTrace();
+        } catch (InterruptedException e) {
+          LOG.info("ZoneMover trigger thread is interrupted!");
+          break;
+        }
+      }
+    }
+
+    /**
+     * Choose new files from HDFS audit log
+     */
+    private void processMessage(String message) throws JSONException, InterruptedException {
+      if (message.contains("cmd=complete")) {
+        JSONObject jsonMessage = message2json(message);
+        if (jsonMessage.get("allowed").equals("true")) {
+          if (checkPaths(jsonMessage.get("src").toString())) {
+            pathQueue.put(jsonMessage.get("src").toString());
+            LOG.info("New create file: " +
+                jsonMessage.get("src").toString());
+          }
+        }
+      } else if (message.contains("cmd=rename")) {
+        JSONObject jsonMessage = message2json(message);
+        if (jsonMessage.get("allowed").equals("true")) {
+          if (checkPaths(jsonMessage.get("dst").toString())) {
+            pathQueue.put(jsonMessage.get("dst").toString());
+            LOG.info("New rename file: " +
+                jsonMessage.get("dst").toString());
+          }
+        }
+      }
     }
   }
 }
