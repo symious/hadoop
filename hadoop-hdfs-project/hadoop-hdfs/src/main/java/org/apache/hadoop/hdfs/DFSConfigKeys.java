@@ -777,6 +777,7 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   //ZoneMover kafka trigger related keys
   public static final String  DFS_ZONEMOVER_KAFKA_BOOTSTRAP_SERVERS = "dfs.zonemover.kafka.bootstrap.servers";
   public static final String  DFS_ZONEMOVER_KAFKA_TOPIC = "dfs.zonemover.kafka.topic";
+  public static final String  DFS_ZONEMOVER_KAFKA_TOPIC_WITH_NAMESPACE_PREFIX = "dfs.zonemover.kafka.topic.";
   public static final String  DFS_ZONEMOVER_KAFKA_GROUP_ID = "dfs.zonemover.kafka.group.id";
   public static final String  DFS_ZONEMOVER_KAFKA_USERNAME = "dfs.zonemover.kafka.username";
   public static final String  DFS_ZONEMOVER_KAFKA_PASSWORD = "dfs.zonemover.kafka.password";

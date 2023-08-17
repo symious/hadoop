@@ -37,6 +37,7 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   //Init HDFS audit log kafka consumer
   public ZoneMoverKafkaTrigger(Configuration conf,
       List<Path> paths, URI namenode) {
+    nameSpace = namenode.getAuthority();
     final String username =
         conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_USERNAME);
     final String password =
@@ -44,7 +45,7 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
     final String bootstrapServers =
         conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_BOOTSTRAP_SERVERS);
     final String topic =
-        conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_TOPIC);
+        conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_TOPIC_WITH_NAMESPACE_PREFIX + nameSpace);
     final String groupId =
         conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_GROUP_ID);
 
@@ -55,7 +56,6 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
         StringDeserializer.class.getName());
     properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
         StringDeserializer.class.getName());
-    nameSpace = namenode.getAuthority();
     properties.put("group.id", groupId + "_" + nameSpace);
 
     properties.setProperty("security.protocol", "SASL_PLAINTEXT");
@@ -199,6 +199,8 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
             JSONObject jsonObject = new JSONObject(rawMessage);
             //Filter the record doesn't belong to this namespace
             if (!jsonObject.get("ns").equals(nameSpace)) {
+              LOG.error("The topic with ns is {}, but ns field is {}",
+                  topic, jsonObject.get("ns"));
               continue;
             }
             String message = jsonObject.get("message").toString();
