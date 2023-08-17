@@ -26,7 +26,7 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   private final String nameSpace;
   private final Consumer<String, String> consumer;
   private List<Path> monitorPaths;
-  private final Thread monitorThread;
+  private final int consumerThreadsNum;
   private final BlockingQueue<String> pathQueue;
 
   //Init HDFS audit log kafka consumer
@@ -42,6 +42,7 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
         conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_TOPIC);
     final String groupId =
         conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_GROUP_ID);
+
 
     Properties properties = new Properties();
     properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
@@ -63,14 +64,17 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
         conf.getInt(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_KEY,
             DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_DEFAULT);
     pathQueue = new LinkedBlockingQueue<>(queueSize);
-
+    consumerThreadsNum =
+        conf.getInt(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_KAFKA_CONSUMER_THREADS_KEY,
+            DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_KAFKA_CONSUMER_THREADS_DEFAULT);
     consumer = new KafkaConsumer<>(properties);
     consumer.subscribe(Collections.singletonList(topic));
 
     monitorPaths = paths;
-    monitorThread = new MonitorThread(this.getClass().getSimpleName() + "_" +
-        nameSpace);
-    monitorThread.start();
+    for (int i = 0; i < consumerThreadsNum; ++i) {
+      new MonitorThread(this.getClass().getSimpleName() + "_" +
+          nameSpace + "_" + i).start();
+    }
     LOG.info("ZoneMover trigger for {} has been started!", nameSpace);
   }
 
