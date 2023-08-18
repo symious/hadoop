@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
@@ -117,8 +118,9 @@ public class ZoneReplicationCoordinator {
       }
       while (runningReplications.get() + replicaDelta > maxConcurrentReplications) {
         try {
-          LOG.warn("Waiting runningReplications({}/{}) to have enough quota for {} ...",
-              runningDeletions.get(), maxConcurrentReplications, filePath);
+          LOG.warn("Waiting runningReplications({}/{}) with replicaDelta {}" +
+              " to have enough quota for {} ...", runningReplications.get(),
+              maxConcurrentReplications, replicaDelta, filePath);
           //noinspection BusyWait
           Thread.sleep(SLEEP_PERIOD);
         } catch (InterruptedException e) {
@@ -278,16 +280,20 @@ public class ZoneReplicationCoordinator {
           return null;
         }
 
-        HdfsFileStatus[] statuses;
+        HdfsFileStatus[] statuses = null;
+        DirectoryListing directorylisting = null;
         if (fileState.fileId == HdfsConstants.INVALIDATE_INODE_ID) {
-          statuses = dfs.listPaths(
-              fileState.filePath, HdfsFileStatus.EMPTY_NAME, true).getPartialListing();
+          directorylisting = dfs.listPaths(
+              fileState.filePath, HdfsFileStatus.EMPTY_NAME, true);
         } else {
-          statuses = dfs.listPaths(fileState.filePath, fileState.fileId,
-              HdfsFileStatus.EMPTY_NAME, true).getPartialListing();
+          directorylisting = dfs.listPaths(fileState.filePath, fileState.fileId,
+              HdfsFileStatus.EMPTY_NAME, true);
         }
-        if (statuses[0].isDir()) {
-          LOG.info("Skip directory: " + fileState.filePath);
+        if (directorylisting != null) {
+          statuses = directorylisting.getPartialListing();
+        }
+        if (statuses == null || statuses[0].isDir()) {
+          LOG.info("Skip it because it is a directory or doesn't exist: " + fileState.filePath);
           return null;
         }
         Preconditions.checkArgument(statuses[0] instanceof HdfsLocatedFileStatus);

@@ -536,6 +536,8 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
       for (byte[] lastReturnedName = HdfsFileStatus.EMPTY_NAME;;) {
         final DirectoryListing children;
         try {
+          // Only call msync for the root path. Avoid stale read for trigger mode.
+          dfs.msync();
           children = dfs.listPaths(fullPath, lastReturnedName, true);
         } catch(IOException e) {
           LOG.warn("Failed to list directory " + fullPath
