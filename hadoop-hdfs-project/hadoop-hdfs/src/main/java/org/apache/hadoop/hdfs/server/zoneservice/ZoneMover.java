@@ -53,6 +53,7 @@ import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
+import org.apache.hadoop.hdfs.server.zoneservice.utils.MigrationDataCenters;
 import org.apache.hadoop.hdfs.server.zoneservice.utils.RunMode;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
@@ -115,12 +116,12 @@ public class ZoneMover {
   protected final AtomicInteger retryCount;
   protected final DFSClient dfs;
   protected static final long DELAY_AFTER_CHOOSE_FAIL = 2 * 1000;
-  protected final Processor processor = new Processor();
+  protected final Processor processor;
   public final ReplicationRuleUtil ruleUtil;
   protected final boolean xattrSetEnable;
   protected final ZoneReplicationCoordinator coordinator;
   protected Result result;
-  protected final Thread fetcher = new Thread(new Fetcher(), "ZoneMover-Fetcher");
+  protected final Thread fetcher;
   protected static int checkUpdateInterval = 0;
   protected static final String DC_SEPARATOR = ",";
 
@@ -168,7 +169,13 @@ public class ZoneMover {
     checkUpdateInterval = conf.getInt(
         DFSConfigKeys.DFS_ZONEMOVER_CHECK_ZK_UPDATE_PATH_RULE_MAP_INTERVAL,
         DFSConfigKeys.DFS_ZONEMOVER_CHECK_ZK_UPDATE_PATH_RULE_MAP_INTERVAL_DEFAULT);
+    processor = initProcessor();
+    fetcher = new Fetcher(processor);
     fetcher.start();
+  }
+
+  protected Processor initProcessor() {
+    return new Processor();
   }
 
   public ZoneMover(NameNodeConnector nnc, Configuration conf,
@@ -195,17 +202,6 @@ public class ZoneMover {
       throw new UnsupportedActionException(
           "ZoneMover must work with BlockPlacementPolicyWithDataCenter");
     }
-  }
-
-  DBlock newDBlock(Block block, List<MLocation> locations) {
-    final DBlock db = new DBlock(block);
-    for(MLocation ml : locations) {
-      StorageGroup source = storages.getSource(ml);
-      if (source != null) {
-        db.addLocation(source);
-      }
-    }
-    return db;
   }
 
   void init(Configuration conf) throws IOException {
@@ -241,9 +237,9 @@ public class ZoneMover {
     Result result = new Result();
     this.result = result;
     if (this.globalRule != null) {
-      processor.processPath(path, this.globalRule, result);
+      processor.processPath(path, this.globalRule, result, null);
     } else {
-      processor.processPath(path, getPathRule(path), result);
+      processor.processPath(path, getPathRule(path), result, null);
     }
 
     return result.getExitStatus();
@@ -834,7 +830,12 @@ public class ZoneMover {
   }
 
   class Processor {
-    private Result processPath() {
+
+    protected Result processPath() {
+      return processPath(null);
+    }
+
+    protected Result processPath(MigrationDataCenters dc) {
       ZoneProgressTracker.resetTracker();
       ZoneProgressTracker.trackPaths(dispatcher.getDistributedFileSystem(), targetPaths);
       ZoneProgressTracker.startCountingProcessPathTime();
@@ -842,10 +843,10 @@ public class ZoneMover {
       result = new Result();
       for (Path target: targetPaths) {
         if (globalRule != null) {
-          processPath(target.toUri().getPath(), globalRule, result);
+          processPath(target.toUri().getPath(), globalRule, result, dc);
         } else {
           String path = target.toUri().getPath();
-          processor.processPath(path, getPathRule(path), result);
+          processor.processPath(path, getPathRule(path), result, dc);
         }
       }
       ZoneProgressTracker.finishCountingProcessPathTimeAndLog();
@@ -891,11 +892,21 @@ public class ZoneMover {
       return result;
     }
 
-    private void processPath(String fullPath, ReplicationRule rule, Result result) {
+    protected void processPath(String fullPath, ReplicationRule rule, Result result,
+        MigrationDataCenters dc) {
       LOG.info("Processing path: " + fullPath + " ...");
+      processPath(fullPath, rule, result, dc, false);
+    }
+
+    protected void processPath(String fullPath, ReplicationRule rule, Result result,
+        MigrationDataCenters dc, boolean doesMsync) {
       for (byte[] lastReturnedName = HdfsFileStatus.EMPTY_NAME;;) {
         final DirectoryListing children;
         try {
+          // Only call msync for the root path. Avoid stale read for trigger mode.
+          if (doesMsync) {
+            dfs.msync();
+          }
           children = dfs.listPaths(fullPath, lastReturnedName, true);
         } catch(IOException e) {
           LOG.warn("Failed to list directory " + fullPath
@@ -906,7 +917,7 @@ public class ZoneMover {
           return;
         }
         for (HdfsFileStatus child : children.getPartialListing()) {
-          processRecursively(fullPath, child, rule, result);
+          processRecursively(fullPath, child, rule, result, dc);
         }
         if (children.hasMore()) {
           lastReturnedName = children.getLastName();
@@ -916,16 +927,16 @@ public class ZoneMover {
       }
     }
 
-    private void processRecursively(String parent,
-        HdfsFileStatus status, ReplicationRule rule, Result result) {
+    private void processRecursively(String parent, HdfsFileStatus status, ReplicationRule rule,
+        Result result, MigrationDataCenters dc) {
       String fullPath = status.getFullName(parent);
       if (status.isDir()) {
         if (!fullPath.endsWith(Path.SEPARATOR)) {
           fullPath = fullPath + Path.SEPARATOR;
         }
-        processPath(fullPath, rule, result);
+        processPath(fullPath, rule, result, dc);
       } else if (!status.isSymlink()) { // file
-        processFile(fullPath, (HdfsLocatedFileStatus) status, rule, result);
+        processFile(fullPath, (HdfsLocatedFileStatus) status, rule, result, dc);
       }
     }
 
@@ -962,9 +973,8 @@ public class ZoneMover {
       processFileBlocks(fullPath, status, rule, result);
     }
 
-    private void processFile(String fullPath,
-        HdfsLocatedFileStatus status, ReplicationRule rule,
-        Result result) {
+    protected void processFile(String fullPath, HdfsLocatedFileStatus status, ReplicationRule rule,
+        Result result, MigrationDataCenters dc) {
       LOG.info("Processing file: " + fullPath + " ....");
 
       final LocatedBlocks locatedBlocks = status.getLocatedBlocks();
@@ -1041,9 +1051,8 @@ public class ZoneMover {
       }
     }
 
-    private boolean isFileNeedMove(
-        LocatedBlocks locatedBlocks, ReplicationRule rule) {
-      for (LocatedBlock block: locatedBlocks.getLocatedBlocks()) {
+    protected boolean isFileNeedMove(LocatedBlocks locatedBlocks, ReplicationRule rule) {
+      for (LocatedBlock block : locatedBlocks.getLocatedBlocks()) {
         if (!getZoneMoveItems(block, rule).isEmpty()) {
           return true;
         }
@@ -1051,8 +1060,8 @@ public class ZoneMover {
       return false;
     }
 
-    private void processFileBlocks(String fullPath,
-        HdfsLocatedFileStatus status, ReplicationRule rule, Result result) {
+    protected void processFileBlocks(String fullPath, HdfsLocatedFileStatus status,
+        ReplicationRule rule, Result result) {
       final LocatedBlocks locatedBlocks = status.getLocatedBlocks();
       // Cannot just check the first and last block, as the dispatching action
       // is parallel and asynchronous. The movement of any blocks of a file
@@ -1124,7 +1133,13 @@ public class ZoneMover {
       ZoneProgressTracker.dequeueFile(fullPath);
     }
 
-    boolean scheduleMoves4Block(String fullPath, LocatedBlock lb, List<ZoneMoveItem> moveItems) {
+    protected boolean scheduleMoves4Block(String fullPath, LocatedBlock lb,
+        List<ZoneMoveItem> moveItems) {
+      return scheduleMoves4Block(fullPath, lb, moveItems, null);
+    }
+
+    boolean scheduleMoves4Block(String fullPath, LocatedBlock lb, List<ZoneMoveItem> moveItems,
+        ErasureCodingPolicy ecPolicy) {
       final List<MLocation> locations = MLocation.toLocations(lb);
       // put locations to a map with datacenter as the key
       final Map<String, List<MLocation>> locationMap = new HashMap<>();
@@ -1137,7 +1152,7 @@ public class ZoneMover {
         }
       }
 
-      final DBlock db = newDBlock(lb.getBlock().getLocalBlock(), locations);
+      final DBlock db = newDBlock(lb, locations, ecPolicy);
       Set<StorageType> targetTypes = new HashSet<>(Arrays.asList(lb.getStorageTypes()));
       Set<StorageGroup> excluded = getExcluded(locations, moveItems);
       // get MLocation according to datacenter and select source
@@ -1158,6 +1173,18 @@ public class ZoneMover {
         }
       }
       return true;
+    }
+
+    protected DBlock newDBlock(LocatedBlock lb, List<MLocation> locations, ErasureCodingPolicy ecPolicy) {
+      Block block = lb.getBlock().getLocalBlock();
+      final DBlock db = new DBlock(block);
+      for(MLocation ml : locations) {
+        StorageGroup source = storages.getSource(ml);
+        if (source != null) {
+          db.addLocation(source);
+        }
+      }
+      return db;
     }
 
     private Set<StorageGroup> getExcluded(
@@ -1235,7 +1262,15 @@ public class ZoneMover {
     }
   }
 
-  class Fetcher implements Runnable {
+  class Fetcher extends Thread {
+
+    private final Processor processor;
+
+    Fetcher(Processor processor) {
+      super("ZoneMover-Fetcher");
+      this.processor = processor;
+    }
+
     @Override
     public void run() {
       ZoneReplicationCoordinator.FileState fileState = null;
