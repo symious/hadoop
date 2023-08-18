@@ -18,22 +18,20 @@
 package org.apache.hadoop.hdfs.server.zoneservice;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
-import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
-import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
 import org.apache.hadoop.hdfs.server.zoneservice.utils.MigrationDataCenters;
 import org.apache.hadoop.net.StaticMapping;
+import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
 import org.junit.After;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,8 +49,7 @@ public class TestZoneMoverWithSetReplication {
   private MiniDFSCluster cluster = null;
   private static final long FILE_LEN = 1024;
   private static final short REPLICATION = 3;
-  private static final Logger LOG =
-      LoggerFactory.getLogger(TestZoneMoverWithSetReplication.class);
+  private static final Logger LOG = LoggerFactory.getLogger(TestZoneMoverWithSetReplication.class);
   public static final String TEST_CACHE_DATA_DIR =
       System.getProperty("test.cache.data", "build/test/cache");
 
@@ -62,6 +59,11 @@ public class TestZoneMoverWithSetReplication {
 
   private final Map<Integer, ReplicationRule> ruleAlias = new HashMap<>();
   Map<ReplicationRule, ReplicationRule> referMap = new HashMap<>();
+
+  @BeforeClass
+  public static void setLogging() {
+    LogManager.getLogger(ZoneProgressTracker.class.getName()).setLevel(Level.DEBUG);
+  }
 
   private void init() {
     if (!ruleAlias.isEmpty()) {

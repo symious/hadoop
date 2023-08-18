@@ -632,7 +632,9 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
             appliedRule.getReplica(), fullPath);
         try {
           if (appliedRule.getReplica() != status.getReplication()) {
+            long startRpcTime = Time.monotonicNow();
             dfs.setReplication(fullPath, appliedRule.getReplica());
+            ZoneProgressTracker.addSetReplicationTime(Time.monotonicNow() - startRpcTime);
           }
         } catch (IOException e) {
           LOG.warn("Set replication fails for {}\n {}", fullPath, e);
