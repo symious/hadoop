@@ -116,6 +116,7 @@ public class ZoneReplicationCoordinator {
             replicaDelta, maxConcurrentReplications);
         extendConcurrentReplications();
       }
+      long startSleepTime = Time.monotonicNow();
       while (runningReplications.get() + replicaDelta > maxConcurrentReplications) {
         try {
           LOG.warn("Waiting runningReplications({}/{}) with replicaDelta {}" +
@@ -127,11 +128,13 @@ public class ZoneReplicationCoordinator {
           Thread.currentThread().interrupt();
         }
       }
+      ZoneProgressTracker.addCoordinatorSleepTime(Time.monotonicNow() - startSleepTime);
       int n = runningReplications.addAndGet(replicaDelta);
       LOG.debug("Added {} replicas, now runningReplications is: {}", replicaDelta, n);
     }
-    waitFiles.add(new FileState(filePath, fileId, rule, maxCheckTimes,
-        replicaDelta));
+    FileState fileState = new FileState(filePath, fileId, rule, maxCheckTimes, replicaDelta);
+    fileState.setLastStepStartTime(Time.monotonicNow());
+    waitFiles.add(fileState);
   }
 
   /**
@@ -166,7 +169,10 @@ public class ZoneReplicationCoordinator {
    */
   public FileState getNextFinishedFile(long timeout) throws NoSuchElementException {
     if (finishedFiles.size() > 0) {
-      return finishedFiles.poll();
+      FileState fileState = finishedFiles.poll();
+      ZoneProgressTracker.addTimeSpentInFinishFilesQueue(
+          Time.monotonicNow() - fileState.lastStepStartTime);
+      return fileState;
     }
     long endTime = Time.monotonicNow() + timeout;
     while (!isWaitingCompletion.get() ||
@@ -179,7 +185,10 @@ public class ZoneReplicationCoordinator {
         Thread.currentThread().interrupt();
       }
       if (finishedFiles.size() > 0) {
-        return finishedFiles.poll();
+        FileState fileState = finishedFiles.poll();
+        ZoneProgressTracker.addTimeSpentInFinishFilesQueue(
+            Time.monotonicNow() - fileState.lastStepStartTime);
+        return fileState;
       } else if (Time.monotonicNow() > endTime) {
         return null;
       }
@@ -214,6 +223,8 @@ public class ZoneReplicationCoordinator {
           int replicaDelta = fileState.getReplicaDelta();
           if (status == null) {
             minusReplicaDeltaFromRunning(replicaDelta);
+            ZoneProgressTracker.addTimeSpentInWaitFilesQueue(
+                Time.monotonicNow() - fileState.lastStepStartTime);
             continue;
           }
 
@@ -224,10 +235,17 @@ public class ZoneReplicationCoordinator {
               LOG.info("Checker failed to offer the file to finishedFiles." +
                   "the size of finishedFiles is {}.", finishedFiles.size());
               try {
+                ZoneProgressTracker.addTimeSpentInWaitFilesQueue(
+                    Time.monotonicNow() - fileState.lastStepStartTime);
+                fileState.setLastStepStartTime(Time.monotonicNow());
                 finishedFiles.put(fileState);
               } catch (InterruptedException e) {
                 LOG.error("Failed to put fileState to finishedFiles", e);
               }
+            } else {
+              ZoneProgressTracker.addTimeSpentInWaitFilesQueue(
+                  Time.monotonicNow() - fileState.lastStepStartTime);
+              fileState.setLastStepStartTime(Time.monotonicNow());
             }
             minusReplicaDeltaFromRunning(replicaDelta);
           } else {
@@ -236,6 +254,8 @@ public class ZoneReplicationCoordinator {
               LOG.warn("This file({}) does not have correct replicas after checking {} times!",
                   fileState.getFilePath(), maxCheckTimes);
               minusReplicaDeltaFromRunning(replicaDelta);
+              ZoneProgressTracker.addTimeSpentInWaitFilesQueue(
+                  Time.monotonicNow() - fileState.lastStepStartTime);
             } else {
               LOG.info("This file({}) does not have correct replicas with leftCheckTimes={}",
                   fileState.filePath, leftCheckTimes);
@@ -332,6 +352,7 @@ public class ZoneReplicationCoordinator {
 
     private final String filePath;
     private final long fileId;
+    private long lastStepStartTime;
     private long lastCheckTime = 0L;
     private int leftCheckTimes;
     // the number of replicas to add for the file
@@ -346,6 +367,7 @@ public class ZoneReplicationCoordinator {
 
     FileState(String filePath, long fileId, ReplicationRule rule,
         int checkTimes, int replicaDelta) {
+      this.lastStepStartTime = Time.monotonicNow();
       this.filePath = filePath;
       this.fileId = fileId;
       this.rule = rule;
@@ -389,19 +411,27 @@ public class ZoneReplicationCoordinator {
       return rule;
     }
 
-    public long getFileId() { return fileId; }
+    public long getFileId() {
+      return fileId;
+    }
 
-    public void setRule(ReplicationRule rule) { this.rule = rule; }
+    public void setRule(ReplicationRule rule) {
+      this.rule = rule;
+    }
+
+    public long getLastStepStartTime() {
+      return lastStepStartTime;
+    }
+
+    public void setLastStepStartTime(long t) {
+      lastStepStartTime = t;
+    }
 
     @Override
     public String toString() {
-      return "FileState{" +
-          "filePath='" + filePath + '\'' +
-          ", lastCheckTime=" + lastCheckTime +
-          ", leftCheckTimes=" + leftCheckTimes +
-          ", replicaDelta=" + replicaDelta +
-          ", fileStatus=" + fileStatus +
-          ", rule=" + rule +
+      return "FileState{" + "filePath='" + filePath + '\'' + ", lastCheckTime=" + lastCheckTime
+          + ", leftCheckTimes=" + leftCheckTimes + ", replicaDelta=" + replicaDelta
+          + ", fileStatus=" + fileStatus + ", rule=" + rule +
           '}';
     }
   }

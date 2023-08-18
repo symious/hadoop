@@ -72,6 +72,10 @@ public class ZoneProgressTracker {
   private static int fileCountLastPrint;
   private static long byteCountLastPrint;
   private static long blockCountLastPrint;
+  private static final ArithmeticMeanRoller setReplicationRoller = new ArithmeticMeanRoller();
+  private static final ArithmeticMeanRoller coordinatorSleepRoller = new ArithmeticMeanRoller();
+  private static final ArithmeticMeanRoller waitFilesQueueRoller = new ArithmeticMeanRoller();
+  private static final ArithmeticMeanRoller finishFilesQueueRoller = new ArithmeticMeanRoller();
 
   public static void initConf(Configuration conf) {
     printPeriod = conf.getLong(DFSConfigKeys.DFS_ZONE_PROGRESS_TRACKER_PRINT_PERIOD_KEY,
@@ -119,8 +123,10 @@ public class ZoneProgressTracker {
   }
 
   public synchronized static void finishCountingProcessPathTimeAndLog() {
-    LOG.debug("Time to initialize all dispatchers: {}ms",
-        timer.monotonicNow() - processPathStartTime);
+    LOG.debug(
+        "Time to initialize all dispatchers: {}ms, of which setReplication took {}ms, coordinator slept {}ms",
+        timer.monotonicNow() - processPathStartTime, setReplicationRoller.sum,
+        coordinatorSleepRoller.sum);
   }
 
   public synchronized static void finishCountingCoordinatorWaitTimeAndLog() {
@@ -130,6 +136,10 @@ public class ZoneProgressTracker {
 
   public synchronized static void finishCountingFetcherWaitTimeAndLog() {
     LOG.debug("ZoneMover.Fetcher finished: {}ms", timer.monotonicNow() - fetcherWaitStartTime);
+    LOG.info("Average setReplication time: {}ms", setReplicationRoller.getTruncatedMean());
+    LOG.info("Average coordinator sleep time: {}ms", coordinatorSleepRoller.getTruncatedMean());
+    LOG.info("Average time spent in waitFiles: {}ms", waitFilesQueueRoller.getTruncatedMean());
+    LOG.info("Average time spent in finishFiles: {}ms", finishFilesQueueRoller.getTruncatedMean());
   }
 
   public synchronized static void finishCountingMoveCompletionWaitTimeAndLog() {
@@ -138,6 +148,23 @@ public class ZoneProgressTracker {
 
   public synchronized static void finishCountingPostProcessingTimeAndLog() {
     LOG.debug("Post processing finished in {}ms", timer.monotonicNow() - postProcessingStartTime);
+  }
+
+  // No need for any kind of thread-safe for the methods below, only used by a blocking main thread
+  public static void addSetReplicationTime(long l) {
+    setReplicationRoller.addNumber(l);
+  }
+
+  public static void addCoordinatorSleepTime(long l) {
+    coordinatorSleepRoller.addNumber(l);
+  }
+
+  public static void addTimeSpentInWaitFilesQueue(long l) {
+    waitFilesQueueRoller.addNumber(l);
+  }
+
+  public static void addTimeSpentInFinishFilesQueue(long l) {
+    finishFilesQueueRoller.addNumber(l);
   }
 
   public enum ZoneProgressPrintModes {
@@ -162,6 +189,10 @@ public class ZoneProgressTracker {
     fetcherWaitStartTime = 0;
     moveCompletionWaitStartTime = 0;
     postProcessingStartTime = 0;
+    setReplicationRoller.reset();
+    coordinatorSleepRoller.reset();
+    waitFilesQueueRoller.reset();
+    finishFilesQueueRoller.reset();
   }
 
   /**
@@ -205,7 +236,11 @@ public class ZoneProgressTracker {
         + "Files since last report: %d, rate: %f files/s\n"
         + "Blocks since last report: %d, rate: %f blocks/s\n"
         + "Bytes since last report: %d, rate: %f bytes/s\n"
-        + "ETC: %fs.\n";
+        + "ETC: %fs\n"
+        + "Average time spent in waitFiles: %d ms\n"
+        + "Average time spent in finishFiles: %d ms\n"
+        + "Average setReplication time: %d ms\n"
+        + "Average coordinator sleep time: %d ms.\n";
     double filesRate = fileCountSnapshot / elapsedForFile * 1000;
     double blocksRate = blockCountSnapshot / elapsedForByte * 1000;
     double bytesRate = byteCountSnapshot / elapsedForBlock * 1000;
@@ -219,7 +254,11 @@ public class ZoneProgressTracker {
         fileCountSinceLastPrint, (double) fileCountSinceLastPrint / timeSinceLastPrint * 1000,
         blockCountSinceLastPrint, (double) blockCountSinceLastPrint / timeSinceLastPrint * 1000,
         byteCountSinceLastPrint, (double) byteCountSinceLastPrint / timeSinceLastPrint * 1000,
-        estimatedTimeToComplete));
+        estimatedTimeToComplete,
+        waitFilesQueueRoller.getTruncatedMean(),
+        finishFilesQueueRoller.getTruncatedMean(),
+        setReplicationRoller.getTruncatedMean(),
+        coordinatorSleepRoller.getTruncatedMean()));
     fileCountLastPrint = fileCountSnapshot;
     byteCountLastPrint = byteCountSnapshot;
     blockCountLastPrint = blockCountSnapshot;
@@ -297,7 +336,7 @@ public class ZoneProgressTracker {
           totalFiles = UNTRACKED_DUMMY;
         }
       }
-    });
+    }, "ZoneProgressTracker-TotalFileCounter");
     totalFilesTrackerThread.start();
   }
 
@@ -335,5 +374,30 @@ public class ZoneProgressTracker {
   @VisibleForTesting
   public static long getByteCount() {
     return byteCount.get();
+  }
+
+  static class ArithmeticMeanRoller {
+    long count = 0;
+    long sum = 0;
+
+    public void reset() {
+      count = 0;
+      sum = 0;
+    }
+
+    public void addNumber(long num) {
+      count++;
+      sum += num;
+    }
+
+    /**
+     * Usage is not thread-safe, but in general safe to do so since thread-safety is not critical.
+     */
+    public long getTruncatedMean() {
+      if (count == 0) {
+        return 0;
+      }
+      return sum / count;
+    }
   }
 }
