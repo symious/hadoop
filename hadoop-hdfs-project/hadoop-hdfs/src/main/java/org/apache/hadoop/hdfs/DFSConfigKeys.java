@@ -777,11 +777,14 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   //ZoneMover kafka trigger related keys
   public static final String  DFS_ZONEMOVER_KAFKA_BOOTSTRAP_SERVERS = "dfs.zonemover.kafka.bootstrap.servers";
   public static final String  DFS_ZONEMOVER_KAFKA_TOPIC = "dfs.zonemover.kafka.topic";
+  public static final String  DFS_ZONEMOVER_KAFKA_TOPIC_WITH_NAMESPACE_PREFIX = "dfs.zonemover.kafka.topic.";
   public static final String  DFS_ZONEMOVER_KAFKA_GROUP_ID = "dfs.zonemover.kafka.group.id";
   public static final String  DFS_ZONEMOVER_KAFKA_USERNAME = "dfs.zonemover.kafka.username";
   public static final String  DFS_ZONEMOVER_KAFKA_PASSWORD = "dfs.zonemover.kafka.password";
   public static final String  DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_KEY = "dfs.zonemover.trigger.queue.size";
-  public static final int     DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_DEFAULT = 1000;
+  public static final int     DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_DEFAULT = 100000;
+  public static final String  DFS_ZONEMOVER_TRIGGER_KAFKA_CONSUMER_THREADS_KEY = "dfs.zonemover.trigger.kafka.consumer.threads";
+  public static final int     DFS_ZONEMOVER_TRIGGER_KAFKA_CONSUMER_THREADS_DEFAULT = 5;
   // datacenter values separated by comma
   public static final String  DFS_ZONEMOVER_VALID_DATACENTERS_KEY = "dfs.zonemover.valid.datacenters";
   public static final String  DFS_ZONEMOVER_VALID_DATACENTERS_DEFAULT = "";
