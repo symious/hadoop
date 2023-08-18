@@ -26,6 +26,7 @@ import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.StartupProgress;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.StartupProgressMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
@@ -279,6 +280,7 @@ public class ZoneService extends ReconfigurableBase  {
 
     @Override
     public void run() {
+      ZoneProgressTracker.disableResetForZoneService();
       while (!Thread.currentThread().isInterrupted()) {
         try {
           long start = System.currentTimeMillis();

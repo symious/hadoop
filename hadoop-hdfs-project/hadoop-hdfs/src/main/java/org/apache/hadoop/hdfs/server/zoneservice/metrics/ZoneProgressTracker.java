@@ -76,6 +76,7 @@ public class ZoneProgressTracker {
   private static final ArithmeticMeanRoller coordinatorSleepRoller = new ArithmeticMeanRoller();
   private static final ArithmeticMeanRoller waitFilesQueueRoller = new ArithmeticMeanRoller();
   private static final ArithmeticMeanRoller finishFilesQueueRoller = new ArithmeticMeanRoller();
+  private static boolean resetAllowed = true;
 
   public static void initConf(Configuration conf) {
     printPeriod = conf.getLong(DFSConfigKeys.DFS_ZONE_PROGRESS_TRACKER_PRINT_PERIOD_KEY,
@@ -92,6 +93,10 @@ public class ZoneProgressTracker {
   @VisibleForTesting
   public static void setTimer(Timer newTimer) {
     timer = newTimer;
+  }
+
+  public static void disableResetForZoneService() {
+    resetAllowed = false;
   }
 
   public synchronized static void startCountingInitTime() {
@@ -172,6 +177,9 @@ public class ZoneProgressTracker {
   }
 
   public synchronized static void resetTracker() {
+    if (!resetAllowed) {
+      return;
+    }
     if (totalFilesTrackerThread != null) {
       totalFilesTrackerThread.interrupt();
       totalFilesTrackerThread = null;
