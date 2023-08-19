@@ -1295,7 +1295,6 @@ public class ZoneMover {
           }
         }
       }
-      pathRuleMap.clear();
       pathRuleMap = pathRuleMapTmp;
       zoneMoverTrigger.updatePaths(Cli.getPaths(pathRuleMap));
     }
