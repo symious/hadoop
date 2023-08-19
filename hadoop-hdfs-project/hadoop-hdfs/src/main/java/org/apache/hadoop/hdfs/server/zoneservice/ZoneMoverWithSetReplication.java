@@ -1014,12 +1014,10 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
 
       if (fromZS) {
         // Update the pathRuleMap and monitorPaths for Zone Service.
-        pathRuleMap.clear();
         pathRuleMap = pathRuleMapTmp;
         zoneMoverTrigger.updatePaths(ZoneMover.Cli.getPaths(pathRuleMap));
       } else {
         // Update the filteredPathRulesFromZS for Zone Mover.
-        filteredPathRulesFromZS.clear();
         filteredPathRulesFromZS = filterPathRuleMapTmp;
       }
     }
