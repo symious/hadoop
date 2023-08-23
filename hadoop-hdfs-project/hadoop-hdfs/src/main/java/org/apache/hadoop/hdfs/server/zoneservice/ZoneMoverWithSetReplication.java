@@ -27,13 +27,10 @@ import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
-import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
 import org.apache.hadoop.hdfs.protocol.Block;
-import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
@@ -70,14 +67,16 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS;
@@ -86,12 +85,17 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_
 public class ZoneMoverWithSetReplication extends ZoneMover {
   private static final Logger LOG = LoggerFactory.getLogger(ZoneMoverWithSetReplication.class);
   private static final String ID_PATH_PREFIX = "/system/zoneenhancedmover.id";
-  private final boolean allowChangeReplication;
+  private boolean allowChangeReplication;
 
   private static ReplicaMigrationRuleMap migrationRuleMap;
   private StoreDriver driver;
   private boolean fromZS = false;
   private RunMode runMode = RunMode.BATCH;
+  private BlockingQueue<PreMigrationFile> preMigrationFileQueue;
+  private long preMigrationCheckInterval;
+  private CountDownLatch preMigrationLatch;
+  protected final Thread
+      preMigrationChecker = new Thread(new PreMigrationChecker(), "ZoneMover-PreMigrationChecker");
   public static final ReplicationRule DEFAULT_RULE =
       ReplicationRule.parseFromString(String.format("%s:2,%s:2,%s:1",
       MigrationDataCenters.STT, MigrationDataCenters.TL, MigrationDataCenters.AT));
@@ -99,24 +103,21 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
   public ZoneMoverWithSetReplication(NameNodeConnector nnc, Configuration conf,
       AtomicInteger retryCount, boolean allowChange) throws IOException {
     super(nnc, conf, retryCount);
-    allowChangeReplication = allowChange;
-    migrationRuleMap = new ReplicaMigrationRuleMap(conf);
+    initZoneMoverWithSetReplication(conf, allowChange);
   }
 
   public ZoneMoverWithSetReplication(NameNodeConnector nnc,
       Configuration conf, ReplicationRule rule,
       AtomicInteger retryCount, boolean allowChange) throws IOException {
     super(nnc, conf, rule, retryCount);
-    allowChangeReplication = allowChange;
-    migrationRuleMap = new ReplicaMigrationRuleMap(conf);
+    initZoneMoverWithSetReplication(conf, allowChange);
   }
 
   public ZoneMoverWithSetReplication(NameNodeConnector nnc,
       Configuration conf, ReplicationRule rule,
       AtomicInteger retryCount, boolean allowChange, boolean fromZS) throws IOException {
     super(nnc, conf, rule, retryCount);
-    allowChangeReplication = allowChange;
-    migrationRuleMap = new ReplicaMigrationRuleMap(conf);
+    initZoneMoverWithSetReplication(conf, allowChange);
     this.fromZS = fromZS;
   }
 
@@ -124,9 +125,23 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
       Configuration conf, Map<String, ReplicationRule> pathRuleMap,
       AtomicInteger retryCount, boolean allowChange, boolean fromZS) throws IOException {
     super(nnc, conf, pathRuleMap, retryCount);
+    initZoneMoverWithSetReplication(conf, allowChange);
+    this.fromZS = fromZS;
+  }
+
+  void initZoneMoverWithSetReplication(Configuration conf, boolean allowChange) throws IOException {
     allowChangeReplication = allowChange;
     migrationRuleMap = new ReplicaMigrationRuleMap(conf);
-    this.fromZS = fromZS;
+    preMigrationCheckInterval = conf.getLong(
+        DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_KEY,
+        DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_DEFAULT);
+    int preMigrationQueueSize = conf.getInt(
+        DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_QUEUE_SIZE_KEY,
+        DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_QUEUE_SIZE_DEFAULT);
+    preMigrationFileQueue =
+        new LinkedBlockingQueue<>(preMigrationQueueSize);
+    preMigrationLatch = new CountDownLatch(2);
+    preMigrationChecker.start();
   }
 
   void intZkDriver(Configuration conf, StoreDriver storeDriver) {
@@ -145,6 +160,11 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
   @Override
   protected Processor initProcessor() {
     return new ProcessorWithSetReplication();
+  }
+
+  @Override
+  protected Fetcher initFetcher(Processor processor) {
+    return new FetcherWithPreMigration(processor);
   }
 
   void init(RunMode mode, Configuration conf, StoreDriver driver, URI namenode,
@@ -427,6 +447,12 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
   }
 
   @Override
+  void shutdown() {
+    dispatcher.shutdownNow();
+    preMigrationChecker.interrupt();
+  }
+
+  @Override
   ExitStatus run() {
     try {
       return new ProcessorWithSetReplication().processPath().getExitStatus();
@@ -470,7 +496,7 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
         NetUtils.getLocalHostname(),
         Time.now()));
   }
-
+  
   class ProcessorWithSetReplication extends Processor {
     @Override
     protected void processPath(String fullPath, ReplicationRule rule, Mover.Result result,
@@ -479,8 +505,39 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
       processPath(fullPath, rule, result, dc, true);
     }
 
+    // stop coordinator after pre-process queue is empty
     @Override
-    protected void processFile(String fullPath, HdfsLocatedFileStatus status, ReplicationRule rule,
+    protected void stopCoordinator() {
+      preMigrationLatch.countDown();
+      try {
+        preMigrationLatch.await();
+      } catch (InterruptedException e) {
+        throw new RuntimeException(e);
+      }
+      coordinator.waitForCheckCompletion();
+    }
+
+    @Override
+    protected void processRecursively(String parent, HdfsFileStatus status, ReplicationRule rule,
+        Mover.Result result, MigrationDataCenters dc) {
+      String fullPath = status.getFullName(parent);
+      if (status.isDir()) {
+        if (!fullPath.endsWith(Path.SEPARATOR)) {
+          fullPath = fullPath + Path.SEPARATOR;
+        }
+        processPath(fullPath, rule, result, dc);
+      } else if (!status.isSymlink()) { // file
+        preMigrationFile(fullPath, (HdfsLocatedFileStatus) status, rule, result, dc);
+      }
+    }
+
+    /**
+     * Generate the file rule
+     * If the file need to be pre-migrated,
+     * will pre-migrate it and put into preMigrationFileQueue}
+     * */
+    private void preMigrationFile(String fullPath,
+        HdfsLocatedFileStatus status, ReplicationRule rule,
         Mover.Result result, MigrationDataCenters dc) {
 
       if (status.getErasureCodingPolicy() != null) {
@@ -505,13 +562,16 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
         return;
       }
 
-      ReplicationRule appliedRule;
+      ReplicationRule appliedRule = rule;
+      // Queue file here to avoid multiple incr file
+      ZoneProgressTracker.queueFile(fullPath);
 
       if (allowChangeReplication) {
         LocatedBlock firstBlock = status.getLocatedBlocks().get(0);
         Map<String, Short> blockDistribution = getBlockDistribution(firstBlock);
-        if(blockDistribution.size() == 0) {
+        if (blockDistribution.size() == 0) {
           LOG.error("There are no replicas for the missing block {}", firstBlock);
+          ZoneProgressTracker.dequeueFile(fullPath);
           return;
         }
         ReplicationRule dis = ReplicationRule.parseFromMap(blockDistribution);
@@ -520,12 +580,12 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
         } else if (runMode == RunMode.CHECK) {
           if (dc == null) {
             LOG.warn("Using check mode but not give the data center!");
-            ZoneProgressTracker.incrFileCount();
+            ZoneProgressTracker.dequeueFile(fullPath);
             return;
           }
           appliedRule = migrationRuleMap.checkDistribution(dis, status.getReplication(), dc);
           if (appliedRule == null) {
-            ZoneProgressTracker.incrFileCount();
+            ZoneProgressTracker.dequeueFile(fullPath);
             return;
           }
         } else {
@@ -538,20 +598,28 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
 
         LOG.info("Will apply the rule from {} to {} with replication {} on {}", dis, appliedRule,
             appliedRule.getReplica(), fullPath);
-        try {
-          if (appliedRule.getReplica() != status.getReplication()) {
-            long startRpcTime = Time.monotonicNow();
-            dfs.setReplication(fullPath, appliedRule.getReplica());
-            ZoneProgressTracker.addSetReplicationTime(Time.monotonicNow() - startRpcTime);
+
+        // If two replicas are required to migrate, the tool will migrate one replica first
+        // then the rest replica can copy from the migrated replica directly
+        if (appliedRule.getReplica(MigrationDataCenters.STT.getName()) > 1
+            && !dis.getDatacenters().contains(MigrationDataCenters.STT.getName())
+            && dis.getReplica() == status.getReplication()) {
+          try {
+            LOG.info("Will pre migration 1 replica from TL to STT for {}", fullPath);
+            Map<String, Short> disMap = dis.toMap();
+            disMap.put(MigrationDataCenters.TL.getName(),
+                (short) (disMap.get(MigrationDataCenters.TL.getName()) - 1));
+            disMap.put(MigrationDataCenters.STT.getName(), (short) 1);
+            ReplicationRule preRule = ReplicationRule.parseFromMap(disMap);
+            processFileBlocks(fullPath, status, preRule, result, true);
+            preMigrationFileQueue.put(new PreMigrationFile(fullPath, appliedRule));
+          } catch (InterruptedException e) {
+            processFile(fullPath, status, appliedRule, result);
+            LOG.warn("Add pre-migration file {} into pre-migration queue is interrupted", fullPath);
           }
-        } catch (IOException e) {
-          LOG.warn("Set replication fails for {}\n {}", fullPath, e);
-          result.setRetryFailed();
+        } else {
+          processFile(fullPath, status, appliedRule, result);
         }
-      } else {
-        LOG.warn("Ignore replica not consistent file: {}", fullPath);
-        ZoneProgressTracker.incrFileCount();
-        return;
       }
 
       if (xattrSetEnable) {
@@ -575,11 +643,34 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
           }
         } catch (IOException e) {
           LOG.warn(e.toString());
-          ZoneProgressTracker.incrFileCount();
-          return;
         }
       }
+    }
 
+    @Override
+    protected void processFile(String fullPath,
+        HdfsLocatedFileStatus status, ReplicationRule appliedRule,
+        Mover.Result result) {
+      final LocatedBlocks locatedBlocks = status.getLocatedBlocks();
+
+      if (allowChangeReplication) {
+        try {
+          if (appliedRule.getReplica() != status.getReplication()) {
+            long startRpcTime = Time.monotonicNow();
+            LOG.debug("Before set replication: distribution is {}, appliedRule is {}",
+                getBlockDistribution(status.getLocatedBlocks().get(0)), appliedRule);
+            dfs.setReplication(fullPath, appliedRule.getReplica());
+            ZoneProgressTracker.addSetReplicationTime(Time.monotonicNow() - startRpcTime);
+          }
+        } catch (IOException e) {
+          LOG.warn("Set replication fails for {}\n {}", fullPath, e);
+          result.setRetryFailed();
+        }
+      } else {
+        LOG.warn("Ignore replica not consistent file: {}", fullPath);
+        ZoneProgressTracker.dequeueFile(fullPath);
+        return;
+      }
 
       if (status.getReplication() < appliedRule.getReplica()) {
         LOG.debug("factor < rule.replication file: " + fullPath);
@@ -609,6 +700,7 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
         }
       } else {
         processFileBlocks(fullPath, status, appliedRule, result);
+        ZoneProgressTracker.dequeueFile(fullPath);
       }
     }
 
@@ -659,6 +751,105 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
         }
       }
       return db;
+    }
+  }
+
+  class FetcherWithPreMigration extends Fetcher {
+    FetcherWithPreMigration(Processor processor) {
+      super(processor, "ZoneMover-Fetcher-PreMigration");
+    }
+
+    @Override
+    public void run() {
+      LOG.info("Fetcher with pre-migration is started!");
+      long lastRecord = Time.monotonicNow();
+      ZoneReplicationCoordinator.FileState fileState = null;
+      while (true) {
+        try {
+          fileState = coordinator.getNextFinishedFile();
+          processor.processFileBlocks(fileState.getFilePath(),
+              fileState.getFileStatus(), fileState.getRule(), result, true);
+          lastRecord = Time.monotonicNow();
+        } catch (NoSuchElementException e) {
+          if ((Time.monotonicNow() - lastRecord) > 2 * preMigrationCheckInterval) {
+            LOG.info("Fetcher for replication mismatch file is timeout, stopping...");
+            break;
+          }
+        } catch (Exception e) {
+          LOG.warn("Fetcher encountered the exception!", e);
+        } finally {
+          if (fileState != null) {
+            try {
+              ZoneProgressTracker.dequeueFile(fileState.getFilePath());
+              fileState = null;
+            } catch (NullPointerException e) {
+              LOG.warn("Dequeue file {} fail with null exception", fileState.getFilePath());
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * A structure used to record the path-rule pair.
+   */
+  static class PreMigrationFile {
+    private final String filePath;
+    private final long recordTime;
+    private final ReplicationRule rule;
+
+    PreMigrationFile(String filePath, ReplicationRule rule) {
+      this.filePath = filePath;
+      this.rule = rule;
+      recordTime = Time.monotonicNow();
+    }
+
+    public String getFilePath() {
+      return filePath;
+    }
+
+    public long getRecordTime() {
+      return recordTime;
+    }
+
+    public ReplicationRule getRule() {
+      return rule;
+    }
+  }
+
+  /**
+   * Check if the pre-migration file has waited for enough time to proceed to the next step
+   * */
+  class PreMigrationChecker implements Runnable {
+    @Override
+    public void run() {
+      LOG.info("Pre-process checker is started.");
+      PreMigrationFile preMigrationFile;
+      while (true) {
+        try {
+          preMigrationFile = preMigrationFileQueue.poll();
+          if (preMigrationFile == null) {
+            continue;
+          }
+          if ((Time.monotonicNow() - preMigrationFile.getRecordTime()) >
+              preMigrationCheckInterval) {
+            HdfsLocatedFileStatus status = (HdfsLocatedFileStatus) dfs.listPaths(
+                preMigrationFile.getFilePath(), HdfsFileStatus.EMPTY_NAME, true)
+                .getPartialListing()[0];
+            processor.processFile(preMigrationFile.getFilePath(), status,
+                preMigrationFile.getRule(), result);
+          } else {
+            preMigrationFileQueue.put(preMigrationFile);
+          }
+          if (preMigrationLatch.getCount() == 1 && preMigrationFileQueue.isEmpty()) {
+            preMigrationLatch.countDown();
+            return;
+          }
+        } catch (Exception e) {
+          LOG.warn("Pre-migration checker encountered the exception!", e);
+        }
+      }
     }
   }
 

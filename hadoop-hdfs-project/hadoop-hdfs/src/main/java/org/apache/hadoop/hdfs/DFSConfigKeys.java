@@ -1055,6 +1055,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.storage.policy.satisfier.keytab.file";
   public static final String  DFS_SPS_KERBEROS_PRINCIPAL_KEY =
       "dfs.storage.policy.satisfier.kerberos.principal";
+  public static final String  DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_KEY = "dfs.zone.migration.premigration.check.interval";
+  public static final long    DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_DEFAULT = 5000L;
+  public static final String  DFS_ZONE_MIGRATION_PRE_MIGRATION_QUEUE_SIZE_KEY = "dfs.zone.migration.premigration.queue.size";
+  public static final int     DFS_ZONE_MIGRATION_PRE_MIGRATION_QUEUE_SIZE_DEFAULT = 100000;
   public static final String  DFS_ZONE_COORDINATOR_MAX_CONCURRENT_REPLICATIONS_KEY =
       "dfs.zone.coordinator.max.concurrent.replications";
   public static final int     DFS_ZONE_COORDINATOR_MAX_CONCURRENT_REPLICATIONS_DEFAULT = 1000;

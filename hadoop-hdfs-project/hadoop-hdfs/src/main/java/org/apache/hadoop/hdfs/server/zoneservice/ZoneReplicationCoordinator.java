@@ -30,11 +30,13 @@ import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
+import org.apache.hadoop.hdfs.server.zoneservice.utils.MigrationDataCenters;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -58,6 +60,8 @@ public class ZoneReplicationCoordinator {
   private final AtomicInteger runningDeletions = new AtomicInteger(0);
   private final long minCheckInterval;
   private final int maxCheckTimes;
+  private int successPreMigrationCount = 0;
+  private int failPreMigrationCount = 0;
   private final Thread checker = new Thread(new Checker(), "Coordinator-Checker");
   private static final Logger LOG =
       LoggerFactory.getLogger(ZoneReplicationCoordinator.class);
@@ -230,6 +234,17 @@ public class ZoneReplicationCoordinator {
 
           fileState.setFileStatus(status);
           if (areAllBlocksHaveCorrectReplicas(fileState)) {
+            if (fileState.getRule().getReplica(MigrationDataCenters.STT.getName()) > 1) {
+              Map<String, Short> dis = ZoneMover.getBlockDistribution(
+                  fileState.getFileStatus().getBlockLocations().get(0));
+              if (dis.containsKey(MigrationDataCenters.STT.getName())) {
+                successPreMigrationCount++;
+              } else {
+                failPreMigrationCount++;
+              }
+              LOG.info("Pre-migration success check: the pre migration successful rate is {}/{}",
+                  successPreMigrationCount, successPreMigrationCount + failPreMigrationCount);
+            }
             boolean successOffered = finishedFiles.offer(fileState);
             if (!successOffered) {
               LOG.info("Checker failed to offer the file to finishedFiles." +
@@ -254,6 +269,7 @@ public class ZoneReplicationCoordinator {
               LOG.warn("This file({}) does not have correct replicas after checking {} times!",
                   fileState.getFilePath(), maxCheckTimes);
               minusReplicaDeltaFromRunning(replicaDelta);
+              ZoneProgressTracker.dequeueFile(fileState.filePath);
               ZoneProgressTracker.addTimeSpentInWaitFilesQueue(
                   Time.monotonicNow() - fileState.lastStepStartTime);
             } else {
