@@ -134,12 +134,16 @@ public class ZoneMover {
         DFSConfigKeys.DFS_ZONEMOVER_CHECK_ZK_UPDATE_PATH_RULE_MAP_INTERVAL,
         DFSConfigKeys.DFS_ZONEMOVER_CHECK_ZK_UPDATE_PATH_RULE_MAP_INTERVAL_DEFAULT);
     processor = initProcessor();
-    fetcher = new Fetcher(processor);
+    fetcher = initFetcher(processor);
     fetcher.start();
   }
 
   protected Processor initProcessor() {
     return new Processor();
+  }
+
+  protected Fetcher initFetcher(Processor processor) {
+    return new Fetcher(processor);
   }
 
   public ZoneMover(NameNodeConnector nnc, Configuration conf,
@@ -808,7 +812,7 @@ public class ZoneMover {
       }
       ZoneProgressTracker.finishCountingProcessPathTimeAndLog();
 
-      coordinator.waitForCheckCompletion();
+      stopCoordinator();
       ZoneProgressTracker.startCountingFetcherWaitTime();
       try {
         fetcher.join();
@@ -849,6 +853,10 @@ public class ZoneMover {
       return result;
     }
 
+    protected void stopCoordinator() {
+      coordinator.waitForCheckCompletion();
+    }
+
     protected void processPath(String fullPath, ReplicationRule rule, Result result,
         MigrationDataCenters dc) {
       LOG.info("Processing path: " + fullPath + " ...");
@@ -884,7 +892,7 @@ public class ZoneMover {
       }
     }
 
-    private void processRecursively(String parent, HdfsFileStatus status, ReplicationRule rule,
+    protected void processRecursively(String parent, HdfsFileStatus status, ReplicationRule rule,
         Result result, MigrationDataCenters dc) {
       String fullPath = status.getFullName(parent);
       if (status.isDir()) {
@@ -893,7 +901,7 @@ public class ZoneMover {
         }
         processPath(fullPath, rule, result, dc);
       } else if (!status.isSymlink()) { // file
-        processFile(fullPath, (HdfsLocatedFileStatus) status, rule, result, dc);
+        processFile(fullPath, (HdfsLocatedFileStatus) status, rule, result);
       }
     }
 
@@ -931,7 +939,7 @@ public class ZoneMover {
     }
 
     protected void processFile(String fullPath, HdfsLocatedFileStatus status,
-        ReplicationRule rule, Result result, MigrationDataCenters dc) {
+        ReplicationRule rule, Result result) {
       LOG.info("Processing file: " + fullPath + " ....");
 
       final LocatedBlocks locatedBlocks = status.getBlockLocations();
@@ -1019,6 +1027,11 @@ public class ZoneMover {
 
     protected void processFileBlocks(String fullPath, HdfsLocatedFileStatus status,
         ReplicationRule rule, Result result) {
+      processFileBlocks(fullPath, status, rule, result, false);
+    }
+
+    protected void processFileBlocks(String fullPath, HdfsLocatedFileStatus status,
+        ReplicationRule rule, Result result, boolean hasPreMigration) {
       final LocatedBlocks locatedBlocks = status.getBlockLocations();
       // Cannot just check the first and last block, as the dispatching action
       // is parallel and asynchronous. The movement of any blocks of a file
@@ -1028,10 +1041,12 @@ public class ZoneMover {
         LocatedBlock firstBlock = locatedBlocks.get(0);
         if (isBlockSatisfyRule(firstBlock, rule)) {
           LOG.info("Skip the file as all blocks already satisfy the rule: " + fullPath);
-          ZoneProgressTracker.incrFileCount();
+          if (!hasPreMigration) {
+            ZoneProgressTracker.incrFileCount();
+          }
           return;
         }
-        processConsistentBlocks(fullPath, locatedBlocks, rule, result);
+        processConsistentBlocks(fullPath, locatedBlocks, rule, result, hasPreMigration);
       } else {
         processInconsistentBlocks(fullPath, locatedBlocks, rule, result);
       }
@@ -1041,10 +1056,12 @@ public class ZoneMover {
      * Process blocks have the same datacenter distribution.
      */
     private void processConsistentBlocks(String fullPath,
-        LocatedBlocks locatedBlocks, ReplicationRule rule, Result result) {
+        LocatedBlocks locatedBlocks, ReplicationRule rule, Result result, boolean hasPreMigration) {
       LocatedBlock firstBlock = locatedBlocks.get(0);
       if (isBlockSatisfyRule(firstBlock, rule)) {
-        ZoneProgressTracker.incrFileCount();
+        if (!hasPreMigration) {
+          ZoneProgressTracker.incrFileCount();
+        }
         return;
       }
       List<ZoneMoveItem> moveItems = getZoneMoveItems(firstBlock, rule);
@@ -1220,11 +1237,14 @@ public class ZoneMover {
   }
 
   class Fetcher extends Thread {
-
-    private final Processor processor;
+    protected final Processor processor;
 
     Fetcher(Processor processor) {
-      super("ZoneMover-Fetcher");
+      this(processor, "ZoneMover-Fetcher");
+    }
+
+    Fetcher(Processor processor, String name) {
+      super(name);
       this.processor = processor;
     }
 

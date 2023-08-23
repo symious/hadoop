@@ -795,6 +795,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final XAttr.NameSpace  DFS_ZONE_REPLICATION_RULE_XATTR_NAMESPACE =
       XAttr.NameSpace.USER;
   public static final String  DFS_ZONE_REPLICATION_RULE_XATTR_NAME = "replicationRule";
+  public static final String  DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_KEY = "dfs.zone.migration.premigration.check.interval";
+  public static final long    DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_DEFAULT = 5000L;
+  public static final String  DFS_ZONE_MIGRATION_PRE_MIGRATION_QUEUE_SIZE_KEY = "dfs.zone.migration.premigration.queue.size";
+  public static final int     DFS_ZONE_MIGRATION_PRE_MIGRATION_QUEUE_SIZE_DEFAULT = 100000;
   public static final String  DFS_ZONE_COORDINATOR_MAX_CONCURRENT_REPLICATIONS_KEY =
       "dfs.zone.coordinator.max.concurrent.replications";
   public static final int     DFS_ZONE_COORDINATOR_MAX_CONCURRENT_REPLICATIONS_DEFAULT = 1000;
