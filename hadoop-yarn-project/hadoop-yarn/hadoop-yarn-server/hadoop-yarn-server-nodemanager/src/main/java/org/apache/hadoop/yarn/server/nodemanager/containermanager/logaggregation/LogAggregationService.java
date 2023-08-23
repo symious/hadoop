@@ -346,8 +346,7 @@ public class LogAggregationService extends AbstractService implements
       return;
     }
     aggregator.startContainerLogAggregation(
-        new ContainerLogContext(containerId, containerType, exitCode,
-            context.getContainers().get(containerId).getContainerLaunchTime()));
+        new ContainerLogContext(containerId, containerType, exitCode));
   }
 
   @SuppressWarnings("unchecked")
