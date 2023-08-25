@@ -43,7 +43,7 @@
   </property>
   <property>
     <name>yarn.sls.am.type.mapreduce</name>
-    <value>org.apache.hadoop.yarn.sls.appmaster.MRAMSimulator</value>
+    <value>org.apache.hadoop.yarn.sls.appmaster.UnManagedMRAMSimulatorForRealRM</value>
   </property>
 
   <!-- Containers configuration -->
@@ -77,5 +77,31 @@
     <name>org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler</name>
     <value>org.apache.hadoop.yarn.sls.scheduler.CapacitySchedulerMetrics</value>
   </property>
-  
+
+  <!-- SLSRunnerForRealRM configuration -->
+
+  <property>
+    <name>yarn.sls.runner.pool.am.size</name>
+    <value>100</value>
+  </property>
+  <property>
+    <name>yarn.sls.runner.pool.nm.size</name>
+    <value>100</value>
+  </property>
+  <property>
+    <name>yarn.sls.am.parallel.init-num</name>
+    <value>100</value>
+  </property>
+  <property>
+    <name>yarn.sls.am.parallel.max-num</name>
+    <value>1000</value>
+  </property>
+  <property>
+    <name>yarn.sls.am.submit.interval.ms</name>
+    <value>100</value>
+  </property>
+  <property>
+    <name>yarn.sls.am.submit.interval.count</name>
+    <value>100</value>
+  </property>
 </configuration>

@@ -89,6 +89,21 @@ public class SLSConfiguration {
   public static final String CONTAINER_VCORES = CONTAINER_PREFIX + "vcores";
   public static final int CONTAINER_VCORES_DEFAULT = 1;
 
+  public static final String RUNNER_AM_POOL_SIZE = RUNNER_PREFIX + "pool.am.size";
+  public static final int RUNNER_AM_POOL_SIZE_DEFAULT = 10;
+
+  public static final String RUNNER_NM_POOL_SIZE = RUNNER_PREFIX + "pool.nm.size";
+  public static final int RUNNER_NM_POOL_SIZE_DEFAULT = 50;
+
+  public static final String AM_INIT_PARALLEL_NUM = AM_PREFIX + "parallel.init-num";
+  public static final String AM_MAX_PARALLEL_NUM = AM_PREFIX + "parallel.max-num";
+
+  public static final String AM_SUBMIT_INTERVAL_MS = AM_PREFIX + "submit.interval.ms";
+  public static final int AM_SUBMIT_INTERVAL_MS_DEFAULT = 1000 * 60;
+
+  public static final String AM_SUBMIT_INTERVAL_COUNT = AM_PREFIX + "submit.interval.count";
+  public static final int AM_SUBMIT_INTERVAL_COUNT_DEFAULT = 250;
+
   public static Resource getAMContainerResource(Configuration conf) {
     return Resource.newInstance(
         conf.getLong(AM_CONTAINER_MEMORY, AM_CONTAINER_MEMORY_DEFAULT),

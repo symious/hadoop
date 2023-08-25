@@ -87,13 +87,13 @@ public class TaskRunner {
       try {
         if (nextRun == startTime) {
           firstStep();
-          nextRun = Time.monotonicNow() + repeatInterval;
+          nextRun = Time.now() + repeatInterval;
           if (nextRun <= endTime) {
             queue.add(this);          
           }
         } else if (nextRun < endTime) {
           middleStep();
-          nextRun = Time.monotonicNow() + repeatInterval;
+          nextRun = Time.now() + repeatInterval;
           queue.add(this);
         } else {
           lastStep();
@@ -145,22 +145,19 @@ public class TaskRunner {
     this.threadPoolSize = threadPoolSize;
   }
 
+  public int getQueueSize() {
+    return this.queue.size();
+  }
+
   @SuppressWarnings("unchecked")
   public void start() {
     if (executor != null && !executor.isTerminated()) {
       throw new IllegalStateException("Executor already running");
     }
-    DelayQueue preStartQueue = queue;
 
-    queue = new DelayQueue();
     executor = new ThreadPoolExecutor(threadPoolSize, threadPoolSize, 0,
       TimeUnit.MILLISECONDS, queue);
     executor.prestartAllCoreThreads();
-
-    startTimeMS = System.currentTimeMillis();
-    for (Object d : preStartQueue) {
-      schedule((Task) d, startTimeMS);
-    }
   }
   
   public void stop() throws InterruptedException {
