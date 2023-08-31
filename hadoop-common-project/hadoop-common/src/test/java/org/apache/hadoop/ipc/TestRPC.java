@@ -1051,7 +1051,7 @@ public class TestRPC extends TestRpcBase {
     // disable ping & timeout to minimize traffic
     clientConf.setBoolean(CommonConfigurationKeys.IPC_CLIENT_PING_KEY, false);
     clientConf.setInt(CommonConfigurationKeys.IPC_CLIENT_RPC_TIMEOUT_KEY, 0);
-    RPC.setProtocolEngine(clientConf, TestRpcService.class, ProtobufRpcEngine.class);
+    RPC.setProtocolEngine(clientConf, TestRpcService.class, ProtobufRpcEngine2.class);
     // set async mode so that we don't need to implement the input stream
     final boolean wasAsync = Client.isAsynchronousMode();
     TestRpcService client = null;
@@ -1320,7 +1320,7 @@ public class TestRPC extends TestRpcBase {
 
       String actualHandlerOps = MetricsAsserts
           .getStringMetric("NumHandlerProcessedCalls", rpcMetrics);
-      assertEquals(actualHandlerOps, "[3000]");
+      assertEquals(actualHandlerOps, "[3000,0,0,0,0,0,0,0,0,0,0]");
 
       proxy.lockAndSleep(null, newSleepRequest(5));
       rpcMetrics = getMetrics(server.getRpcMetrics().name());

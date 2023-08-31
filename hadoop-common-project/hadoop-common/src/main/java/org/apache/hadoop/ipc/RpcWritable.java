@@ -186,7 +186,7 @@ public abstract class RpcWritable implements Writable {
   public static class Buffer extends RpcWritable {
     private ByteBuffer bb;
 
-    protected final Map<Message, Message> cache = new HashMap<>();
+    protected final Map<Object, Object> cache = new HashMap<>();
 
     public static Buffer wrap(ByteBuffer bb) {
       return new Buffer(bb);
@@ -241,12 +241,12 @@ public abstract class RpcWritable implements Writable {
       return bb.remaining();
     }
 
-    public Message tryGetFromCache(Message prototype) throws IOException {
+    public <T> T tryGetFromCache(T prototype) throws IOException {
       if (!this.cache.containsKey(prototype)) {
-        Message value = getValue(prototype);
+        T value = getValue(prototype);
         this.cache.put(prototype, value);
       }
-      return this.cache.get(prototype);
+      return (T) this.cache.get(prototype);
     }
   }
 }
