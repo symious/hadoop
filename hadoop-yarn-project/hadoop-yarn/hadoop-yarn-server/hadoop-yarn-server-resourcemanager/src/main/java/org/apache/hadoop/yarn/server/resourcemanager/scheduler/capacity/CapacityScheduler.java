@@ -34,6 +34,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.server.resourcemanager.ClusterMetrics;
@@ -234,6 +235,12 @@ public class CapacityScheduler extends
   private String nodePolicyConfigs;
   private volatile List<String> globalChoosePartitions = new ArrayList<>();
 
+  private volatile long filterCandidatesInterval;
+  private ConcurrentHashMap<String, Map<NodeId, FiCaSchedulerNode>>
+      cacheCandidates = new ConcurrentHashMap<>();
+  private ConcurrentHashMap<String, Long> cacheLastUpdateTime =
+      new ConcurrentHashMap<>();
+
   @VisibleForTesting
   protected List<AsyncScheduleThread> asyncSchedulerThreads;
   private ResourceCommitterService resourceCommitterService;
@@ -255,6 +262,13 @@ public class CapacityScheduler extends
       CapacitySchedulerConfiguration.SCHEDULE_ASYNCHRONOUSLY_PREFIX
           + ".scheduling-interval-ms";
   private static final long DEFAULT_ASYNC_SCHEDULER_INTERVAL = 5;
+
+  private static final String ASYNC_SCHEDULER_FILTER_CANDIDATE_INTERVAL =
+      CapacitySchedulerConfiguration.SCHEDULE_ASYNCHRONOUSLY_PREFIX
+          + ".filter-candidate-interval-ms";
+  private static final long DEFAULT_ASYNC_SCHEDULER_FILTER_CANDIDATE_INTERVAL =
+      -1;
+
   private long asyncMaxPendingBacklogs;
 
   private CSMaxRunningAppsEnforcer maxRunningEnforcer;
@@ -366,6 +380,11 @@ public class CapacityScheduler extends
       scheduleAsynchronously = this.conf.getScheduleAynschronously();
       asyncScheduleInterval = this.conf.getLong(ASYNC_SCHEDULER_INTERVAL,
           DEFAULT_ASYNC_SCHEDULER_INTERVAL);
+
+      this.filterCandidatesInterval =
+          this.conf.getLong(ASYNC_SCHEDULER_FILTER_CANDIDATE_INTERVAL,
+              DEFAULT_ASYNC_SCHEDULER_FILTER_CANDIDATE_INTERVAL);
+      LOG.info("filterCandidatesInterval: " + filterCandidatesInterval);
 
       this.multipleSchedulersParallelly = this.conf.getMultipleSchedulersParallelly();
 
@@ -542,6 +561,11 @@ public class CapacityScheduler extends
         LOG.info(
             "multipleSchedulersParallelly: " + multipleSchedulersParallelly +
                 " ,asyncScheduleInterval: " + asyncScheduleInterval);
+
+        this.filterCandidatesInterval =
+            this.conf.getLong(ASYNC_SCHEDULER_FILTER_CANDIDATE_INTERVAL,
+                DEFAULT_ASYNC_SCHEDULER_FILTER_CANDIDATE_INTERVAL);
+        LOG.info("filterCandidatesInterval: " + filterCandidatesInterval);
 
         if (scheduleAsynchronously && multipleSchedulersParallelly) {
           schedulingNodeTypeSettingPolicy = this.conf.getNodeSchedulingPolicy();
@@ -1670,6 +1694,23 @@ public class CapacityScheduler extends
     boolean printSkippedNodeLogging = isPrintSkippedNodeLogging(this);
     List<FiCaSchedulerNode> nodes = nodeTracker
         .getNodesPerPartition(partition);
+
+    if (filterCandidatesInterval > 0) {
+      long now = System.currentTimeMillis();
+      Long tmp = cacheLastUpdateTime.get(partition);
+      long lastUpdateTime = (tmp != null) ? tmp : 0;
+
+      if (now - lastUpdateTime <= filterCandidatesInterval) {
+        Map<NodeId, FiCaSchedulerNode> cacheNodes =
+            cacheCandidates.get(partition);
+        if (MapUtils.isNotEmpty(cacheNodes)) {
+          return cacheNodes;
+        }
+      } else {
+        cacheLastUpdateTime.put(partition, now);
+      }
+    }
+
     if (nodes != null && !nodes.isEmpty()) {
       //Filter for node heartbeat too long
       nodes.stream()
@@ -1677,6 +1718,10 @@ public class CapacityScheduler extends
               !shouldSkipNodeSchedule(node, this, printSkippedNodeLogging,
                   withNodeHeartbeat))
           .forEach(n -> nodesByPartition.put(n.getNodeID(), n));
+
+      if (filterCandidatesInterval > 0) {
+        cacheCandidates.put(partition, nodesByPartition);
+      }
     }
     if (printSkippedNodeLogging) {
       printedVerboseLoggingForAsyncScheduling = true;
