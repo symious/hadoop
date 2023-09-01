@@ -100,6 +100,9 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
 
     monitorPaths = paths;
     LOG.info("ZoneMover trigger for {} has been started!", nameSpace);
+    LOG.info("{}:{}, {}:{}",
+        DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_SKIP_COMPLETE_KEYWORDS_KEY,skipCompleteKeywords,
+        DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_SKIP_RENAME_KEYWORDS_KEY, skipRenameKeywords);
   }
 
   @Override
@@ -248,7 +251,7 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
         if (jsonMessage.get("allowed").equals("true")) {
           String src = jsonMessage.get("src").toString();
           if (!containKeyWords(src, skipCompleteKeywords) && checkPaths(src)) {
-            pathQueue.put(jsonMessage.get("src").toString());
+            pathQueue.put(src);
             LOG.debug("New create file: " +
                 jsonMessage.get("src").toString());
           }
