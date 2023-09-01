@@ -252,18 +252,17 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
           String src = jsonMessage.get("src").toString();
           if (!containKeyWords(src, skipCompleteKeywords) && checkPaths(src)) {
             pathQueue.put(src);
-            LOG.debug("New create file: " +
-                jsonMessage.get("src").toString());
+            LOG.debug("New create file: {}", src);
           }
         }
       } else if (message.contains("cmd=rename")) {
         JSONObject jsonMessage = message2json(message);
         if (jsonMessage.get("allowed").equals("true")) {
+          String src = jsonMessage.get("src").toString();
           String dst = jsonMessage.get("dst").toString();
           if (!containKeyWords(dst, skipRenameKeywords) && checkPaths(dst)) {
             pathQueue.put(dst);
-            LOG.debug("New rename file: " +
-                jsonMessage.get("dst").toString());
+            LOG.debug("New rename file, source: {}, destination: {}", src, dst);
           }
         }
       }
