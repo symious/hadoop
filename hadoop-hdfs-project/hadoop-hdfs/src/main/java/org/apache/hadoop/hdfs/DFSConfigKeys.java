@@ -1059,6 +1059,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final long    DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_DEFAULT = 5000L;
   public static final String  DFS_ZONE_MIGRATION_PRE_MIGRATION_QUEUE_SIZE_KEY = "dfs.zone.migration.premigration.queue.size";
   public static final int     DFS_ZONE_MIGRATION_PRE_MIGRATION_QUEUE_SIZE_DEFAULT = 100000;
+  public static final String  DFS_ZONE_MIGRATION_MONITOR_IGNORED_DC_KEY = "dfs.zone.migration.monitor.ignored.datacenters";
+  public static final String  DFS_ZONE_MIGRATION_MONITOR_IGNORED_DC_DEFAULT = "";
+  public static final String  DFS_ZONE_MIGRATION_MONITOR_IGNORED_DC_FORCE_KEY = "dfs.zone.migration.monitor.ignored.datacenters.force";
+  public static final boolean DFS_ZONE_MIGRATION_MONITOR_IGNORED_DC_FORCE_DEFAULT = false;
   public static final String  DFS_ZONE_COORDINATOR_MAX_CONCURRENT_REPLICATIONS_KEY =
       "dfs.zone.coordinator.max.concurrent.replications";
   public static final int     DFS_ZONE_COORDINATOR_MAX_CONCURRENT_REPLICATIONS_DEFAULT = 1000;
