@@ -14,7 +14,9 @@ import org.slf4j.LoggerFactory;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.BlockingQueue;
@@ -33,6 +35,9 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   private ExecutorService executorService;
 
   private final BlockingQueue<String> pathQueue;
+
+  private final Collection<String> skipRenameKeywords;
+  private final Collection<String> skipCompleteKeywords;
 
   //Init HDFS audit log kafka consumer
   public ZoneMoverKafkaTrigger(Configuration conf,
@@ -71,6 +76,11 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
         conf.getInt(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_KEY,
             DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_DEFAULT);
     pathQueue = new LinkedBlockingQueue<>(queueSize);
+
+    skipCompleteKeywords =
+        conf.getStringCollection(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_SKIP_COMPLETE_KEYWORDS_KEY);
+    skipRenameKeywords =
+        conf.getStringCollection(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_SKIP_RENAME_KEYWORDS_KEY);
 
     consumerThreadsNum =
         conf.getInt(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_KAFKA_CONSUMER_THREADS_KEY,
@@ -170,6 +180,18 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
     return false;
   }
 
+  /**
+   * return true if path contains any keywords
+   */
+  boolean containKeyWords(String path, Collection<String> keySet) {
+    for (Iterator<String> it = keySet.iterator(); it.hasNext();) {
+      if (path.indexOf(it.next()) > -1) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   @Override
   public void updatePaths(List<Path> paths) {
     monitorPaths = paths;
@@ -224,7 +246,8 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
       if (message.contains("cmd=complete")) {
         JSONObject jsonMessage = message2json(message);
         if (jsonMessage.get("allowed").equals("true")) {
-          if (checkPaths(jsonMessage.get("src").toString())) {
+          String src = jsonMessage.get("src").toString();
+          if (!containKeyWords(src, skipCompleteKeywords) && checkPaths(src)) {
             pathQueue.put(jsonMessage.get("src").toString());
             LOG.debug("New create file: " +
                 jsonMessage.get("src").toString());
@@ -233,8 +256,9 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
       } else if (message.contains("cmd=rename")) {
         JSONObject jsonMessage = message2json(message);
         if (jsonMessage.get("allowed").equals("true")) {
-          if (checkPaths(jsonMessage.get("dst").toString())) {
-            pathQueue.put(jsonMessage.get("dst").toString());
+          String dst = jsonMessage.get("dst").toString();
+          if (!containKeyWords(dst, skipRenameKeywords) && checkPaths(dst)) {
+            pathQueue.put(dst);
             LOG.debug("New rename file: " +
                 jsonMessage.get("dst").toString());
           }
