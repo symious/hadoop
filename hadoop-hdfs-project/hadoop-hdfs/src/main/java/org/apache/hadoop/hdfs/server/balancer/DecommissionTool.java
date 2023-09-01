@@ -96,6 +96,7 @@ public class DecommissionTool {
   private final boolean enableCrossDC;
   private final DataTransferThrottler crossDCThrottler;
   private final NameNodeConnector nnc;
+  private final String nsId;
   private final ExecutorService dispatcherServices;
 
   private final Map<DatanodeInfo, Map<Block, Task>> movedBlocks = new ConcurrentHashMap<>();
@@ -109,9 +110,12 @@ public class DecommissionTool {
   private final int retryTimeout;
   private final MoverManager moverManager;
   private final Set<String> decommissionedDNs = new HashSet<>();
+  private final Configuration conf;
 
   public DecommissionTool(NameNodeConnector nnc1, Configuration conf, MoverManager moverManager) {
+    this.conf = conf;
     this.nnc = nnc1;
+    this.nsId = nnc.getNameNodeUri().getAuthority();
     this.moverManager = moverManager;
     this.enableCrossDC = conf.getBoolean(DFSConfigKeys.DFS_DECOMMISSION_ENABLE_CROSS_DC_KEY,
         DFSConfigKeys.DFS_DECOMMISSION_ENABLE_CROSS_DC_DEFAULT);
@@ -130,15 +134,14 @@ public class DecommissionTool {
     this.targetDC = conf.get(DFSConfigKeys.DFS_DECOMMISSION_TARGET_DC_KEY, null);
 
     NetworkTopology clusterMap = NetworkTopology.getInstance(conf);
-    this.blockPlacement = new BlockPlacementPolicyForDecommissionTool(
-        clusterMap, nnc.getBlockpoolID());
+    this.blockPlacement = new BlockPlacementPolicyForDecommissionTool(clusterMap, this.nsId);
 
     this.saslClient = new SaslDataTransferClient(conf,
         DataTransferSaslUtil.getSaslPropertiesResolver(conf),
         TrustedChannelResolver.getInstance(conf), nnc.fallbackToSimpleAuth);
 
     ThreadFactory tf = new ThreadFactoryBuilder()
-        .setNameFormat(nnc.getBlockpoolID() + " Dispatcher Executor #%d")
+        .setNameFormat(this.nsId + " Dispatcher Executor #%d")
         .build();
     this.dispatcherServices = HadoopExecutors.newFixedThreadPool(1000, tf);
 
@@ -167,7 +170,7 @@ public class DecommissionTool {
     Collections.shuffle(reports);
     for (DatanodeStorageReport r : reports) {
       final DatanodeInfo datanode = r.getDatanodeInfo();
-      LOG.debug("[{}] DataNode {} state {}.", nnc.getBlockpoolID(),
+      LOG.debug("[{}] DataNode {} state {}.", this.nsId,
           datanode, datanode.getAdminState());
       this.blockPlacement.addNode(datanode);
     }
@@ -183,10 +186,9 @@ public class DecommissionTool {
           for (DatanodeInfo dn : decommissioningDNs) {
             if (!decommissionedDNs.contains(dn.getDatanodeUuid())) {
               loopCount = 5;
-              LOG.info("[{}] {} need to be decommissioned.", nnc.getBlockpoolID(), dn);
+              LOG.info("[{}] {} {} need to be decommissioned.", nnc.getBlockpoolID(), this.nsId, dn);
               futures.add(this.dispatcherServices.submit(() -> {
-                String threadName = nnc.getBlockpoolID() + " Dispatcher Executor for "
-                    + dn.getXferAddr();
+                String threadName = this.nsId + "_" + dn.getXferAddr();
                 Thread.currentThread().setName(threadName);
                 return dispatchDN(dn);
               }));
@@ -200,7 +202,7 @@ public class DecommissionTool {
         }
         Thread.sleep(1000 * 20);
         LOG.info("[{}] There is no datanode need to be decommissioned, loopCount is {}.",
-            nnc.getBlockpoolID(), loopCount);
+            this.nsId, loopCount);
       }
       return true;
     } finally {
@@ -209,7 +211,9 @@ public class DecommissionTool {
   }
 
   private boolean dispatchDN(DatanodeInfo dn) throws IOException, InterruptedException {
-    long loopCounter = 10;
+    long maxCheckTimes = this.conf.getInt(DFSConfigKeys.DFS_DECOMMISSION_MAX_CHECK_TIMES_KEY,
+        DFSConfigKeys.DFS_DECOMMISSION_MAX_CHECK_TIMES_DEFAULT);
+    long loopCounter = maxCheckTimes;
     while (true) {
       BlocksWithLocations blocksWithLocations = this.nnc.getBlocks(
           dn, this.getBlocksSize, this.getBlocksMinBlockSize);
@@ -221,7 +225,7 @@ public class DecommissionTool {
             dn, k -> new ConcurrentHashMap<>());
         Task task = tasks.get(block);
         if (task == null || task.canRetry(retryTimeout)) {
-          loopCounter = 10;
+          loopCounter = maxCheckTimes;
           canExit = false;
           try {
             Task movingTask = new Task(dn, blockWithLocation);
@@ -230,25 +234,27 @@ public class DecommissionTool {
             tasks.put(block, movingTask);
             this.moverManager.addTask(movingTask);
           } catch (Throwable e) {
-            LOG.warn("Failed to build the task for {} with {} in {}.",
-                block, blockWithLocation, dn, e);
+            LOG.warn("Failed to build the task for {} with {} in {} by {}.",
+                block, blockWithLocation, dn, this.nsId, e);
           }
         } else if (task.endTime == 0) { // means: moving
-          loopCounter = 10;
+          loopCounter = maxCheckTimes;
           canExit = false;
         }
       }
 
       if (canExit) {
         loopCounter -= 1;
-        LOG.info("[{}] DN {} can be decommissioned in {} loop, {} blocks are remained",
-            nnc.getBlockpoolID(), dn, loopCounter, blocks.length);
+        LOG.info("[{}] {} DN {} can be decommissioned in {} loop, {} blocks are remained",
+            nnc.getBlockpoolID(), this.nsId, dn, loopCounter,
+            blocks.length);
         if (loopCounter <= 0) {
-          LOG.info("[{}] DN {} still has {} blocks need to be decommissioned, the blocks are {}.",
-              nnc.getBlockpoolID(), dn, blocks.length, Arrays.asList(blocks));
+          LOG.info("[{}] {} DN {} still has {} blocks need to be decommissioned, the blocks " +
+              "are {}.", nnc.getBlockpoolID(), this.nsId, dn,
+              blocks.length, Arrays.asList(blocks));
           break;
         } else {
-          Thread.sleep(1000 * 20);
+          Thread.sleep(1000 * 60);
         }
       }
     }
@@ -262,12 +268,6 @@ public class DecommissionTool {
     RUNNING,
     SUCCESS,
     FAILED
-  }
-
-  public enum RetryState {
-    RETRY_PROXY,
-    RETRY_TARGET,
-    NONE
   }
 
   public class Task {
@@ -290,8 +290,8 @@ public class DecommissionTool {
           if (this.blockWithLocations instanceof StripedBlockWithLocations) {
             this.locations.add(null);
           } else {
-            LOG.warn("[{}] cannot find datanode for {} with uuId {}.",
-                nnc.getBlockpoolID(), blockWithLocations.getBlock(), uuId);
+            LOG.warn("[{}] {} cannot find datanode for {} with uuId {}.",
+                nnc.getBlockpoolID(), nsId, blockWithLocations.getBlock(), uuId);
           }
         } else {
           this.locations.add(dn);
@@ -346,7 +346,7 @@ public class DecommissionTool {
 
       if (targetDN == null) {
         LOG.warn("[{}] Cannot choose target DN for {} with locations {} and source DN is {}.",
-            nnc.getBlockpoolID(), this.block, this.locations, this.source);
+            nsId, this.block, this.locations, this.source);
         throw new IOException("Cannot choose target DN for " + this.block);
       }
       this.target = targetDN;
@@ -354,23 +354,22 @@ public class DecommissionTool {
 
     public void chooseProxy() {
       this.proxy = DecommissionTool.chooseProxy(this.blockWithLocations, this.source,
-          this.target, this.proxy, this.locations, enableCrossDC, nnc.getBlockpoolID());
+          this.target, this.proxy, this.locations, enableCrossDC, nsId);
     }
 
     public String toString() {
-      String bStr = nnc.getBlockpoolID() + " " + this.block + " with size="
+      String bStr = nsId + " " + this.block + " with size="
           + this.block.getNumBytes() + " ";
       return bStr + "from " + this.source.getXferAddr() + " to " + this.target
           .getXferAddr() + " through " + this.proxy.getXferAddr();
     }
 
     /** Dispatch the move to the proxy source & wait for the response. */
-    public RetryState dispatch() throws IOException {
+    public boolean dispatch(boolean firstDispatch) throws IOException {
       this.state = State.RUNNING;
-      RetryState retryState = RetryState.NONE;
       if (!isSameDC(this.target, this.proxy) && crossDCThrottler != null) {
         // here means this replace block operations may cross dc.
-        LOG.debug("[{}][Throttle] Acquire {}.", nnc.getBlockpoolID(), this.block.getNumBytes());
+        LOG.debug("[{}][Throttle] Acquire {}.", nsId, this.block.getNumBytes());
         crossDCThrottler.throttle(this.block.getNumBytes());
       }
       Socket sock = new Socket();
@@ -410,15 +409,9 @@ public class DecommissionTool {
         this.endTime = Time.monotonicNow();
         this.state = State.SUCCESS;
       } catch (IOException e) {
-        if (e.getMessage().contains("checksum mismatch") ||
-            e.getMessage().contains("java.net.SocketTimeoutException") ||
-            (e.getMessage().contains("threads quota is exceeded") &&
-                !(blockWithLocations instanceof StripedBlockWithLocations))) {
+        if (firstDispatch) {
           this.state = State.PENDING;
-          retryState = RetryState.RETRY_PROXY;
-        } else if (e.getMessage().contains("ReplicaAlreadyExistsException")) {
-          this.state = State.PENDING;
-          retryState = RetryState.RETRY_TARGET;
+          return true;
         } else {
           this.endTime = Time.monotonicNow();
           this.state = State.FAILED;
@@ -430,7 +423,7 @@ public class DecommissionTool {
         IOUtils.closeSocket(sock);
       }
 
-      return retryState;
+      return false;
     }
 
     public void callBack() {
@@ -634,16 +627,12 @@ public class DecommissionTool {
         Task task = null;
         try {
           task = this.movingBlocks.take();
-          RetryState state = task.dispatch();
-          if (state == RetryState.RETRY_PROXY) {
-            LOG.info("Will change proxy and retry move " + task);
-            task.chooseProxy();
-            task.dispatch();
-          } else if (state == RetryState.RETRY_TARGET) {
-            LOG.info("Will change target and retry move " + task);
+          boolean shouldRetry = task.dispatch(true);
+          if (shouldRetry) {
+            LOG.info("Will retry move " + task);
             task.chooseTarget();
             task.chooseProxy();
-            task.dispatch();
+            task.dispatch(false);
           }
         } catch (InterruptedException e) {
           // ignore
@@ -662,7 +651,8 @@ public class DecommissionTool {
     boolean checkAllNNs = conf.getBoolean(
         DFSConfigKeys.DFS_DECOMMISSION_BALANCER_CHECK_ALL_NAMENODE_KEY,
         DFSConfigKeys.DFS_DECOMMISSION_BALANCER_CHECK_ALL_NAMENODE_DEFAULT);
-    LOG.info("namenodes  = " + namenodes);
+
+    LOG.info("namenodes = {}, checkAllNNs = {}.", namenodes, checkAllNNs);
 
     List<NameNodeConnector> connectors = new ArrayList<>();
     MoverManager moverManager = null;
@@ -682,8 +672,7 @@ public class DecommissionTool {
         }
       } else {
         connectors = NameNodeConnector.newNameNodeConnectors(namenodes, nsIds,
-            DecommissionTool.class.getSimpleName(),
-            getPathForDecommission(), conf, 5);
+            DecommissionTool.class.getSimpleName(), getPathForDecommission(), conf, 5);
       }
 
       LOG.info("Namenode list is {}", connectors);

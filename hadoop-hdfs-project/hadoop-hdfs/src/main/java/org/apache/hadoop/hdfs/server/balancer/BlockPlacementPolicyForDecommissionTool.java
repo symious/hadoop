@@ -41,13 +41,13 @@ import java.util.Map;
 public class BlockPlacementPolicyForDecommissionTool {
   private final Logger LOG = LoggerFactory.getLogger(BlockPlacementPolicyForDecommissionTool.class);
   private final NetworkTopology clusterMap;
-  private final String bpId;
+  private final String nsId;
   private final Map<String, DatanodeInfo> dataNodes = new HashMap<>();
   private final Map<String, HashSet<String>> dcRacks = new HashMap<>();
 
-  public BlockPlacementPolicyForDecommissionTool(NetworkTopology clusterMap, String bpId) {
+  public BlockPlacementPolicyForDecommissionTool(NetworkTopology clusterMap, String nsId) {
     this.clusterMap = clusterMap;
-    this.bpId = bpId;
+    this.nsId = nsId;
   }
 
   public DatanodeInfo getDataNode(String uuid) {
@@ -65,10 +65,10 @@ public class BlockPlacementPolicyForDecommissionTool {
       HashSet<String> racks = this.dcRacks.computeIfAbsent(dc, k -> new HashSet<>());
       racks.add(dnInfo.getNetworkLocation());
       this.clusterMap.add(dnInfo);
-      LOG.info("[{}] Add {} into cluster, uuId {}.", bpId, dnInfo, dnInfo.getDatanodeUuid());
+      LOG.info("[{}] Add {} into cluster, uuId {}.", nsId, dnInfo, dnInfo.getDatanodeUuid());
     } else {
       LOG.warn("[{}] Skip this abnormal DN {} with status {}, uuId {}.",
-          bpId, dnInfo, dnInfo.getAdminState(), dnInfo.getDatanodeUuid());
+          nsId, dnInfo, dnInfo.getAdminState(), dnInfo.getDatanodeUuid());
     }
   }
 
@@ -185,7 +185,7 @@ public class BlockPlacementPolicyForDecommissionTool {
         locationRacks.put(rack, ++value);
       }
     } catch (NullPointerException e) {
-      LOG.warn("[{}] block {} locations {}.", this.bpId, block, locations);
+      LOG.warn("[{}] block {} locations {}.", this.nsId, block, locations);
       throw e;
     }
 

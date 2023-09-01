@@ -2242,6 +2242,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final int DFS_DECOMMISSION_QUEUE_SIZE_DEFAULT = 50000;
   public static final String DFS_DECOMMISSION_HANDLER_COUNT_KEY = "dfs.decommission.handler.count";
   public static final int DFS_DECOMMISSION_HANDLER_COUNT_DEFAULT = 1024;
+  public static final String DFS_DECOMMISSION_MAX_CHECK_TIMES_KEY = "dfs.decommission.max.check.times";
+  public static final int DFS_DECOMMISSION_MAX_CHECK_TIMES_DEFAULT = 100;
 
   //Decommission Balancer
 

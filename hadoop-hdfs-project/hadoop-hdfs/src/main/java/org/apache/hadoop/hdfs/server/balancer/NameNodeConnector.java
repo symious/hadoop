@@ -24,7 +24,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -33,11 +32,10 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import com.nimbusds.jose.util.ArrayUtils;
-import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.RateLimiter;
 import org.apache.hadoop.ha.HAServiceProtocol;
+import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.HAUtil;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
@@ -293,43 +291,13 @@ public class NameNodeConnector implements Closeable {
     if (getBlocksRateLimiter != null) {
       getBlocksRateLimiter.acquire();
     }
-    boolean isRequestStandby = false;
-    NamenodeProtocol nnproxy = null;
-    try {
-      if (requestToStandby && nsId != null
-          && HAUtil.isHAEnabled(config, nsId)) {
-        List<ClientProtocol> namenodes =
-            HAUtil.getProxiesForAllNameNodesInNameservice(config, nsId);
-        for (ClientProtocol proxy : namenodes) {
-          try {
-            if (proxy.getHAServiceState().equals(
-                HAServiceProtocol.HAServiceState.STANDBY)) {
-              NamenodeProtocol sbn = NameNodeProxies.createNonHAProxy(
-                  config, RPC.getServerAddress(proxy), NamenodeProtocol.class,
-                  UserGroupInformation.getCurrentUser(), false).getProxy();
-              nnproxy = sbn;
-              isRequestStandby = true;
-              break;
-            }
-          } catch (Exception e) {
-            // Ignore the exception while connecting to a namenode.
-            LOG.debug("Error while connecting to namenode", e);
-          }
-        }
-        if (nnproxy == null) {
-          LOG.warn("Request #getBlocks to Standby NameNode but meet exception,"
-              + " will fallback to normal way.");
-          nnproxy = namenode;
-        }
-      } else {
-        nnproxy = namenode;
-      }
-      return nnproxy.getBlocks(datanode, size, minBlockSize);
-    } finally {
-      if (isRequestStandby) {
-        LOG.info("Request #getBlocks to Standby NameNode success.");
-      }
+    NamenodeProtocol nnproxy;
+    if (requestToStandby) {
+      nnproxy = getStandbyProxy();
+    } else {
+      nnproxy = getActiveProxy();
     }
+    return nnproxy.getBlocks(datanode, size, minBlockSize);
   }
 
   /**
@@ -346,21 +314,64 @@ public class NameNodeConnector implements Closeable {
     return (isUpgrade || isRollingUpgrade);
   }
 
+  private BalancerProtocols getNNProxy(HAServiceState state) throws IOException {
+    BalancerProtocols nnproxy = null;
+    if (nsId != null && HAUtil.isHAEnabled(config, nsId)) {
+      List<ClientProtocol> namenodes = HAUtil.getProxiesForAllNameNodesInNameservice(config, nsId);
+      for (ClientProtocol proxy : namenodes) {
+        try {
+          if (proxy.getHAServiceState().equals(state)) {
+            nnproxy = NameNodeProxies.createNonHAProxy(config, RPC.getServerAddress(proxy),
+                BalancerProtocols.class, UserGroupInformation.getCurrentUser(), false).getProxy();
+            LOG.info("{} Will send request to {} with state {}.", this.nameNodeUri.getAuthority(),
+                RPC.getServerAddress(proxy), state);
+            break;
+          }
+        } catch (Exception e) {
+          // Ignore the exception while connecting to a namenode.
+          LOG.debug("Error while connecting to namenode", e);
+        }
+      }
+    }
+    if (nnproxy == null) {
+      LOG.warn("Request to {} NameNode but meet exception, will fallback to normal way.",
+          state);
+      nnproxy = namenode;
+    }
+    return nnproxy;
+  }
+
+  private BalancerProtocols getActiveProxy() throws IOException {
+    return getNNProxy(HAServiceState.ACTIVE);
+  }
+
+  private BalancerProtocols getStandbyProxy() throws IOException {
+    return getNNProxy(HAServiceState.STANDBY);
+  }
+
+  private BalancerProtocols getObserverProxy() throws IOException {
+    return getNNProxy(HAServiceState.OBSERVER);
+  }
+
   /** @return live datanode storage reports. */
   public DatanodeStorageReport[] getLiveDatanodeStorageReport()
       throws IOException {
-    return namenode.getDatanodeStorageReport(DatanodeReportType.LIVE);
+    BalancerProtocols protocol = requestToStandby ? getStandbyProxy() : getActiveProxy();
+    return protocol.getDatanodeStorageReport(DatanodeReportType.LIVE);
   }
 
   /** @return live&decommission datanode storage reports. */
   public List<DatanodeInfo> getLiveAndDecommissionDatanodeStorageReport() throws IOException {
-    DatanodeInfo[] live = namenode.getDatanodeReport(DatanodeReportType.LIVE);
+    BalancerProtocols protocol = requestToStandby ? getStandbyProxy() : getActiveProxy();
+    DatanodeInfo[] live = protocol.getDatanodeReport(DatanodeReportType.LIVE);
     List<DatanodeInfo> reports = new ArrayList<>();
     for (DatanodeInfo dsr : live) {
       if (dsr.isDecommissionInProgress()) {
         reports.add(dsr);
       }
     }
+    LOG.info("{} has {} dns need to be decommissioned, they are {}.",
+        nameNodeUri.getAuthority(), reports.size(), reports);
     return reports;
   }
 
