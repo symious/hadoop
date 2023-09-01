@@ -70,6 +70,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -94,6 +95,9 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
   private BlockingQueue<PreMigrationFile> preMigrationFileQueue;
   private long preMigrationCheckInterval;
   private CountDownLatch preMigrationLatch;
+  private Set<String> monitorIgnoreDC = new HashSet<>();
+  // Ignore the file generated in DC no matter rule contains the DC or not
+  private boolean monitorIgnoreDCForce = false;
   protected final Thread
       preMigrationChecker = new Thread(new PreMigrationChecker(), "ZoneMover-PreMigrationChecker");
   public static final ReplicationRule DEFAULT_RULE =
@@ -132,6 +136,16 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
   void initZoneMoverWithSetReplication(Configuration conf, boolean allowChange) throws IOException {
     allowChangeReplication = allowChange;
     migrationRuleMap = new ReplicaMigrationRuleMap(conf);
+
+    // ignore file generated in the specific data centers
+    monitorIgnoreDC = new HashSet<>(
+        conf.getTrimmedStringCollection(DFSConfigKeys.DFS_ZONE_MIGRATION_MONITOR_IGNORED_DC_KEY));
+    monitorIgnoreDCForce = conf.getBoolean(
+        DFSConfigKeys.DFS_ZONE_MIGRATION_MONITOR_IGNORED_DC_FORCE_KEY,
+        DFSConfigKeys.DFS_ZONE_MIGRATION_MONITOR_IGNORED_DC_FORCE_DEFAULT);
+    LOG.info("Monitor mode will ignore the data center: {} with force {}", monitorIgnoreDC,
+        monitorIgnoreDCForce);
+
     preMigrationCheckInterval = conf.getLong(
         DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_KEY,
         DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_DEFAULT);
@@ -589,6 +603,14 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
             return;
           }
         } else {
+          if (blockDistribution.size() == 1
+              && monitorIgnoreDC.containsAll(blockDistribution.keySet())
+              && (monitorIgnoreDCForce ||
+                !rule.getDatacenters().containsAll(blockDistribution.keySet()))) {
+            LOG.info("Monitor will ignore the path: {} with distribution {}", fullPath, dis);
+            ZoneProgressTracker.dequeueFile(fullPath);
+            return;
+          }
           appliedRule =
               migrationRuleMap.generateRule(rule, status.getReplication(), dis);
           if (appliedRule == null) {
@@ -603,7 +625,8 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
         // then the rest replica can copy from the migrated replica directly
         if (appliedRule.getReplica(MigrationDataCenters.STT.getName()) > 1
             && !dis.getDatacenters().contains(MigrationDataCenters.STT.getName())
-            && dis.getReplica() == status.getReplication()) {
+            && dis.getReplica() == status.getReplication()
+            && dis.getDatacenters().contains(MigrationDataCenters.TL.getName())) {
           try {
             LOG.info("Will pre migration 1 replica from TL to STT for {}", fullPath);
             Map<String, Short> disMap = dis.toMap();
