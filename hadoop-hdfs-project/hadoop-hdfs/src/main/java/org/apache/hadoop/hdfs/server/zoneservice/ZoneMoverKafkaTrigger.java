@@ -192,6 +192,7 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
         return true;
       }
     }
+    LOG.debug("In containKeyWords: path: {}, keySet: {}", path, keySet);
     return false;
   }
 
