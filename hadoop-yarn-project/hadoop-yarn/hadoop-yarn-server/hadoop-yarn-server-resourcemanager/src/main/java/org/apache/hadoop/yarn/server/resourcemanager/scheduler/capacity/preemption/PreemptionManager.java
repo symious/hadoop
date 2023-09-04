@@ -28,6 +28,7 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -40,6 +41,11 @@ public class PreemptionManager {
     ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     readLock = lock.readLock();
     writeLock = lock.writeLock();
+  }
+
+  @VisibleForTesting
+  public ReentrantReadWriteLock.WriteLock getWriteLock() {
+    return writeLock;
   }
 
   public void refreshQueues(CSQueue parent, CSQueue current) {
@@ -55,8 +61,9 @@ public class PreemptionManager {
             new PreemptableQueue(parentEntity));
       }
 
-      if (current.getChildQueues() != null) {
-        for (CSQueue child : current.getChildQueuesByTryLock()) {
+      List<CSQueue> childQueues = current.getChildQueuesByTryLock();
+      if (childQueues != null) {
+        for (CSQueue child : childQueues) {
           refreshQueues(current, child);
         }
       }
