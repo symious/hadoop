@@ -1002,6 +1002,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final int     DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_DEFAULT = 100000;
   public static final String  DFS_ZONEMOVER_TRIGGER_KAFKA_CONSUMER_THREADS_KEY = "dfs.zonemover.trigger.kafka.consumer.threads";
   public static final int     DFS_ZONEMOVER_TRIGGER_KAFKA_CONSUMER_THREADS_DEFAULT = 5;
+  public static final String  DFS_ZONEMOVER_TRIGGER_SKIP_RENAME_KEYWORDS_KEY = "dfs.zonemover.trigger.skip.rename.keywords";
+  public static final String  DFS_ZONEMOVER_TRIGGER_SKIP_COMPLETE_KEYWORDS_KEY = "dfs.zonemover.trigger.skip.complete.keywords";
   // datacenter values separated by comma
   public static final String  DFS_ZONEMOVER_VALID_DATACENTERS_KEY = "dfs.zonemover.valid.datacenters";
   public static final String  DFS_ZONEMOVER_VALID_DATACENTERS_DEFAULT = "";
