@@ -14,7 +14,6 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -66,5 +65,22 @@ public class TestZoneMoverKafkaTrigger {
     String pathLoc2 = "/test4/test.file";
     assertTrue(zoneMoverTrigger.checkPaths(pathLoc1));
     assertFalse(zoneMoverTrigger.checkPaths(pathLoc2));
+
+  }
+
+  @Test
+  public void testContainKeyWords() {
+    Configuration conf = new Configuration();
+    conf.set(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_SKIP_COMPLETE_KEYWORDS_KEY,
+        "spark-staging, _temporary, .hoodie");
+
+    ZoneMoverKafkaTrigger zoneMoverTrigger =
+        new ZoneMoverKafkaTrigger(getConf(), null, URI.create("hdfs://test/"));
+
+    assertTrue(zoneMoverTrigger.containKeyWords(
+        ".spark-staging-857f6bac-cc51-4ad6-927b-aaef215fa714/_temporary",
+        conf.getTrimmedStringCollection(
+            DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_SKIP_COMPLETE_KEYWORDS_KEY))
+    );
   }
 }
