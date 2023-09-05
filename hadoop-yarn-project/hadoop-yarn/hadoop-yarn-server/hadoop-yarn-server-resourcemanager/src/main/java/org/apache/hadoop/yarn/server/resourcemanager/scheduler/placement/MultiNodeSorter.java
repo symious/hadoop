@@ -34,6 +34,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.SchedulingNodeType;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -151,15 +152,19 @@ public class MultiNodeSorter<N extends SchedulerNode> extends AbstractService {
       if (nodes != null) {
         for (SchedulerNode sn : nodes) {
           NodeId nodeId = sn.getNodeID();
-          RMNode rmNode = ((AbstractYarnScheduler) rmContext
-              .getScheduler()).getNode(nodeId).getRMNode();
-          if (multiNodeEnabledForHeartBeat) {
-            nodesByPartition.put(nodeId, sn);
-          } else if (rmNode.getNodeSchedulerType()
-              .equals(SchedulingNodeType.GLOBAL) &&
-              SchedulerUtils.isNodeHeartbeated(sn, cs.getSkipNodeInterval()) &&
-              rmNode.isGoodTarget()) {
-            nodesByPartition.put(nodeId, sn);
+          SchedulerNode node = ((AbstractYarnScheduler) rmContext
+              .getScheduler()).getNode(nodeId);
+          if (null != node) {
+            RMNode rmNode = node.getRMNode();
+            if (multiNodeEnabledForHeartBeat) {
+              nodesByPartition.put(nodeId, sn);
+            } else if (rmNode.getNodeSchedulerType()
+                .equals(SchedulingNodeType.GLOBAL) &&
+                SchedulerUtils
+                    .isNodeHeartbeated(sn, cs.getSkipNodeInterval()) &&
+                rmNode.isGoodTarget()) {
+              nodesByPartition.put(nodeId, sn);
+            }
           }
         }
         if (nodesByPartition.size() > 0) {
