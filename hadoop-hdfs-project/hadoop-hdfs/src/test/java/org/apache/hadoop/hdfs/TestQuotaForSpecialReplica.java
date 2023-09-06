@@ -30,6 +30,7 @@ import org.apache.hadoop.hdfs.server.namenode.INodeDirectory;
 import org.apache.hadoop.hdfs.server.namenode.QuotaCounts;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
 import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.hadoop.test.LambdaTestUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -468,5 +469,82 @@ public class TestQuotaForSpecialReplica {
     } finally {
       fsn.writeUnlock();
     }
+  }
+
+
+  @Test
+  public void testAppendRPC() throws Exception {
+    // Create dir and set quota.
+    Path dir = new Path("/testAppendRPC");
+    dfs.mkdirs(dir);
+    dfs.setQuota(dir, 100, DEFAULT_BLOCK_SIZE * 4 * 2);
+
+    // Create 4 replication file.
+    Path file = new Path("/testAppendRPC/file");
+    short replication_3 = 3;
+    short replication_4 = 4;
+    long spaceUsage = replication_3 * DEFAULT_BLOCK_SIZE ;
+    DFSTestUtil.createFile(dfs, file, DEFAULT_BLOCK_SIZE, replication_4, 0);
+    // Validate dir spaceConsumed.
+    QuotaUsage quotaUsage = dfs.getQuotaUsage(dir);
+    Assert.assertEquals(spaceUsage, quotaUsage.getSpaceConsumed());
+    ContentSummary contentSummary = dfs.getContentSummary(dir);
+    Assert.assertEquals(spaceUsage, contentSummary.getSpaceConsumed());
+
+    // the last block is full block
+    int appendSize = 64;
+    assert appendSize < DEFAULT_BLOCK_SIZE;
+    DFSTestUtil.appendFile(dfs, file, appendSize);
+    spaceUsage = spaceUsage + replication_3 * appendSize;
+    // Validate dir spaceConsumed.
+    quotaUsage = dfs.getQuotaUsage(dir);
+    Assert.assertEquals(spaceUsage, quotaUsage.getSpaceConsumed());
+    contentSummary = dfs.getContentSummary(dir);
+    Assert.assertEquals(spaceUsage, contentSummary.getSpaceConsumed());
+
+    // the last block is partial block
+    appendSize = 60;
+    assert appendSize < DEFAULT_BLOCK_SIZE;
+    DFSTestUtil.appendFile(dfs, file, appendSize);
+    spaceUsage = spaceUsage + replication_3 * appendSize;
+    // Validate dir spaceConsumed.
+    quotaUsage = dfs.getQuotaUsage(dir);
+    Assert.assertEquals(spaceUsage, quotaUsage.getSpaceConsumed());
+    contentSummary = dfs.getContentSummary(dir);
+    Assert.assertEquals(spaceUsage, contentSummary.getSpaceConsumed());
+  }
+
+  @Test
+  public void testTruncateRPC() throws Exception {
+    // Create dir and set quota.
+    Path dir = new Path("/testTruncate");
+    dfs.mkdirs(dir);
+    dfs.setQuota(dir, 100, DEFAULT_BLOCK_SIZE * 4 * 3);
+
+    // Create 4 replication file.
+    Path file = new Path("/testTruncate/file");
+    short replication_3 = 3;
+    short replication_4 = 4;
+    long spaceUsage = replication_3 * DEFAULT_BLOCK_SIZE * 2 ;
+    DFSTestUtil.createFile(dfs, file, DEFAULT_BLOCK_SIZE * 2, replication_4, 0);
+    // Validate dir spaceConsumed.
+    QuotaUsage quotaUsage = dfs.getQuotaUsage(dir);
+    Assert.assertEquals(spaceUsage, quotaUsage.getSpaceConsumed());
+    ContentSummary contentSummary = dfs.getContentSummary(dir);
+    Assert.assertEquals(spaceUsage, contentSummary.getSpaceConsumed());
+
+    // the last block is full block
+    int newSize = 64;
+    assert newSize < DEFAULT_BLOCK_SIZE;
+    dfs.truncate(file, newSize);
+
+    LambdaTestUtils.await(30000, 500, () -> dfs.isFileClosed(file));
+
+    spaceUsage = replication_3 * newSize;
+    // Validate dir spaceConsumed.
+    quotaUsage = dfs.getQuotaUsage(dir);
+    Assert.assertEquals(spaceUsage, quotaUsage.getSpaceConsumed());
+    contentSummary = dfs.getContentSummary(dir);
+    Assert.assertEquals(spaceUsage, contentSummary.getSpaceConsumed());
   }
 }

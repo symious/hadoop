@@ -1211,10 +1211,10 @@ public class INodeFile extends INodeWithAdditionalFields
       if (sblocks != null && i < sblocks.length && bi.equals(sblocks[i])) {
         truncatedBytes -= bi.getNumBytes();
       }
-
-      delta.addStorageSpace(-truncatedBytes * bi.getReplication());
+      final short targetRep = FSDirectory.getTargetFileReplica(bi.getReplication());
+      delta.addStorageSpace(-truncatedBytes * targetRep);
       if (bsps != null) {
-        List<StorageType> types = bsps.chooseStorageTypes(bi.getReplication());
+        List<StorageType> types = bsps.chooseStorageTypes(targetRep);
         for (StorageType t : types) {
           if (t.supportTypeQuota()) {
             delta.addTypeSpace(t, -truncatedBytes);
