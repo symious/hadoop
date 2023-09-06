@@ -261,10 +261,11 @@ final class FSDirAppendOp {
     if (lastBlock != null) {
       final long diff = file.getPreferredBlockSize() - lastBlock.getNumBytes();
       final short repl = lastBlock.getReplication();
-      delta.addStorageSpace(diff * repl);
+      final short targetRepl = FSDirectory.getTargetFileReplica(repl);
+      delta.addStorageSpace(diff * targetRepl);
       final BlockStoragePolicy policy = fsn.getFSDirectory()
           .getBlockStoragePolicySuite().getPolicy(file.getStoragePolicyID());
-      List<StorageType> types = policy.chooseStorageTypes(repl);
+      List<StorageType> types = policy.chooseStorageTypes(targetRepl);
       for (StorageType t : types) {
         if (t.supportTypeQuota()) {
           delta.addTypeSpace(t, diff);
