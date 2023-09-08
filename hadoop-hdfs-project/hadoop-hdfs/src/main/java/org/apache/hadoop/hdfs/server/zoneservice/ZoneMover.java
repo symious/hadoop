@@ -174,6 +174,8 @@ public class ZoneMover {
 
   void init(Configuration conf) throws IOException {
     LOG.info("Initializing ...");
+    long blockSize = conf.getLongBytes(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,
+        DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT);
     final List<DatanodeStorageReport> reports = dispatcher.init();
     ZoneProgressTracker.initConf(conf);
     LOG.info("Datanode reports size: " + reports.size());
@@ -182,7 +184,11 @@ public class ZoneMover {
       for (StorageType t: StorageType.getMovableTypes()) {
         final ZoneSource source = dn.addSource(t, Long.MAX_VALUE, dispatcher);
         final long maxRemaining = Mover.getMaxRemaining(r, t);
-        final StorageGroup target = maxRemaining > 0L ? dn.addTarget(t, maxRemaining) : null;
+        if (maxRemaining < blockSize) {
+          LOG.warn("Target {} {} with max remaining {} cannot accommodate 1 block size {}", dn, t,
+              maxRemaining, blockSize);
+        }
+        final StorageGroup target = maxRemaining > blockSize ? dn.addTarget(t, maxRemaining) : null;
         storages.add(source, target);
       }
     }
