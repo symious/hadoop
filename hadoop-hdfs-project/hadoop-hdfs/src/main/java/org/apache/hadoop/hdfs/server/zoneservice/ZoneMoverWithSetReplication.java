@@ -591,6 +591,9 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
         ReplicationRule dis = ReplicationRule.parseFromMap(blockDistribution);
         if (runMode == RunMode.BATCH) {
           appliedRule = migrationRuleMap.getRuleFromDistribution(dis, status.getReplication());
+          if (appliedRule == null) {
+            appliedRule = migrationRuleMap.getDefaultRule(dis, status.getReplication());
+          }
         } else if (runMode == RunMode.CHECK) {
           if (dc == null) {
             LOG.warn("Using check mode but not give the data center!");
@@ -722,7 +725,7 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
               locatedBlocks.getLocatedBlocks().size());
         }
       } else {
-        processFileBlocks(fullPath, status, appliedRule, result);
+        processFileBlocks(fullPath, status, appliedRule, result, true);
         ZoneProgressTracker.dequeueFile(fullPath);
       }
     }
@@ -735,6 +738,7 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
       final ErasureCodingPolicy erasureCodingPolicy = status.getErasureCodingPolicy();
       String TLname = MigrationDataCenters.TL.getName();
       int n = locatedBlocks.locatedBlockCount();
+      ZoneProgressTracker.queueFile(fullPath);
       for (int i=0; i<n; i++) {
         List<ZoneMoveItem> moveItems = new ArrayList<>();
         LocatedBlock block = locatedBlocks.get(i);
@@ -749,6 +753,7 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
           }
         }
       }
+      ZoneProgressTracker.dequeueFile(fullPath);
     }
 
     @Override
@@ -851,6 +856,11 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
       PreMigrationFile preMigrationFile;
       while (true) {
         try {
+          if (preMigrationLatch.getCount() == 1 && preMigrationFileQueue.isEmpty()) {
+            preMigrationLatch.countDown();
+            return;
+          }
+
           preMigrationFile = preMigrationFileQueue.poll();
           if (preMigrationFile == null) {
             continue;
@@ -864,10 +874,6 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
                 preMigrationFile.getRule(), result);
           } else {
             preMigrationFileQueue.put(preMigrationFile);
-          }
-          if (preMigrationLatch.getCount() == 1 && preMigrationFileQueue.isEmpty()) {
-            preMigrationLatch.countDown();
-            return;
           }
         } catch (Exception e) {
           LOG.warn("Pre-migration checker encountered the exception!", e);
