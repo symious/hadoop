@@ -78,7 +78,6 @@ public class ECFileValidator implements Closeable {
   private final boolean useDNHostname;
   private final CachingStrategy cachingStrategy;
   private final int stripedReadBufferSize;
-  private final CompletionService<Integer> stripedReadPool;
   private ThreadPoolExecutor executor;
   private final DistributedFileSystem dfs;
   public final static String EC_FILE_FAIL_BLOCK = "fileFailed";
@@ -100,9 +99,9 @@ public class ECFileValidator implements Closeable {
     int threads = conf.getInt(HdfsClientConfigKeys.DFS_EC_VALIDATOR_THREADS_KEY,
         HdfsClientConfigKeys.DFS_EC_VALIDATOR_THREADS_DEFAULT);
     LOG.info("Create striped reader service pool with {} threads", threads);
-    this.executor = DFSUtilClient.getThreadPoolExecutor(threads, threads, 60,
-        new LinkedBlockingQueue<>(), "read-", false);
-    this.stripedReadPool = new ExecutorCompletionService<>(executor);
+    this.executor = DFSUtilClient.getThreadPoolExecutor(threads,
+        threads, 60, "StripedRead-", true);
+    this.executor.allowCoreThreadTimeOut(true);
   }
 
   public List<ECBlockValidatorReport> verifyECFile(String file, boolean ignoreFailures)
@@ -145,6 +144,11 @@ public class ECFileValidator implements Closeable {
     LocatedBlocks locatedBlocks = client.getLocatedBlocks(file, 0, fileStatus.getLen());
     if (locatedBlocks.getErasureCodingPolicy() == null) {
       blockValidatorReports.add(createFailedReport("File " + file + " is not erasure coded."));
+      return blockValidatorReports;
+    }
+
+    if (locatedBlocks.locatedBlockCount() == 0) {
+      blockValidatorReports.add(createFailedReport("File " + file + " size is zero."));
       return blockValidatorReports;
     }
 
@@ -206,15 +210,35 @@ public class ECFileValidator implements Closeable {
       return ecBlockValidatorReport;
     }
 
-    Validator validator = new Validator(blockGroup, file, dataBlkNum, parityBlkNum, encoder);
+    Validator validator = null;
+    try {
+      validator = new Validator(blockGroup, file, dataBlkNum, parityBlkNum, encoder);
 
-    validator.initReaders(indexedBlocks, blockReaders);
+      validator.initReaders(indexedBlocks, blockReaders);
 
-    validator.initBufferSize();
+      validator.initBufferSize();
 
-    validator.validate(indexedBlocks, blockReaders, ecBlockValidatorReport);
+      validator.validate(indexedBlocks, blockReaders, ecBlockValidatorReport);
+    } finally {
+      clearBuffers(validator);
+    }
 
     return ecBlockValidatorReport;
+  }
+
+  private void clearBuffers(Validator validator) {
+    if (validator != null) {
+      if (validator.buffers != null) {
+        for (ByteBuffer buffer : validator.buffers) {
+          buffer.clear();
+        }
+      }
+      if (validator.outputs != null) {
+        for (ByteBuffer buffer : validator.outputs) {
+          buffer.clear();
+        }
+      }
+    }
   }
 
   private void closeBlockReaders(BlockReader[] blockReaders) {
@@ -340,53 +364,70 @@ public class ECFileValidator implements Closeable {
     private void readStripedBlock(int toVerifyLen, LocatedBlock[] indexedBlocks,
         BlockReader[] blockReaders, ECBlockValidatorReport ecBlockValidatorReport) {
       List<Future<Integer>> futures = new ArrayList<>(dataBlkNum + parityBlkNum);
-      for (int i = 0; i < dataBlkNum + parityBlkNum; i++) {
-        final int fi = i;
-        futures.add(stripedReadPool.submit(() -> {
-          BlockReader blockReader = blockReaders[fi];
-          ByteBuffer buffer = buffers[fi];
-          buffer.clear();
-          buffer.limit(toVerifyLen);
-          int readLen = 0;
-          if (blockReader != null) {
-            int toRead = buffer.remaining();
-            while (readLen < toRead) {
-              int nread = blockReader.read(buffer);
-              if (nread <= 0) {
-                break;
-              }
-              readLen += nread;
-            }
-          }
-          while (buffer.hasRemaining()) {
-            buffer.put((byte) 0);
-          }
-          buffer.flip();
-          return readLen;
-        }));
+      try {
+        for (int i = 0; i < dataBlkNum + parityBlkNum; i++) {
+          futures.add(submitBlockReadTask(blockReaders[i], buffers[i], toVerifyLen));
+        }
 
-      }
-
-      for (int i = 0; i < dataBlkNum + parityBlkNum; i++) {
-        try {
-          futures.get(i).get(1, TimeUnit.MINUTES);
-        } catch (Exception e) {
-          String internalBlock = indexedBlocks[i].getBlock().getLocalBlock().toString();
-          String datanodeInfo = indexedBlocks[i].getLocations()[0].getXferAddr();
-          if ((e.getCause() instanceof ChecksumException)) {
-            LOG.warn("Block group {} read {} found Checksum error for {} from {} cause: {}",
-                blockGroup.getBlock().toString(), internalBlock, file, datanodeInfo,
-                e.getMessage());
-            ecBlockValidatorReport.addCheckSumFailedBlockReports(internalBlock, datanodeInfo,
-                e.getMessage());
-          } else {
-            LOG.warn("Block group {} read {} found Unknown error for {} from {} cause: {}",
-                blockGroup.getBlock().toString(), internalBlock, file, datanodeInfo,
-                e.getMessage());
-            ecBlockValidatorReport.addFailedBlockReports(internalBlock, datanodeInfo,
-                e.getMessage());
+        for (int i = 0; i < dataBlkNum + parityBlkNum; i++) {
+          try {
+            futures.get(i).get();
+          } catch (Exception e) {
+            handleBlockReadException(e, indexedBlocks[i], file, ecBlockValidatorReport);
           }
         }
+      } finally {
+        cancelAndClearFutures(futures);
+      }
+    }
+
+    private void cancelAndClearFutures(List<Future<Integer>> futures) {
+      for (Future<Integer> future : futures) {
+        future.cancel(true);
+      }
+      futures.clear();
+    }
+
+    private Future<Integer> submitBlockReadTask(BlockReader blockReader, ByteBuffer buffer,
+        int toVerifyLen) {
+      return executor.submit(() -> {
+        buffer.clear();
+        buffer.limit(toVerifyLen);
+        int readLen = 0;
+        if (blockReader != null) {
+          int toRead = buffer.remaining();
+          while (readLen < toRead) {
+            int nread = blockReader.read(buffer);
+            if (nread <= 0) {
+              break;
+            }
+            readLen += nread;
+          }
+        }
+        while (buffer.hasRemaining()) {
+          buffer.put((byte) 0);
+        }
+        buffer.flip();
+        return readLen;
+      });
+    }
+
+    private void handleBlockReadException(Exception e, LocatedBlock indexedBlock, String file,
+        ECBlockValidatorReport ecBlockValidatorReport) {
+      String internalBlock = indexedBlock.getBlock().getLocalBlock().toString();
+      String datanodeInfo = indexedBlock.getLocations()[0].getXferAddr();
+      if ((e.getCause() instanceof ChecksumException)) {
+        LOG.warn("Block group {} read {} found Checksum error for {} from {} cause: {}",
+            blockGroup.getBlock().toString(), internalBlock, file, datanodeInfo,
+            e.getMessage());
+        ecBlockValidatorReport.addCheckSumFailedBlockReports(internalBlock, datanodeInfo,
+            e.getMessage());
+      } else {
+        LOG.warn("Block group {} read {} found Unknown error for {} from {} cause: {}",
+            blockGroup.getBlock().toString(), internalBlock, file, datanodeInfo,
+            e.getMessage());
+        ecBlockValidatorReport.addFailedBlockReports(internalBlock, datanodeInfo,
+            e.getMessage());
       }
     }
 

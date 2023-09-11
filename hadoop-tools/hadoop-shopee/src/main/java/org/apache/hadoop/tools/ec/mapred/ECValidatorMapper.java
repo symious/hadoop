@@ -58,20 +58,28 @@ public class ECValidatorMapper extends Mapper<LongWritable, Text, Text, ECBlockV
       throws IOException, InterruptedException {
     String fileStr = value.toString();
     LOG.info("map received {}.", fileStr);
-    String fileStrS[] = fileStr.split("\t");
-    if (fileStrS.length == 2) {
-      String file = fileStrS[1];
+    String[] fileStrS = fileStr.split("\t");
+
+    if (fileStrS.length != 2) {
+      LOG.warn("map received {} is not valid.", fileStr);
+      context.write(value, ecFileValidator.createFailedReport("no valid"));
+      return;
+    }
+
+    String file = fileStrS[1];
+    try {
       List<ECBlockValidatorReport> ecBlockValidatorReports = ecFileValidator.verifyECFile(file,
           true);
+      LOG.info("map complete {}.", fileStr);
       if (!CollectionUtils.isEmpty(ecBlockValidatorReports)) {
         for (ECBlockValidatorReport ecBlockValidatorReport : ecBlockValidatorReports) {
           context.write(value, ecBlockValidatorReport);
         }
-        return;
       }
+    } catch (Exception e) {
+      LOG.error("failed to verify {}", file, e);
+      context.write(value, ecFileValidator.createFailedReport(e.getMessage()));
     }
-    LOG.warn("map received {} is not valid.", fileStr);
-    context.write(value, ecFileValidator.createFailedReport("no valid"));
   }
 
   @Override

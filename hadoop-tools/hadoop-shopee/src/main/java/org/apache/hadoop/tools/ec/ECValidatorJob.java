@@ -176,7 +176,6 @@ public class ECValidatorJob extends Configured implements Tool {
 
     // Setup MapReduce
     job.setMapperClass(ECValidatorMapper.class);
-    job.setInputFormatClass(TextInputFormat.class);
     job.setMapOutputKeyClass(Text.class);
     job.setMapOutputValueClass(ECBlockValidatorReport.class);
     job.getConfiguration().set(JobContext.NUM_MAPS, String.valueOf(numMapTasks));
@@ -187,7 +186,6 @@ public class ECValidatorJob extends Configured implements Tool {
 
     // Input
     FileInputFormat.addInputPath(job, new Path(inputDir));
-    job.setInputFormatClass(TextInputFormat.class);
 
     // Output
     FileOutputFormat.setOutputPath(job, new Path(outputDir));
