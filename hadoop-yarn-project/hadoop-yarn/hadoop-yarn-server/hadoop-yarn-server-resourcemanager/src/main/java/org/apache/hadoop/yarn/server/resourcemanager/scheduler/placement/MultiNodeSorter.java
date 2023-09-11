@@ -165,6 +165,11 @@ public class MultiNodeSorter<N extends SchedulerNode> extends AbstractService {
                 rmNode.isGoodTarget()) {
               nodesByPartition.put(nodeId, sn);
             }
+          } else {
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("node: " + nodeId + " in label: " + label +
+                  " ,but not existed in cluster nodes");
+            }
           }
         }
         if (nodesByPartition.size() > 0) {
