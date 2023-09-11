@@ -650,6 +650,7 @@ public class ProcfsBasedProcessTree extends ResourceCalculatorProcessTree {
       this.pid = pid;
       // seeing this the first time.
       this.age = 1;
+      this.fdNum = Integer.valueOf(0);
     }
 
     public String getPid() {
