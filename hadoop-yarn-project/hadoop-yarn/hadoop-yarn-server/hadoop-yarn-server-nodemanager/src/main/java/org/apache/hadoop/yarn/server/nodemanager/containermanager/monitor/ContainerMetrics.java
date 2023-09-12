@@ -280,6 +280,11 @@ public class ContainerMetrics implements MetricsSource {
     if (memoryMBs >= 0) {
       this.pMemMBsStat.add(memoryMBs);
       this.pMemMBQuantiles.add(memoryMBs);
+    }
+  }
+
+  public void recordMemoryUsageOfAged(int memoryMBs) {
+    if (memoryMBs >= 0) {
       this.minMax.add(memoryMBs);
       this.latestMemoryMbs.set(memoryMBs);
     }

@@ -788,11 +788,16 @@ public class ContainersMonitorImpl extends AbstractService implements
               milliVcoresUsed / 1000.0f);
 
       // Add usage to container metrics
+      long curRssMemUsageOfAgedProcesses = pTree.getRssMemorySize(1);
       if (containerMetricsEnabled) {
         ContainerMetrics.forContainer(
                 containerId, containerMetricsPeriodMs,
                 containerMetricsUnregisterDelayMs).recordMemoryUsage(
                 (int) (currentPmemUsage >> 20));
+        ContainerMetrics.forContainer(
+            containerId, containerMetricsPeriodMs,
+            containerMetricsUnregisterDelayMs).recordMemoryUsageOfAged(
+            (int) (curRssMemUsageOfAgedProcesses >> 20));
         ContainerMetrics.forContainer(containerId, containerMetricsPeriodMs,
             containerMetricsUnregisterDelayMs)
             .recordCpuUsage((int) cpuUsagePercentPerCore, milliVcoresUsed);
