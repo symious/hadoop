@@ -109,6 +109,7 @@ public class ZoneMover {
   protected final StorageMap storages;
   protected final List<Path> targetPaths;
   protected final int retryMaxAttempts;
+  private final long storageMinimumRequirement;
   protected ReplicationRule globalRule = null;
   protected Map<String, ReplicationRule> pathRuleMap = Maps.newHashMap();
   // Filtered path rules from ZoneService for ZoneMover.
@@ -169,6 +170,10 @@ public class ZoneMover {
     checkUpdateInterval = conf.getInt(
         DFSConfigKeys.DFS_ZONEMOVER_CHECK_ZK_UPDATE_PATH_RULE_MAP_INTERVAL,
         DFSConfigKeys.DFS_ZONEMOVER_CHECK_ZK_UPDATE_PATH_RULE_MAP_INTERVAL_DEFAULT);
+    this.storageMinimumRequirement = conf.getLongBytes(
+        DFSConfigKeys.DFS_ZONEMOVER_STORAGE_MINIMUM_REQ_KEY,
+        DFSConfigKeys.DFS_ZONEMOVER_STORAGE_MINIMUM_REQ_DEFAULT
+    );
     processor = initProcessor();
     fetcher = initFetcher(processor);
     fetcher.start();
@@ -218,7 +223,11 @@ public class ZoneMover {
       for (StorageType t: StorageType.getMovableTypes()) {
         final ZoneSource source = dn.addSource(t, Long.MAX_VALUE, dispatcher);
         final long maxRemaining = Mover.getMaxRemaining(r, t);
-        final StorageGroup target = maxRemaining > 0L ? dn.addTarget(t, maxRemaining) : null;
+        if (maxRemaining <= storageMinimumRequirement) {
+          LOG.warn("Ignore target {} {} with too low maxRemaining {}<={}", dn, t,
+              maxRemaining, storageMinimumRequirement);
+        }
+        final StorageGroup target = maxRemaining > storageMinimumRequirement ? dn.addTarget(t, maxRemaining) : null;
         storages.add(source, target);
       }
     }

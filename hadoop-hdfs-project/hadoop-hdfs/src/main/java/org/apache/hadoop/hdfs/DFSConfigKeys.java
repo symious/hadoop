@@ -984,6 +984,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONEMOVER_CHECK_ZK_UPDATE_PATH_RULE_MAP_INTERVAL =
       "dfs.zonemover.check.zk.update.path.rule.map.interval";
   public static final int     DFS_ZONEMOVER_CHECK_ZK_UPDATE_PATH_RULE_MAP_INTERVAL_DEFAULT = 5;
+  public static final String DFS_ZONEMOVER_STORAGE_MINIMUM_REQ_KEY =
+      "dfs.zonemover.storage.minimum.requirement";
+  public static final long DFS_ZONEMOVER_STORAGE_MINIMUM_REQ_DEFAULT = 100L << 30; // 100GB
   //ZoneChecker related keys
   public static final String  DFS_ZONECHECKER_DEFAULT_RATIO = "dfs.zonechecker.default.ratio";
   public static final float   DFS_ZONECHECKER_DEFAULT_RATIO_DEFAULT = 1.0f;
