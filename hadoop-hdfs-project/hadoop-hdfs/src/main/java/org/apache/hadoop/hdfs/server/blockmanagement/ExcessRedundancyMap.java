@@ -68,6 +68,20 @@ class ExcessRedundancyMap {
     return set != null && set.contains(blk);
   }
 
+  synchronized boolean containsWithGSCheck(DatanodeDescriptor dn, BlockInfo blk) {
+    final LightWeightHashSet<BlockInfo> set = map.get(dn.getDatanodeUuid());
+    if (set != null) {
+      BlockInfo excessBlock = set.getElement(blk);
+      if (excessBlock == null) {
+        return false;
+      } else {
+        return excessBlock.getGenerationStamp() == blk.getGenerationStamp();
+      }
+    } else {
+      return false;
+    }
+  }
+
   /**
    * Add the redundancy of the given block stored in the given datanode to the
    * map.

@@ -3790,7 +3790,7 @@ public class BlockManager implements BlockStatsMXBean {
       postponeBlocks.add(storedBlock);
       return;
     }
-    if (isExcess(storage.getDatanodeDescriptor(), storedBlock)) {
+    if (isExcessWithGSCheck(storage.getDatanodeDescriptor(), storedBlock)) {
       LOG.info("Will not delete this decommissioning replica for {}, " +
           "because the storage is marked as excess replica.", storedBlock);
       return;
@@ -4853,6 +4853,10 @@ public class BlockManager implements BlockStatsMXBean {
 
   public boolean isExcess(DatanodeDescriptor dn, BlockInfo blk) {
     return excessRedundancyMap.contains(dn, blk);
+  }
+
+  public boolean isExcessWithGSCheck(DatanodeDescriptor dn, BlockInfo blk) {
+    return excessRedundancyMap.containsWithGSCheck(dn, blk);
   }
 
   /** 
