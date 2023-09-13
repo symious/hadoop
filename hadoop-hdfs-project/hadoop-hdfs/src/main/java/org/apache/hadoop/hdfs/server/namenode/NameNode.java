@@ -191,6 +191,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_METRICS_PERCENTILES_INTER
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BACKUP_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BACKUP_HTTP_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BACKUP_SERVICE_RPC_ADDRESS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_START_MISSING_BLOCK_SCANNER_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_START_MISSING_BLOCK_SCANNER_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_DIR_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_EDITS_DIR_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_KEY;
@@ -425,7 +427,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ENABLE_KEY,
           DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ORIGINAL_REPLICATIONS_KEY,
           DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_TARGET_REPLICATION_KEY,
-          DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS));
+          DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS,
+          DFS_NAMENODE_START_MISSING_BLOCK_SCANNER_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2495,6 +2498,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigurationRecomputeQuotaUsageOriginalReplications(newVal);
     } else if (property.equals(DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_TARGET_REPLICATION_KEY)) {
       return reconfigurationRecomputeQuotaUsageTargetReplication(newVal);
+    } else if (property.equals(DFS_NAMENODE_START_MISSING_BLOCK_SCANNER_KEY)) {
+      return startOrStopMissingBlockScanner(newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -3005,6 +3010,17 @@ public class NameNode extends ReconfigurableBase implements
       value = Short.parseShort(newValue);
     }
     FSDirectory.reConfTargetReplication(value);
+    return String.valueOf(value);
+  }
+
+  private String startOrStopMissingBlockScanner(String newValue) {
+    boolean value;
+    if (newValue == null) {
+      value = DFS_NAMENODE_START_MISSING_BLOCK_SCANNER_DEFAULT;
+    } else {
+      value = Boolean.parseBoolean(newValue);
+    }
+    this.namesystem.getBlockManager().startOrStopMissingBlockScanner(value);
     return String.valueOf(value);
   }
 

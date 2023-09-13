@@ -1249,6 +1249,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   /* Maximum number of blocks to process for initializing replication queues */
   public static final String  DFS_BLOCK_MISREPLICATION_PROCESSING_LIMIT = "dfs.block.misreplication.processing.limit";
   public static final int     DFS_BLOCK_MISREPLICATION_PROCESSING_LIMIT_DEFAULT = 10000;
+  public static final String  DFS_NAMENODE_START_MISSING_BLOCK_SCANNER_KEY =
+      "dfs.namenode.start.missing.block.scanner";
+  public static final boolean DFS_NAMENODE_START_MISSING_BLOCK_SCANNER_DEFAULT = false;
 
   public static final String DFS_DATANODE_OUTLIERS_REPORT_INTERVAL_KEY =
       "dfs.datanode.outliers.report.interval";
