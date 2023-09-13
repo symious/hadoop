@@ -3916,9 +3916,9 @@ public class BlockManager implements BlockStatsMXBean {
         try {
           scannerMisReplicatesAsync();
         } catch (InterruptedException ie) {
-          LOG.info("Interrupted while processing reconstruction queues.");
+          LOG.info("Interrupted while starting MissingBlockScanner.");
         } catch (Exception e) {
-          LOG.error("Error while processing reconstruction queues async", e);
+          LOG.error("Error while starting MissingBlockScanner", e);
         }
       }
     };
