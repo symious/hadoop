@@ -1714,7 +1714,7 @@ public class RouterRpcClient {
         namenodeResolver.getNamenodesForNameserviceId(nsId, observerRead);
 
     if (namenodes == null || namenodes.isEmpty()) {
-      throw new IOException("Cannot locate a registered namenode for " + nsId +
+      throw new StandbyException("Cannot locate a registered namenode for " + nsId +
           " from " + router.getRouterId());
     }
     return namenodes;
