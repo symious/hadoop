@@ -54,6 +54,7 @@ import javax.management.ObjectName;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.ha.HAServiceProtocol;
 import org.apache.hadoop.hdfs.AddBlockFlag;
 import org.apache.hadoop.fs.FileEncryptionInfo;
 import org.apache.hadoop.fs.StorageType;
@@ -419,6 +420,12 @@ public class BlockManager implements BlockStatsMXBean {
    * exit and failover to be faster. HDFS-5496.
    */
   private Daemon reconstructionQueuesInitializer = null;
+
+  /**
+   * Scan all blocks asynchronously to just find all missing blocks.
+   */
+  private Daemon missingBlockScanner = null;
+
   /**
    * Number of blocks to process asychronously for reconstruction queues
    * initialization once aquired the namesystem lock. Remaining blocks will be
@@ -3886,6 +3893,39 @@ public class BlockManager implements BlockStatsMXBean {
     reconstructionQueuesInitializer.start();
   }
 
+  public void startOrStopMissingBlockScanner(boolean start) {
+    if (start) {
+      startMissingBlockScanner();
+    } else {
+      stopMissingBlockScanner();
+    }
+  }
+
+  public void startMissingBlockScanner() {
+    LOG.info("Starting missingBlockScanner");
+    stopMissingBlockScanner();
+    HAContext haContext = namesystem.getHAContext();
+    if (haContext != null &&
+        haContext.getState().getServiceState() == HAServiceProtocol.HAServiceState.ACTIVE) {
+      LOG.warn("Active NameNode doesn't support this missingBlockScanner");
+      return;
+    }
+    missingBlockScanner = new Daemon() {
+      @Override
+      public void run() {
+        try {
+          scannerMisReplicatesAsync();
+        } catch (InterruptedException ie) {
+          LOG.info("Interrupted while starting MissingBlockScanner.");
+        } catch (Exception e) {
+          LOG.error("Error while starting MissingBlockScanner", e);
+        }
+      }
+    };
+    missingBlockScanner.setName("MissingBlock Scanner");
+    missingBlockScanner.start();
+  }
+
   /*
    * Stop the ongoing initialisation of reconstruction queues
    */
@@ -3900,6 +3940,20 @@ public class BlockManager implements BlockStatsMXBean {
         return;
       } finally {
         reconstructionQueuesInitializer = null;
+      }
+    }
+  }
+
+  public void stopMissingBlockScanner() {
+    LOG.info("Stopping missingBlockScanner");
+    if (missingBlockScanner != null) {
+      missingBlockScanner.interrupt();
+      try {
+        missingBlockScanner.join();
+      } catch (final InterruptedException e) {
+        LOG.warn("Interrupted while waiting for missingBlockScanner. Returning..");
+      } finally {
+        missingBlockScanner = null;
       }
     }
   }
@@ -3988,6 +4042,49 @@ public class BlockManager implements BlockStatsMXBean {
     }
     if (Thread.currentThread().isInterrupted()) {
       LOG.info("Interrupted while processing replication queues.");
+    }
+  }
+
+
+  /**
+   * Scann all missing blocks, and just print some logs.
+   * @throws InterruptedException
+   */
+  private void scannerMisReplicatesAsync() throws InterruptedException {
+    long startTimeMisReplicatedScan = Time.monotonicNow();
+    Iterator<BlockInfo> blocksItr = blocksMap.getBlocks().iterator();
+    long sleepDuration = Math.max(1, Math.min(numBlocksPerIteration/1000, 10000));
+
+    while (namesystem.isRunning() && !Thread.currentThread().isInterrupted()) {
+      int processed = 0;
+      namesystem.readLock();
+      try {
+        while (processed < numBlocksPerIteration && blocksItr.hasNext()) {
+          BlockInfo block = blocksItr.next();
+          if (!block.isDeleted() && block.isComplete()) {
+            NumberReplicas num = countNodes(block);
+            final int numCurrentReplica = num.liveReplicas();
+            if (numCurrentReplica == 0) {
+              LOG.warn("{} is missing all replicas.", block);
+            }
+          }
+          processed++;
+        }
+
+        if (!blocksItr.hasNext()) {
+          LOG.info("Total number of blocks = {}", blocksMap.size());
+          LOG.info("MissingBlockScanner completed in {} msec.",
+              Time.monotonicNow() - startTimeMisReplicatedScan);
+          break;
+        }
+      } finally {
+        namesystem.readUnlock();
+        // Make sure it is out of the read lock for sufficiently long time.
+        Thread.sleep(sleepDuration);
+      }
+    }
+    if (Thread.currentThread().isInterrupted()) {
+      LOG.info("Interrupted while scanning all missing blocks.");
     }
   }
 
@@ -5384,6 +5481,7 @@ public class BlockManager implements BlockStatsMXBean {
    * Initialize replication queues.
    */
   public void initializeReplQueues() {
+    startOrStopMissingBlockScanner(false);
     LOG.info("initializing replication queues");
     processMisReplicatedBlocks();
     initializedReplQueues = true;
