@@ -54,6 +54,7 @@ import javax.management.ObjectName;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.ha.HAServiceProtocol;
 import org.apache.hadoop.hdfs.AddBlockFlag;
 import org.apache.hadoop.fs.FileEncryptionInfo;
 import org.apache.hadoop.fs.StorageType;
@@ -3903,6 +3904,12 @@ public class BlockManager implements BlockStatsMXBean {
   public void startMissingBlockScanner() {
     LOG.info("Starting missingBlockScanner");
     stopMissingBlockScanner();
+    HAContext haContext = namesystem.getHAContext();
+    if (haContext != null &&
+        haContext.getState().getServiceState() == HAServiceProtocol.HAServiceState.ACTIVE) {
+      LOG.warn("Active NameNode doesn't support this missingBlockScanner");
+      return;
+    }
     missingBlockScanner = new Daemon() {
       @Override
       public void run() {
@@ -4072,7 +4079,7 @@ public class BlockManager implements BlockStatsMXBean {
         }
       } finally {
         namesystem.readUnlock();
-        // Make sure it is out of the write lock for sufficiently long time.
+        // Make sure it is out of the read lock for sufficiently long time.
         Thread.sleep(sleepDuration);
       }
     }
