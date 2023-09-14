@@ -1,3 +1,6 @@
+variables:
+  HADOOP_PROTOC_PATH: /usr/bin/protoc-2
+
 stages:
   - compile
   - pretest
@@ -6,6 +9,7 @@ stages:
 pretest:
   stage: pretest
   tags:
+    - k8s
     - hadoop2
   script:
     -  ./submodule-ci.sh
@@ -25,6 +29,7 @@ submodule-test:
 compile:
   stage: compile
   tags:
+    - k8s
     - hadoop2
   script:
     - mvn clean install package -DskipTests

@@ -43,6 +43,7 @@ hadoop-hdfs:
   stage: test
   tags:
     - hadoop2
+    - k8s
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs
     - mvn test
@@ -62,6 +63,7 @@ hadoop-hdfs-client:
   stage: test
   tags:
     - hadoop2
+    - k8s
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs-client
     - mvn test
@@ -81,6 +83,7 @@ hadoop-hdfs-httpfs:
   stage: test
   tags:
     - hadoop2
+    - k8s
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs-httpfs
     - mvn test
@@ -100,6 +103,7 @@ hadoop-hdfs-native-client:
   stage: test
   tags:
     - hadoop2
+    - k8s
   script:
     - hadoop-hdfs-project/hadoop-hdfs-native-client
     - mvn test
@@ -119,6 +123,7 @@ hadoop-hdfs-nfs:
   stage: test
   tags:
     - hadoop2
+    - k8s
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs-nfs
     - mvn test
@@ -138,6 +143,7 @@ hadoop-hdfs-rbf:
   stage: test
   tags:
     - hadoop2
+    - k8s
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs-rbf
     - mvn test
@@ -157,6 +163,7 @@ hadoop-hdfs-bkjournal:
   stage: test
   tags:
     - hadoop2
+    - k8s
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs/src/contrib/bkjournal
     - mvn test
@@ -181,6 +188,7 @@ empty:
   stage: test
   tags:
     - hadoop2
+    - k8s
   script:
     - echo empty
 EOF

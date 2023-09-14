@@ -1,0 +1,117 @@
+## GitLab Runner Image
+##
+## By default it's using registry.gitlab.com/gitlab-org/gitlab-runner:alpine-v{VERSION}
+## where {VERSION} is taken from Chart.yaml from appVersion field
+##
+## DEPRECATED: Setting `image: registry.gitlab.com/gitlab-org/gitlab-runner:alpine-v11.6.0` is deprecated
+##
+## ref: https://gitlab.com/gitlab-org/gitlab-runner/container_registry/29383?orderBy=NAME&sort=asc&search[]=alpine-v&search[]=
+##
+image:
+  registry: harbor.shopeemobile.com
+  image: di-foundation/hadoop-gitlab-runner-2
+  tag: latest
+
+imagePullPolicy: IfNotPresent
+
+replicas: 0
+
+gitlabUrl: https://git.garena.com/
+
+runnerRegistrationToken: "Zwy3H9Uq2h3e6ycGtxzS"
+
+terminationGracePeriodSeconds: 3600
+
+concurrent: 20
+
+checkInterval: 30
+
+sessionServer:
+  enabled: false
+
+rbac:
+  create: false
+  rules: []
+  clusterWideAccess: false
+  podSecurityPolicy:
+    enabled: false
+    resourceNames:
+    - gitlab-runner
+
+metrics:
+  enabled: false
+  portName: metrics
+  port: 9252
+  serviceMonitor:
+    enabled: false
+
+service:
+  enabled: false
+  type: ClusterIP
+
+runners:
+  config: |
+    [[runners]]
+      [runners.kubernetes]
+        namespace = "{{.Release.Namespace}}"
+        image = "ubuntu:16.04"
+  image: harbor.shopeemobile.com/di-foundation/gitlab-runner
+  tags: "k8s,runner,jenkins,hadoop2,yarn"
+  namespace: di-hadoop-gitlab-runner
+  cache: {}
+  builds: {}
+  services: {}
+  helpers: {}
+
+securityContext:
+  allowPrivilegeEscalation: true
+  readOnlyRootFilesystem: false
+  runAsNonRoot: false
+  privileged: false
+
+podSecurityContext:
+  runAsUser: 0
+  runAsGroup: 0
+
+resources:
+  limits:
+    memory: "16Gi"
+    cpu: "2"
+  requests:
+    memory: "16Gi"
+    cpu: "2"
+
+
+affinity: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+hostAliases: []
+
+podAnnotations:
+  cni.projectcalico.org/ipv4pools: '["gitlab-whitelist-ippool"]'
+
+podLabels: {}
+
+priorityClassName: ""
+
+secrets: []
+
+configMaps: {}
+
+envVars:
+  - name: RUNNER_EXECUTOR
+    value: shell
+
+volumeMounts:
+  - name: m2-path
+    mountPath: /usr/local/.m2/
+    subPathExpr: $(POD_NAME)  
+
+volumes:
+  - name: m2-path
+    hostPath:
+      path: /data/gitlab-runner/
+      type: DirectoryOrCreate
