@@ -1,3 +1,6 @@
+variables:
+  HADOOP_PROTOC_PATH: /usr/bin/protoc
+
 stages:
   - compile
   - pretest
@@ -7,6 +10,7 @@ pretest:
   stage: pretest
   tags:
     - yarn
+    - k8s
   script:
     -  ./submodule-ci.sh
   artifacts:
@@ -26,5 +30,6 @@ compile:
   stage: compile
   tags:
     - yarn
+    - k8s
   script:
     - mvn install -DskipTests

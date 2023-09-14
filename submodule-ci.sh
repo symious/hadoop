@@ -40,6 +40,7 @@ hadoop-yarn-api:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-api
     - mvn test
@@ -59,6 +60,7 @@ hadoop-yarn-client:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-client
     - mvn test
@@ -78,6 +80,7 @@ hadoop-yarn-common:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-common
     - mvn test
@@ -97,6 +100,7 @@ hadoop-yarn-csi:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-csi
     - mvn test
@@ -116,6 +120,7 @@ hadoop-yarn-registry:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-registry
     - mvn test
@@ -135,6 +140,7 @@ hadoop-yarn-server-applicationhistoryservice:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-applicationhistoryservice
     - mvn test
@@ -154,6 +160,7 @@ hadoop-yarn-server-common:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-common
     - mvn test
@@ -173,6 +180,7 @@ hadoop-yarn-server-globalpolicygenerator:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-globalpolicygenerator
     - mvn test
@@ -192,6 +200,7 @@ hadoop-yarn-server-nodemanager:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-nodemanager
     - mvn test
@@ -211,6 +220,7 @@ hadoop-yarn-server-resourcemanager:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager
     - mvn test -Dtest=CapacitySchedulerConfigGeneratorForTest,TestCapacity\* 
@@ -230,6 +240,7 @@ hadoop-yarn-server-router:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-router
     - mvn test
@@ -249,6 +260,7 @@ hadoop-yarn-server-sharecachemanager:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-sharedcachemanager
     - mvn test
@@ -268,6 +280,7 @@ hadoop-yarn-server-timeline-pluginstorage:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-timeline-pluginstorage
     - mvn test
@@ -287,6 +300,7 @@ hadoop-yarn-server-timelineservice:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-timelineservice
     - mvn test
@@ -306,6 +320,7 @@ hadoop-yarn-server-timelineservice-documentstore:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-timelineservice-documentstore
     - mvn test
@@ -325,6 +340,7 @@ hadoop-yarn-server-web-proxy:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-web-proxy
     - mvn test
@@ -344,6 +360,7 @@ hadoop-hdfs:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs
     - mvn test
@@ -363,6 +380,7 @@ hadoop-hdfs-client:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs-client
     - mvn test
@@ -382,6 +400,7 @@ hadoop-hdfs-httpfs:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs-httpfs
     - mvn test
@@ -401,6 +420,7 @@ hadoop-hdfs-rbf:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs-rbf
     - mvn test
@@ -425,6 +445,7 @@ empty:
   stage: test
   tags:
     - yarn
+    - k8s
   script:
     - echo empty
 EOF
