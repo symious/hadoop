@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy;
 
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
@@ -30,7 +32,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -55,37 +59,54 @@ public class PercentageSchedulingNodeTypeSettingPolicy
     this.nodePolicyConfigs = nodePolicyConfigs;
   }
 
-  private boolean checkNodeLabelsSchedulerTypeDetails(
+  private Map<String,Double> checkNodeLabelsSchedulerTypeDetails(
       String nodeLabelsSchedulerTypeDetails) {
+    Map<String, Double> labelGlobalRateMap = new HashMap<>();
     if (StringUtils.isBlank(nodeLabelsSchedulerTypeDetails)) {
       LOG.error("Invalid nodeLabelsSchedulerTypeDetails: can't be empty!");
-      return false;
-    } else if (!nodeLabelsSchedulerTypeDetails.contains(",")) {
-      LOG.error("Invalid nodeLabelsSchedulerTypeDetails: Incorrect format, " +
-          "at least contain one label!");
-      return false;
+      return null;
     } else {
       try {
-        List<String> labelList = new ArrayList<>();
-        List<Double> rateList = new ArrayList<>();
         String[] labelsConfigDetails =
             nodeLabelsSchedulerTypeDetails.split(";");
         for (String labelConfigDetails : labelsConfigDetails) {
-          labelList.add(labelConfigDetails.split(",")[0]);
-          rateList.add(Double.valueOf(labelConfigDetails.split(",")[1]));
-        }
-        if (labelList.size() != rateList.size()) {
-          LOG.error(
-              "Invalid nodeLabelsSchedulerTypeDetails: Incorrect format, " +
-                  "incomplete configuration!");
-          return false;
+          String[] labelConfigsArray = labelConfigDetails.split(",");
+          if (labelConfigsArray.length != 2) {
+            LOG.error(
+                "Invalid nodeLabelsSchedulerTypeDetails: Incorrect format, " +
+                    "incomplete configuration!");
+            return null;
+          }
+          String labelName = labelConfigsArray[0];
+          double labelRate = Double.parseDouble(labelConfigsArray[1]);
+          labelGlobalRateMap.put(labelName, labelRate);
         }
       } catch (Exception e) {
         LOG.error("Invalid nodeLabelsSchedulerTypeDetails", e);
-        return false;
+        return null;
       }
     }
-    return true;
+    return labelGlobalRateMap;
+  }
+
+  //update nodes scheduler type, return expectGsNodesCount (global scheduler nodes count)
+  private void updateLabelNodesSchedulerType(List<FiCaSchedulerNode> labelNodes,
+      int expectGsNodesCount) {
+    int totalNodesCount = labelNodes.size();
+
+    for (int i = 0; i < totalNodesCount; i++) {
+      RMNode rmNode = labelNodes.get(i).getRMNode();
+      if (i < expectGsNodesCount) {
+        rmNode.setNodeSchedulerType(SchedulingNodeType.GLOBAL);
+        LOG.info("update node: " + rmNode.getHostName() + " to " +
+            "global scheduler");
+      } else {
+        rmNode.setNodeSchedulerType(SchedulingNodeType.HEARTBEAT);
+        LOG.info("update node: " + rmNode.getHostName() + " to " +
+            "heartbeat scheduler");
+      }
+    }
+
   }
 
   /**
@@ -95,56 +116,42 @@ public class PercentageSchedulingNodeTypeSettingPolicy
   @Override
   public List<String> updateAllConfigureLabels(RMContext rmContext) {
     long startTime = Time.monotonicNowNanos();
-    boolean legal =
+    Map<String, Double> labelGlobalRateMap =
         checkNodeLabelsSchedulerTypeDetails(nodePolicyConfigs);
 
-    List<String> updateLabels = new ArrayList<>();
+    List<String> updateGlobalLabels = new ArrayList<>();
 
-    if (legal) {
+    if (MapUtils.isNotEmpty(labelGlobalRateMap)) {
       try {
-        for (String labelSchedulerTypeDetails : nodePolicyConfigs
-            .split(";")) {
-          String labelSchedulerTypeDetailsTrim =
-              labelSchedulerTypeDetails.trim();
-          if (!labelSchedulerTypeDetailsTrim.isEmpty()) {
-            String[] globalSchedulerNodesConfigPair =
-                labelSchedulerTypeDetailsTrim.split(",");
-            String labelName = globalSchedulerNodesConfigPair[0].trim();
-            double globalSchedulerNodesRate =
-                Double.parseDouble(globalSchedulerNodesConfigPair[1].trim());
+        List<String> allLabels = ((CapacityScheduler) rmContext
+            .getScheduler()).getNodeTracker().getPartitions();
 
-            List<FiCaSchedulerNode> labelNodes = ((CapacityScheduler) rmContext
-                .getScheduler()).getNodeTracker()
-                .getNodesPerPartition(labelName);
-            int labelAllNodeSize = labelNodes.size();
+        for (String label : allLabels) {
+          List<FiCaSchedulerNode> labelAllNodes = ((CapacityScheduler) rmContext
+              .getScheduler()).getNodeTracker().getNodesPerPartition(label);
 
-            int globalSchedulerNodeSize =
-                (int) Math.round(labelAllNodeSize * globalSchedulerNodesRate);
+          int totalNodesCount = 0;
+          int expectGsNodesCount = 0;
 
-            if (globalSchedulerNodeSize > labelAllNodeSize) {
-              globalSchedulerNodeSize = labelAllNodeSize;
+          if (CollectionUtils.isNotEmpty(labelAllNodes)) {
+            totalNodesCount = labelAllNodes.size();
+            double gsNodesRate = 0;
+            if (labelGlobalRateMap.containsKey(label)) {
+              gsNodesRate = labelGlobalRateMap.get(label);
             }
-
-            for (int i = 0; i < globalSchedulerNodeSize; i++) {
-              RMNode rmNode = labelNodes.get(i).getRMNode();
-              rmNode.setNodeSchedulerType(SchedulingNodeType.GLOBAL);
-              LOG.info(
-                  "updateAllConfigureLabels set node: " + rmNode.getHostName() +
-                      " to to global scheduler");
-            }
-            for (int i = globalSchedulerNodeSize; i < labelAllNodeSize; i++) {
-              RMNode rmNode = labelNodes.get(i).getRMNode();
-              rmNode.setNodeSchedulerType(SchedulingNodeType.HEARTBEAT);
-              LOG.info(
-                  "updateAllConfigureLabels set node: " + rmNode.getHostName() +
-                      " to to heartbeat scheduler");
-            }
-            updateLabels.add(labelName);
-            LOG.info("updateAllConfigureLabels for label " + labelName +
-                " ,globalSchedulerNodeSize: " + globalSchedulerNodeSize +
-                " ,heartbeatSchedulerNodeSize: " +
-                (labelAllNodeSize - globalSchedulerNodeSize));
+            expectGsNodesCount =
+                Math.min((int) Math.round(totalNodesCount * gsNodesRate),
+                    totalNodesCount);
+            updateLabelNodesSchedulerType(labelAllNodes, expectGsNodesCount);
           }
+
+          if (labelGlobalRateMap.containsKey(label)) {
+            updateGlobalLabels.add(label);
+          }
+          LOG.info("updateAllConfigureLabels for label " + label +
+              " ,globalSchedulerNodeSize: " + expectGsNodesCount +
+              " ,heartbeatSchedulerNodeSize: " +
+              (totalNodesCount - expectGsNodesCount));
         }
       } catch (Exception e) {
         LOG.error("updateAllConfigureLabels fail!", e);
@@ -157,61 +164,38 @@ public class PercentageSchedulingNodeTypeSettingPolicy
     LOG.info(
         "updateAllConfigureLabels cost time: " + (endTime - startTime) / 1000 +
             " us!");
-    return updateLabels;
+    return updateGlobalLabels;
   }
 
   @Override
   public void updateByLabel(RMContext rmContext, String label) {
     long startTime = Time.monotonicNowNanos();
-    boolean legal =
+    Map<String, Double> labelGlobalRateMap =
         checkNodeLabelsSchedulerTypeDetails(nodePolicyConfigs);
 
-    if (legal) {
+    if (MapUtils.isNotEmpty(labelGlobalRateMap)) {
       try {
-        for (String labelSchedulerTypeDetails : nodePolicyConfigs
-            .split(";")) {
-          String labelSchedulerTypeDetailsTrim =
-              labelSchedulerTypeDetails.trim();
-          if (!labelSchedulerTypeDetailsTrim.isEmpty()) {
-            String[] globalSchedulerNodesConfigPair =
-                labelSchedulerTypeDetailsTrim.split(",");
-            String labelName = globalSchedulerNodesConfigPair[0].trim();
-            double globalSchedulerNodesRate =
-                Double.parseDouble(globalSchedulerNodesConfigPair[1].trim());
-            if (labelName.equals(label)) {
-              List<FiCaSchedulerNode> labelNodes =
-                  ((CapacityScheduler) rmContext
-                      .getScheduler()).getNodeTracker()
-                      .getNodesPerPartition(labelName);
-              int labelAllNodeSize = labelNodes.size();
-
-              int globalSchedulerNodeSize =
-                  (int) Math.round(labelAllNodeSize * globalSchedulerNodesRate);
-
-              if (globalSchedulerNodeSize > labelAllNodeSize) {
-                globalSchedulerNodeSize = labelAllNodeSize;
-              }
-
-              for (int i = 0; i < globalSchedulerNodeSize; i++) {
-                RMNode rmNode = labelNodes.get(i).getRMNode();
-                rmNode.setNodeSchedulerType(SchedulingNodeType.GLOBAL);
-                LOG.info("updateByLabel set node: " + rmNode.getHostName() +
-                    " to to global scheduler");
-              }
-              for (int i = globalSchedulerNodeSize; i < labelAllNodeSize; i++) {
-                RMNode rmNode = labelNodes.get(i).getRMNode();
-                rmNode.setNodeSchedulerType(SchedulingNodeType.HEARTBEAT);
-                LOG.info("updateByLabel set node: " + rmNode.getHostName() +
-                    " to to heartbeat scheduler");
-              }
-              LOG.info("updateByLabel for label " + labelName +
-                  " ,globalSchedulerNodeSize: " + globalSchedulerNodeSize +
-                  " ,heartbeatSchedulerNodeSize: " +
-                  (labelAllNodeSize - globalSchedulerNodeSize));
-              break;
-            }
+        List<FiCaSchedulerNode> labelAllNodes = ((CapacityScheduler) rmContext
+            .getScheduler()).getNodeTracker()
+            .getNodesPerPartition(label);
+        int totalNodesCount = 0;
+        int expectGsNodesCount = 0;
+        if (CollectionUtils.isNotEmpty(labelAllNodes)) {
+          totalNodesCount = labelAllNodes.size();
+          double gsNodesRate = 0;
+          if (labelGlobalRateMap.containsKey(label)) {
+            gsNodesRate = labelGlobalRateMap.get(label);
           }
+          expectGsNodesCount =
+              Math.min((int) Math.round(totalNodesCount * gsNodesRate),
+                  totalNodesCount);
+          updateLabelNodesSchedulerType(labelAllNodes, expectGsNodesCount);
         }
+        LOG.info("updateByLabel for label " + label +
+            " ,globalSchedulerNodeSize: " + expectGsNodesCount +
+            " ,heartbeatSchedulerNodeSize: " +
+            (totalNodesCount - expectGsNodesCount));
+
       } catch (Exception e) {
         LOG.error("updateByLabel fail!", e);
       }
@@ -221,15 +205,14 @@ public class PercentageSchedulingNodeTypeSettingPolicy
     }
     long endTime = Time.monotonicNowNanos();
     LOG.info("updateByLabel: " + label + " cost time: " +
-        (endTime - startTime) / 1000 +
-        " us!");
+        (endTime - startTime) / 1000 + " us!");
   }
 
 
   @Override
   public void updateByNode(RMContext rmContext, RMNode node) {
     long startTime = Time.monotonicNowNanos();
-    boolean legal =
+    Map<String, Double> labelGlobalRateMap =
         checkNodeLabelsSchedulerTypeDetails(nodePolicyConfigs);
 
     String nodeLabel = RMNodeLabelsManager.NO_LABEL;
@@ -238,65 +221,51 @@ public class PercentageSchedulingNodeTypeSettingPolicy
       nodeLabel = new ArrayList<>(labels).get(0);
     }
 
-    if (legal) {
+    if (MapUtils.isNotEmpty(labelGlobalRateMap)) {
       try {
-        for (String labelSchedulerTypeDetails : nodePolicyConfigs
-            .split(";")) {
-          String labelSchedulerTypeDetailsTrim =
-              labelSchedulerTypeDetails.trim();
 
-          if (!labelSchedulerTypeDetailsTrim.isEmpty()) {
-            String[] globalSchedulerNodesConfigPair =
-                labelSchedulerTypeDetailsTrim.split(",");
-            String labelName = globalSchedulerNodesConfigPair[0].trim();
-            if (nodeLabel.equals(labelName)) {
-              double globalSchedulerNodesRate =
-                  Double.parseDouble(globalSchedulerNodesConfigPair[1].trim());
+        List<FiCaSchedulerNode> labelAllNodes = ((CapacityScheduler) rmContext
+            .getScheduler()).getNodeTracker()
+            .getNodesPerPartition(nodeLabel);
 
-              List<FiCaSchedulerNode> labelNodes =
-                  ((CapacityScheduler) rmContext
-                      .getScheduler()).getNodeTracker()
-                      .getNodesPerPartition(labelName);
-              int labelAllNodeSize = labelNodes.size();
+        int totalNodesCount = 0;
+        int expectGsNodesCount = 0;
+        int actualGsNodesCount = 0;
 
-              int expectGlobalSchedulerNodeSize =
-                  (int) Math.round(labelAllNodeSize * globalSchedulerNodesRate);
-
-              if (expectGlobalSchedulerNodeSize > labelAllNodeSize) {
-                expectGlobalSchedulerNodeSize = labelAllNodeSize;
-              }
-
-              int actualGlobalSchedulerNodeSize = 0;
-
-              for (FiCaSchedulerNode labelNode : labelNodes) {
-                if (labelNode.getRMNode().getNodeSchedulerType()
-                    .equals(SchedulingNodeType.GLOBAL)) {
-                  actualGlobalSchedulerNodeSize++;
-                }
-              }
-              LOG.info("actualGlobalSchedulerNodeSize: " +
-                  actualGlobalSchedulerNodeSize);
-              if (actualGlobalSchedulerNodeSize >
-                  expectGlobalSchedulerNodeSize) {
-                node.setNodeSchedulerType(SchedulingNodeType.HEARTBEAT);
-                LOG.info("actualGlobalSchedulerNodeSize: " +
-                    actualGlobalSchedulerNodeSize + " bigger than " +
-                    "expectGlobalSchedulerNodeSize: " +
-                    expectGlobalSchedulerNodeSize + " ,update node: " +
-                    node.getHostName() + " to heartbeat scheduler");
-              } else if (actualGlobalSchedulerNodeSize <
-                  expectGlobalSchedulerNodeSize) {
-                node.setNodeSchedulerType(SchedulingNodeType.GLOBAL);
-                LOG.info("actualGlobalSchedulerNodeSize: " +
-                    actualGlobalSchedulerNodeSize + " smaller than " +
-                    "expectGlobalSchedulerNodeSize: " +
-                    expectGlobalSchedulerNodeSize + " ,update node: " +
-                    node.getHostName() + " to global scheduler");
-              }
-              break;
+        if (CollectionUtils.isNotEmpty(labelAllNodes)) {
+          totalNodesCount = labelAllNodes.size();
+          if (labelGlobalRateMap.containsKey(nodeLabel)) {
+            double gsNodesRate = labelGlobalRateMap.get(nodeLabel);
+            expectGsNodesCount =
+                Math.min((int) Math.round(totalNodesCount * gsNodesRate),
+                    totalNodesCount);
+          }
+          for (FiCaSchedulerNode labelNode : labelAllNodes) {
+            if (labelNode.getRMNode().getNodeSchedulerType()
+                .equals(SchedulingNodeType.GLOBAL)) {
+              actualGsNodesCount++;
             }
           }
         }
+        LOG.info("labelAllNodeSize: " + totalNodesCount +
+            " ,expectGlobalSchedulerNodeSize: " + expectGsNodesCount +
+            " ,actualGlobalSchedulerNodeSize: " + actualGsNodesCount);
+
+        if (actualGsNodesCount > expectGsNodesCount) {
+          node.setNodeSchedulerType(SchedulingNodeType.HEARTBEAT);
+          LOG.info("actualGlobalSchedulerNodeSize: " + actualGsNodesCount +
+              " bigger than expectGlobalSchedulerNodeSize: " +
+              expectGsNodesCount +
+              " ,update node: " + node.getHostName() +
+              " to heartbeat scheduler");
+        } else if (actualGsNodesCount < expectGsNodesCount) {
+          node.setNodeSchedulerType(SchedulingNodeType.GLOBAL);
+          LOG.info("actualGlobalSchedulerNodeSize: " + actualGsNodesCount +
+              " smaller than expectGlobalSchedulerNodeSize: " +
+              expectGsNodesCount +
+              " ,update node: " + node.getHostName() + " to global scheduler");
+        }
+
       } catch (Exception e) {
         LOG.error("updateByNode fail!", e);
       }
@@ -306,7 +275,7 @@ public class PercentageSchedulingNodeTypeSettingPolicy
     }
     long endTime = Time.monotonicNowNanos();
     LOG.info(
-        "updateByNode: " + node.getHostName() + " current nodeSchedulerType: " +
+        "updateByNode: " + node.getHostName() + " new nodeSchedulerType: " +
             node.getNodeSchedulerType() + " cost time: " +
             (endTime - startTime) / 1000 + " us!");
   }
