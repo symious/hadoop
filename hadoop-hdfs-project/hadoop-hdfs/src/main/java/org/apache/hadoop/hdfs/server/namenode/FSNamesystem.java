@@ -127,6 +127,7 @@ import static org.apache.hadoop.ha.HAServiceProtocol.HAServiceState.OBSERVER;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicyInfo;
 
 import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
+import org.apache.hadoop.hdfs.protocol.LocatedStripedBlock;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoStriped;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAState;
 import org.apache.hadoop.hdfs.server.namenode.handler.FSNamesystemLockMetricsRefreshHandler;
@@ -6026,8 +6027,25 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       block.setGenerationStamp(nextGenerationStamp(
           blockManager.isLegacyBlock(block.getLocalBlock())));
 
-      locatedBlock = BlockManager.newLocatedBlock(
-          block, file.getLastBlock(), null, -1);
+      BlockInfo lastBlockInfo = file.getLastBlock();
+      locatedBlock = BlockManager.newLocatedBlock(block, lastBlockInfo, null, -1);
+      if (lastBlockInfo.isStriped() &&
+          ((BlockInfoStriped) lastBlockInfo).getTotalBlockNum() >
+              ((LocatedStripedBlock) locatedBlock).getBlockIndices().length) {
+        // The location info in BlockUnderConstructionFeature may not be
+        // complete after a failover, so we just return all block tokens for a
+        // striped block. This will disrupt the correspondence between
+        // LocatedStripedBlock.blockIndices and LocatedStripedBlock.locs,
+        // which is not used in client side. The correspondence between
+        // LocatedStripedBlock.blockIndices and LocatedBlock.blockToken is
+        // ensured.
+        byte[] indices =
+            new byte[((BlockInfoStriped) lastBlockInfo).getTotalBlockNum()];
+        for (int i = 0; i < indices.length; ++i) {
+          indices[i] = (byte) i;
+        }
+        ((LocatedStripedBlock) locatedBlock).setBlockIndices(indices);
+      }
       blockManager.setBlockToken(locatedBlock,
           BlockTokenIdentifier.AccessMode.WRITE);
     } finally {
