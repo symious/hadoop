@@ -81,7 +81,7 @@ import java.util.List;
 import java.util.Scanner;
 import java.util.concurrent.TimeoutException;
 
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_LEASE_HARDLIMIT_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_INVALIDATE_WORK_PCT_PER_ITERATION;
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.anyOf;
 import static org.hamcrest.CoreMatchers.is;
@@ -419,8 +419,8 @@ public class TestDFSAdmin {
     final List<String> outs = Lists.newArrayList();
     final List<String> errs = Lists.newArrayList();
     getReconfigurableProperties("namenode", address, outs, errs);
-    assertEquals(DFS_LEASE_HARDLIMIT_KEY, outs.get(24));
-    assertEquals(44, outs.size());
+    assertEquals(DFS_NAMENODE_INVALIDATE_WORK_PCT_PER_ITERATION, outs.get(24));
+    assertEquals(45, outs.size());
     assertEquals(errs.size(), 0);
   }
 

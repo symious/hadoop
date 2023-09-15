@@ -147,6 +147,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY;
@@ -428,7 +429,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_ORIGINAL_REPLICATIONS_KEY,
           DFS_NAMENODE_RECOMPUTE_QUOTA_USAGE_TARGET_REPLICATION_KEY,
           DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS,
-          DFS_NAMENODE_START_MISSING_BLOCK_SCANNER_KEY));
+          DFS_NAMENODE_START_MISSING_BLOCK_SCANNER_KEY,
+          DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2443,8 +2445,9 @@ public class NameNode extends ReconfigurableBase implements
         || property.equals(DFS_NAMENODE_REPLICATION_WORK_MULTIPLIER_PER_ITERATION)
         || property.equals(DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY)) {
       return reconfReplicationParameters(newVal, property);
-    } else if (property.equals(DFS_BLOCK_REPLICATOR_CLASSNAME_KEY) || property
-        .equals(DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY)) {
+    } else if (property.equals(DFS_BLOCK_REPLICATOR_CLASSNAME_KEY) ||
+        property.equals(DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY) ||
+        property.equals(DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY)) {
       reconfBlockPlacementPolicy();
       return newVal;
     } else if (property.equals(DFS_IMAGE_PARALLEL_LOAD_KEY)) {

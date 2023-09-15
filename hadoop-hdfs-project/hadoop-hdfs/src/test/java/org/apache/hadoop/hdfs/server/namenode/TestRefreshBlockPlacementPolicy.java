@@ -41,6 +41,7 @@ import java.util.Set;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY;
 import static org.junit.Assert.assertEquals;
 
 /**
@@ -90,6 +91,15 @@ public class TestRefreshBlockPlacementPolicy {
 
     verifyRefreshPolicy(dfs, file, () -> cluster.getNameNode()
         .reconfigurePropertyImpl(DFS_BLOCK_REPLICATOR_CLASSNAME_KEY, null));
+  }
+
+  @Test
+  public void testRefreshDefaultDCPolicy() throws Exception {
+    Path file = new Path("/test-default-dc");
+    DistributedFileSystem dfs = cluster.getFileSystem();
+
+    verifyRefreshPolicy(dfs, file, () -> cluster.getNameNode().reconfigurePropertyImpl(
+        DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY, null));
   }
 
   @Test
