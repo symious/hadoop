@@ -56,7 +56,7 @@ public class ReplicationRule {
     }
     ReplicationRule replicationRule = new ReplicationRule();
 
-    LOG.info("Trying to parse ReplicationRule from '" + rule + "' ...");
+    LOG.debug("Trying to parse ReplicationRule from '" + rule + "' ...");
     
     // Strip
     String strip = rule;

@@ -868,7 +868,7 @@ public class ZoneMover {
 
     protected void processPath(String fullPath, ReplicationRule rule, Result result,
         MigrationDataCenters dc) {
-      LOG.info("Processing path: " + fullPath + " ...");
+      LOG.debug("Processing path: " + fullPath + " ...");
       processPath(fullPath, rule, result, dc, false);
     }
 
@@ -919,19 +919,19 @@ public class ZoneMover {
           HdfsFileStatus.EMPTY_NAME, true).getPartialListing();
 
       if (statuses[0].isDir()) {
-        LOG.info("Skip directory: " + fullPath);
+        LOG.debug("Skip directory: " + fullPath);
         return;
       }
       Preconditions.checkArgument(statuses[0] instanceof HdfsLocatedFileStatus);
       HdfsLocatedFileStatus status = (HdfsLocatedFileStatus) statuses[0];
       final LocatedBlocks locatedBlocks = status.getBlockLocations();
       if (status.getLen() == 0) {
-        LOG.info("Skip empty file: " + fullPath);
+        LOG.debug("Skip empty file: " + fullPath);
         return;
       }
 
       if (!locatedBlocks.isLastBlockComplete()) {
-        LOG.info("Skip uncompleted file: " + fullPath);
+        LOG.debug("Skip uncompleted file: " + fullPath);
         return;
       }
 
@@ -949,17 +949,17 @@ public class ZoneMover {
 
     protected void processFile(String fullPath, HdfsLocatedFileStatus status,
         ReplicationRule rule, Result result) {
-      LOG.info("Processing file: " + fullPath + " ....");
+      LOG.debug("Processing file: " + fullPath + " ....");
 
       final LocatedBlocks locatedBlocks = status.getBlockLocations();
       if (status.getLen() == 0) {
-        LOG.info("Skip empty file: " + fullPath);
+        LOG.debug("Skip empty file: " + fullPath);
         ZoneProgressTracker.incrFileCount();
         return;
       }
 
       if (!locatedBlocks.isLastBlockComplete()) {
-        LOG.info("Skip uncompleted file: " + fullPath);
+        LOG.debug("Skip uncompleted file: " + fullPath);
         ZoneProgressTracker.incrFileCount();
         return;
       }
@@ -970,7 +970,7 @@ public class ZoneMover {
           if (ruleUtil.hasRuleInXAttr(fullPath)) {
             try {
               if (ruleUtil.getRuleFromXAttr(fullPath).equals(rule)) {
-                LOG.info("This file already has the replicationRule: " + fullPath);
+                LOG.debug("This file already has the replicationRule: " + fullPath);
                 needSet = false;
               }
             } catch (IllegalArgumentException e) {
@@ -981,7 +981,7 @@ public class ZoneMover {
 
           if (needSet) {
             ruleUtil.setRuleToXAttr(fullPath, rule);
-            LOG.info("Added replicationRule to: " + fullPath);
+            LOG.debug("Added replicationRule to: " + fullPath);
           }
         } catch (IOException e) {
           LOG.warn(e.toString());
@@ -1049,7 +1049,7 @@ public class ZoneMover {
         // get the first block
         LocatedBlock firstBlock = locatedBlocks.get(0);
         if (isBlockSatisfyRule(firstBlock, rule)) {
-          LOG.info("Skip the file as all blocks already satisfy the rule: " + fullPath);
+          LOG.debug("Skip the file as all blocks already satisfy the rule: " + fullPath);
           if (!hasPreMigration) {
             ZoneProgressTracker.incrFileCount();
           }
@@ -1230,7 +1230,7 @@ public class ZoneMover {
           total += target.getDDatanode().getPendingSize();
         }
         if (targets.size() > 0) {
-          LOG.info("Average pending size for targetDataCenter: " + targetDataCenter +
+          LOG.warn("Average pending size for targetDataCenter: " + targetDataCenter +
               ", storageType: " + t + ", datanodes.num: "+ targets.size() +
               " is " + total / targets.size());
         } else {
