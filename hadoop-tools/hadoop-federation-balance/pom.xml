@@ -20,11 +20,11 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>2.10.sdi-090</version>
+    <version>2.10.sdi-091-SNAPSHOT</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <artifactId>hadoop-federation-balance</artifactId>
-  <version>2.10.sdi-090</version>
+  <version>2.10.sdi-091-SNAPSHOT</version>
   <description>Apache Hadoop Federation Balance</description>
   <name>Apache Hadoop Federation Balance</name>
   <packaging>jar</packaging>
