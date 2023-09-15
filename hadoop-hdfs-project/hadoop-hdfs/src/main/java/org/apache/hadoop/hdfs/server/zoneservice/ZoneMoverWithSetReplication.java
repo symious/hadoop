@@ -555,23 +555,23 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
         Mover.Result result, MigrationDataCenters dc) {
 
       if (status.getErasureCodingPolicy() != null) {
-        LOG.info("Processing EC file: " + fullPath + " ....");
+        LOG.debug("Processing EC file: " + fullPath + " ....");
         // Tracker is updated inside the method call so no need to incr tracker file count here
         processECFile(fullPath, status, result);
         return;
       }
 
-      LOG.info("Processing file: {}, mode: {}", fullPath, runMode);
+      LOG.debug("Processing file: {}, mode: {}", fullPath, runMode);
 
       final LocatedBlocks locatedBlocks = status.getBlockLocations();
       if (status.getLen() == 0) {
-        LOG.info("Skip empty file: " + fullPath);
+        LOG.debug("Skip empty file: " + fullPath);
         ZoneProgressTracker.incrFileCount();
         return;
       }
 
       if (!locatedBlocks.isLastBlockComplete()) {
-        LOG.info("Skip uncompleted file: " + fullPath);
+        LOG.debug("Skip uncompleted file: " + fullPath);
         ZoneProgressTracker.incrFileCount();
         return;
       }
@@ -610,7 +610,7 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
               && monitorIgnoreDC.containsAll(blockDistribution.keySet())
               && (monitorIgnoreDCForce ||
                 !rule.getDatacenters().containsAll(blockDistribution.keySet()))) {
-            LOG.info("Monitor will ignore the path: {} with distribution {}", fullPath, dis);
+            LOG.debug("Monitor will ignore the path: {} with distribution {}", fullPath, dis);
             ZoneProgressTracker.dequeueFile(fullPath);
             return;
           }
@@ -654,7 +654,7 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
           if (ruleUtil.hasRuleInXAttr(fullPath)) {
             try {
               if (ruleUtil.getRuleFromXAttr(fullPath).equals(appliedRule)) {
-                LOG.info("This file already has the replicationRule: " + fullPath);
+                LOG.debug("This file already has the replicationRule: " + fullPath);
                 needSet = false;
               }
             } catch (IllegalArgumentException e) {
@@ -665,7 +665,7 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
 
           if (needSet) {
             ruleUtil.setRuleToXAttr(fullPath, appliedRule);
-            LOG.info("Added replicationRule to: " + fullPath);
+            LOG.debug("Added replicationRule to: " + fullPath);
           }
         } catch (IOException e) {
           LOG.warn(e.toString());
