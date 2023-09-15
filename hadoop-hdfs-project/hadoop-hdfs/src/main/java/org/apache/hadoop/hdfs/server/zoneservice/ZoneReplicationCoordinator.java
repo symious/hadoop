@@ -242,7 +242,7 @@ public class ZoneReplicationCoordinator {
               } else {
                 failPreMigrationCount++;
               }
-              LOG.info("Pre-migration success check: the pre migration successful rate is {}/{}",
+              LOG.debug("Pre-migration success check: the pre migration successful rate is {}/{}",
                   successPreMigrationCount, successPreMigrationCount + failPreMigrationCount);
             }
             boolean successOffered = finishedFiles.offer(fileState);
@@ -273,7 +273,7 @@ public class ZoneReplicationCoordinator {
               ZoneProgressTracker.addTimeSpentInWaitFilesQueue(
                   Time.monotonicNow() - fileState.lastStepStartTime);
             } else {
-              LOG.info("This file({}) does not have correct replicas with leftCheckTimes={}",
+              LOG.debug("This file({}) does not have correct replicas with leftCheckTimes={}",
                   fileState.filePath, leftCheckTimes);
               fileState.setLeftCheckTimes(leftCheckTimes);
               fileState.setLastCheckTime(Time.monotonicNow());
@@ -309,10 +309,10 @@ public class ZoneReplicationCoordinator {
         return null;
       }
 
-      LOG.info("Checking file: " + fileState + " ...");
+      LOG.debug("Checking file: " + fileState + " ...");
       try {
         if (!dfs.exists(fileState.filePath)) {
-          LOG.info("Skip not exist file: " + fileState.filePath);
+          LOG.debug("Skip not exist file: " + fileState.filePath);
           return null;
         }
 
@@ -329,7 +329,7 @@ public class ZoneReplicationCoordinator {
           statuses = directorylisting.getPartialListing();
         }
         if (statuses == null || statuses[0].isDir()) {
-          LOG.info("Skip it because it is a directory or doesn't exist: " + fileState.filePath);
+          LOG.debug("Skip it because it is a directory or doesn't exist: " + fileState.filePath);
           return null;
         }
         Preconditions.checkArgument(statuses[0] instanceof HdfsLocatedFileStatus);
@@ -344,7 +344,7 @@ public class ZoneReplicationCoordinator {
       Preconditions.checkNotNull(fileState.getFileStatus());
       HdfsLocatedFileStatus status = fileState.getFileStatus();
       if (status.getLen() == 0) {
-        LOG.info("Skip empty file: " + fileState.getFilePath());
+        LOG.debug("Skip empty file: " + fileState.getFilePath());
         return true;
       }
 

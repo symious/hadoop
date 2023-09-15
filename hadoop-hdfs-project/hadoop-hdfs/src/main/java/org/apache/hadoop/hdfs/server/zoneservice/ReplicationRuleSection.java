@@ -54,8 +54,8 @@ public class ReplicationRuleSection {
       throw new IllegalArgumentException(
           "ReplicationRuleSection string cannot be null");
     }
-
-    LOG.info("Trying to parse ReplicationRuleSection from {" + rule + "} ...");
+    
+    LOG.debug("Trying to parse ReplicationRuleSection from {" + rule + "} ...");
     // Strip
     String strip = rule;
     for (String s: STRIP_CHARACTERS) {
