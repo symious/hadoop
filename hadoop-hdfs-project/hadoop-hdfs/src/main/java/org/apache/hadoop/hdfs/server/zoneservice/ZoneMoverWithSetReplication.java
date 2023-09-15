@@ -795,8 +795,14 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
       while (true) {
         try {
           fileState = coordinator.getNextFinishedFile();
-          processor.processFileBlocks(fileState.getFilePath(),
-              fileState.getFileStatus(), fileState.getRule(), result, true);
+          String fullPath = fileState.getFilePath();
+          HdfsLocatedFileStatus status = fileState.getFileStatus();
+          if (!status.getBlockLocations().isLastBlockComplete()) {
+            LOG.debug("Skip uncompleted file: " + fullPath);
+            continue;
+          }
+          processor.processFileBlocks(fullPath,status,
+              fileState.getRule(), result, true);
           lastRecord = Time.monotonicNow();
         } catch (NoSuchElementException e) {
           if ((Time.monotonicNow() - lastRecord) > 2 * preMigrationCheckInterval) {
