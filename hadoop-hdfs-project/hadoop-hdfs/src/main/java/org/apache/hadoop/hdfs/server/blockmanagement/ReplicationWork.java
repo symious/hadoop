@@ -18,7 +18,6 @@
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
 import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
-import org.apache.hadoop.hdfs.server.protocol.BlockCommand;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.net.Node;
 
@@ -55,7 +54,7 @@ class ReplicationWork extends BlockReconstructionWork {
       // HDFS-14720 If the block is deleted, the block size will become
       // BlockCommand.NO_ACK (LONG.MAX_VALUE) . This kind of block we don't need
       // to send for replication or reconstruction
-      if (getBlock().getNumBytes() != BlockCommand.NO_ACK) {
+      if (!getBlock().isDeleted()) {
         if (rule != null) {
           chosenTargets = chooseTargetWithDataCenter(blockplacement,
               storagePolicySuite, excludedNodes, rule, originalSrcNode);
@@ -66,7 +65,7 @@ class ReplicationWork extends BlockReconstructionWork {
               storagePolicySuite.getPolicy(getStoragePolicyID()), null);
         }
       } else {
-        LOG.info("Could not find any targets for blk_{}", getBlock());
+        LOG.warn("ReplicationWork could not need choose targets for {}", getBlock());
       }
       setTargets(chosenTargets);
     } finally {
