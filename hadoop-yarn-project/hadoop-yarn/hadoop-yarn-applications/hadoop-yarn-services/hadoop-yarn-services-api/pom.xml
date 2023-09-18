@@ -19,7 +19,7 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-yarn-services</artifactId>
-    <version>3.3.sdi-086</version>
+    <version>3.3.sdi-087-SNAPSHOT</version>
   </parent>
   <artifactId>hadoop-yarn-services-api</artifactId>
   <name>Apache Hadoop YARN Services API</name>
