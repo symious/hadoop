@@ -18,11 +18,11 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>3.3.sdi-086-SNAPSHOT</version>
+    <version>3.3.sdi-086</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <artifactId>hadoop-client-check-test-invariants</artifactId>
-  <version>3.3.sdi-086-SNAPSHOT</version>
+  <version>3.3.sdi-086</version>
   <packaging>pom</packaging>
 
   <description>
