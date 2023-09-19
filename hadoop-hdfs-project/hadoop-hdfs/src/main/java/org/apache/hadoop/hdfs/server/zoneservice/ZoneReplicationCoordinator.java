@@ -225,7 +225,7 @@ public class ZoneReplicationCoordinator {
 
           HdfsLocatedFileStatus status = getFileStatus(fileState);
           int replicaDelta = fileState.getReplicaDelta();
-          if (status == null) {
+          if (status == null || status.getLen() == 0) {
             minusReplicaDeltaFromRunning(replicaDelta);
             ZoneProgressTracker.addTimeSpentInWaitFilesQueue(
                 Time.monotonicNow() - fileState.lastStepStartTime);
@@ -343,11 +343,6 @@ public class ZoneReplicationCoordinator {
     private boolean areAllBlocksHaveCorrectReplicas(FileState fileState) {
       Preconditions.checkNotNull(fileState.getFileStatus());
       HdfsLocatedFileStatus status = fileState.getFileStatus();
-      if (status.getLen() == 0) {
-        LOG.debug("Skip empty file: " + fileState.getFilePath());
-        return true;
-      }
-
       LocatedBlocks locatedBlocks = status.getBlockLocations();
       Preconditions.checkNotNull(locatedBlocks, "locatedBlocks should not be null!");
 

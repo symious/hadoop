@@ -636,6 +636,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.zone.generate.replicationrule.max-poll.records";
   public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_MAX_POLL_RECORDS_DEFAULT = 50;
 
+  public static final String DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_MAX_POLL_INTERVAL_MS =
+      "dfs.zone.generate.replicationrule.kafka.max-poll.interval.ms";
+  public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_MAX_POLL_INTERVAL_MS_DEFAULT = 300000;
+
   public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY =
       "dfs.zone.generate.replicationrule.enabled";
   public static final boolean DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY_DEFAULT =
