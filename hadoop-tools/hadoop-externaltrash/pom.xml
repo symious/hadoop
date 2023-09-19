@@ -6,12 +6,12 @@
   <parent>
     <groupId>org.apache.hadoop</groupId>
     <artifactId>hadoop-project</artifactId>
-    <version>2.10.sdi-091</version>
+    <version>2.10.sdi-092-SNAPSHOT</version>
     <relativePath>../../hadoop-project</relativePath>
   </parent>
   <groupId>org.apache.hadoop</groupId>
   <artifactId>hadoop-externaltrash</artifactId>
-  <version>2.10.sdi-091</version>
+  <version>2.10.sdi-092-SNAPSHOT</version>
   <description>Apache Hadoop External Trash</description>
   <name>Apache Hadoop External Trash</name>
   <packaging>jar</packaging>
