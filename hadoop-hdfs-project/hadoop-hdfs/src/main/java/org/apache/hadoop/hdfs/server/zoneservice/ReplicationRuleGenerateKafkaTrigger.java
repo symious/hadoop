@@ -102,6 +102,9 @@ public class ReplicationRuleGenerateKafkaTrigger {
     final int maxPollRecords =
         conf.getInt(DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_MAX_POLL_RECORDS_KEY,
             DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_MAX_POLL_RECORDS_DEFAULT);
+    final int maxPollIntervalMs =
+        conf.getInt(DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_MAX_POLL_INTERVAL_MS,
+            DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_MAX_POLL_INTERVAL_MS_DEFAULT);
 
     Properties properties = new Properties();
     properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
@@ -114,6 +117,7 @@ public class ReplicationRuleGenerateKafkaTrigger {
     properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
     properties.put(ConsumerConfig.REQUEST_TIMEOUT_MS_CONFIG, requestTimeOut);
     properties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, maxPollRecords);
+    properties.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, maxPollIntervalMs);
 
     properties.setProperty("security.protocol", "SASL_PLAINTEXT");
     properties.setProperty("sasl.mechanism", "PLAIN");
