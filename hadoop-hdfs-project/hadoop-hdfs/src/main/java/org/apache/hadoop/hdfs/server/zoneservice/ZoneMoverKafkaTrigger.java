@@ -39,6 +39,12 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   private final Collection<String> skipRenameKeywords;
   private final Collection<String> skipCompleteKeywords;
 
+  static final List<String> CARE_LOG_SYMBOL = new ArrayList() {{
+    add("allowed=");
+    add("src=");
+    add("dst=");
+  }};
+
   //Init HDFS audit log kafka consumer
   public ZoneMoverKafkaTrigger(Configuration conf,
       List<Path> paths, URI namenode) {
@@ -127,17 +133,22 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   protected static JSONObject message2json(String rawMessage) {
     JSONObject jsonObject = new JSONObject();
     try {
-      List<String> listString = extractCompletePath(rawMessage);
-      for (int i = 0; i < listString.size(); i++) {
-        listString.set(i,listString.get(i).replace(':','/'));
-        listString.set(i,listString.get(i).replaceFirst("=", "\":\""));
+      List<String> listRawString = extractCompletePath(rawMessage);
+      List<String> listString = new ArrayList<>();
+      int index = 0;
+      String curSymbol = CARE_LOG_SYMBOL.get(index);
+      for (String item : listRawString) {
+        if (item.startsWith(curSymbol)) {
+          listString.add(item.replaceFirst("=", "\":\""));
+          index++;
+          if (index >= CARE_LOG_SYMBOL.size()) {
+            break;
+          }
+          curSymbol = CARE_LOG_SYMBOL.get(index);
+        }
       }
-      String[] partString =
-          listString.subList(4, listString.size() - 1).toArray(new String[0]);
       String message = "\"" + StringUtils
-          .join("\",\"",partString) + "\"";
-      message = message.replace("auth/","auth\":\"");
-      message = message.replace("via\",","via\":");
+          .join("\",\"",listString) + "\"";
       jsonObject = new JSONObject('{' + message + '}');
       return jsonObject;
     } catch (JSONException e) {
