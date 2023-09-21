@@ -85,6 +85,8 @@ import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTest
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.SettableFuture;
 import org.apache.hadoop.yarn.util.StringHelper;
 
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_MB;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES;
 import static org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager.NO_LABEL;
 import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.DEFAULT_MULTI_LABEL_ACCESS_CONFIG;
 import static org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration.DEFAULT_MULTI_LABEL_RESOURCE_BUFFER_RATIO;
@@ -574,11 +576,11 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
       return 1f;
     }
 
-    // If Effective is Zero then return 1f
-    if (queue.getEffectiveCapacity(label).getMemorySize() == 0 ||
-        queue.getEffectiveCapacity(label).getVirtualCores() == 0 ||
-        queue.getEffectiveMaxCapacity(label).getMemorySize() == 0 ||
-        queue.getEffectiveMaxCapacity(label).getVirtualCores() == 0) {
+    // If Effective is less than Minimum Allocation Resource
+    if (queue.getEffectiveCapacity(label).getMemorySize() <= DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_MB ||
+            queue.getEffectiveCapacity(label).getVirtualCores() <= DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES ||
+            queue.getEffectiveMaxCapacity(label).getMemorySize() <= DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_MB ||
+            queue.getEffectiveMaxCapacity(label).getVirtualCores() <= DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES) {
       return 1f;
     }
     long memUsed = queue.getQueueResourceUsage().getUsed(label).getMemorySize();
