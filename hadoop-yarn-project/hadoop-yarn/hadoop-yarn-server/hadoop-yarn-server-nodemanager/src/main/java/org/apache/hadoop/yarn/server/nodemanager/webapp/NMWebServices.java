@@ -45,11 +45,13 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.ResourcePluginManager;
 import org.apache.hadoop.yarn.server.nodemanager.webapp.dao.AuxiliaryServicesInfo;
 import org.apache.hadoop.yarn.server.nodemanager.webapp.dao.NMResourceInfo;
+import org.codehaus.jettison.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.ws.rs.Consumes;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.PUT;
@@ -769,15 +771,17 @@ public class NMWebServices {
 
   @POST
   @Path("/modify")
-  @Produces({ MediaType.TEXT_PLAIN + "; " + JettyUtils.UTF_8 })
+  @Produces({MediaType.APPLICATION_JSON + "; " + JettyUtils.UTF_8,
+      MediaType.APPLICATION_XML + "; " + JettyUtils.UTF_8})
+  @Consumes({MediaType.APPLICATION_JSON + "; " + JettyUtils.UTF_8})
   @Public
   @Unstable
-  public Response change(@QueryParam("jsonstring") String json) {
+  public Response change(JSONObject json) {
     try {
       Deque<Wrapper> stack = new LinkedList<>();
       stack.push(new Wrapper(this.nmContext, ""));
       ObjectMapper mapper = new ObjectMapper();
-      JsonNode node = mapper.readTree(json);
+      JsonNode node = mapper.readTree(json.toString());
       parseNode(node, stack);
     } catch (JsonProcessingException | NoSuchFieldException | IllegalAccessException e) {
       return Response.status(Status.BAD_REQUEST).entity(e.getCause()).build();
@@ -811,6 +815,10 @@ public class NMWebServices {
         f.set(parentObject, node.asInt());
       } else if (currentObject.getClass().equals(Boolean.class)) {
         f.set(parentObject, node.asBoolean());
+      } else if (currentObject.getClass().equals(Long.class)) {
+        f.set(parentObject, node.asLong());
+      } else if (currentObject.getClass().equals(Double.class)) {
+        f.set(parentObject, node.asDouble());
       }
       stack.push(wrap);
     }
