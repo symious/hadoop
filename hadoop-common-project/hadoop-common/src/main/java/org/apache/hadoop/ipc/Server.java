@@ -953,6 +953,14 @@ public abstract class Server {
       this.canPassToDeepQueue = false;
     }
 
+    public boolean needMSyncForNewConnection(String ns) {
+      return false;
+    }
+
+    public void markNSMsynced(String ns) {
+
+    }
+
     void setFromRBF(boolean fromRBF) {
       this.fromRBF = fromRBF;
     }
@@ -1169,6 +1177,14 @@ public abstract class Server {
                            ResponseParams responseParams) {
       this.rv = returnValue;
       this.responseParams = responseParams;
+    }
+
+    public boolean needMSyncForNewConnection(String ns) {
+      return connection.needMSync(ns);
+    }
+
+    public void markNSMsynced(String ns) {
+      connection.markNSSynced(ns);
     }
 
     @Override
@@ -2101,6 +2117,8 @@ public abstract class Server {
     private String hostAddress;
     private int remotePort;
     private InetAddress addr;
+
+    private Set<String> syncedNSs = new HashSet<>();
     
     IpcConnectionContextProto connectionContext;
     String protocolName;
@@ -2157,7 +2175,15 @@ public abstract class Server {
                    socketSendBufferSize);
         }
       }
-    }   
+    }
+
+    public boolean needMSync(String nsId) {
+      return !this.syncedNSs.contains(nsId);
+    }
+
+    public void markNSSynced(String nsId) {
+      syncedNSs.add(nsId);
+    }
 
     @Override
     public String toString() {

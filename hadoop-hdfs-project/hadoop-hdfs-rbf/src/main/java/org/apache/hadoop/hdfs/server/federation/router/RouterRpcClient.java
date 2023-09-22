@@ -1622,13 +1622,34 @@ public class RouterRpcClient {
     }
   }
 
+  /**
+   * Return true if msync is needed for this connection, else return false.
+   * Return true means that this namespace has not been msynced after this connection was created.
+   */
+  private boolean needMsyncForNewConnection(String nsId) {
+    Server.Call call = Server.getCurCall().get();
+    return call != null && call.needMSyncForNewConnection(nsId);
+  }
+
+  /**
+   * Try to mark the namespace synced for this connection.
+   * It means that this namespace has been msynced after this connection was created.
+   */
+  private void markNSMSynced(String nsId) {
+    Server.Call call = Server.getCurCall().get();
+    if (call != null) {
+      call.markNSMsynced(nsId);
+    }
+  }
+
   private void msync(String ns, UserGroupInformation ugi, Method m)
       throws IOException {
+    boolean needMsyncForNewConn = needMsyncForNewConnection(ns);
     if (observerReadEnabled && isRead(m)) {
       boolean needMSync = (autoMsyncPeriodMs == 0)
           || !lastMsyncTimes.containsKey(ns)
           || (Time.monotonicNow() - lastMsyncTimes.get(ns).get() > autoMsyncPeriodMs)
-          || needSyncForwardThisRequest();
+          || needSyncForwardThisRequest() || needMsyncForNewConn;
       if (needMSync) {
         long beginTime = Time.monotonicNow();
         internalMsync(ugi, ns);
@@ -1644,6 +1665,9 @@ public class RouterRpcClient {
           }
         }
         lastMsyncTimes.get(ns).set(syncedTime);
+        if (needMsyncForNewConn) {
+          markNSMSynced(ns);
+        }
       }
     }
   }
