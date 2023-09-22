@@ -95,14 +95,9 @@ public abstract class FileSystemLinkResolver<T> {
           throw new IOException("Possible cyclic loop while " +
                                 "following symbolic link " + path);
         }
-        Path targetPath = null;
-        if (e instanceof UnresolvedPathException) {
-          targetPath = ((UnresolvedPathException) e).getResolvedPath();
-        } else {
-          targetPath = filesys.resolveLink(p);
-        }
         // Resolve the first unresolved path component
-        p = FSLinkResolver.qualifySymlinkTarget(fs.getUri(), p, targetPath);
+        p = FSLinkResolver.qualifySymlinkTarget(fs.getUri(), p,
+            filesys.resolveLink(p));
         fs = FileSystem.getFSofPath(p, filesys.getConf());
         // Have to call next if it's a new FS
         if (!fs.equals(filesys)) {

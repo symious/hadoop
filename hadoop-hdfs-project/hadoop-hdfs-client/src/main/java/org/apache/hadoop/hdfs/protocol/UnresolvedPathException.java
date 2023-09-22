@@ -16,19 +16,19 @@
  * limitations under the License.
  */
 
-package org.apache.hadoop.fs;
+package org.apache.hadoop.hdfs.protocol;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
-import org.apache.hadoop.ipc.ReconstructibleException;
+import org.apache.hadoop.fs.UnresolvedLinkException;
+import org.apache.hadoop.fs.Path;
 
 /**
  * Thrown when a symbolic link is encountered in a path.
  */
 @InterfaceAudience.Private
 @InterfaceStability.Evolving
-public final class UnresolvedPathException extends UnresolvedLinkException implements
-    ReconstructibleException<UnresolvedPathException> {
+public final class UnresolvedPathException extends UnresolvedLinkException {
   private static final long serialVersionUID = 1L;
   private String path;        // The path containing the link
   private String preceding;   // The path part preceding the link
@@ -63,13 +63,9 @@ public final class UnresolvedPathException extends UnresolvedLinkException imple
       return noRemainder ? target : new Path(target, remainder);
     } else {
       return noRemainder
-          ? new Path(preceding, target)
-          : new Path(new Path(preceding, linkTarget), remainder);
+        ? new Path(preceding, target)
+        : new Path(new Path(preceding, linkTarget), remainder);
     }
-  }
-
-  public String getLinkTarget() {
-    return linkTarget;
   }
 
   @Override
@@ -79,18 +75,5 @@ public final class UnresolvedPathException extends UnresolvedLinkException imple
       return msg;
     }
     return getResolvedPath().toString();
-  }
-
-  @Override
-  public UnresolvedPathException reconstruct(String... params) {
-    if (params.length != 4) {
-      return null;
-    }
-    return new UnresolvedPathException(params[0], params[1], params[2], params[3]);
-  }
-
-  @Override
-  public String[] getReconstructParams() {
-    return new String[]{path, preceding, remainder, linkTarget};
   }
 }
