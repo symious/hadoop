@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 export COMMIT_BEFORE_SHA="$(git rev-parse HEAD~1)"
 export COMMIT_SHA="$(git rev-parse HEAD~0)"
-echo "CI_COMMIT_BEFORE_SHA is ${CI_COMMIT_BEFORE_SHA}, CI_COMMIT_SHA is $CI_COMMIT_SHA"
 echo "COMMIT_BEFORE_SHA is $COMMIT_BEFORE_SHA and COMMIT_SHA is $COMMIT_SHA"
 
-#a=$(git diff --stat --name-only $CI_COMMIT_BEFORE_SHA $CI_COMMIT_SHA)
 a=$(git diff --stat --name-only $COMMIT_BEFORE_SHA $COMMIT_SHA)
 
 declare -A map
@@ -20,6 +18,17 @@ do
   fi
 done
 
+echo "Use runner tag $RUNNER"
+
+TAGS="tags:
+    - yarn
+    - k8s
+    - $RUNNER"
+
+COMMON_SCRIPTS="- export _JAVA_OPTIONS=\"-Djava.net.preferIPv4Stack=true\"
+    - mvn test
+    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'"
+
 CI_CONFIG_FILE="submodule-ci.yml"
 
 EMPTY=true
@@ -27,6 +36,7 @@ EMPTY=true
 cat <<EOF > "${CI_CONFIG_FILE}"
 stages:
   - test
+  $COMMON_SCRIPTS
 
 EOF
 
@@ -38,13 +48,10 @@ do
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-api:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-api
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -58,13 +65,10 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-client:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-client
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -78,13 +82,10 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-common:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-common
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -98,13 +99,10 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-csi:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-csi
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -118,13 +116,10 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-registry:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-registry
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -138,13 +133,10 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-server-applicationhistoryservice:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-applicationhistoryservice
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -158,13 +150,10 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-server-common:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-common
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -178,13 +167,10 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-server-globalpolicygenerator:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-globalpolicygenerator
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -198,13 +184,10 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-server-nodemanager:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-nodemanager
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -218,12 +201,11 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-server-resourcemanager:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager
-    - mvn test -Dtest=CapacitySchedulerConfigGeneratorForTest,TestCapacity\* 
+    - export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
+    - mvn test -Dtest=CapacitySchedulerConfigGeneratorForTest,TestCapacity\*
     - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
@@ -238,13 +220,10 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-server-router:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-router
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -258,13 +237,10 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-server-sharecachemanager:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-sharedcachemanager
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -278,13 +254,10 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-server-timeline-pluginstorage:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-timeline-pluginstorage
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -298,13 +271,10 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-server-timelineservice:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-timelineservice
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -318,13 +288,10 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-server-timelineservice-documentstore:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-timelineservice-documentstore
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -338,13 +305,10 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-yarn-server-web-proxy:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-web-proxy
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -358,13 +322,10 @@ EOF
      cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-hdfs:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -378,13 +339,10 @@ EOF
       cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-hdfs-client:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs-client
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -398,13 +356,10 @@ EOF
       cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-hdfs-httpfs:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs-httpfs
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -418,13 +373,10 @@ EOF
       cat <<EOF >> "${CI_CONFIG_FILE}"
 hadoop-hdfs-rbf:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs-rbf
-    - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    $COMMON_SCRIPTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
@@ -443,9 +395,7 @@ if [[ $EMPTY == true ]]; then
   cat <<EOF >> "${CI_CONFIG_FILE}"
 empty:
   stage: test
-  tags:
-    - yarn
-    - k8s
+  $TAGS
   script:
     - echo empty
 EOF

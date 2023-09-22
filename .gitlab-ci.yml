@@ -1,35 +1,86 @@
 variables:
   HADOOP_PROTOC_PATH: /usr/bin/protoc
+  RUNNER: "default"
+
+workflow:
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "SPDI-1234" || $CI_COMMIT_REF_NAME =~ /shopee-.*/ || $CI_COMMIT_REF_NAME =~ /ci-.*/'
+      variables:
+        RUNNER: "release"
+    - when: always
 
 stages:
   - compile
   - pretest
   - test
 
-pretest:
+# Need to hack runner tag in
+compile-release:
+  stage: compile
+  tags:
+    - yarn
+    - k8s
+    - release
+  script:
+    - mvn install -DskipTests
+  rules:
+    - if: $RUNNER == "release"
+
+pretest-release:
   stage: pretest
   tags:
     - yarn
     - k8s
+    - release
   script:
-    -  ./submodule-ci.sh
+    - ./submodule-ci.sh
   artifacts:
     paths:
       - submodule-ci.yml
+  rules:
+    - if: $RUNNER == "release"
 
-submodule-test:
+submodule-test-release:
   stage: test
   trigger:
     strategy: depend
     include:
       - artifact: submodule-ci.yml
-        job: pretest
+        job: pretest-release
+  rules:
+    - if: $RUNNER == "release"
 
-
-compile:
+compile-default:
   stage: compile
   tags:
     - yarn
     - k8s
+    - default
   script:
     - mvn install -DskipTests
+  rules:
+    - if: $RUNNER == "default"
+
+pretest-default:
+  stage: pretest
+  tags:
+    - yarn
+    - k8s
+    - default
+  script:
+    - ./submodule-ci.sh
+  artifacts:
+    paths:
+      - submodule-ci.yml
+  rules:
+    - if: $RUNNER == "default"
+
+submodule-test-default:
+  stage: test
+  trigger:
+    strategy: depend
+    include:
+      - artifact: submodule-ci.yml
+        job: pretest-default
+  rules:
+    - if: $RUNNER == "default"

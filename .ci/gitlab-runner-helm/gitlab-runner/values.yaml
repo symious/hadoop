@@ -14,7 +14,7 @@ image:
 
 imagePullPolicy: IfNotPresent
 
-replicas: 0
+replicas: 1
 
 gitlabUrl: https://git.garena.com/
 
@@ -55,8 +55,8 @@ runners:
       [runners.kubernetes]
         namespace = "{{.Release.Namespace}}"
         image = "ubuntu:16.04"
-  image: harbor.shopeemobile.com/di-foundation/gitlab-runner
-  tags: "k8s,runner,jenkins,hadoop2,yarn"
+  image: harbor.shopeemobile.com/di-foundation/hadoop-gitlab-runner-2
+  tags: "k8s,yarn"
   namespace: di-hadoop-gitlab-runner
   cache: {}
   builds: {}
@@ -75,10 +75,10 @@ podSecurityContext:
 
 resources:
   limits:
-    memory: "16Gi"
+    memory: "8Gi"
     cpu: "2"
   requests:
-    memory: "16Gi"
+    memory: "8Gi"
     cpu: "2"
 
 
