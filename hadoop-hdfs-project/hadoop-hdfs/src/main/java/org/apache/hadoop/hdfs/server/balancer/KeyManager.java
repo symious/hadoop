@@ -96,8 +96,17 @@ public class KeyManager implements Closeable, DataEncryptionKeyFactory {
   }
 
   /** Get an access token for a block. */
-  public Token<BlockTokenIdentifier> getAccessToken(ExtendedBlock eb
-      ) throws IOException {
+  public Token<BlockTokenIdentifier> getAccessToken(ExtendedBlock eb) throws IOException {
+    return getAccessToken(eb,
+        EnumSet.of(BlockTokenIdentifier.AccessMode.REPLACE, BlockTokenIdentifier.AccessMode.COPY));
+  }
+
+  public Token<BlockTokenIdentifier> getAccessTokenToTestProxy(ExtendedBlock eb) throws IOException {
+    return getAccessToken(eb, EnumSet.of(BlockTokenIdentifier.AccessMode.READ));
+  }
+
+  private Token<BlockTokenIdentifier> getAccessToken(ExtendedBlock eb,
+      EnumSet<BlockTokenIdentifier.AccessMode> modes) throws IOException {
     if (!isBlockTokenEnabled) {
       return BlockTokenSecretManager.DUMMY_TOKEN;
     } else {
@@ -105,8 +114,7 @@ public class KeyManager implements Closeable, DataEncryptionKeyFactory {
         throw new IOException(
             "Cannot get access token since BlockKeyUpdater is not running");
       }
-      return blockTokenSecretManager.generateToken(null, eb,
-          EnumSet.of(BlockTokenIdentifier.AccessMode.REPLACE, BlockTokenIdentifier.AccessMode.COPY));
+      return blockTokenSecretManager.generateToken(null, eb, modes);
     }
   }
 

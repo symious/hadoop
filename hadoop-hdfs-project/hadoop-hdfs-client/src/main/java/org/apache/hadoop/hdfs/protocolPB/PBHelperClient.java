@@ -210,6 +210,8 @@ public class PBHelperClient {
       AclEntryScope.values();
   private static final FsAction[] FSACTION_VALUES =
       FsAction.values();
+  public static final String UNEXPECTED_EOF_MSG =
+      "Unexpected EOF while trying to read response from server";
 
   /**
    * Map used to cache fixed strings to ByteStrings. Since there is no
@@ -510,8 +512,7 @@ public class PBHelperClient {
       throws IOException {
     final int firstByte = input.read();
     if (firstByte == -1) {
-      throw new EOFException(
-          "Unexpected EOF while trying to read response from server");
+      throw new EOFException(UNEXPECTED_EOF_MSG);
     }
 
     int size = CodedInputStream.readRawVarint32(firstByte, input);
