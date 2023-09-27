@@ -107,18 +107,29 @@ public class KeyManager implements Closeable, DataEncryptionKeyFactory {
   }
 
   /** Get an access token for a block. */
-  public Token<BlockTokenIdentifier> getAccessToken(ExtendedBlock eb,
+  public Token<BlockTokenIdentifier> getAccessToken(ExtendedBlock eb, StorageType[] storageTypes,
+      String[] storageIds) throws IOException {
+    return getAccessToken(eb,
+        EnumSet.of(BlockTokenIdentifier.AccessMode.REPLACE, BlockTokenIdentifier.AccessMode.COPY),
+        storageTypes, storageIds);
+  }
+
+  public Token<BlockTokenIdentifier> getAccessTokenToTestProxy(ExtendedBlock eb,
       StorageType[] storageTypes, String[] storageIds) throws IOException {
+    return getAccessToken(eb, EnumSet.of(BlockTokenIdentifier.AccessMode.READ), storageTypes,
+        storageIds);
+  }
+
+  private Token<BlockTokenIdentifier> getAccessToken(ExtendedBlock eb,
+      EnumSet<BlockTokenIdentifier.AccessMode> modes, StorageType[] storageTypes,
+      String[] storageIds) throws IOException {
     if (!isBlockTokenEnabled) {
       return BlockTokenSecretManager.DUMMY_TOKEN;
     } else {
       if (!shouldRun) {
-        throw new IOException(
-            "Cannot get access token since BlockKeyUpdater is not running");
+        throw new IOException("Cannot get access token since BlockKeyUpdater is not running");
       }
-      return blockTokenSecretManager.generateToken(null, eb,
-          EnumSet.of(BlockTokenIdentifier.AccessMode.REPLACE,
-              BlockTokenIdentifier.AccessMode.COPY), storageTypes, storageIds);
+      return blockTokenSecretManager.generateToken(null, eb, modes, storageTypes, storageIds);
     }
   }
 

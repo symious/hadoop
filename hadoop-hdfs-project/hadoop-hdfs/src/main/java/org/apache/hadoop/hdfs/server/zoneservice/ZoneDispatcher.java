@@ -24,12 +24,17 @@ import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.datatransfer.IOStreamPair;
+import org.apache.hadoop.hdfs.protocol.datatransfer.Sender;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos;
+import org.apache.hadoop.hdfs.protocolPB.PBHelperClient;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.hdfs.security.token.block.InvalidBlockTokenException;
 import org.apache.hadoop.hdfs.server.balancer.Dispatcher;
 import org.apache.hadoop.hdfs.server.balancer.KeyManager;
 import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
 import org.apache.hadoop.hdfs.server.balancer.Dispatcher.DDatanode.StorageGroup;
+import org.apache.hadoop.hdfs.server.datanode.CachingStrategy;
+import org.apache.hadoop.hdfs.server.datanode.ReplicaNotFoundException;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
 import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 import org.apache.hadoop.io.IOUtils;
@@ -56,6 +61,8 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Semaphore;
 
+import static org.apache.hadoop.hdfs.protocolPB.PBHelperClient.UNEXPECTED_EOF_MSG;
+
 /**
  * Dispatching block replica moves between datacenters.
  */
@@ -65,10 +72,11 @@ public class ZoneDispatcher extends Dispatcher {
       ZoneDispatcher.class);
   private final int blockDispatchAttempts;
   private final long blockDispatchRetryInterval;
-  private final long dispatcherKeepAliveTime;
   private static final long DELAY_AFTER_DATANODE_ERRORS = 10 * 60 * 1000;
   protected final ExecutorService dispatchExecutor;
   private final DataTransferThrottler throttler;
+
+  private final static String REPLICA_NOT_FOUND_ON_PROXY_MSG = "Replica for not found on proxy: ";
 
   /** Constructor called by ZoneMover. */
   public ZoneDispatcher(NameNodeConnector nnc, Set<String> includedNodes,
@@ -108,7 +116,6 @@ public class ZoneDispatcher extends Dispatcher {
         blockMoveTimeout, maxNoMoveInterval, -1, conf, null);
     this.blockDispatchAttempts = blockDispatchAttempts;
     this.blockDispatchRetryInterval = blockDispatchRetryInterval;
-    this.dispatcherKeepAliveTime = dispatcherKeepAliveTime;
     this.dispatchExecutor = dispatcherThreads == 0? null
         : HadoopExecutors.newFixedThreadPool(dispatcherThreads, dispatcherKeepAliveTime);
     if (dispatcherThrottlerBandwidth <= 0) {
@@ -212,6 +219,12 @@ public class ZoneDispatcher extends Dispatcher {
             target.getDDatanode().setHasFailure();
             target.getDDatanode().activateDelay(DELAY_AFTER_DATANODE_ERRORS);
             return;
+          } catch (ReplicaNotFoundException rnfe) {
+            // Terminate immediately to prevent redundant dispatches since they will all fail
+            // No need for delay
+            LOG.info("Ignore ReplicaNotFoundException for " + this);
+            target.getDDatanode().setHasFailure();
+            return;
           } catch (IOException e) {
             // If the attempt encounters "IOException: Block move timed out",
             // it may encounter ReplicaAlreadyExistsException when retrying
@@ -265,6 +278,9 @@ public class ZoneDispatcher extends Dispatcher {
       Socket sock = new Socket();
       DataOutputStream out = null;
       DataInputStream in = null;
+      ExtendedBlock eb = null;
+      KeyManager km = null;
+      Token<BlockTokenIdentifier> accessToken = null;
       try {
         sock.connect(
             NetUtils.createSocketAddr(target.getDatanodeInfo().
@@ -280,13 +296,11 @@ public class ZoneDispatcher extends Dispatcher {
 
         OutputStream unbufOut = sock.getOutputStream();
         InputStream unbufIn = sock.getInputStream();
-        ExtendedBlock eb = new ExtendedBlock(nnc.getBlockpoolID(),
-            reportedBlock.getBlock());
-        final KeyManager km = nnc.getKeyManager();
-        Token<BlockTokenIdentifier> accessToken = km.getAccessToken(
-            eb, null, null);
-        IOStreamPair saslStreams = saslClient.socketSend(sock, unbufOut,
-            unbufIn, km, accessToken, target.getDatanodeInfo());
+        eb = new ExtendedBlock(nnc.getBlockpoolID(), reportedBlock.getBlock());
+        km = nnc.getKeyManager();
+        accessToken = km.getAccessToken(eb, null, null);
+        IOStreamPair saslStreams = saslClient.socketSend(sock, unbufOut, unbufIn, km, accessToken,
+            target.getDatanodeInfo());
         unbufOut = saslStreams.out;
         unbufIn = saslStreams.in;
         out = new DataOutputStream(new BufferedOutputStream(unbufOut,
@@ -298,6 +312,51 @@ public class ZoneDispatcher extends Dispatcher {
         receiveResponse(in);
         if (throttler != null) {
           throttler.throttle(reportedBlock.getNumBytes());
+        }
+      } catch (IOException ioe) {
+        // Only do extra processing if it's an EOF
+        if (!ioe.getMessage().contains(UNEXPECTED_EOF_MSG)) {
+          throw ioe;
+        }
+        Socket sock2 = null;
+        DataOutputStream out2 = null;
+        DataInputStream in2 = null;
+        try {
+          // Test the proxy node to see if the EOF is from proxy node not having a replica
+          sock2 = new Socket();
+          sock2.connect(NetUtils.createSocketAddr(proxySource.getDatanodeInfo()
+                  .getXferAddr(ZoneDispatcher.this.connectToDnViaHostname)),
+              HdfsConstants.READ_TIMEOUT);
+          OutputStream unbufOut = sock2.getOutputStream();
+          InputStream unbufIn = sock2.getInputStream();
+          try {
+            LOG.info("Checking proxy DN {} for block replica {}", proxySource, reportedBlock);
+            accessToken = km.getAccessTokenToTestProxy(eb, null, null);
+            IOStreamPair saslStreams =
+                saslClient.socketSend(sock2, unbufOut, unbufIn, km, accessToken,
+                    proxySource.getDatanodeInfo());
+            unbufOut = saslStreams.out;
+            out2 = new DataOutputStream(new BufferedOutputStream(unbufOut, ioFileBufferSize));
+            in2 = new DataInputStream(new BufferedInputStream(unbufIn, ioFileBufferSize));
+            // Send an OP_READ to proxy
+            new Sender(out2).readBlock(eb, accessToken, "ZoneDispatcherProxyTester", 0, 1, true,
+              CachingStrategy.newDefaultStrategy());
+            DataTransferProtos.BlockOpResponseProto status =
+                DataTransferProtos.BlockOpResponseProto.parseFrom(PBHelperClient.vintPrefixed(in2));
+            if (status.getStatus().equals(DataTransferProtos.Status.ERROR) && status.getMessage()
+                .contains("ReplicaNotFoundException")) {
+              throw new ReplicaNotFoundException(REPLICA_NOT_FOUND_ON_PROXY_MSG + eb);
+            }
+          } catch (Throwable e) {
+            throw e;
+          }
+          // If reaches here, then copyBlock passes normally, EOF has another cause
+          // Else vintPrefixed will throw before reaching this point.
+          throw ioe;
+        } finally {
+          IOUtils.closeStream(out2);
+          IOUtils.closeStream(in2);
+          IOUtils.closeSocket(sock2);
         }
       } finally {
         IOUtils.closeStream(out);

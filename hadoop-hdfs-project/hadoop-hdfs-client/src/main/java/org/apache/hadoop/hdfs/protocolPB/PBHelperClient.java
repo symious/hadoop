@@ -232,6 +232,8 @@ public class PBHelperClient {
       AclEntryScope.values();
   private static final FsAction[] FSACTION_VALUES =
       FsAction.values();
+  public static final String UNEXPECTED_EOF_MSG =
+      "Unexpected EOF while trying to read response from server";
 
   private static ByteString getFixedByteString(String key) {
     return ProtobufHelper.getFixedByteString(key);
@@ -518,8 +520,7 @@ public class PBHelperClient {
       throws IOException {
     final int firstByte = input.read();
     if (firstByte == -1) {
-      throw new EOFException(
-          "Unexpected EOF while trying to read response from server");
+      throw new EOFException(UNEXPECTED_EOF_MSG);
     }
 
     int size = CodedInputStream.readRawVarint32(firstByte, input);
