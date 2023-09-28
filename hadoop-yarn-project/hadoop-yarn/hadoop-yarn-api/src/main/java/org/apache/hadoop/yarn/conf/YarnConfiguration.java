@@ -896,6 +896,11 @@ public class YarnConfiguration extends Configuration {
   public static final boolean DEFAULT_RM_PUBLISH_CONTAINER_EVENTS_ENABLED =
       false;
 
+  public static final String RM_TIMELINE_EVENT_RETRY_COUNT =
+      YARN_PREFIX + "rm.timeline-event.retry.count";
+
+  public static final int DEFAULT_RM_TIMELINE_EVENT_RETRY_COUNT = 5;
+
   public static final String RM_SYSTEM_METRICS_PUBLISHER_DISPATCHER_POOL_SIZE =
       RM_PREFIX + "system-metrics-publisher.dispatcher.pool-size";
   public static final int

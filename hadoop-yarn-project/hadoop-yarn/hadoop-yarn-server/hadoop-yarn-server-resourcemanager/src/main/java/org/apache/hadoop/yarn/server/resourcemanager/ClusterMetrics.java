@@ -82,6 +82,8 @@ public class ClusterMetrics {
     rmMainEventProcCPUAvg;
   @Metric("RM Main Event Processor CPU Usage 60 second Max") MutableGaugeLong
     rmMainEventProcCPUMax;
+  @Metric("Number of RM Timeline Event failures") MutableGaugeLong
+    timelineEventFailures;
 
   private boolean rmEventProcMonitorEnable = false;
 
@@ -416,5 +418,9 @@ public class ClusterMetrics {
 
   public void setNumRmNodesListEvents(long num) {
     numRmNodesListEvents.set(num);
+  }
+
+  public void incrTimelineEventFailures() {
+    timelineEventFailures.incr();
   }
 }

@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.hadoop.yarn.server.resourcemanager.ClusterMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -77,6 +78,8 @@ public class TimelineServiceV2Publisher extends AbstractSystemMetricsPublisher {
       LoggerFactory.getLogger(TimelineServiceV2Publisher.class);
   private RMTimelineCollectorManager rmTimelineCollectorManager;
   private boolean publishContainerEvents;
+  private int retryThreshold;
+  private ClusterMetrics metrics = ClusterMetrics.getMetrics();
 
   public TimelineServiceV2Publisher(
       RMTimelineCollectorManager timelineCollectorManager) {
@@ -92,6 +95,9 @@ public class TimelineServiceV2Publisher extends AbstractSystemMetricsPublisher {
     publishContainerEvents = getConfig().getBoolean(
         YarnConfiguration.RM_PUBLISH_CONTAINER_EVENTS_ENABLED,
         YarnConfiguration.DEFAULT_RM_PUBLISH_CONTAINER_EVENTS_ENABLED);
+    retryThreshold = getConfig()
+        .getInt(YarnConfiguration.RM_TIMELINE_EVENT_RETRY_COUNT,
+            YarnConfiguration.DEFAULT_RM_TIMELINE_EVENT_RETRY_COUNT);
   }
 
   @VisibleForTesting
@@ -520,7 +526,7 @@ public class TimelineServiceV2Publisher extends AbstractSystemMetricsPublisher {
     return entity;
   }
 
-  private void putEntity(TimelineEntity entity, ApplicationId appId) {
+  private boolean putEntity(TimelineEntity entity, ApplicationId appId) {
     try {
       if (LOG.isDebugEnabled()) {
         LOG.debug("Publishing the entity " + entity + ", JSON-style content: "
@@ -537,11 +543,14 @@ public class TimelineServiceV2Publisher extends AbstractSystemMetricsPublisher {
         LOG.debug("Cannot find active collector while publishing entity "
             + entity);
       }
+      return true;
     } catch (IOException e) {
       LOG.error("Error when publishing entity " + entity);
       LOG.debug("Error when publishing entity {}", entity, e);
+      return false;
     } catch (Exception e) {
       LOG.error("Unexpected error when publishing entity {}", entity, e);
+      return false;
     }
   }
 
@@ -565,19 +574,35 @@ public class TimelineServiceV2Publisher extends AbstractSystemMetricsPublisher {
     public void handle(TimelineV2PublishEvent event) {
       switch (event.getType()) {
       case PUBLISH_APPLICATION_FINISHED_ENTITY:
-        putEntity(event.getEntity(), event.getApplicationId());
-        ((ApplicationFinishPublishEvent) event).getRMAppImpl()
-            .stopTimelineCollector();
+        if (!putEntity(event.getEntity(), event.getApplicationId())
+            && shouldRetry(event)) {
+          event.retryCount++;
+          getDispatcher().getEventHandler().handle(event);
+          metrics.incrTimelineEventFailures();
+        } else {
+          ((ApplicationFinishPublishEvent) event).getRMAppImpl()
+              .stopTimelineCollector();
+        }
         break;
       default:
-        putEntity(event.getEntity(), event.getApplicationId());
+        if (!putEntity(event.getEntity(), event.getApplicationId())
+            && shouldRetry(event)) {
+          event.retryCount++;
+          getDispatcher().getEventHandler().handle(event);
+          metrics.incrTimelineEventFailures();
+        }
         break;
       }
     }
   }
 
+  private boolean shouldRetry(TimelineV2PublishEvent event) {
+    return event.retryCount < retryThreshold;
+  }
+
   private class TimelineV2PublishEvent extends TimelinePublishEvent {
     private TimelineEntity entity;
+    private int retryCount;
 
     public TimelineV2PublishEvent(SystemMetricsEventType type,
         TimelineEntity entity, ApplicationId appId) {
