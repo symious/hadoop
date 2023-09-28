@@ -189,6 +189,10 @@ goto :eof
   set HADOOP_OPTS=%HADOOP_OPTS% %HADOOP_ROUTER_OPTS%
   goto :eof
 
+:singleReplica
+  set CLASS=org.apache.hadoop.hdfs.tools.VerifySingleReplica
+  goto :eof
+
 :debug
   set CLASS=org.apache.hadoop.hdfs.tools.DebugAdmin
   goto :eof

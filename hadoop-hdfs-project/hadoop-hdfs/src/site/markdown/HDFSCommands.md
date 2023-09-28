@@ -248,6 +248,26 @@ Usage: `hdfs oiv_legacy [OPTIONS] -i INPUT_FILE -o OUTPUT_FILE`
 
 Hadoop offline image viewer for older versions of Hadoop. See [oiv\_legacy Command](./HdfsImageViewer.html#oiv_legacy_Command) for more info.
 
+### `singleReplica`
+
+Usage: `hdfs singleReplica -p PREVIEW_FILE [-i INPUT_FILE] [--execute]`
+
+Verifies if some paths have only 1 replica, handles those paths accordingly:
+- if all blocks are present, increase the file replica to 2,
+- if some blocks are missing, the file is unsalvageable at this point, delete it.
+
+| COMMAND\_OPTION                     | Description                                                                               |
+|:------------------------------------|:------------------------------------------------------------------------------------------|
+| `-p`,`--previewFile` *preview file* | Specify the output preview filename.                                                      |
+
+#### Optional command line arguments:
+
+| COMMAND\_OPTION                 | Description                                                                               |
+|:--------------------------------|:------------------------------------------------------------------------------------------|
+| `-i`,`--inputFile` *input file* | Specify the input file to read paths from. This option is ignored if `--execute` is used. |
+| `-e`,`--execute`                | Delete files/Increase replicas based on preview file.                                     |
+
+
 ### `snapshotDiff`
 
 Usage: `hdfs snapshotDiff <path> <fromSnapshot> <toSnapshot> `
