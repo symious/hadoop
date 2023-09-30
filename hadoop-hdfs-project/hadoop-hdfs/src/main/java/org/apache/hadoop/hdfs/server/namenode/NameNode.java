@@ -147,6 +147,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_MIN_BLOCKS_FOR_WRITE_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_MIN_BLOCKS_FOR_WRITE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_DEFAULT;
@@ -410,6 +412,7 @@ public class NameNode extends ReconfigurableBase implements
           DFS_DATANODE_MAX_NODES_TO_REPORT_KEY,
           DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY,
           DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY,
+          DFS_NAMENODE_BLOCKPLACEMENTPOLICY_MIN_BLOCKS_FOR_WRITE_KEY,
           DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY,
           DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_FACTOR,
           DFS_NAMENODE_MAX_FULL_BLOCK_REPORT_LEASES,
@@ -2503,6 +2506,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigurationRecomputeQuotaUsageTargetReplication(newVal);
     } else if (property.equals(DFS_NAMENODE_START_MISSING_BLOCK_SCANNER_KEY)) {
       return startOrStopMissingBlockScanner(newVal);
+    } else if (property.equals(DFS_NAMENODE_BLOCKPLACEMENTPOLICY_MIN_BLOCKS_FOR_WRITE_KEY)) {
+      return reconfigureMinBlocksForWrite(property, newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -3025,6 +3030,18 @@ public class NameNode extends ReconfigurableBase implements
     }
     this.namesystem.getBlockManager().startOrStopMissingBlockScanner(value);
     return String.valueOf(value);
+  }
+
+  private String reconfigureMinBlocksForWrite(String property, String newValue)
+      throws ReconfigurationException {
+    try {
+      int newSetting = adjustNewVal(
+          DFS_NAMENODE_BLOCKPLACEMENTPOLICY_MIN_BLOCKS_FOR_WRITE_DEFAULT, newValue);
+      this.namesystem.getBlockManager().setMinBlocksForWrite(newSetting);
+      return String.valueOf(newSetting);
+    } catch (IllegalArgumentException e) {
+      throw new ReconfigurationException(property, newValue, getConf().get(property), e);
+    }
   }
 
   private String reconfigureTailEditsOnlyDurableTxns(String newVal) {

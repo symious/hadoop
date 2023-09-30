@@ -5831,4 +5831,16 @@ public class BlockManager implements BlockStatsMXBean {
   public Collection<String> getDelRedundantDataCenters() {
     return this.delRedundantDataCenters;
   }
+
+  public void setMinBlocksForWrite(int minBlocksForWrite) {
+    ensurePositiveInt(minBlocksForWrite,
+        DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_MIN_BLOCKS_FOR_WRITE_KEY);
+    placementPolicies.getPolicy(CONTIGUOUS).setMinBlocksForWrite(minBlocksForWrite);
+    placementPolicies.getPolicy(STRIPED).setMinBlocksForWrite(minBlocksForWrite);
+  }
+
+  @VisibleForTesting
+  public int getMinBlocksForWrite(BlockType blockType) {
+    return placementPolicies.getPolicy(blockType).getMinBlocksForWrite();
+  }
 }
