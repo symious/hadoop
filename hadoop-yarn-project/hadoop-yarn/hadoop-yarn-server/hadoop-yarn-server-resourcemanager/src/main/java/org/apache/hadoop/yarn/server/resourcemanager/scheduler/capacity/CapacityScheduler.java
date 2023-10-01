@@ -683,16 +683,16 @@ public class CapacityScheduler extends
   static void schedule(CapacityScheduler cs) throws InterruptedException{
     // First randomize the start point
     int current = 0;
-    Collection<FiCaSchedulerNode> nodes = cs.nodeTracker.getAllNodes();
 
     // If nodes size is 0 (when there are no node managers registered,
     // we can return from here itself.
-    int nodeSize = nodes.size();
+    int nodeSize = cs.nodeTracker.nodeCount();
     if(nodeSize == 0) {
       return;
     }
 
     if (!cs.multiNodePlacementEnabled) {
+      Collection<FiCaSchedulerNode> nodes = cs.nodeTracker.getAllNodes();
       int start = random.nextInt(nodeSize);
 
       boolean printSkippedNodeLogging = isPrintSkippedNodeLogging(cs);
