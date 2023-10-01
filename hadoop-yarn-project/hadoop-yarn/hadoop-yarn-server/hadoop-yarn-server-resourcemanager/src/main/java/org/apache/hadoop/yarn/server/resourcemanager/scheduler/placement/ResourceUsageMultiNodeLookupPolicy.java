@@ -51,6 +51,7 @@ public class ResourceUsageMultiNodeLookupPolicy<N extends SchedulerNode>
       .getLogger(ResourceUsageMultiNodeLookupPolicy.class);
 
   protected Map<String, Set<N>> nodesPerPartition = new ConcurrentHashMap<>();
+  protected Map<String, Integer> nodeSizePerPartition = new ConcurrentHashMap<>();
   protected Comparator<N> comparator;
 
   private int memoryResourcesUnit;
@@ -119,8 +120,13 @@ public class ResourceUsageMultiNodeLookupPolicy<N extends SchedulerNode>
 
     Set<N> nodesPerPartitionSet = getNodesPerPartition(partition);
     Iterator<N> nodesPerPartitionIterator = nodesPerPartitionSet.iterator();
-    int sumSize = nodesPerPartitionSet.size();
-    int topRandomSize = Math.round(sumSize * topRate);
+    int sumSize;
+    if (nodeSizePerPartition.get(partition) != null) {
+      sumSize = nodeSizePerPartition.get(partition);
+    } else {
+      sumSize = nodesPerPartitionSet.size();
+    }
+    int topRandomSize = Math.min(Math.round(sumSize * topRate), sumSize);
 
     int i = 0;
     while (nodesPerPartitionIterator.hasNext()) {
@@ -165,6 +171,7 @@ public class ResourceUsageMultiNodeLookupPolicy<N extends SchedulerNode>
               (System.nanoTime() - start) / 1000 + " us!");
     }
     nodesPerPartition.put(partition, putNodeSet);
+    nodeSizePerPartition.put(partition, putNodeSet.size());
   }
 
   @Override
