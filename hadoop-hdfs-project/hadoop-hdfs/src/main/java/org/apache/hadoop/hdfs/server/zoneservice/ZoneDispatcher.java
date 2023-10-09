@@ -35,6 +35,7 @@ import java.net.SocketTimeoutException;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.hadoop.hdfs.protocolPB.PBHelperClient.UNEXPECTED_EOF_MSG;
 
@@ -49,6 +50,8 @@ public class ZoneDispatcher extends Dispatcher {
   private static final long DELAY_AFTER_DATANODE_ERRORS = 10 * 60 * 1000;
   protected final ExecutorService dispatchExecutor;
   private final DataTransferThrottler throttler;
+  private final AtomicInteger usedThreads = new AtomicInteger();
+  private final AtomicInteger activeThreads = new AtomicInteger();
 
   private final static String REPLICA_NOT_FOUND_ON_PROXY_MSG = "Replica for not found on proxy: ";
 
@@ -103,26 +106,27 @@ public class ZoneDispatcher extends Dispatcher {
   public class ZonePendingMove extends PendingMove {
 
     private final String fullPath;
+    private final Set<DDatanode> excluded;
 
     private ZonePendingMove(String fullPath, Source source, StorageGroup target) {
       super(source, target);
       this.fullPath = fullPath;
+      this.excluded = new HashSet<>();
     }
 
     public String getFullPath() {
       return fullPath;
     }
 
-    /**
-     * Choose a proxy source.
-     *
-     * @return true if a proxy is found; otherwise false
-     */
     @Override
     protected boolean chooseProxySource() {
+      return chooseProxySource(excluded);
+    }
+
+    private boolean chooseProxySource(Set<DDatanode> excluded) {
       final DatanodeInfo targetDN = target.getDatanodeInfo();
       // if source and target are same nodes then no need of proxy
-      if (source.getDatanodeInfo().equals(targetDN) && addTo(source)) {
+      if (source.getDatanodeInfo().equals(targetDN) && addTo(source, excluded)) {
         return true;
       }
 
@@ -130,7 +134,7 @@ public class ZoneDispatcher extends Dispatcher {
       if (cluster.isNodeGroupAware()) {
         for (StorageGroup loc : block.getLocations()) {
           if (cluster.isOnSameNodeGroup(loc.getDatanodeInfo(), targetDN)
-              && addTo(loc)) {
+              && addTo(loc, excluded)) {
             return true;
           }
         }
@@ -138,7 +142,7 @@ public class ZoneDispatcher extends Dispatcher {
 
       // check if there is replica which is on the same rack with the target
       for (StorageGroup loc : block.getLocations()) {
-        if (cluster.isOnSameRack(loc.getDatanodeInfo(), targetDN) && addTo(loc)) {
+        if (cluster.isOnSameRack(loc.getDatanodeInfo(), targetDN) && addTo(loc, excluded)) {
           return true;
         }
       }
@@ -147,21 +151,21 @@ public class ZoneDispatcher extends Dispatcher {
       String targetDC = DFSNetworkTopologyWithDataCenter.getDataCenter(
           target.getDatanodeInfo().getNetworkLocation());
       if (targetDC.equals(DFSNetworkTopologyWithDataCenter.getDataCenter(
-          source.getDatanodeInfo().getNetworkLocation())) && addTo(source)) {
+          source.getDatanodeInfo().getNetworkLocation())) && addTo(source, excluded)) {
         return true;
       }
       List<StorageGroup> locations = block.getLocations();
       Collections.shuffle(locations);
       for (StorageGroup loc : locations) {
         if (targetDC.equals(DFSNetworkTopologyWithDataCenter.getDataCenter(
-            loc.getDatanodeInfo().getNetworkLocation())) && addTo(loc)) {
+            loc.getDatanodeInfo().getNetworkLocation())) && addTo(loc, excluded)) {
           return true;
         }
       }
 
       // find out a non-busy replica
       for (StorageGroup loc : locations) {
-        if (addTo(loc)) {
+        if (addTo(loc, excluded)) {
           return true;
         }
       }
@@ -194,11 +198,16 @@ public class ZoneDispatcher extends Dispatcher {
             target.getDDatanode().activateDelay(DELAY_AFTER_DATANODE_ERRORS);
             return;
           } catch (ReplicaNotFoundException rnfe) {
-            // Terminate immediately to prevent redundant dispatches since they will all fail
-            // No need for delay
-            LOG.info("Ignore ReplicaNotFoundException for " + this);
-            target.getDDatanode().setHasFailure();
-            return;
+            // Attempt to dispatch again using a different proxy
+            DDatanode oldProxy = proxySource;
+            if (!switchProxy()) {
+              // Terminate immediately to prevent redundant dispatches since they will all fail
+              // No need for delay
+              LOG.info("Ignore ReplicaNotFoundException for " + this);
+              target.getDDatanode().setHasFailure();
+              return;
+            }
+            LOG.info("Retrying {} with replaced proxy: {} -> {}", this, oldProxy, proxySource);
           } catch (IOException e) {
             // If the attempt encounters "IOException: Block move timed out",
             // it may encounter ReplicaAlreadyExistsException when retrying
@@ -246,6 +255,12 @@ public class ZoneDispatcher extends Dispatcher {
           ZoneDispatcher.this.notifyAll();
         }
       }
+    }
+
+    private boolean switchProxy() {
+      excluded.add(proxySource);
+      proxySource.removePendingBlock(this);
+      return chooseProxySource();
     }
 
     /**
@@ -389,9 +404,14 @@ public class ZoneDispatcher extends Dispatcher {
       int MAX_WAITING_MULTIPLE = 2;
       // avoid too many tasks waiting for the permit of this node
       if (getPendingSize() >= maxConcurrentMoves * MAX_WAITING_MULTIPLE) {
+        failureReason.get().tooManyPending++;
         return false;
       }
-      return super.addPendingBlock(pendingBlock);
+      boolean result = super.addPendingBlock(pendingBlock);
+      if (!result) {
+        failureReason.get().delayed++;
+      }
+      return result;
     }
   }
 
@@ -444,15 +464,37 @@ public class ZoneDispatcher extends Dispatcher {
     dispatchExecutor.execute(new Runnable() {
       @Override
       public void run() {
+        usedThreads.incrementAndGet();
         final ZoneDDatanode targetDn = (ZoneDDatanode) zpv.getTarget().getDDatanode();
         try {
           targetDn.permits.acquire();
+          activeThreads.incrementAndGet();
           zpv.dispatchWithRetry();
+          activeThreads.decrementAndGet();
           targetDn.permits.release();
         } catch (InterruptedException ie) {
           LOG.warn("Encountered InterruptedException, will skip " + zpv);
+        } finally {
+          usedThreads.decrementAndGet();
         }
       }
     });
+  }
+
+  public int getUsedThreads() {
+    return usedThreads.get();
+  }
+
+  public int getActiveThreads() {
+    return activeThreads.get();
+  }
+
+  public String getFailureReason() {
+    return failureReason.get().toString();
+  }
+
+
+  public void resetFailureReason() {
+    failureReason.set(new FailureReason());
   }
 }
