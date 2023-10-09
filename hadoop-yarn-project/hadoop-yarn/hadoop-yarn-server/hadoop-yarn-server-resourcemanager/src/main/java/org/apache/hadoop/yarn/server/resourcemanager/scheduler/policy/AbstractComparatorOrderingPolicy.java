@@ -104,8 +104,8 @@ public abstract class AbstractComparatorOrderingPolicy<S extends SchedulableEnti
     }
     synchronized (entitiesToReorder) {
       entitiesToReorder.remove(s.getId());
+      return schedulableEntities.remove(s);
     }
-    return schedulableEntities.remove(s); 
   }
   
   @Override
