@@ -439,6 +439,14 @@ public class Dispatcher {
       return false;
     }
 
+    protected boolean addTo(StorageGroup g, Set<DDatanode> excluded) {
+      if (excluded.contains(g.getDDatanode())) {
+        return false;
+      } else {
+        return addTo(g);
+      }
+    }
+
     /** Dispatch the move to the proxy source & wait for the response. */
     public void dispatch() {
       LOG.debug("Dispatch dataCenterConstraint is {} and proxySource is {}.",
@@ -751,6 +759,7 @@ public class Dispatcher {
             incScheduledSize(pm.reportedBlock.getNumBytes());
             return pm;
           } else {
+            failureReason.get().badBlock++;
             getDDatanode().removePendingBlock(pm);
           }
         }
@@ -1660,6 +1669,28 @@ public class Dispatcher {
         return false;
       }
       return (nodes.contains(host) || nodes.contains(host + ":" + port));
+    }
+  }
+
+  protected static final ThreadLocal<FailureReason> failureReason = new ThreadLocal<FailureReason>() {
+    @Override
+    public FailureReason initialValue() {
+      return new FailureReason();
+    }
+  };
+
+  public static class FailureReason {
+    public int tooManyPending;
+    public int delayed;
+    public int excluded;
+    public int badBlock;
+
+    @Override
+    public String toString() {
+      return "tooManyPending: " + tooManyPending + ", "
+          + "delayed: " + delayed + ", "
+          + "excluded: " + excluded + ", "
+          + "badBlock: " + badBlock;
     }
   }
 }

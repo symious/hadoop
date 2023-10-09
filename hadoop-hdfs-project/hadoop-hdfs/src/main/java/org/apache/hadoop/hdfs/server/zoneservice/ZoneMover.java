@@ -1243,6 +1243,7 @@ public class ZoneMover {
     boolean chooseTargetInDataCenter(String fullPath,
         DBlock db, ZoneSource source, String targetDataCenter,
         Set<StorageType> targetTypes, Set<StorageGroup> excluded) {
+      dispatcher.resetFailureReason();
       for (StorageType t: targetTypes) {
         final List<StorageGroup> targets = storages.getTargetStorages(t, targetDataCenter);
         Collections.shuffle(targets);
@@ -1258,9 +1259,9 @@ public class ZoneMover {
           }
         }
       }
-      LOG.warn("chooseTargetInDataCenter failed with block: " +
-          db + ", source: " + source + ", targetDataCenter: " + targetDataCenter +
-          ",targetTypes: " + targetTypes + ", excluded: " + excluded);
+      LOG.warn("chooseTargetInDataCenter failed with block: {}, "
+              + "source: {}, targetDataCenter: {},targetTypes: {}, excluded: {}. Reason: {}.", db,
+          source, targetDataCenter, targetTypes, excluded, dispatcher.getFailureReason());
       handleChooseFail(targetDataCenter, targetTypes);
       return false;
     }
@@ -1273,9 +1274,11 @@ public class ZoneMover {
           total += target.getDDatanode().getPendingSize();
         }
         if (targets.size() > 0) {
-          LOG.warn("Average pending size for targetDataCenter: " + targetDataCenter +
-              ", storageType: " + t + ", datanodes.num: "+ targets.size() +
-              " is " + total / targets.size());
+          LOG.warn("Average pending size for targetDataCenter: {}, "
+                  + "storageType: {}, datanodes.num: {} is {}. "
+                  + "Dispatcher thread report: {} active / {} used.", targetDataCenter, t,
+              targets.size(), total / targets.size(), dispatcher.getActiveThreads(),
+              dispatcher.getUsedThreads());
         } else {
           LOG.warn("targets.size = 0 !");
         }
