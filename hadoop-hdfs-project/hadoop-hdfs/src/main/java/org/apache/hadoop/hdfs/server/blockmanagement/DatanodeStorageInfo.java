@@ -127,6 +127,10 @@ public class DatanodeStorageInfo {
   /** The number of block reports received */
   private int blockReportCount = 0;
 
+  /** Whether the NameNode has received block reports for this storage since it
+   * was started.*/
+  private boolean hasReceivedBlockReport = false;
+
   /**
    * Set to false on any NN failover, and reset to true
    * whenever a block report is received.
@@ -159,6 +163,10 @@ public class DatanodeStorageInfo {
     return blockReportCount;
   }
 
+  boolean hasReceivedBlockReport() {
+    return hasReceivedBlockReport;
+  }
+
   void setBlockReportCount(int blockReportCount) {
     this.blockReportCount = blockReportCount;
   }
@@ -182,6 +190,7 @@ public class DatanodeStorageInfo {
       blockContentsStale = false;
     }
     blockReportCount++;
+    hasReceivedBlockReport = true;
   }
 
   @VisibleForTesting

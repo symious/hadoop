@@ -335,7 +335,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
   }
 
   @VisibleForTesting
-  File getCurrentDir() {
+  public File getCurrentDir() {
     return currentDir;
   }
 
