@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.blockmanagement;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileUtil;
+import org.apache.hadoop.hdfs.server.datanode.DataNodeFaultInjector;
 import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.hadoop.thirdparty.com.google.common.collect.LinkedListMultimap;
@@ -68,7 +69,6 @@ import org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter;
 import org.apache.hadoop.hdfs.server.namenode.TestINodeFile;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAContext;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAState;
-import org.apache.hadoop.hdfs.server.protocol.BlockReportContext;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorage;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
@@ -100,7 +100,6 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -114,6 +113,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -2120,6 +2120,128 @@ public class TestBlockManager {
       // The replica num should be 2.
       locs = fs.getFileBlockLocations(stat, 0, stat.getLen());
       assertEquals(2, locs[0].getHosts().length);
+    }
+  }
+
+  /**
+   * Test NameNode should remove excess redundancy blocks when dn register.
+   * @throws IOException
+   * @throws InterruptedException
+   * @throws TimeoutException
+   */
+  @Test(timeout = 120000)
+  public void testRemoveExcessRedundancyMapWhenDNRegisters() throws IOException,
+      InterruptedException, TimeoutException {
+    Configuration config = new HdfsConfiguration();
+    // Bump up replication interval.
+    config.setInt(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY, 10000);
+    DataNodeFaultInjector oldInjector = DataNodeFaultInjector.get();
+
+    final Semaphore semaphore = new Semaphore(0);
+    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(config).numDataNodes(3).build()) {
+      DistributedFileSystem fs = cluster.getFileSystem();
+      BlockManager blockManager = cluster.getNameNode().getNamesystem().getBlockManager();
+      cluster.waitActive();
+
+      final DataNodeFaultInjector injector = new DataNodeFaultInjector() {
+        @Override
+        public void delayDeleteReplica() {
+          // Lets wait for the remove replica process.
+          try {
+            semaphore.acquire(1);
+          } catch (InterruptedException e) {
+            // ignore.
+          }
+        }
+      };
+      DataNodeFaultInjector.set(injector);
+
+      // Create file.
+      Path path = new Path("/testfile");
+      DFSTestUtil.createFile(fs, path, 1024, (short) 3, 0);
+      DFSTestUtil.waitReplication(fs, path, (short) 3);
+      LocatedBlock lb = DFSTestUtil.getAllBlocks(fs, path).get(0);
+      ExtendedBlock extendedBlock = lb.getBlock();
+      DatanodeInfo[] loc = lb.getLocations();
+      assertEquals(3, loc.length);
+
+      // Set replication as 2, to choose excess.
+      fs.setReplication(path, (short) 2);
+
+      // Check excessRedundancyMap and invalidateBlocks size as 1.
+      assertEquals(1, blockManager.getExcessBlocksCount());
+      assertEquals(1, blockManager.getPendingDeletionBlocksCount());
+      DataNode excessDn = Arrays.stream(loc).
+          filter(datanodeInfo -> blockManager.getExcessSize4Testing(
+              datanodeInfo.getDatanodeUuid()) > 0)
+          .map(datanodeInfo -> cluster.getDataNode(datanodeInfo.getIpcPort()))
+          .findFirst()
+          .orElse(null);
+
+      // Schedule blocks for deletion at excessDn.
+      assertEquals(1, blockManager.computeInvalidateWork(1));
+      // Check excessRedundancyMap size as 1.
+      assertEquals(1, blockManager.getExcessBlocksCount());
+      // Check invalidateBlocks size as 0.
+      assertEquals(0, blockManager.getPendingDeletionBlocksCount());
+      assertNotNull(excessDn);
+
+      // Name node will ask datanode to delete replicas in heartbeat response.
+      cluster.triggerHeartbeats();
+
+      // Wait for the datanode to process any block deletions
+      // that have already been asynchronously queued.
+      DataNode finalExcessDn = excessDn;
+      GenericTestUtils.waitFor(() ->
+              cluster.getFsDatasetTestUtils(finalExcessDn).getPendingAsyncDeletions() == 1,
+          100, 1000);
+
+      // Restart the datanode.
+      int ipcPort = excessDn.getDatanodeId().getIpcPort();
+      MiniDFSCluster.DataNodeProperties dataNodeProperties = cluster.stopDataNode(
+          excessDn.getDatanodeId().getXferAddr());
+      assertTrue(cluster.restartDataNode(dataNodeProperties, true));
+      semaphore.release(1);
+      cluster.waitActive();
+
+      // Check replica is exists in excessDn.
+      excessDn = cluster.getDataNode(ipcPort);
+      assertNotNull(cluster.getFsDatasetTestUtils(excessDn).fetchReplica(extendedBlock));
+      assertEquals(0, cluster.getFsDatasetTestUtils(excessDn).getPendingAsyncDeletions());
+
+      // Check excessRedundancyMap and invalidateBlocks size as 0, not include excessDn.
+      assertEquals(0, blockManager.getExcessSize4Testing(excessDn.getDatanodeUuid()));
+      assertEquals(0, blockManager.getExcessBlocksCount());
+      assertEquals(0, blockManager.getPendingDeletionReplicatedBlocks());
+
+      // Call rescan the list of postponed blocks.
+      assertEquals(1, blockManager.getPostponedMisreplicatedBlocksCount());
+      blockManager.rescanPostponedMisreplicatedBlocks();
+
+      // Check excessRedundancyMap and invalidateBlocks size as 1.
+      assertEquals(1, blockManager.getExcessBlocksCount());
+      assertEquals(1, blockManager.getPendingDeletionBlocksCount());
+
+      // Schedule blocks for deletion.
+      assertEquals(1, blockManager.computeInvalidateWork(1));
+
+      cluster.triggerHeartbeats();
+
+      // Make it resume the removeReplicaFromMem method.
+      semaphore.release(1);
+
+      // Wait for the datanode in the cluster to process any block
+      // deletions that have already been asynchronously queued
+      cluster.waitForDNDeletions();
+
+      // Trigger immediate deletion report.
+      cluster.triggerDeletionReports();
+
+      // The replica num should be 2.
+      assertEquals(2, DFSTestUtil.getAllBlocks(fs, path).get(0).getLocations().length);
+      assertEquals(0, blockManager.getExcessBlocksCount());
+    } finally {
+      DataNodeFaultInjector.set(oldInjector);
     }
   }
 }

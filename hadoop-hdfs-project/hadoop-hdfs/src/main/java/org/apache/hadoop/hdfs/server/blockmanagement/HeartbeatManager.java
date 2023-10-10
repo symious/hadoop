@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -245,6 +246,22 @@ class HeartbeatManager implements DatanodeStatistics {
       //update its timestamp
       d.updateHeartbeatState(StorageReport.EMPTY_ARRAY, 0L, 0L, 0, 0, null);
       stats.add(d);
+    } else {
+      if (!blockManager.isPopulatingReplQueues()) {
+        return;
+      }
+      // Remove blocks from excessRedundancyMap by datanode.
+      Collection<BlockInfo> excessBlocks = blockManager.removeBlocksFromExcessRedundancyMap(d);
+      // Remove blocks from invalidateBlocks in blockManager.
+      blockManager.removeBlocksFromInvalidateBlocks(d);
+      // Remove blocks from invalidateBlocks in datanode.
+      d.clearInvalidateBlocks();
+      // Add blocks into postponed queue, add excessBlocks != null to avoid the mock test UT failed.
+      if (excessBlocks != null && !excessBlocks.isEmpty()) {
+        for (BlockInfo block : excessBlocks) {
+          blockManager.postponeBlock(block);
+        }
+      }
     }
   }
 

@@ -116,6 +116,7 @@ import org.apache.hadoop.hdfs.server.namenode.CacheManager;
 
 import static org.apache.hadoop.hdfs.util.StripedBlockUtil.getInternalBlockLength;
 
+import org.apache.hadoop.hdfs.util.LightWeightHashSet;
 import org.apache.hadoop.metrics2.util.MBeans;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -1784,6 +1785,19 @@ public class BlockManager implements BlockStatsMXBean {
         storageInfo, node);
   }
 
+  /** Remove the blocks to the given DatanodeDescriptor from InvalidateBlocks. */
+  void removeBlocksFromInvalidateBlocks(final DatanodeDescriptor node) {
+    assert namesystem.hasWriteLock();
+    invalidateBlocks.remove(node);
+  }
+
+  /** Remove the blocks to the given DatanodeDescriptor from excessRedundancyMap. */
+  LightWeightHashSet<BlockInfo> removeBlocksFromExcessRedundancyMap(
+      final DatanodeDescriptor node) {
+    assert namesystem.hasWriteLock();
+    return excessRedundancyMap.remove(node);
+  }
+
   /**
    * Adds block to list of blocks which will be invalidated on specified
    * datanode and log the operation
@@ -1992,7 +2006,6 @@ public class BlockManager implements BlockStatsMXBean {
   void postponeBlock(Block blk) {
     postponedMisreplicatedBlocks.add(blk);
   }
-  
   
   void updateState() {
     pendingReconstructionBlocksCount = pendingReconstruction.size();

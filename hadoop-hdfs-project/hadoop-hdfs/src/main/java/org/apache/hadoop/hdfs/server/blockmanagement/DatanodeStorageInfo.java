@@ -175,6 +175,10 @@ public class DatanodeStorageInfo {
     return blockContentsStale;
   }
 
+  public void setBlockContentsStale(boolean value) {
+    blockContentsStale = value;
+  }
+
   void markStaleAfterFailover() {
     heartbeatedSinceFailover = false;
     blockContentsStale = true;

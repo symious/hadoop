@@ -353,6 +353,12 @@ public class DatanodeDescriptor extends DatanodeInfo {
     this.cached.clear();
     this.pendingUncached.clear();
   }
+
+  public void clearInvalidateBlocks() {
+    synchronized (invalidateBlocks) {
+      this.invalidateBlocks.clear();
+    }
+  }
   
   public void clearBlockQueues() {
     synchronized (invalidateBlocks) {
@@ -970,6 +976,7 @@ public class DatanodeDescriptor extends DatanodeInfo {
     for(DatanodeStorageInfo storage : getStorageInfos()) {
       if (storage.getStorageType() != StorageType.PROVIDED) {
         storage.setBlockReportCount(0);
+        storage.setBlockContentsStale(true);
       }
     }
     heartbeatedSinceRegistration = false;

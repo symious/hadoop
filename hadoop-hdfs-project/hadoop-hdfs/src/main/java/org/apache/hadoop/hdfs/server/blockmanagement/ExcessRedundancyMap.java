@@ -125,4 +125,19 @@ class ExcessRedundancyMap {
     }
     return removed;
   }
+
+  /**
+   * Remove the redundancy corresponding to the given datanode.
+   *
+   * @return the block list of redundancies corresponding to the given datanode.
+   */
+  synchronized LightWeightHashSet<BlockInfo> remove(DatanodeDescriptor dn) {
+    final LightWeightHashSet<BlockInfo> set = map.remove(dn.getDatanodeUuid());
+    if (set == null) {
+      return new LightWeightHashSet<>();
+    }
+    size.addAndGet(set.size() * -1);
+    blockLog.debug("BLOCK* ExcessRedundancyMap.remove {}", dn);
+    return set;
+  }
 }
