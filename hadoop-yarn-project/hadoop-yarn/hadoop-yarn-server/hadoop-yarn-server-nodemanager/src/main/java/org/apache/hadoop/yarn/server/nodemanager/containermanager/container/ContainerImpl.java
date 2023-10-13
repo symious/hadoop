@@ -1164,6 +1164,10 @@ public class ContainerImpl implements Container {
       super.transition(container, updateEvent);
       container.metrics.changeContainer(originalToken.getResource(),
           updateEvent.getUpdatedToken().getResource());
+      container.metrics.updateContainerMemoryChange(
+          originalToken.getResource().getMemorySize(),
+          updateEvent.getUpdatedToken().getResource().getMemorySize(),
+          updateEvent.isIncrease());
       container.dispatcher.getEventHandler().handle(
           new UpdateContainerSchedulerEvent(container,
               originalToken, updateEvent));

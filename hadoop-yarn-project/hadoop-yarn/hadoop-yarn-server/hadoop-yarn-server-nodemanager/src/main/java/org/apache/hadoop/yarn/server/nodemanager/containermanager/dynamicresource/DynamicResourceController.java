@@ -106,7 +106,7 @@ public class DynamicResourceController extends Thread {
     if (increaseSum != 0 && decreaseSum != 0) {
       LOG.info(
           "Merge action cancel " + (increaseSum >= Math.abs(decreaseSum) ?
-              Math.abs(decreaseSum) : Math.abs(increaseSum + decreaseSum))
+              Math.abs(decreaseSum) : increaseSum)
               + "Mb memory decrease request.");
     }
     if (increaseSum >= Math.abs(decreaseSum)) {

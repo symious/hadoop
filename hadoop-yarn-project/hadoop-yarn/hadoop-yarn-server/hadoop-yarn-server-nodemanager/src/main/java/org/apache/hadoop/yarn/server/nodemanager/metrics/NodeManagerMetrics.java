@@ -127,6 +127,12 @@ public class NodeManagerMetrics {
   @Metric("how much time passed after nm startup")
   MutableGaugeLong passedTimeAfterStartup;
 
+  @Metric("Decrease container's memory in GB")
+  MutableCounterLong decreaseMemorySize;
+
+  @Metric("Increase container's memory in GB")
+  MutableCounterLong increaseMemorySize;
+
   // CHECKSTYLE:ON:VisibilityModifier
 
   private JvmMetrics jvmMetrics = null;
@@ -552,5 +558,16 @@ public class NodeManagerMetrics {
 
   public void setTotalCpuCore(int totalCpuCore) {
     this.totalCpuCore.set(totalCpuCore);
+  }
+
+  public void updateContainerMemoryChange(long originalMemory,
+      long targetMemory, boolean isIncrease) {
+    if (isIncrease) {
+      increaseMemorySize
+          .incr((long) Math.ceil((targetMemory - originalMemory) / 1024d));
+    } else {
+      decreaseMemorySize
+          .incr((long) Math.ceil((originalMemory - targetMemory) / 1024d));
+    }
   }
 }
