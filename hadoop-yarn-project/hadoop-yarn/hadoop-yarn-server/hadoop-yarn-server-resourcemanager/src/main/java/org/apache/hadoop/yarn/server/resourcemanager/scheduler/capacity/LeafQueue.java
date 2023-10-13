@@ -2024,8 +2024,12 @@ public class LeafQueue extends AbstractCSQueue {
       this.getMetrics().setMaxNumApps(this.getMaxApplications());
 
       if (!CollectionUtils.isEmpty(accessibleLabels)) {
-        updatePartitionQueueMetrics();
+        Iterator<String> it = accessibleLabels.iterator();
+        while (it.hasNext()) {
+          updateMetrics(it.next());
+        }
       }
+      updateMetrics(RMNodeLabelsManager.NO_LABEL);
 
       // queue metrics are updated, more resource may be available
       // activate the pending applications if possible
@@ -2047,32 +2051,28 @@ public class LeafQueue extends AbstractCSQueue {
     }
   }
 
-  private void updatePartitionQueueMetrics() {
-    Iterator<String> it = accessibleLabels.iterator();
-    while (it.hasNext()) {
-      String tmpLabel = it.next();
-      Resource configuredMinResource =
-          getQueueResourceQuotas().getConfiguredMinResource(tmpLabel);
-      Resource configuredMaxResource =
-          getQueueResourceQuotas().getConfiguredMaxResource(tmpLabel);
-      Resource effectiveResource = getEffectiveCapacity(tmpLabel);
-      Resource maxEffectiveResource = getEffectiveMaxCapacity(tmpLabel);
-      QueueMetrics pMetrics = getMetrics().getPartitionQueueMetrics(tmpLabel);
-      if (null != pMetrics) {
-        if (null != effectiveResource && null != maxEffectiveResource) {
-          pMetrics.updateEffectiveMetric(effectiveResource.getMemorySize(),
-              maxEffectiveResource.getMemorySize(), effectiveResource.getVirtualCores(),
-              maxEffectiveResource.getVirtualCores());
-        }
-        if (null != configuredMinResource && null != configuredMaxResource) {
-          pMetrics.updateConfigureMetric(configuredMinResource.getMemorySize(),
-              configuredMaxResource.getMemorySize(), configuredMinResource.getVirtualCores(),
-              configuredMaxResource.getVirtualCores());
-        }
+  private void updateMetrics(String label) {
+    Resource configuredMinResource =
+            getQueueResourceQuotas().getConfiguredMinResource(label);
+    Resource configuredMaxResource =
+            getQueueResourceQuotas().getConfiguredMaxResource(label);
+    Resource effectiveResource = getEffectiveCapacity(label);
+    Resource maxEffectiveResource = getEffectiveMaxCapacity(label);
+    QueueMetrics pMetrics = getMetrics().getPartitionQueueMetrics(label);
+    if (null != pMetrics) {
+      if (null != effectiveResource && null != maxEffectiveResource) {
+        pMetrics.updateEffectiveMetric(effectiveResource.getMemorySize(),
+                maxEffectiveResource.getMemorySize(), effectiveResource.getVirtualCores(),
+                maxEffectiveResource.getVirtualCores());
       }
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Update Label Queue Metrics: partition-" + tmpLabel + ".");
+      if (null != configuredMinResource && null != configuredMaxResource) {
+        pMetrics.updateConfigureMetric(configuredMinResource.getMemorySize(),
+                configuredMaxResource.getMemorySize(), configuredMinResource.getVirtualCores(),
+                configuredMaxResource.getVirtualCores());
       }
+    }
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Update Label Queue Metrics: partition-" + label + ".");
     }
   }
 
