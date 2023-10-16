@@ -237,7 +237,7 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
 
       // Update usage metrics
       queue.getMetrics().releaseResources(partition,
-          getUser(), 1, containerResource);
+          getUser(), 1, containerResource, !rmContainer.isDecreaseContainer());
       attemptResourceUsage.decUsed(partition, containerResource);
 
       // Clear resource utilization metrics cache.

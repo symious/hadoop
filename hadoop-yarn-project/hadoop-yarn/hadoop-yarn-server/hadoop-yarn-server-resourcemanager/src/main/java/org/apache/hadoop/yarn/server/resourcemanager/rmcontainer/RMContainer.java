@@ -128,4 +128,6 @@ public interface RMContainer extends EventHandler<RMContainerEvent>,
    * @return allocation tags, could be null/empty
    */
   Set<String> getAllocationTags();
+
+  boolean isDecreaseContainer();
 }

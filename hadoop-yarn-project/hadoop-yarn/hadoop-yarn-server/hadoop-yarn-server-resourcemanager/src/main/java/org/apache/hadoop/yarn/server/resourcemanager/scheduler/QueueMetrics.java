@@ -889,32 +889,35 @@ public class QueueMetrics implements MetricsSource {
 
   public void releaseResources(String partition, String user, int containers,
       Resource res) {
+    releaseResources(partition, user, containers, res, true);
+  }
 
+  public void releaseResources(String partition, String user, int containers,
+      Resource res, boolean decrContainers) {
     if (partition == null || partition.equals(RMNodeLabelsManager.NO_LABEL)) {
-      internalReleaseResources(partition, user, containers, res);
+      internalReleaseResources(partition, user, containers, res, decrContainers);
     }
 
     QueueMetrics partitionQueueMetrics = getPartitionQueueMetrics(partition);
     if (partitionQueueMetrics != null) {
       partitionQueueMetrics.internalReleaseResources(partition, user,
-          containers, res);
+          containers, res, decrContainers);
       QueueMetrics partitionMetrics = getPartitionMetrics(partition);
       if (partitionMetrics != null) {
-        partitionMetrics.computeReleaseResources(containers, res);
+        partitionMetrics.computeReleaseResources(containers, res, decrContainers);
       }
     }
   }
 
   public void internalReleaseResources(String partition, String user,
-      int containers, Resource res) {
-
-    computeReleaseResources(containers, res);
+      int containers, Resource res, boolean decrContainers) {
+    computeReleaseResources(containers, res, decrContainers);
     QueueMetrics userMetrics = getUserMetrics(user);
     if (userMetrics != null) {
-      userMetrics.internalReleaseResources(partition, user, containers, res);
+      userMetrics.internalReleaseResources(partition, user, containers, res, decrContainers);
     }
     if (parent != null) {
-      parent.internalReleaseResources(partition, user, containers, res);
+      parent.internalReleaseResources(partition, user, containers, res, decrContainers);
     }
   }
 
@@ -924,9 +927,9 @@ public class QueueMetrics implements MetricsSource {
    * @param containers number of containers
    * @param res resource containing memory size, vcores etc
    */
-  private void computeReleaseResources(int containers, Resource res) {
-    allocatedContainers.decr(containers);
-    aggregateContainersReleased.incr(containers);
+
+  private void computeReleaseResources(int containers, Resource res,
+      boolean decrContainers) {
     allocatedMB.decr(res.getMemorySize() * containers);
     allocatedVCores.decr(res.getVirtualCores() * containers);
     if (queueMetricsForCustomResources != null) {
@@ -934,6 +937,10 @@ public class QueueMetrics implements MetricsSource {
       queueMetricsForCustomResources.registerCustomResources(
           queueMetricsForCustomResources.getAllocatedValues(), this.registry,
           ALLOCATED_RESOURCE_METRIC_PREFIX, ALLOCATED_RESOURCE_METRIC_DESC);
+    }
+    if (decrContainers) {
+      allocatedContainers.decr(containers);
+      aggregateContainersReleased.incr(containers);
     }
   }
 

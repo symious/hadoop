@@ -1500,6 +1500,7 @@ public abstract class AbstractYarnScheduler
         decreasedContainer.getNodeId(), appAttempt.getUser(), rmContext,
         rmContainer.isRemotelyAllocated());
     ((RMContainerImpl) newRmContainer).setQueueName(rmContainer.getQueueName());
+    ((RMContainerImpl) newRmContainer).setDecreasedContainer();
     appAttempt.addRMContainer(decreasedContainer.getId(), rmContainer);
     ((AbstractYarnScheduler) rmContext.getScheduler()).getNode(
         decreasedContainer.getNodeId()).allocateContainer(newRmContainer);

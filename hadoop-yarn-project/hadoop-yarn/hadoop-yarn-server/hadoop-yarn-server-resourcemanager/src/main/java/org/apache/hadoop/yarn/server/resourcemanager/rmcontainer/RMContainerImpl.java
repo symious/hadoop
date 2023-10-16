@@ -207,6 +207,8 @@ public class RMContainerImpl implements RMContainer {
 
   private volatile Set<String> allocationTags = null;
 
+  private boolean isDecreaseContainer;
+
   public RMContainerImpl(Container container, SchedulerRequestKey schedulerKey,
       ApplicationAttemptId appAttemptId, NodeId nodeId, String user,
       RMContext rmContext) {
@@ -899,6 +901,10 @@ public class RMContainerImpl implements RMContainer {
     this.queueName = queueName;
   }
 
+  public void setDecreasedContainer() {
+    this.isDecreaseContainer = true;
+  }
+
   @Override
   public String getQueueName() {
     return queueName;
@@ -938,6 +944,11 @@ public class RMContainerImpl implements RMContainer {
     if (containerId != null) {
       rmContext.getRMApplicationHistoryWriter().containerStarted(this);
     }
+  }
+
+  @Override
+  public boolean isDecreaseContainer() {
+    return isDecreaseContainer;
   }
 
   /**
