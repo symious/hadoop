@@ -29,10 +29,12 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -204,7 +206,10 @@ public class Balancer {
       + "on over-utilized machines."
       + "\n\t[-dataCenterConstraint <data-center-constraint>]"
       + "\tConstraint balance scope into specific data center."
-      + "\n\t[-asService]\tRun as a long running service.";
+      + "\n\t[-asService]\tRun as a long running service."
+      + "\n\t[-sortTopNodes]"
+      + "\tSort datanodes based on the utilization so "
+      + "that highly utilized datanodes get scheduled first.";
 
   @VisibleForTesting
   static volatile boolean serviceRunning = false;
@@ -221,6 +226,7 @@ public class Balancer {
   protected final double threshold;
   protected final long maxSizeToMove;
   private final long defaultBlockSize;
+  private final boolean sortTopNodes;
 
   // all data node lists
   private final Collection<Source> overUtilized = new LinkedList<Source>();
@@ -338,6 +344,7 @@ public class Balancer {
     this.policy = p.getBalancingPolicy();
     this.sourceNodes = p.getSourceNodes();
     this.runDuringUpgrade = p.getRunDuringUpgrade();
+    this.sortTopNodes = p.getSortTopNodes();
 
     this.maxSizeToMove = getLongBytes(conf,
         DFSConfigKeys.DFS_BALANCER_MAX_SIZE_TO_MOVE_KEY,
@@ -384,6 +391,8 @@ public class Balancer {
       policy.accumulateSpaces(r);
     }
     policy.initAvgUtilization();
+    // Store the capacity % of over utilized nodes for sorting, if needed.
+    Map<Source, Double> overUtilizedPercentage = new HashMap<>();
 
     // create network topology and classify utilization collections: 
     //   over-utilized, above-average, below-average and under-utilized.
@@ -419,6 +428,7 @@ public class Balancer {
           } else {
             overLoadedBytes += percentage2bytes(thresholdDiff, capacity);
             overUtilized.add(s);
+            overUtilizedPercentage.put(s, utilization);
           }
           g = s;
         } else {
@@ -434,6 +444,10 @@ public class Balancer {
       }
     }
 
+    if (sortTopNodes) {
+      sortOverUtilized(overUtilizedPercentage);
+    }
+
     logUtilizationCollections();
     
     Preconditions.checkState(dispatcher.getStorageGroupMap().size()
@@ -443,6 +457,20 @@ public class Balancer {
     
     // return number of bytes to be moved in order to make the cluster balanced
     return Math.max(overLoadedBytes, underLoadedBytes);
+  }
+
+  private void sortOverUtilized(Map<Source, Double> overUtilizedPercentage) {
+    Preconditions.checkState(overUtilized instanceof List,
+        "Collection overUtilized is not a List.");
+
+    LOG.info("Sorting over-utilized nodes by capacity" +
+        " to bring down top used datanode capacity faster");
+
+    List<Source> list = (List<Source>) overUtilized;
+    list.sort(
+        (Source s1, Source s2) ->
+            (Double.compare(overUtilizedPercentage.get(s2), overUtilizedPercentage.get(s1)))
+    );
   }
 
   protected static long computeMaxSize2Move(final long capacity, final long remaining,
@@ -1016,6 +1044,10 @@ public class Balancer {
             } else if ("-asService".equalsIgnoreCase(args[i])) {
               b.setRunAsService(true);
               LOG.info("Balancer will run as a long running service");
+            } else if ("-sortTopNodes".equalsIgnoreCase(args[i])) {
+              b.setSortTopNodes(true);
+              LOG.info("Balancer will sort nodes by" +
+                  " capacity usage percentage to prioritize top used nodes");
             } else {
               throw new IllegalArgumentException("args = "
                   + Arrays.toString(args));

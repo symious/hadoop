@@ -54,6 +54,8 @@ final class BalancerParameters {
 
   private final boolean runAsService;
 
+  private final boolean sortTopNodes;
+
   static final BalancerParameters DEFAULT = new BalancerParameters();
 
   private BalancerParameters() {
@@ -72,6 +74,7 @@ final class BalancerParameters {
     this.runAsService = builder.runAsService;
     this.dataCenterConstraint = builder.dataCenterConstraint;
     this.targetDataCenter = builder.targetDataCenter;
+    this.sortTopNodes = builder.sortTopNodes;
   }
 
   BalancingPolicy getBalancingPolicy() {
@@ -121,16 +124,21 @@ final class BalancerParameters {
     return this.targetDataCenter;
   }
 
+  boolean getSortTopNodes() {
+    return this.sortTopNodes;
+  }
+
   @Override
   public String toString() {
     return String.format("%s.%s [%s," + " threshold = %s,"
         + " max idle iteration = %s," + " #excluded nodes = %s,"
         + " #included nodes = %s," + " #source nodes = %s,"
-        + " #blockpools = %s," + " run during upgrade = %s]",
+        + " #blockpools = %s," + " run during upgrade = %s]"
+        + " sort top nodes = %s",
         Balancer.class.getSimpleName(), getClass().getSimpleName(), policy,
         threshold, maxIdleIteration, excludedNodes.size(),
         includedNodes.size(), sourceNodes.size(), blockpools.size(),
-        runDuringUpgrade);
+        runDuringUpgrade, sortTopNodes);
   }
 
   static class Builder {
@@ -147,6 +155,7 @@ final class BalancerParameters {
     private String dataCenterConstraint = null;
     private String targetDataCenter = null;
     private boolean runAsService = false;
+    private boolean sortTopNodes = false;
 
     Builder() {
     }
@@ -225,6 +234,11 @@ final class BalancerParameters {
         this.targetDataCenter =
             ROOT_BASE + targetDataCenter;
       }
+      return this;
+    }
+
+    Builder setSortTopNodes(boolean shouldSortTopNodes) {
+      this.sortTopNodes = shouldSortTopNodes;
       return this;
     }
 
