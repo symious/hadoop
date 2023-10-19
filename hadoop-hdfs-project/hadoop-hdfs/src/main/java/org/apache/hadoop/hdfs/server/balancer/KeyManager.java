@@ -47,6 +47,7 @@ public class KeyManager implements Closeable, DataEncryptionKeyFactory {
   private static final Logger LOG = LoggerFactory.getLogger(KeyManager.class);
 
   private final NamenodeProtocol namenode;
+  private final NameNodeConnector nnc;
 
   private final boolean isBlockTokenEnabled;
   private final boolean encryptDataTransfer;
@@ -61,13 +62,14 @@ public class KeyManager implements Closeable, DataEncryptionKeyFactory {
    */
   private Timer timer;
 
-  public KeyManager(String blockpoolID, NamenodeProtocol namenode,
+  public KeyManager(String blockpoolID, NamenodeProtocol namenode, NameNodeConnector nnc,
       boolean encryptDataTransfer, Configuration conf) throws IOException {
+    this.nnc = nnc;
     this.namenode = namenode;
     this.encryptDataTransfer = encryptDataTransfer;
     this.timer = new Timer();
 
-    final ExportedBlockKeys keys = namenode.getBlockKeys();
+    final ExportedBlockKeys keys = getNNProxy().getBlockKeys();
     this.isBlockTokenEnabled = keys.isBlockTokenEnabled();
     if (isBlockTokenEnabled) {
       long updateInterval = keys.getKeyUpdateInterval();
@@ -92,6 +94,10 @@ public class KeyManager implements Closeable, DataEncryptionKeyFactory {
       this.blockTokenSecretManager = null;
       this.blockKeyUpdater = null;
     }
+  }
+
+  private NamenodeProtocol getNNProxy() throws IOException {
+    return this.nnc != null ? this.nnc.getActiveProxy() : this.namenode;
   }
   
   public void startBlockKeyUpdater() {
@@ -177,7 +183,7 @@ public class KeyManager implements Closeable, DataEncryptionKeyFactory {
       try {
         while (shouldRun) {
           try {
-            blockTokenSecretManager.addKeys(namenode.getBlockKeys());
+            blockTokenSecretManager.addKeys(getNNProxy().getBlockKeys());
           } catch (IOException e) {
             LOG.error("Failed to set keys", e);
           }

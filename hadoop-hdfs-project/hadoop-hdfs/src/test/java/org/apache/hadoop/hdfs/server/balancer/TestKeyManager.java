@@ -62,7 +62,7 @@ public class TestKeyManager {
     when(namenode.getBlockKeys()).thenReturn(btsm.exportKeys());
 
     // Instantiate a KeyManager instance and get data encryption key.
-    KeyManager keyManager = new KeyManager(blockPoolId, namenode,
+    KeyManager keyManager = new KeyManager(blockPoolId, namenode, null,
         true, conf);
     Whitebox.setInternalState(keyManager, "timer", fakeTimer);
     Whitebox.setInternalState(

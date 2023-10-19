@@ -223,7 +223,7 @@ public class NameNodeConnector implements Closeable {
     this.blockpoolID = namespaceinfo.getBlockPoolID();
 
     final FsServerDefaults defaults = fs.getServerDefaults(new Path("/"));
-    this.keyManager = new KeyManager(blockpoolID, namenode,
+    this.keyManager = new KeyManager(blockpoolID, namenode, this,
         defaults.getEncryptDataTransfer(), conf);
   }
 
@@ -358,7 +358,7 @@ public class NameNodeConnector implements Closeable {
     return nnproxy;
   }
 
-  private BalancerProtocols getActiveProxy() throws IOException {
+  public BalancerProtocols getActiveProxy() throws IOException {
     return getNNProxy(HAServiceState.ACTIVE);
   }
 
