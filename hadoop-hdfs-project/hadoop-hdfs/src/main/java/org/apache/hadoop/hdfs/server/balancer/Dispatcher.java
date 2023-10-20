@@ -45,13 +45,15 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
-import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
 import org.apache.hadoop.hdfs.util.DataTransferThrottler;
+import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -89,7 +91,6 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 
 /** Dispatching block replica moves between datanodes. */
@@ -152,6 +153,8 @@ public class Dispatcher {
   private final int longTailBlockThreshold;
   private volatile boolean supportCrossDC = false;
   private volatile DataTransferThrottler crossDCThrottler = null;
+
+  private boolean skipAllTimeoutTasks;
 
   static class Allocator {
     private final int max;
@@ -449,11 +452,13 @@ public class Dispatcher {
       Socket sock = new Socket();
       DataOutputStream out = null;
       DataInputStream in = null;
+      boolean isIterationOver = false;
       try {
         if (source.isIterationOver()){
           LOG.info("Cancel moving " + this +
               " as iteration is already cancelled due to" +
               " dfs.balancer.max-iteration-time is passed.");
+          isIterationOver = true;
           throw new IOException("Block move cancelled.");
         }
         LOG.info("Start moving " + this);
@@ -515,8 +520,17 @@ public class Dispatcher {
         IOUtils.closeStream(in);
         IOUtils.closeSocket(sock);
 
-        proxySource.removePendingBlock(this);
-        target.getDDatanode().removePendingBlock(this);
+        if (isIterationOver && skipAllTimeoutTasks) {
+          List<PendingMove> pendingMoves = target.getDDatanode().clearPendingBlocks();
+          pendingMoves.forEach(k -> {
+            if (k.proxySource != null) {
+              k.proxySource.removePendingBlock(k);
+            }
+          });
+        } else {
+          proxySource.removePendingBlock(this);
+          target.getDDatanode().removePendingBlock(this);
+        }
 
         synchronized (this) {
           reset();
@@ -794,7 +808,9 @@ public class Dispatcher {
     }
 
     synchronized ExecutorService initMoveExecutor(int poolSize) {
-      return moveExecutor = Executors.newFixedThreadPool(poolSize);
+      ThreadFactory threadFactory = new ThreadFactoryBuilder()
+          .setNameFormat("MoverExecutor-%d-" + this.getDatanodeInfo().getXferAddr()).build();
+      return moveExecutor = Executors.newFixedThreadPool(poolSize, threadFactory);
     }
 
     synchronized ExecutorService getMoveExecutor() {
@@ -855,6 +871,11 @@ public class Dispatcher {
     /** Remove a scheduled block move from the node */
     public synchronized boolean removePendingBlock(PendingMove pendingBlock) {
       return pendings.remove(pendingBlock);
+    }
+    public synchronized List<PendingMove> clearPendingBlocks() {
+      List<PendingMove> pendingLists = new ArrayList<>(this.pendings);
+      this.pendings.clear();
+      return pendingLists;
     }
 
     public void setHasFailure() {
@@ -1194,8 +1215,10 @@ public class Dispatcher {
     this.movedBlocks = new MovedBlocks<StorageGroup>(movedWinWidth);
     this.dataCenterConstraint = dataCenterConstraint;
 
+    ThreadFactory threadFactory = new ThreadFactoryBuilder()
+        .setNameFormat("Dispatcher-%d").build();
     this.dispatchExecutor = dispatcherThreads == 0? null
-        : Executors.newFixedThreadPool(dispatcherThreads);
+        : Executors.newFixedThreadPool(dispatcherThreads, threadFactory);
     this.moverThreadAllocator = new Allocator(moverThreads);
     this.maxMoverThreads = moverThreads;
     this.maxConcurrentMovesPerNode = maxConcurrentMovesPerNode;
@@ -1228,6 +1251,8 @@ public class Dispatcher {
     this.longTailBlockThreshold = conf.getInt(
         DFSConfigKeys.DFS_BALANCER_LONG_TAIL_BLOCK_THRESHOLD_KEY,
         DFSConfigKeys.DFS_BALANCER_BLOCK_MOVE_TIMEOUT_DEFAULT);
+    this.skipAllTimeoutTasks = conf.getBoolean(DFSConfigKeys.DFS_BALANCER_SKIP_ALL_TIMEOUT_TASKS_KEY,
+        DFSConfigKeys.DFS_BALANCER_SKIP_ALL_TIMEOUT_TASKS_DEFAULT);
   }
 
   public DistributedFileSystem getDistributedFileSystem() {
@@ -1356,12 +1381,7 @@ public class Dispatcher {
       p.proxySource.removePendingBlock(p);
       return;
     }
-    moveExecutor.execute(new Runnable() {
-      @Override
-      public void run() {
-        p.dispatch();
-      }
-    });
+    moveExecutor.execute(p::dispatch);
   }
 
   public boolean dispatchAndCheckContinue()
@@ -1382,6 +1402,7 @@ public class Dispatcher {
    * @return the total number of bytes successfully moved in this iteration.
    */
   private long dispatchBlockMoves() throws InterruptedException {
+    long beginTime = Time.monotonicNow();
     final long bytesLastMoved = getBytesMoved();
     final long blocksLastMoved = getBblocksMoved();
     final Future<?>[] futures = new Future<?>[sources.size()];
@@ -1412,10 +1433,13 @@ public class Dispatcher {
     final Iterator<Source> i = sources.iterator();
     for (int j = 0; j < futures.length; j++) {
       final Source s = i.next();
-      futures[j] = dispatchExecutor.submit(new Runnable() {
-        @Override
-        public void run() {
+      futures[j] = dispatchExecutor.submit(() -> {
+        String oldThreadName = Thread.currentThread().getName();
+        try {
+          Thread.currentThread().setName("Dispatcher-" + s.getDatanodeInfo().getXferAddr());
           s.dispatchBlocks();
+        } finally {
+          Thread.currentThread().setName(oldThreadName);
         }
       });
     }
@@ -1431,7 +1455,9 @@ public class Dispatcher {
 
     // wait for all reportedBlock moving to be done
     waitForMoveCompletion(targets);
-    LOG.info("Total bytes (blocks) moved in this iteration {} ({})",
+    long endTime = Time.monotonicNow();
+    LOG.info("This iteration cost {}min to move {} bytes {} blocks.",
+        TimeUnit.MINUTES.convert(endTime - beginTime, TimeUnit.MILLISECONDS),
         StringUtils.byteDesc(getBytesMoved() - bytesLastMoved),
         (getBblocksMoved() - blocksLastMoved));
     return getBytesMoved() - bytesLastMoved;

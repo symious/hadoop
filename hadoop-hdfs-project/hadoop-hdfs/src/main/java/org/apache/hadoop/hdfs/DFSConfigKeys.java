@@ -2272,4 +2272,6 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String DFS_BALANCER_LONG_TAIL_BLOCK_THRESHOLD_KEY =
       "dfs.balancer.long-tail.block.threshold";
   public static final int DFS_BALANCER_LONG_TAIL_BLOCK_THRESHOLD_DEFAULT = 0;
+  public static final String DFS_BALANCER_SKIP_ALL_TIMEOUT_TASKS_KEY = "dfs.balancer.skip.all.timeout.tasks";
+  public static final boolean DFS_BALANCER_SKIP_ALL_TIMEOUT_TASKS_DEFAULT = false;
 }
