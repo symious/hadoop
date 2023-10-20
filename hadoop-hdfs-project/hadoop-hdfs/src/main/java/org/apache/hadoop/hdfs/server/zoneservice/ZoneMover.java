@@ -817,7 +817,7 @@ public class ZoneMover {
       }
 
       // wait for pending move to finish and retry the failed migration
-      boolean hasFailed = Dispatcher.waitForMoveCompletion(storages.targets.values());
+      boolean hasFailed = dispatcher.waitForMoveCompletion(storages.targets.values());
       boolean hasSuccess = Dispatcher.checkForSuccess(storages.targets.values());
 
       // check and update retryCount

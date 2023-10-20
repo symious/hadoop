@@ -301,7 +301,7 @@ public class Mover {
         processPath(target.toUri().getPath(), result);
       }
       // wait for pending move to finish and retry the failed migration
-      boolean hasFailed = Dispatcher.waitForMoveCompletion(storages.targets
+      boolean hasFailed = dispatcher.waitForMoveCompletion(storages.targets
           .values());
       Dispatcher.checkForBlockPinningFailures(excludedPinnedBlocks,
           storages.targets.values());

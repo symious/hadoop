@@ -149,6 +149,7 @@ public class Dispatcher {
 
   private long maxIterationTime;
   private final int preferSourcePercent;
+  private final int longTailBlockThreshold;
   private volatile boolean supportCrossDC = false;
   private volatile DataTransferThrottler crossDCThrottler = null;
 
@@ -1224,6 +1225,9 @@ public class Dispatcher {
         DFSConfigKeys.DFS_DISPATCHER_PRE_SOURCE_PERCENT_DEFAULT);
     this.delayAfterErrors = conf.getLong(DFSConfigKeys.DFS_DISPATCHER_DELAY_TIME_AFTER_ERROR_KEY,
         DFSConfigKeys.DFS_DISPATCHER_DELAY_TIME_AFTER_ERROR_DEFAULT);
+    this.longTailBlockThreshold = conf.getInt(
+        DFSConfigKeys.DFS_BALANCER_LONG_TAIL_BLOCK_THRESHOLD_KEY,
+        DFSConfigKeys.DFS_BALANCER_BLOCK_MOVE_TIMEOUT_DEFAULT);
   }
 
   public DistributedFileSystem getDistributedFileSystem() {
@@ -1437,13 +1441,13 @@ public class Dispatcher {
    * Wait for all reportedBlock move confirmations.
    * @return true if there is failed move execution
    */
-  public static boolean waitForMoveCompletion(
+  public boolean waitForMoveCompletion(
       Iterable<? extends StorageGroup> targets) {
     boolean hasFailure = false;
     for(;;) {
       boolean empty = true;
       for (StorageGroup t : targets) {
-        if (!t.getDDatanode().isPendingQEmpty()) {
+        if (t.getDDatanode().getPendingSize() > longTailBlockThreshold) {
           empty = false;
           break;
         } else {
