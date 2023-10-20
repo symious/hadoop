@@ -96,6 +96,7 @@ public class TestStorageMover {
     DEFAULT_CONF.setLong(
         DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY, 2L);
     DEFAULT_CONF.setLong(DFSConfigKeys.DFS_MOVER_MOVEDWINWIDTH_KEY, 2000L);
+    DEFAULT_CONF.setLong(DFSConfigKeys.DFS_DISPATCHER_DELAY_TIME_AFTER_ERROR_KEY, 1000L);
     DEFAULT_CONF.set(DFSConfigKeys.DFS_STORAGE_POLICY_SATISFIER_MODE_KEY,
         DFSConfigKeys.DFS_STORAGE_POLICY_SATISFIER_MODE_DEFAULT);
 
@@ -104,7 +105,6 @@ public class TestStorageMover {
     WARM = DEFAULT_POLICIES.getPolicy(HdfsConstants.WARM_STORAGE_POLICY_NAME);
     COLD = DEFAULT_POLICIES.getPolicy(HdfsConstants.COLD_STORAGE_POLICY_NAME);
     TestBalancer.initTestSetup();
-    Dispatcher.setDelayAfterErrors(1000L);
   }
 
   /**

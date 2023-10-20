@@ -101,7 +101,7 @@ public class Dispatcher {
    * the period of time to delay the usage of a DataNode after hitting
    * errors when using it for migrating data
    */
-  protected static long delayAfterErrors = 10 * 1000;
+  protected long delayAfterErrors;
 
   protected final NameNodeConnector nnc;
   protected final SaslDataTransferClient saslClient;
@@ -1222,6 +1222,8 @@ public class Dispatcher {
     this.maxIterationTime = maxIterationTime;
     this.preferSourcePercent = conf.getInt(DFSConfigKeys.DFS_DISPATCHER_PRE_SOURCE_PERCENT_KEY,
         DFSConfigKeys.DFS_DISPATCHER_PRE_SOURCE_PERCENT_DEFAULT);
+    this.delayAfterErrors = conf.getLong(DFSConfigKeys.DFS_DISPATCHER_DELAY_TIME_AFTER_ERROR_KEY,
+        DFSConfigKeys.DFS_DISPATCHER_DELAY_TIME_AFTER_ERROR_DEFAULT);
   }
 
   public DistributedFileSystem getDistributedFileSystem() {
@@ -1563,11 +1565,6 @@ public class Dispatcher {
     targets.clear();
     globalBlocks.removeAllButRetain(movedBlocks);
     movedBlocks.cleanup();
-  }
-
-  @VisibleForTesting
-  public static void setDelayAfterErrors(long time) {
-    delayAfterErrors = time;
   }
 
   /** shutdown thread pools */

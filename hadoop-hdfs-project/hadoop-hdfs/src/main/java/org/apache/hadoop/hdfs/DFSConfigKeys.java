@@ -2264,4 +2264,6 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final long DFS_DECOMMISSION_BALANCER_CROSS_DC_BANDWIDTH_DEFAULT = 0;
   public static final String  DFS_DISPATCHER_PRE_SOURCE_PERCENT_KEY = "dfs.dispatcher.pre.source.percent";
   public static final int DFS_DISPATCHER_PRE_SOURCE_PERCENT_DEFAULT = 20;
+  public static final String DFS_DISPATCHER_DELAY_TIME_AFTER_ERROR_KEY = "dfs.dispatcher.delay.time.after.error";
+  public static final long  DFS_DISPATCHER_DELAY_TIME_AFTER_ERROR_DEFAULT = 10 * 1000;
 }
