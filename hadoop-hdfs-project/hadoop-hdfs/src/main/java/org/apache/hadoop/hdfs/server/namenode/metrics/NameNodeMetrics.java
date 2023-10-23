@@ -36,6 +36,7 @@ import org.apache.hadoop.metrics2.lib.MutableQuantiles;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.metrics2.lib.MutableStat;
 import org.apache.hadoop.metrics2.source.JvmMetrics;
+import org.apache.hadoop.util.MutableMetricRegister;
 
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -46,6 +47,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Metrics(name="NameNodeActivity", about="NameNode metrics", context="dfs")
 public class NameNodeMetrics {
   final MetricsRegistry registry = new MetricsRegistry("namenode");
+  private final ConcurrentHashMap<String, MutableRate> auditOps;
 
   @Metric MutableCounterLong createFileOps;
   @Metric MutableCounterLong filesCreated;
@@ -226,6 +228,7 @@ public class NameNodeMetrics {
           "editLogTailInterval" + interval + "s",
           "Edit log tailing interval", "ops", "latency", interval);
     }
+    auditOps = new ConcurrentHashMap<>();
   }
 
   public static NameNodeMetrics create(Configuration conf, NamenodeRole r) {
@@ -516,5 +519,12 @@ public class NameNodeMetrics {
 
   public void addLoadEditNanos(long duration) {
     loadEditsTime.add(duration);
+  }
+
+  public void incrOpWithAudit(String cmd) {
+    MutableMetricRegister.tryGetMetric(registry, cmd, auditOps, "AuditOps_",
+        MutableRate.class).add(1);
+    MutableMetricRegister.tryGetMetric(registry, "Total", auditOps, "AuditOps_",
+        MutableRate.class).add(1);
   }
 }

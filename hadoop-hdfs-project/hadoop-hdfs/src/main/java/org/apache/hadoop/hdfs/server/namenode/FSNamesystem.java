@@ -471,8 +471,10 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         }
         hdfsLogger.logAuditEvent(succeeded, ugiStr, addr, cmd, src, dst,
             status, CallerContext.getCurrent(), ugi, dtSecretManager);
+        NameNode.getNameNodeMetrics().incrOpWithAudit(cmd);
       } else {
         logger.logAuditEvent(succeeded, ugiStr, addr, cmd, src, dst, status);
+        NameNode.getNameNodeMetrics().incrOpWithAudit(cmd);
       }
     }
   }
