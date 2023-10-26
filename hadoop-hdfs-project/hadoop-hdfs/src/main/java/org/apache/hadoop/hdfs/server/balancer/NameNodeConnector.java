@@ -149,11 +149,17 @@ public class NameNodeConnector implements Closeable {
 
   private final BalancerProtocols namenode;
   /**
-   * If set requestToStandby true, Balancer will getBlocks from
+   * If set requestToStandby true and requestToObserver false, Balancer will getBlocks from
    * Standby NameNode only and it can reduce the performance impact of Active
    * NameNode, especially in a busy HA mode cluster.
    */
-  private boolean requestToStandby;
+  private final boolean requestToStandby;
+  /**
+   * If set requestToStandby true and requestToObserver true, Balancer will getBlocks from
+   * Observer NameNode only and it can reduce the performance impact of Active
+   * NameNode, especially in a busy HA mode cluster.
+   */
+  private final boolean requestToObserver;
   private String nsId;
   private Configuration config;
   private final KeyManager keyManager;
@@ -206,6 +212,9 @@ public class NameNodeConnector implements Closeable {
     this.requestToStandby = conf.getBoolean(
         DFSConfigKeys.DFS_HA_ALLOW_STALE_READ_KEY,
         DFSConfigKeys.DFS_HA_ALLOW_STALE_READ_DEFAULT);
+    this.requestToObserver = conf.getBoolean(
+        DFSConfigKeys.DFS_HA_ALLOW_STALE_READ_FROM_OBSERVER_KEY,
+        DFSConfigKeys.DFS_HA_ALLOW_STALE_READ_FROM_OBSERVER_DEFAULT);
     this.config = conf;
 
     this.fs = (DistributedFileSystem)FileSystem.get(nameNodeUri, conf);
@@ -291,13 +300,20 @@ public class NameNodeConnector implements Closeable {
     if (getBlocksRateLimiter != null) {
       getBlocksRateLimiter.acquire();
     }
-    NamenodeProtocol nnproxy;
-    if (requestToStandby) {
-      nnproxy = getStandbyProxy();
-    } else {
-      nnproxy = getActiveProxy();
-    }
+    NamenodeProtocol nnproxy = getNNProxy();
     return nnproxy.getBlocks(datanode, size, minBlockSize);
+  }
+
+  BalancerProtocols getNNProxy() throws IOException {
+    BalancerProtocols nnProxy;
+    if (requestToStandby) {
+      nnProxy = getStandbyProxy();
+    } else if (requestToObserver) {
+      nnProxy = getObserverProxy();
+    } else {
+      nnProxy = getActiveProxy();
+    }
+    return nnProxy;
   }
 
   /**
@@ -318,6 +334,7 @@ public class NameNodeConnector implements Closeable {
     BalancerProtocols nnproxy = null;
     if (nsId != null && HAUtil.isHAEnabled(config, nsId)) {
       List<ClientProtocol> namenodes = HAUtil.getProxiesForAllNameNodesInNameservice(config, nsId);
+      Collections.shuffle(namenodes);
       for (ClientProtocol proxy : namenodes) {
         try {
           if (proxy.getHAServiceState().equals(state)) {
@@ -329,7 +346,7 @@ public class NameNodeConnector implements Closeable {
           }
         } catch (Exception e) {
           // Ignore the exception while connecting to a namenode.
-          LOG.debug("Error while connecting to namenode", e);
+          LOG.warn("Error while connecting to namenode", e);
         }
       }
     }
@@ -356,13 +373,13 @@ public class NameNodeConnector implements Closeable {
   /** @return live datanode storage reports. */
   public DatanodeStorageReport[] getLiveDatanodeStorageReport()
       throws IOException {
-    BalancerProtocols protocol = requestToStandby ? getStandbyProxy() : getActiveProxy();
+    BalancerProtocols protocol = getNNProxy();
     return protocol.getDatanodeStorageReport(DatanodeReportType.LIVE);
   }
 
   /** @return live&decommission datanode storage reports. */
   public List<DatanodeInfo> getLiveAndDecommissionDatanodeStorageReport() throws IOException {
-    BalancerProtocols protocol = requestToStandby ? getStandbyProxy() : getActiveProxy();
+    BalancerProtocols protocol = getNNProxy();
     DatanodeInfo[] live = protocol.getDatanodeReport(DatanodeReportType.LIVE);
     List<DatanodeInfo> reports = new ArrayList<>();
     for (DatanodeInfo dsr : live) {
