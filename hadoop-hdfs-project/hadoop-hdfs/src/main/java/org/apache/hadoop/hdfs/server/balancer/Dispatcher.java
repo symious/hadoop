@@ -303,8 +303,8 @@ public class Dispatcher {
               reportedBlock = ((DBlockStriped) block).getInternalBlock(source);
               if (reportedBlock == null) {
                 LOG.info(
-                    "No striped internal block on source {}, block {}. Skipping.",
-                    source, block);
+                    "No striped internal block on source {}, block {}. Skipping. locations are {}",
+                    source, block, block.getLocations());
                 return false;
               }
             } else {
@@ -1250,7 +1250,7 @@ public class Dispatcher {
         DFSConfigKeys.DFS_DISPATCHER_DELAY_TIME_AFTER_ERROR_DEFAULT);
     this.longTailBlockThreshold = conf.getInt(
         DFSConfigKeys.DFS_BALANCER_LONG_TAIL_BLOCK_THRESHOLD_KEY,
-        DFSConfigKeys.DFS_BALANCER_BLOCK_MOVE_TIMEOUT_DEFAULT);
+        DFSConfigKeys.DFS_BALANCER_LONG_TAIL_BLOCK_THRESHOLD_DEFAULT);
     this.skipAllTimeoutTasks = conf.getBoolean(DFSConfigKeys.DFS_BALANCER_SKIP_ALL_TIMEOUT_TASKS_KEY,
         DFSConfigKeys.DFS_BALANCER_SKIP_ALL_TIMEOUT_TASKS_DEFAULT);
   }

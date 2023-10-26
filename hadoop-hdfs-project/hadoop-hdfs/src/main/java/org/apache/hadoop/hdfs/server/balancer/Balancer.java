@@ -25,6 +25,7 @@ import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.text.DateFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -228,6 +229,8 @@ public class Balancer {
   private final long defaultBlockSize;
   private final boolean sortTopNodes;
 
+  private HashSet<StorageType> movableTypes = new HashSet<>();
+
   // all data node lists
   private final Collection<Source> overUtilized = new LinkedList<Source>();
   private final Collection<Source> aboveAvgUtilized = new LinkedList<Source>();
@@ -348,6 +351,13 @@ public class Balancer {
     this.defaultBlockSize = getLongBytes(conf,
         DFSConfigKeys.DFS_BLOCK_SIZE_KEY,
         DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT);
+    String[] confStorageTypes = conf.getTrimmedStrings(
+        DFSConfigKeys.DFS_BALANCER_STORAGE_TYPES_KEY,
+        StorageType.SSD.toString(), StorageType.DISK.toString(),
+        StorageType.ARCHIVE.toString(), StorageType.PROVIDED.toString());
+    for (String type : confStorageTypes) {
+      movableTypes.add(StorageType.parseStorageType(type));
+    }
   }
   
   static long getCapacity(DatanodeStorageReport report, StorageType t) {
@@ -370,6 +380,14 @@ public class Balancer {
       }
     }
     return remaining;
+  }
+
+  List<StorageType> getMovableTypes() {
+    if (movableTypes != null && !movableTypes.isEmpty()) {
+      return new ArrayList<>(movableTypes);
+    } else {
+      return StorageType.getMovableTypes();
+    }
   }
 
   /**
@@ -396,7 +414,7 @@ public class Balancer {
     for(DatanodeStorageReport r : reports) {
       final DDatanode dn = dispatcher.newDatanode(r.getDatanodeInfo());
       final boolean isSource = Util.isIncluded(sourceNodes, dn.getDatanodeInfo());
-      for(StorageType t : StorageType.getMovableTypes()) {
+      for(StorageType t : getMovableTypes()) {
         final Double utilization = policy.getUtilization(r, t);
         if (utilization == null) { // datanode does not have such storage type 
           continue;
