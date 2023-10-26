@@ -38,8 +38,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hdfs.DFSUtilClient;
@@ -242,13 +242,9 @@ public class Balancer {
   static void checkReplicationPolicyCompatibility(Configuration conf)
       throws UnsupportedActionException {
     BlockPlacementPolicies placementPolicies =
-        new BlockPlacementPolicies(conf, null, NetworkTopology.getInstance(conf), null);
-    BlockPlacementPolicy contiguousPolicy = placementPolicies.getPolicy(CONTIGUOUS);
-    if (contiguousPolicy instanceof BlockPlacementPolicyWithDataCenter) {
-      LOG.info("Block placement policy of Namenode is " +
-          "BlockPlacementPolicyWithDataCenter, " +
-          "balancer will use BlockPlacementPolicyWithDefault.");
-    } else if (!(contiguousPolicy instanceof BlockPlacementPolicyDefault)) {
+        new BlockPlacementPolicies(conf, null, null, null);
+    if (!(placementPolicies.getPolicy(CONTIGUOUS) instanceof
+        BlockPlacementPolicyDefault)) {
       throw new UnsupportedActionException(
           "Balancer without BlockPlacementPolicyDefault");
     }
@@ -938,6 +934,12 @@ public class Balancer {
     public int run(String[] args) {
       final long startTime = Time.monotonicNow();
       final Configuration conf = getConf();
+      // Balancer should use the BlockPlacementPolicyDefault and NetworkTopology.
+      conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+          DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_DEFAULT,
+          BlockPlacementPolicy.class);
+      conf.setClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_IMPL_KEY,
+          NetworkTopology.class, NetworkTopology.class);
 
       try {
         checkReplicationPolicyCompatibility(conf);
