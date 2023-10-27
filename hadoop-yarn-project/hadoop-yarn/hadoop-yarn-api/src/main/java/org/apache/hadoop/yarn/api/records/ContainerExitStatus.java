@@ -88,4 +88,6 @@ public class ContainerExitStatus {
   public static final int KILLED_EXCEEDED_SHUFFLE_DISK_USAGE = -111;
 
   public static final int KILLED_EXCEEDED_FD_NUMBER = -112;
+
+  public static final int LOCALIZARION_FAILED = -200;
 }

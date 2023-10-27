@@ -2035,6 +2035,13 @@ public class ContainerImpl implements Container {
           "Container failed with state: " + container.getContainerState(),
           container.containerId.getApplicationAttemptId().getApplicationId(),
           container.containerId);
+      try {
+        // Persist change in the state store.
+        container.context.getNMStateStore().storeContainerCompleted(container.getContainerId(), ContainerExitStatus.LOCALIZARION_FAILED);
+      } catch (IOException e) {
+        LOG.warn("Could not store container [" + container.containerId
+            + "] update..", e);
+      }
       super.transition(container, event);
     }
   }
