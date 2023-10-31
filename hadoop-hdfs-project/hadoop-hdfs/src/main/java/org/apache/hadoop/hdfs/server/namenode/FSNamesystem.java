@@ -3388,20 +3388,21 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     FSDirRenameOp.RenameResult res = null;
     checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
-    FSPermissionChecker.setOperationType(OperationName.RENAME);
+    FSPermissionChecker.setOperationType(OperationName.RENAME2);
     try {
-      writeLock(OperationName.RENAME);
+      writeLock(OperationName.RENAME2);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot rename " + src);
         res = FSDirRenameOp.renameToInt(dir, pc, src, dst, logRetryCache,
             options);
       } finally {
-        writeUnlock(OperationName.RENAME);
+        writeUnlock(OperationName.RENAME2);
       }
     } catch (AccessControlException e) {
-      logAuditEvent(false, OperationName.RENAME + " (options=" +
-          Arrays.toString(options) + ")", src, dst, null);
+      String cmd = OperationName.RENAME2 + "_(options=" + Arrays.toString(options) + ")";
+      cmd = cmd.replace(' ', '_');
+      logAuditEvent(false, cmd, src, dst, null);
       throw e;
     }
     getEditLog().logSync();
@@ -3412,8 +3413,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       collectedBlocks.clear();
     }
 
-    logAuditEvent(res.success, OperationName.RENAME + " (options=" +
-        Arrays.toString(options) + ")", src, dst, res.auditStat);
+    String cmd = OperationName.RENAME2 + "_(options=" + Arrays.toString(options) + ")";
+    cmd = cmd.replace(' ', '_');
+    logAuditEvent(res.success, cmd, src, dst, res.auditStat);
   }
 
   /**
