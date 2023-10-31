@@ -30,6 +30,9 @@ import org.junit.Test;
 import org.junit.Before;
 import org.junit.After;
 
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_PEER_STATS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY;
@@ -718,5 +721,48 @@ public class TestNameNodeReconfigure {
     // Ensure none of the values were updated from the new value.
     assertEquals(3, bm.getMinBlocksForWrite(BlockType.CONTIGUOUS));
     assertEquals(3, bm.getMinBlocksForWrite(BlockType.STRIPED));
+  }
+
+  @Test
+  public void testReconfigureLogSlowRPC() throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode(0);
+    final NameNodeRpcServer nnrs = (NameNodeRpcServer) nameNode.getRpcServer();
+    // verify default value.
+    assertFalse(nnrs.getClientRpcServer().isLogSlowRPC());
+    assertEquals(IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_DEFAULT,
+        nnrs.getClientRpcServer().getLogSlowRPCThresholdTime());
+
+    // try invalid logSlowRPC.
+    try {
+      nameNode.reconfigurePropertyImpl(IPC_SERVER_LOG_SLOW_RPC, "non-boolean");
+      fail("should not reach here");
+    } catch (ReconfigurationException e) {
+      assertEquals(
+          "Could not change property ipc.server.log.slow.rpc from 'false' to 'non-boolean'",
+          e.getMessage());
+    }
+
+    // try correct logSlowRPC.
+    nameNode.reconfigurePropertyImpl(IPC_SERVER_LOG_SLOW_RPC, "True");
+    assertTrue(nnrs.getClientRpcServer().isLogSlowRPC());
+
+    // revert to defaults.
+    nameNode.reconfigurePropertyImpl(IPC_SERVER_LOG_SLOW_RPC, null);
+    assertFalse(nnrs.getClientRpcServer().isLogSlowRPC());
+
+    // try invalid logSlowRPCThresholdTime.
+    try {
+      nameNode.reconfigureProperty(IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY,
+          "non-numeric");
+      fail("Should not reach here");
+    } catch (ReconfigurationException e) {
+      assertEquals("Could not change property " +
+          "ipc.server.log.slow.rpc.threshold.ms from '0' to 'non-numeric'", e.getMessage());
+    }
+
+    // try correct logSlowRPCThresholdTime.
+    nameNode.reconfigureProperty(IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY,
+        "20000");
+    assertEquals(nnrs.getClientRpcServer().getLogSlowRPCThresholdTime(), 20000);
   }
 }

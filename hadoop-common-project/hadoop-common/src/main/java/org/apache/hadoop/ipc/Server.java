@@ -567,7 +567,9 @@ public abstract class Server {
   private ThreadMonitor monitor = null;
   private AtomicLongArray handlerProcessedCalls = null;
 
-  private boolean logSlowRPC = false;
+  private volatile boolean logSlowRPC = false;
+  /** Threshold time for log slow rpc. */
+  private volatile long logSlowRPCThresholdTime;
   private boolean rpcPasswordAuthenticate;
   private final boolean isSdiAuthSilentMode;
   private final PasswordEncoder passwordEncoder;
@@ -580,8 +582,12 @@ public abstract class Server {
    * Checks if LogSlowRPC is set true.
    * @return true, if LogSlowRPC is set true, false, otherwise.
    */
-  protected boolean isLogSlowRPC() {
+  public boolean isLogSlowRPC() {
     return logSlowRPC;
+  }
+
+  public long getLogSlowRPCThresholdTime() {
+    return logSlowRPCThresholdTime;
   }
 
   /**
@@ -589,8 +595,14 @@ public abstract class Server {
    * @param logSlowRPCFlag
    */
   @VisibleForTesting
-  protected void setLogSlowRPC(boolean logSlowRPCFlag) {
+  public void setLogSlowRPC(boolean logSlowRPCFlag) {
     this.logSlowRPC = logSlowRPCFlag;
+  }
+
+  @VisibleForTesting
+  public void setLogSlowRPCThresholdTime(long logSlowRPCThresholdMs) {
+    this.logSlowRPCThresholdTime = RpcMetrics.TIMEUNIT.
+        convert(logSlowRPCThresholdMs, TimeUnit.MILLISECONDS);
   }
 
   /**
@@ -608,34 +620,28 @@ public abstract class Server {
    * @param methodName - RPC Request method name
    * @param details - Processing Detail.
    *
-   * if this request took too much time relative to other requests
-   * we consider that as a slow RPC. 3 is a magic number that comes
-   * from 3 sigma deviation. A very simple explanation can be found
-   * by searching for 68-95-99.7 rule. We flag an RPC as slow RPC
-   * if and only if it falls above 99.7% of requests. We start this logic
-   * only once we have enough sample size.
+   * If a request took significant more time than other requests,
+   * and its processing time is at least `logSlowRPCThresholdMs` we consider that as a slow RPC.
+   *
+   * The definition rules for calculating whether the current request took too much time
+   * compared to other requests are as follows:
+   * 3 is a magic number that comes from 3 sigma deviation.
+   * A very simple explanation can be found by searching for 68-95-99.7 rule.
+   * We flag an RPC as slow RPC if and only if it falls above 99.7% of requests.
+   * We start this logic only once we have enough sample size.
    */
   void logSlowRpcCalls(String methodName, Call call,
       ProcessingDetails details) {
-    final int deviation = 3;
-
-    // 1024 for minSampleSize just a guess -- not a number computed based on
-    // sample size analysis. It is chosen with the hope that this
-    // number is high enough to avoid spurious logging, yet useful
-    // in practice.
-    final int minSampleSize = 1024;
-    final double threeSigma = rpcMetrics.getProcessingMean() +
-        (rpcMetrics.getProcessingStdDev() * deviation);
-
     long processingTime =
             details.get(Timing.PROCESSING, RpcMetrics.TIMEUNIT);
-    if ((rpcMetrics.getProcessingSampleCount() > minSampleSize) &&
-        (processingTime > threeSigma)) {
+    // In prod environment, we should log all slow RPC requests exceeding the threshold,
+    // so sample size analysis can be ignored here.
+    if (processingTime > getLogSlowRPCThresholdTime()) {
       LOG.warn(
           "Slow RPC : {} took {} {} to process from client {},"
-              + " the processing detail is {}",
+              + " the processing detail is {}, and the threshold time is {} {}",
           methodName, processingTime, RpcMetrics.TIMEUNIT, call,
-          details.toString());
+          details.toString(), getLogSlowRPCThresholdTime(),  RpcMetrics.TIMEUNIT);
       rpcMetrics.incrSlowRpc();
     }
   }
@@ -3529,6 +3535,9 @@ public abstract class Server {
     this.setLogSlowRPC(conf.getBoolean(
         CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC,
         CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_DEFAULT));
+    this.setLogSlowRPCThresholdTime(conf.getLong(
+        CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY,
+        CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_DEFAULT));
     this.passwordEncoder = new BCryptPasswordEncoder();
 
     int passwordMatchCacheMinute = conf.getInt(
