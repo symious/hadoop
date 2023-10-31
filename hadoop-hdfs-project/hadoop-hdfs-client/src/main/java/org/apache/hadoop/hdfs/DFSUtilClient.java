@@ -216,7 +216,7 @@ public class DFSUtilClient {
   }
 
   /** Add non empty and non null suffix to a key */
-  static String addSuffix(String key, String suffix) {
+  public static String addSuffix(String key, String suffix) {
     if (suffix == null || suffix.isEmpty()) {
       return key;
     }
@@ -377,7 +377,7 @@ public class DFSUtilClient {
    * @return <code>coll</code> if it is non-null and non-empty. Otherwise,
    * returns a list with a single null value.
    */
-  static Collection<String> emptyAsSingletonNull(Collection<String> coll) {
+  public static Collection<String> emptyAsSingletonNull(Collection<String> coll) {
     if (coll == null || coll.isEmpty()) {
       return Collections.singletonList(null);
     } else {

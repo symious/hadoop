@@ -630,23 +630,7 @@ public class DFSUtil {
       defaultAddress = null;
     }
 
-    Collection<String> parentNameServices = conf.getTrimmedStringCollection
-            (DFSConfigKeys.DFS_INTERNAL_NAMESERVICES_KEY);
-
-    if (parentNameServices.isEmpty()) {
-      parentNameServices = conf.getTrimmedStringCollection
-              (DFSConfigKeys.DFS_NAMESERVICES);
-    } else {
-      // Ensure that the internal service is ineed in the list of all available
-      // nameservices.
-      Set<String> availableNameServices = Sets.newHashSet(conf
-              .getTrimmedStringCollection(DFSConfigKeys.DFS_NAMESERVICES));
-      for (String nsId : parentNameServices) {
-        if (!availableNameServices.contains(nsId)) {
-          throw new IOException("Unknown nameservice: " + nsId);
-        }
-      }
-    }
+    Collection<String> parentNameServices = getNameServices(conf);
 
     Map<String, Map<String, InetSocketAddress>> addressList =
             DFSUtilClient.getAddressesForNsIds(conf, parentNameServices,
@@ -675,26 +659,30 @@ public class DFSUtil {
       getNNLifelineRpcAddressesForCluster(Configuration conf)
       throws IOException {
 
-    Collection<String> parentNameServices = conf.getTrimmedStringCollection(
-        DFSConfigKeys.DFS_INTERNAL_NAMESERVICES_KEY);
+    Collection<String> parentNameServices = getNameServices(conf);
 
-    if (parentNameServices.isEmpty()) {
-      parentNameServices = conf.getTrimmedStringCollection(
-          DFSConfigKeys.DFS_NAMESERVICES);
+    return DFSUtilClient.getAddressesForNsIds(conf, parentNameServices, null,
+        DFS_NAMENODE_LIFELINE_RPC_ADDRESS_KEY);
+  }
+
+  public static Collection<String> getNameServices(Configuration conf) throws IOException {
+    Collection<String> nameServices = conf.getTrimmedStringCollection
+        (DFSConfigKeys.DFS_INTERNAL_NAMESERVICES_KEY);
+    if (nameServices.isEmpty()) {
+      nameServices = conf.getTrimmedStringCollection
+          (DFSConfigKeys.DFS_NAMESERVICES);
     } else {
-      // Ensure that the internal service is indeed in the list of all available
-      // nameservices.
+      // Ensure that the internal name service is indeed in the list of all available
+      // name services.
       Set<String> availableNameServices = Sets.newHashSet(conf
           .getTrimmedStringCollection(DFSConfigKeys.DFS_NAMESERVICES));
-      for (String nsId : parentNameServices) {
+      for (String nsId : nameServices) {
         if (!availableNameServices.contains(nsId)) {
           throw new IOException("Unknown nameservice: " + nsId);
         }
       }
     }
-
-    return DFSUtilClient.getAddressesForNsIds(conf, parentNameServices, null,
-        DFS_NAMENODE_LIFELINE_RPC_ADDRESS_KEY);
+    return nameServices;
   }
 
   /**

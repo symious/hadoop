@@ -77,6 +77,16 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_MAX_NUM_BLOCKS_TO_LOG_DEF
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_MAX_NUM_BLOCKS_TO_LOG_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_METRICS_LOGGER_PERIOD_SECONDS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_METRICS_LOGGER_PERIOD_SECONDS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HTTPS_ADDRESS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_RPC_ADDRESS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY;
+import static org.apache.hadoop.hdfs.DFSUtilClient.addSuffix;
+import static org.apache.hadoop.hdfs.DFSUtilClient.getConfValue;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_HA_NAMENODES_KEY_PREFIX;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_NAMENODE_RPC_ADDRESS_AUXILIARY_KEY;
 import static org.apache.hadoop.hdfs.protocol.datatransfer.BlockConstructionStage.PIPELINE_SETUP_APPEND_RECOVERY;
 import static org.apache.hadoop.hdfs.protocol.datatransfer.BlockConstructionStage.PIPELINE_SETUP_CREATE;
 import static org.apache.hadoop.hdfs.protocol.datatransfer.BlockConstructionStage.PIPELINE_SETUP_STREAMING_RECOVERY;
@@ -118,6 +128,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -158,6 +169,7 @@ import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 import org.apache.hadoop.net.DNSToSwitchMapping;
 import org.apache.hadoop.net.IpRangeScriptBasedMapping;
 import org.apache.hadoop.net.ScriptBasedMapping;
+import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
 import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.hdfs.client.BlockReportOptions;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
@@ -1185,7 +1197,7 @@ public class DataNode extends ReconfigurableBase
     List<StorageLocation> newLocations = Lists.newArrayList();
     /** The storage locations of the volumes that are removed. */
     List<StorageLocation> deactivateLocations = Lists.newArrayList();
-    /** The unchanged locations that existed in the old configuration. */
+    /** The unchanged locations that existed in the configuration. */
     List<StorageLocation> unchangedLocations = Lists.newArrayList();
   }
 
@@ -3768,8 +3780,96 @@ public class DataNode extends ReconfigurableBase
   @Override // ClientDatanodeProtocol
   public void refreshNamenodes() throws IOException {
     checkSuperuserPrivilege();
-    setConf(new Configuration());
+    updateConfig4RefreshNameNodes(new Configuration());
     refreshNamenodes(getConf());
+  }
+
+  private void updateConfig4RefreshNameNodes(Configuration newConf) throws IOException {
+    LOG.info("Updating config for refresh NameNode...");
+    // common config for the DataNode
+    List<String> configRelatedNameNodes = new ArrayList() {{
+      add(DFSConfigKeys.DFS_NAMESERVICES);
+      add(DFSConfigKeys.DFS_INTERNAL_NAMESERVICES_KEY);
+    }};
+    // prefix for specific NameNode
+    List<String> config4NameNode = new ArrayList() {{
+      add(DFS_NAMENODE_RPC_ADDRESS_KEY);
+      add(DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY);
+      add(DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY);
+      add(DFS_NAMENODE_HTTP_ADDRESS_KEY);
+      add(DFS_NAMENODE_HTTPS_ADDRESS_KEY);
+      add(DFS_NAMENODE_LIFELINE_RPC_ADDRESS_KEY);
+      add(DFS_NAMENODE_RPC_ADDRESS_AUXILIARY_KEY);
+    }};
+    // Record old name service before update config
+    Collection<String> oldNameServices = getConf().getTrimmedStringCollection
+        (DFSConfigKeys.DFS_INTERNAL_NAMESERVICES_KEY);
+    if (oldNameServices.isEmpty()) {
+      oldNameServices = getConf().getTrimmedStringCollection
+          (DFSConfigKeys.DFS_NAMESERVICES);
+    }
+
+    Collection<String> parentNameServices = DFSUtil.getNameServices(newConf);
+
+    for (String property: configRelatedNameNodes) {
+      updateConfig(newConf, property, false);
+    }
+
+    // update config for every NameNode under every name service
+    for (String nsId : parentNameServices) {
+      String keyPrefix = addSuffix(DFS_HA_NAMENODES_KEY_PREFIX, nsId);
+      updateConfig(newConf, keyPrefix, false);
+      Collection<String> nnIds = DFSUtilClient.getNameNodeIds(getConf(), nsId);
+      for (String nnId : DFSUtilClient.emptyAsSingletonNull(nnIds)) {
+        String suffix = DFSUtilClient.concatSuffixes(nsId, nnId);
+        for (String nnProperty: config4NameNode) {
+          updateConfig(newConf, addSuffix(nnProperty, suffix),
+              nnProperty.equals(DFS_NAMENODE_LIFELINE_RPC_ADDRESS_KEY) ||
+                  nnProperty.equals(DFS_NAMENODE_RPC_ADDRESS_AUXILIARY_KEY));
+        }
+      }
+    }
+
+    // Clean up the ns in the old configuration but not in the new one.
+    for (String nsId : oldNameServices) {
+      if (parentNameServices.contains(nsId)) {
+        continue;
+      }
+      String keyPrefix = addSuffix(DFS_HA_NAMENODES_KEY_PREFIX, nsId);
+      Collection<String> nnIds = DFSUtilClient.getNameNodeIds(getConf(), nsId);
+      updateConfig(newConf, keyPrefix, true);
+      for (String nnId : DFSUtilClient.emptyAsSingletonNull(nnIds)) {
+        String suffix = DFSUtilClient.concatSuffixes(nsId, nnId);
+        for (String nnProperty: config4NameNode) {
+          getConf().unset(addSuffix(nnProperty, suffix));
+        }
+      }
+    }
+    LOG.info("Updating config for refresh NameNode is done!");
+  }
+
+  private void updateConfig(Configuration conf, String property, boolean allowNull) {
+    if (conf.get(property) == null) {
+      if (!allowNull) {
+        LOG.error("Refresh NameNode Config error: {} is null", property);
+      } else {
+        LOG.info("Refresh NameNode will unset config {}", property);
+        getConf().unset(property);
+        return;
+      }
+    }
+
+    if (getConf().get(property) == null) {
+      LOG.info("Refresh NameNode will set config {} to {}", property, conf.get(property));
+      getConf().set(property, conf.get(property));
+      return;
+    }
+
+    if (!conf.get(property).equals(getConf().get(property))) {
+      LOG.info("Refresh NameNode will update config {} from {} to {}", property,
+          getConf().get(property), conf.get(property));
+      getConf().set(property, conf.get(property));
+    }
   }
 
   @Override // ClientDatanodeProtocol
