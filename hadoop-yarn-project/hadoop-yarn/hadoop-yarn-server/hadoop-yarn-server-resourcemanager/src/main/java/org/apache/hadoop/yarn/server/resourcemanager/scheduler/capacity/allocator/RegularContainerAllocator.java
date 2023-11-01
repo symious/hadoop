@@ -126,8 +126,18 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
   private ContainerAllocation preCheckForNodeCandidateSet(FiCaSchedulerNode node,
       SchedulingMode schedulingMode, ResourceLimits resourceLimits,
       SchedulerRequestKey schedulerKey) {
-    PendingAsk offswitchPendingAsk = application.getPendingAsk(schedulerKey,
-        ResourceRequest.ANY);
+    /*
+      Pre-check if current node can fulfill the given schedulerKey.
+      SchedulerKey contains containerToUpdate means this is a increase request.
+      If schedulerKey contains containerToUpdate and the target node is not the same
+      with the current node, it will definitely fail. So we can return PRIORITY_SKIPPED here.
+     */
+    if (schedulerKey.getContainerToUpdate() != null) {
+      PendingAsk nodePending = application.getPendingAsk(schedulerKey, node.getNodeName());
+      if (nodePending.getCount() == 0) {
+        return ContainerAllocation.PRIORITY_SKIPPED;
+      }
+    }
 
     RMNode rmNode = node.getRMNode();
     if (null != rmNode) {
@@ -143,6 +153,9 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
         return ContainerAllocation.NODE_SKIPPED;
       }
     }
+
+    PendingAsk offswitchPendingAsk = application.getPendingAsk(schedulerKey,
+        ResourceRequest.ANY);
 
     if (offswitchPendingAsk.getCount() <= 0) {
       ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
