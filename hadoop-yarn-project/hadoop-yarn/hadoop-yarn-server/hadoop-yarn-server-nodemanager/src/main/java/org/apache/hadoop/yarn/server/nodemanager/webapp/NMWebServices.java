@@ -39,6 +39,7 @@ import java.util.Set;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.records.AuxServiceRecord;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.records.AuxServiceRecords;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.resourceplugin.ResourcePlugin;
@@ -771,22 +772,21 @@ public class NMWebServices {
 
   @POST
   @Path("/modify")
-  @Produces({MediaType.APPLICATION_JSON + "; " + JettyUtils.UTF_8,
-      MediaType.APPLICATION_XML + "; " + JettyUtils.UTF_8})
+  @Produces({MediaType.APPLICATION_JSON + "; " + JettyUtils.UTF_8})
   @Consumes({MediaType.APPLICATION_JSON + "; " + JettyUtils.UTF_8})
   @Public
   @Unstable
   public Response change(JSONObject json) {
     try {
       Deque<Wrapper> stack = new LinkedList<>();
-      stack.push(new Wrapper(this.nmContext, ""));
+      stack.push(new Wrapper(this.nmContext, "", null));
       ObjectMapper mapper = new ObjectMapper();
       JsonNode node = mapper.readTree(json.toString());
       parseNode(node, stack);
+      return Response.status(Response.Status.OK).entity(node).build();
     } catch (JsonProcessingException | NoSuchFieldException | IllegalAccessException e) {
       return Response.status(Status.BAD_REQUEST).entity(e.getCause()).build();
     }
-    return Response.ok().build();
   }
 
   private void parseNode(JsonNode node, Deque<Wrapper> stack)
@@ -798,7 +798,7 @@ public class NMWebServices {
         Object o = stack.peek().getObject();
         Field f = o.getClass().getDeclaredField(tmp.getKey());
         f.setAccessible(true);
-        stack.push(new Wrapper(f.get(o), tmp.getKey()));
+        stack.push(new Wrapper(f.get(o), tmp.getKey(), node));
         parseNode(tmp.getValue(), stack);
         stack.pop();
       }
@@ -809,16 +809,32 @@ public class NMWebServices {
       Object parentObject = stack.peek().getObject();
       Field f = parentObject.getClass().getDeclaredField(fieldName);
       f.setAccessible(true);
-      if (currentObject.getClass().equals(String.class)) {
-        f.set(parentObject, node.asText());
-      } else if (currentObject.getClass().equals(Integer.class)) {
-        f.set(parentObject, node.asInt());
-      } else if (currentObject.getClass().equals(Boolean.class)) {
-        f.set(parentObject, node.asBoolean());
-      } else if (currentObject.getClass().equals(Long.class)) {
-        f.set(parentObject, node.asLong());
-      } else if (currentObject.getClass().equals(Double.class)) {
-        f.set(parentObject, node.asDouble());
+      switch (node.getNodeType()) {
+        case NULL:
+          if (currentObject.getClass().equals(String.class)) {
+            ((ObjectNode)wrap.getNode()).put(fieldName, (String) f.get(parentObject));
+          } else if (currentObject.getClass().equals(Integer.class)) {
+            ((ObjectNode)wrap.getNode()).put(fieldName, (Integer) f.get(parentObject));
+          } else if (currentObject.getClass().equals(Boolean.class)) {
+            ((ObjectNode)wrap.getNode()).put(fieldName, (Boolean) f.get(parentObject));
+          } else if (currentObject.getClass().equals(Long.class)) {
+            ((ObjectNode)wrap.getNode()).put(fieldName, (Long) f.get(parentObject));
+          } else if (currentObject.getClass().equals(Double.class)) {
+            ((ObjectNode)wrap.getNode()).put(fieldName, (Double) f.get(parentObject));
+          }
+          break;
+        default:
+          if (currentObject.getClass().equals(String.class)) {
+            f.set(parentObject, node.asText());
+          } else if (currentObject.getClass().equals(Integer.class)) {
+            f.set(parentObject, node.asInt());
+          } else if (currentObject.getClass().equals(Boolean.class)) {
+            f.set(parentObject, node.asBoolean());
+          } else if (currentObject.getClass().equals(Long.class)) {
+            f.set(parentObject, node.asLong());
+          } else if (currentObject.getClass().equals(Double.class)) {
+            f.set(parentObject, node.asDouble());
+          }
       }
       stack.push(wrap);
     }
@@ -827,10 +843,12 @@ public class NMWebServices {
   public static class Wrapper {
     private Object object;
     private String fieldName;
+    private JsonNode node;
 
-    public Wrapper(Object o, String fieldName) {
+    public Wrapper(Object o, String fieldName, JsonNode node) {
       this.object = o;
       this.fieldName = fieldName;
+      this.node = node;
     }
 
     public Object getObject() {
@@ -839,6 +857,10 @@ public class NMWebServices {
 
     public String getFieldName() {
       return this.fieldName;
+    }
+
+    public JsonNode getNode() {
+      return node;
     }
   }
 }
