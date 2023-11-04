@@ -175,6 +175,8 @@ public class NameNodeConnector implements Closeable {
   private final int maxNotChangedIterations;
   private int notChangedIterations = 0;
   private final RateLimiter getBlocksRateLimiter;
+  private boolean isHAEnable = false;
+  private List<ClientProtocol> namenodes = null;
 
   public NameNodeConnector(URI nameNodeUri,
       List<Path> targetPaths, Configuration conf,
@@ -248,6 +250,10 @@ public class NameNodeConnector implements Closeable {
       throws IOException {
     this(name, nameNodeUri, idPath, targetPaths, conf, maxNotChangedIterations);
     this.nsId = nsId;
+    this.isHAEnable = this.nsId != null && HAUtil.isHAEnabled(config, nsId);
+    if (this.isHAEnable) {
+      this.namenodes = HAUtil.getProxiesForAllNameNodesInNameservice(config, nsId);
+    }
   }
 
   // Connect NN by given address
@@ -257,6 +263,10 @@ public class NameNodeConnector implements Closeable {
       throws IOException {
     this(nameNodeUri, address, targetPaths, conf, maxNotChangedIterations);
     this.nsId = nsId;
+    this.isHAEnable = this.nsId != null && HAUtil.isHAEnabled(config, nsId);
+    if (this.isHAEnable) {
+      this.namenodes = HAUtil.getProxiesForAllNameNodesInNameservice(config, nsId);
+    }
     this.idPath = idPath;
     // if it is for test, we do not create the id file
     if (checkOtherInstanceRunning) {
@@ -330,12 +340,12 @@ public class NameNodeConnector implements Closeable {
     return (isUpgrade || isRollingUpgrade);
   }
 
-  private BalancerProtocols getNNProxy(HAServiceState state) throws IOException {
+  private BalancerProtocols getNNProxy(HAServiceState state) {
     BalancerProtocols nnproxy = null;
-    if (nsId != null && HAUtil.isHAEnabled(config, nsId)) {
-      List<ClientProtocol> namenodes = HAUtil.getProxiesForAllNameNodesInNameservice(config, nsId);
-      Collections.shuffle(namenodes);
-      for (ClientProtocol proxy : namenodes) {
+    if (this.isHAEnable && this.namenodes != null && !this.namenodes.isEmpty()) {
+      List<ClientProtocol> currentNNs = new ArrayList<>(namenodes);
+      Collections.shuffle(currentNNs);
+      for (ClientProtocol proxy : currentNNs) {
         try {
           if (proxy.getHAServiceState().equals(state)) {
             nnproxy = NameNodeProxies.createNonHAProxy(config, RPC.getServerAddress(proxy),
@@ -358,15 +368,15 @@ public class NameNodeConnector implements Closeable {
     return nnproxy;
   }
 
-  public BalancerProtocols getActiveProxy() throws IOException {
+  public BalancerProtocols getActiveProxy() {
     return getNNProxy(HAServiceState.ACTIVE);
   }
 
-  private BalancerProtocols getStandbyProxy() throws IOException {
+  private BalancerProtocols getStandbyProxy() {
     return getNNProxy(HAServiceState.STANDBY);
   }
 
-  private BalancerProtocols getObserverProxy() throws IOException {
+  private BalancerProtocols getObserverProxy() {
     return getNNProxy(HAServiceState.OBSERVER);
   }
 
