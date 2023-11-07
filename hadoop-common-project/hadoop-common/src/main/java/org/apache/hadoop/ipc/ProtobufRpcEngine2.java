@@ -22,6 +22,7 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.ipc.Client.ConnectionId;
@@ -141,6 +142,8 @@ public class ProtobufRpcEngine2 implements RpcEngine {
   protected static class Invoker implements RpcInvocationHandler {
     private final Map<String, Message> returnTypes =
         new ConcurrentHashMap<String, Message>();
+    private final long slowThreshold;
+    private final boolean doesLogSlowCalls;
     private boolean isClosed = false;
     private final Client.ConnectionId remoteId;
     private final Client client;
@@ -171,6 +174,10 @@ public class ProtobufRpcEngine2 implements RpcEngine {
       this.protocolName = RPC.getProtocolName(protocol);
       this.clientProtocolVersion = RPC
           .getProtocolVersion(protocol);
+      this.slowThreshold =
+          conf.getTimeDuration(CommonConfigurationKeys.IPC_SLOW_LOG_THRESHOLD_KEY,
+              CommonConfigurationKeys.IPC_SLOW_LOG_THRESHOLD_DEFAULT, TimeUnit.MILLISECONDS);
+      this.doesLogSlowCalls = this.slowThreshold > 0;
     }
 
     private Invoker(Class<?> protocol, Client.ConnectionId connId,
@@ -224,8 +231,8 @@ public class ProtobufRpcEngine2 implements RpcEngine {
     public Message invoke(Object proxy, final Method method, Object[] args)
         throws ServiceException {
       long startTime = 0;
-      if (LOG.isDebugEnabled()) {
-        startTime = Time.now();
+      if (LOG.isDebugEnabled() || doesLogSlowCalls) {
+        startTime = Time.monotonicNow();
       }
 
       if (args.length != 2) { // RpcController + Message
@@ -279,9 +286,14 @@ public class ProtobufRpcEngine2 implements RpcEngine {
         }
       }
 
-      if (LOG.isDebugEnabled()) {
-        long callTime = Time.now() - startTime;
-        LOG.debug("Call: " + method.getName() + " took " + callTime + "ms");
+      if (LOG.isDebugEnabled() || doesLogSlowCalls) {
+        long callTime = Time.monotonicNow() - startTime;
+        if (doesLogSlowCalls && callTime > slowThreshold) {
+          LOG.info("Slow call: {} to {} took {}ms, over threshold {}ms", method.getName(),
+              this.remoteId, callTime, slowThreshold);
+        } else {
+          LOG.debug("Call: " + method.getName() + " took " + callTime + "ms");
+        }
       }
 
       if (Client.isAsynchronousMode()) {

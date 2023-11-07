@@ -476,6 +476,8 @@ public class TestRPC extends TestRpcBase {
     System.out.println("Testing Slow RPC");
     // create a server with two handlers
     server = setupTestServer(conf, 2);
+    GenericTestUtils.LogCapturer logs =
+        GenericTestUtils.LogCapturer.captureLogs(ProtobufRpcEngine2.LOG);
 
     try {
       // create a client
@@ -487,6 +489,9 @@ public class TestRPC extends TestRpcBase {
       assertTrue("Slow RPC should not have finished1.", !slowrpc.isDone());
 
       slowrpc.ping(false); // first fast ping
+
+      // Do a sleep to make it real slow
+      Thread.sleep(500);
 
       // verify that the first RPC is still stuck
       assertTrue("Slow RPC should not have finished2.", !slowrpc.isDone());
@@ -500,6 +505,10 @@ public class TestRPC extends TestRpcBase {
           Thread.sleep(1000);
         } catch (InterruptedException e) {}
       }
+
+      Assert.assertTrue(logs.getOutput().contains("Slow call: slowPing"));
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
     } finally {
       System.out.println("Down slow rpc testing");
       stop(server, proxy);

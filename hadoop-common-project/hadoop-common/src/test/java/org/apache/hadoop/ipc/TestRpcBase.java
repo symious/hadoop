@@ -20,6 +20,7 @@ package org.apache.hadoop.ipc;
 
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.thirdparty.protobuf.BlockingService;
 import org.apache.hadoop.thirdparty.protobuf.RpcController;
 import org.apache.hadoop.thirdparty.protobuf.ServiceException;
@@ -73,6 +74,8 @@ public class TestRpcBase {
 
   protected void setupConf() {
     conf = new Configuration();
+    conf.setTimeDuration(CommonConfigurationKeys.IPC_SLOW_LOG_THRESHOLD_KEY, 500,
+        TimeUnit.MILLISECONDS);
     // Set RPC engine to protobuf RPC engine
     RPC.setProtocolEngine(conf, TestRpcService.class, ProtobufRpcEngine2.class);
     UserGroupInformation.setConfiguration(conf);
