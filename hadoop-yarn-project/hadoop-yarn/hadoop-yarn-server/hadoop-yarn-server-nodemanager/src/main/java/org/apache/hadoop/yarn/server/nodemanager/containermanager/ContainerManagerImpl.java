@@ -1708,10 +1708,7 @@ public class ContainerManagerImpl extends CompositeService implements
       case FINISH_APPS:
         CMgrCompletedAppsEvent appsFinishedEvent =
             (CMgrCompletedAppsEvent) event;
-        List<ApplicationSimpleReport> appsToCleanList =
-            appsFinishedEvent.getAppsToCleanup();
-        for (int i = 0; i < appsToCleanList.size(); i++) {
-          ApplicationSimpleReport appReport = appsToCleanList.get(i);
+        for (ApplicationSimpleReport appReport : appsFinishedEvent.getAppsToCleanup()) {
           ApplicationId appID = appReport.getApplicationId();
           Application app = this.context.getApplications().get(appID);
 
@@ -1724,46 +1721,23 @@ public class ContainerManagerImpl extends CompositeService implements
           }
 
           boolean shouldDropEvent = false;
-          ContainerId recoverContainerId = null;
           for (Container container : app.getContainers().values()) {
             if (container.isRecovering()) {
-              recoverContainerId = container.getContainerId();
+              LOG.info("drop FINISH_APPS event to " + appID + " because "
+                  + "container " + container.getContainerId()
+                  + " is recovering");
               shouldDropEvent = true;
               break;
             }
           }
-          long curTime = System.currentTimeMillis();
-          long dis = curTime - startTime;
-          if (LOG.isDebugEnabled()) {
-            LOG.debug("FINISH_APPS dis: " + dis);
-          }
-          if (shouldDropEvent &&
-              (dis <= waitForContainerRecoverDuringKillMillis)) {
-            List<ApplicationSimpleReport> applicationSimpleReportList =
-                new ArrayList<>();
-            for (int j = i; j < appsToCleanList.size(); j++) {
-              applicationSimpleReportList.add(appsToCleanList.get(j));
-            }
-            context.getDispatcher().getEventHandler().handle(
-                new CMgrCompletedAppsEvent(applicationSimpleReportList,
-                    CMgrCompletedAppsEvent.Reason.BY_RESOURCEMANAGER));
-            LOG.info("resend FINISH_APPS event to " + appID + " because "
-                + "container " + recoverContainerId + " is recovering");
-            break;
-          } else if (shouldDropEvent) {
-            LOG.info("drop FINISH_APPS event to " + appID + " because "
-                + "container " + recoverContainerId
-                + " is recovering beyond " +
-                waitForContainerRecoverDuringKillMillis + " ms!");
+          if (shouldDropEvent) {
             continue;
           }
 
           String diagnostic = "";
-          if (appsFinishedEvent.getReason() ==
-              CMgrCompletedAppsEvent.Reason.ON_SHUTDOWN) {
+          if (appsFinishedEvent.getReason() == CMgrCompletedAppsEvent.Reason.ON_SHUTDOWN) {
             diagnostic = "Application killed on shutdown";
-          } else if (appsFinishedEvent.getReason() ==
-              CMgrCompletedAppsEvent.Reason.BY_RESOURCEMANAGER) {
+          } else if (appsFinishedEvent.getReason() == CMgrCompletedAppsEvent.Reason.BY_RESOURCEMANAGER) {
             diagnostic = "Application killed by ResourceManager";
           }
           this.dispatcher.getEventHandler().handle(
