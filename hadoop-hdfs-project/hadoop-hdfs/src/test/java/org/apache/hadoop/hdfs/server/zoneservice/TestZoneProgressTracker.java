@@ -95,7 +95,7 @@ public class TestZoneProgressTracker {
     conf.setEnum(DFSConfigKeys.DFS_ZONE_PROGRESS_TRACKER_PRINT_MODE_KEY, ZoneProgressTracker.ZoneProgressPrintModes.PERIODICALLY);
     ZoneProgressTracker.initConf(conf);
     FakeTimer timer = new FakeTimer();
-    timer.advance(1000000);
+    timer.advance((long) 1E9);
     ZoneProgressTracker.setTimer(timer);
 
     // The first print always passes through
