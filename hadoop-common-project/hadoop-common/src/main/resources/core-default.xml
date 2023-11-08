@@ -4089,4 +4089,13 @@
       Value 0 means always log to INFO.
     </description>
   </property>
+
+  <property>
+    <name>ipc.slow.logging.threshold</name>
+    <value>0</value>
+    <description>
+      Logger will log RPC calls that take longer than this threshold to INFO.
+      Value 0 means to never log slow RPC calls.
+    </description>
+  </property>
 </configuration>

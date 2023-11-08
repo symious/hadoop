@@ -502,6 +502,6 @@ public class CommonConfigurationKeys extends CommonConfigurationKeysPublic {
   public static final String IOSTATISTICS_LOGGING_LEVEL_DEFAULT
       = IOSTATISTICS_LOGGING_LEVEL_DEBUG;
 
-  public static final String IPC_SLOW_LOG_THRESHOLD_KEY = "ipc.slow.log.threshold";
+  public static final String IPC_SLOW_LOG_THRESHOLD_KEY = "ipc.slow.logging.threshold";
   public static final long IPC_SLOW_LOG_THRESHOLD_DEFAULT = 0;
 }
