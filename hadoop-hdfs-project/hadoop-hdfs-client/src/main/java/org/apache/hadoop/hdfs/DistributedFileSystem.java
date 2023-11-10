@@ -1691,6 +1691,12 @@ public class DistributedFileSystem extends FileSystem
     return dfs.datanodeReport(type);
   }
 
+  /** @return servers and topos mapping from NN. */
+  public Map<String, String> getTopologyReport()
+      throws IOException {
+    return dfs.getTopologyReport();
+  }
+
   /**
    * Enter, leave or get safe mode.
    *

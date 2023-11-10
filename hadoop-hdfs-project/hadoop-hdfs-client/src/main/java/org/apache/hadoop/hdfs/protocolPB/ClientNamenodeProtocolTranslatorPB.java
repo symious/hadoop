@@ -154,6 +154,8 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetSna
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetStoragePoliciesRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetStoragePoliciesResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetStoragePolicyRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetTopologyReportRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetTopologyReportResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.HAServiceStateRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.IsFileClosedRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.ListCacheDirectivesRequestProto;
@@ -281,6 +283,10 @@ public class ClientNamenodeProtocolTranslatorPB implements
   private final static GetFsECBlockGroupStatsRequestProto
       VOID_GET_FS_ECBLOCKGROUP_STATS_REQUEST =
       GetFsECBlockGroupStatsRequestProto.newBuilder().build();
+
+  private final static GetTopologyReportRequestProto
+      VOID_GET_TOPOLOGY_REPORT_REQUEST =
+      GetTopologyReportRequestProto.newBuilder().build();
 
   private final static RollEditsRequestProto VOID_ROLLEDITS_REQUEST =
       RollEditsRequestProto.getDefaultInstance();
@@ -873,6 +879,16 @@ public class ClientNamenodeProtocolTranslatorPB implements
     try {
       return PBHelperClient.convert(
           rpcProxy.getDatanodeReport(null, req).getDiList());
+    } catch (ServiceException e) {
+      throw ProtobufHelper.getRemoteException(e);
+    }
+  }
+
+  @Override
+  public Map<String, String> getTopologyReport() throws IOException {
+    try {
+      return rpcProxy.getTopologyReport(null,
+          VOID_GET_TOPOLOGY_REPORT_REQUEST).getTopologyReport();
     } catch (ServiceException e) {
       throw ProtobufHelper.getRemoteException(e);
     }

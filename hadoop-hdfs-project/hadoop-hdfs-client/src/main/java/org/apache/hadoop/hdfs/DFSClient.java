@@ -2311,6 +2311,11 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     }
   }
 
+  public Map<String, String> getTopologyReport() throws IOException {
+    checkOpen();
+    return namenode.getTopologyReport();
+  }
+
   public DatanodeStorageReport[] getDatanodeStorageReport(
       DatanodeReportType type) throws IOException {
     checkOpen();

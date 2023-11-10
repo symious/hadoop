@@ -78,6 +78,7 @@ public class OperationName {
   public static String GET_ROLLING_UPGRADE_STATUS = "getRollingUpgradeStatus";
   public static String GET_STORAGE_POLICY = "getStoragePolicy";
   public static String GET_STORAGE_POLICIES = "getStoragePolicies";
+  public static String GET_TOPOLOGY_REPORT = "topologyReport";
   public static String GET_XATTRS = "getXAttrs";
   public static String GET_ZONE_STATUS = "getZoneStatus";
   public static String HANDLE_HEARTBEAT = "handleHeartbeat";

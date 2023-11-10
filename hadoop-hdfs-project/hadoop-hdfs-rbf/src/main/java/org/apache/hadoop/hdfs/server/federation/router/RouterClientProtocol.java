@@ -1382,6 +1382,12 @@ public class RouterClientProtocol implements ClientProtocol {
   }
 
   @Override
+  public Map<String, String> getTopologyReport()
+      throws IOException {
+    throw new UnsupportedOperationException("Topology report is not supported in router!");
+  }
+
+  @Override
   public DatanodeStorageReport[] getDatanodeStorageReport(
       HdfsConstants.DatanodeReportType type) throws IOException {
     rpcServer.checkOperation(NameNode.OperationCategory.UNCHECKED);

@@ -919,6 +919,12 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
     return clientProto.getDatanodeReport(type);
   }
 
+  @Override // ClientProtocol
+  public Map<String, String> getTopologyReport()
+      throws IOException {
+    return clientProto.getTopologyReport();
+  }
+
   /**
    * Get the datanode report with a timeout.
    * @param type Type of the datanode.

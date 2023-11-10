@@ -870,6 +870,12 @@ public interface ClientProtocol {
       throws IOException;
 
   /**
+   * Get a report of all servers topology info stored in NameNode
+   */
+  @Idempotent
+  Map<String, String> getTopologyReport() throws IOException;
+
+  /**
    * Get a report on the current datanode storages.
    */
   @Idempotent

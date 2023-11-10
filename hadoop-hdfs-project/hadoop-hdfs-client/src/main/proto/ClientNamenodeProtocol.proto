@@ -382,6 +382,13 @@ message GetFsECBlockGroupStatsResponseProto {
   optional uint64 highest_prio_low_redundancy_blocks = 6;
 }
 
+message GetTopologyReportRequestProto { // no input parameters
+}
+
+message GetTopologyReportResponseProto {
+  map<string, string> topologyReport = 1;
+}
+
 enum DatanodeReportTypeProto {  // type of the datanode report
   ALL = 1;
   LIVE = 2;
@@ -924,6 +931,8 @@ service ClientNamenodeProtocol {
       returns (GetFsECBlockGroupStatsResponseProto);
   rpc getDatanodeReport(GetDatanodeReportRequestProto)
       returns(GetDatanodeReportResponseProto);
+  rpc getTopologyReport(GetTopologyReportRequestProto)
+      returns(GetTopologyReportResponseProto);
   rpc getDatanodeStorageReport(GetDatanodeStorageReportRequestProto)
       returns(GetDatanodeStorageReportResponseProto);
   rpc getPreferredBlockSize(GetPreferredBlockSizeRequestProto)

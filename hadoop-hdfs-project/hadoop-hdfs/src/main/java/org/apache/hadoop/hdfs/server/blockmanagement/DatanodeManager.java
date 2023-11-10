@@ -578,6 +578,15 @@ public class DatanodeManager {
     return this.avoidSlowDataNodesForRead;
   }
 
+  public Map<String, String> getTopologyMap() throws UnsupportedActionException {
+    if (dnsToSwitchMappingForMetric instanceof CachedDNSToSwitchMapping) {
+      return ((CachedDNSToSwitchMapping) dnsToSwitchMappingForMetric).getSwitchMap();
+    } else {
+      throw new UnsupportedActionException("DNSToSwitchMapping is not " +
+          "the instance of CachedDNSToSwitchMapping!");
+    }
+  }
+
   /** Check if the read traffic is inter-dc. */
   @VisibleForTesting
   public boolean checkInterDCRead(final String clientMachine,
@@ -596,6 +605,7 @@ public class DatanodeManager {
     } else {
       Node client = getDatanodeByHost(clientMachine);
       if (client != null) {
+        LOG.debug("Get client location from DN maps, client is {}", client);
         clientLocation = client.getNetworkLocation();
       } else {
         List<String> hosts = new ArrayList<>(1);

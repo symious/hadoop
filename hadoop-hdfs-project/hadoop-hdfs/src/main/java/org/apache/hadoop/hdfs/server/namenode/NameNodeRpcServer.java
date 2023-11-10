@@ -1522,6 +1522,13 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     return results;
   }
 
+  @Override
+  public Map<String, String> getTopologyReport()
+      throws IOException {
+    checkNNStartup();
+    return namesystem.getTopologyReport();
+  }
+
   @Override // ClientProtocol
   public DatanodeStorageReport[] getDatanodeStorageReport(
       DatanodeReportType type) throws IOException {

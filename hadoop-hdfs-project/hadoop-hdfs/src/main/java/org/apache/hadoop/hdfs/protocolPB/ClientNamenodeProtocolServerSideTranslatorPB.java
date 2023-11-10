@@ -165,6 +165,8 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetSto
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetStoragePoliciesResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetStoragePolicyRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetStoragePolicyResponseProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetTopologyReportRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.GetTopologyReportResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.HAServiceStateRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.HAServiceStateResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientNamenodeProtocolProtos.IsFileClosedRequestProto;
@@ -913,6 +915,22 @@ public class ClientNamenodeProtocolServerSideTranslatorPB implements
           .getDatanodeReport(PBHelperClient.convert(req.getType())));
       return GetDatanodeReportResponseProto.newBuilder()
           .addAllDi(result).build();
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
+  }
+
+  @Override
+  public GetTopologyReportResponseProto getTopologyReport(
+      RpcController controller, GetTopologyReportRequestProto req)
+      throws ServiceException {
+    try {
+      Map<String, String> result = server.getTopologyReport();
+      GetTopologyReportResponseProto.Builder builder = GetTopologyReportResponseProto.newBuilder();
+      for (Map.Entry<String, String> entry: result.entrySet()) {
+        builder.putTopologyReport(entry.getKey(), entry.getValue());
+      }
+      return builder.build();
     } catch (IOException e) {
       throw new ServiceException(e);
     }

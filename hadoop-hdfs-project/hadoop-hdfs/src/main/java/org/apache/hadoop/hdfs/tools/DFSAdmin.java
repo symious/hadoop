@@ -453,6 +453,7 @@ public class DFSAdmin extends FsShell {
     "\t[-reconfig <namenode|datanode> <host:ipc_port> " +
       "<start|status|properties>]\n" +
     "\t[-printTopology]\n" +
+      "\t[-printAllTopology]\n" +
       "\t[-refreshNamenodes datanode_host:ipc_port]\n" +
       "\t[-refreshDatanodeTopology datanode_host:ipc_port]]\n" +
       "\t[-refreshDatanodeThrottlerConfig datanode_host:ipc_port]]\n" +
@@ -1252,6 +1253,9 @@ public class DFSAdmin extends FsShell {
 
     String printTopology = "-printTopology: Print a tree of the racks and their\n" +
                            "\t\tnodes as reported by the Namenode\n";
+
+    String printAllTopology = "-printAllTopology: Print a tree of the racks and\n" +
+        "\t\tall the servers as reported by the Namenode\n";
     
     String refreshNamenodes = "-refreshNamenodes: Takes a " +
             "datanodehost:ipc_port as argument,For the given datanode\n" +
@@ -1381,6 +1385,8 @@ public class DFSAdmin extends FsShell {
       System.out.println(reconfig);
     } else if ("printTopology".equals(cmd)) {
       System.out.println(printTopology);
+    } else if ("printAllTopology".equals(cmd)) {
+      System.out.println(printAllTopology);
     } else if ("refreshNamenodes".equals(cmd)) {
       System.out.println(refreshNamenodes);
     } else if ("refreshDatanodeTopology".equals(cmd)) {
@@ -1438,6 +1444,7 @@ public class DFSAdmin extends FsShell {
       System.out.println(genericRefresh);
       System.out.println(reconfig);
       System.out.println(printTopology);
+      System.out.println(printAllTopology);
       System.out.println(refreshNamenodes);
       System.out.println(refreshDatanodeTopology);
       System.out.println(refreshDatanodeThrottlerConfig);
@@ -1637,8 +1644,8 @@ public class DFSAdmin extends FsShell {
   }
 
   /**
-   * Display each rack and the nodes assigned to that rack, as determined
-   * by the NameNode, in a hierarchical manner.  The nodes and racks are
+   * Display each rack and the Datanodes assigned to that rack, as determined
+   * by the NameNode, in a hierarchical manner.  The DataNodes and racks are
    * sorted alphabetically.
    * 
    * @throws IOException If an error while getting datanode report
@@ -1659,26 +1666,59 @@ public class DFSAdmin extends FsShell {
         
         tree.get(location).add(name);
       }
-      
-      // Sort the racks (and nodes) alphabetically, display in order
-      ArrayList<String> racks = new ArrayList<String>(tree.keySet());
-      Collections.sort(racks);
-      
-      for(String r : racks) {
-        System.out.println("Rack: " + r);
-        TreeSet<String> nodes = tree.get(r);
 
-        for(String n : nodes) {
-          System.out.print("   " + n);
-          String hostname = NetUtils.getHostNameOfIP(n);
-          if(hostname != null)
-            System.out.print(" (" + hostname + ")");
-          System.out.println();
-        }
+      printTopologyByRack(tree);
 
+    return 0;
+  }
+
+  /**
+   * Display each rack and the nodes assigned to that rack, as determined
+   * by the NameNode, in a hierarchical manner.  The nodes and racks are
+   * sorted alphabetically.
+   *
+   * @throws IOException If an error while getting topology report from NameNode
+   */
+  public int printAllTopology() throws IOException {
+    Map<String, String> topoMap = getDFS().getTopologyReport();
+
+    // Build a map of rack -> nodes from the NameNode topology report
+    HashMap<String, TreeSet<String> > tree = new HashMap<String, TreeSet<String>>();
+    for(Map.Entry<String, String> entry: topoMap.entrySet()) {
+      String location = entry.getValue();
+      String name = entry.getKey();
+
+      if(!tree.containsKey(location)) {
+        tree.put(location, new TreeSet<>());
+      }
+
+      tree.get(location).add(name);
+    }
+
+    printTopologyByRack(tree);
+
+    return 0;
+  }
+
+  private void printTopologyByRack(HashMap<String, TreeSet<String> > tree) {
+    // Sort the racks (and nodes) alphabetically, display in order
+    ArrayList<String> racks = new ArrayList<>(tree.keySet());
+    Collections.sort(racks);
+
+    for(String r : racks) {
+      System.out.println("Rack: " + r);
+      TreeSet<String> nodes = tree.get(r);
+
+      for(String n : nodes) {
+        System.out.print("   " + n);
+        String hostname = NetUtils.getHostNameOfIP(n);
+        if(hostname != null)
+          System.out.print(" (" + hostname + ")");
         System.out.println();
       }
-    return 0;
+
+      System.out.println();
+    }
   }
   
   private static UserGroupInformation getUGI() 
@@ -2283,6 +2323,9 @@ public class DFSAdmin extends FsShell {
     } else if ("-printTopology".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
                          + " [-printTopology]");
+    } else if ("-printAllTopology".equals(cmd)) {
+      System.err.println("Usage: hdfs dfsadmin"
+          + " [-printAllTopology]");
     } else if ("-refreshNamenodes".equals(cmd)) {
       System.err.println("Usage: hdfs dfsadmin"
                          + " [-refreshNamenodes datanode-host:ipc_port]");
@@ -2442,6 +2485,11 @@ public class DFSAdmin extends FsShell {
         printUsage(cmd);
         return exitCode;
       }
+    } else if ("-printAllTopology".equals(cmd)) {
+      if(argv.length != 1) {
+        printUsage(cmd);
+        return exitCode;
+      }
     } else if ("-refreshNamenodes".equals(cmd)) {
       if (argv.length != 2) {
         printUsage(cmd);
@@ -2566,6 +2614,8 @@ public class DFSAdmin extends FsShell {
         exitCode = genericRefresh(argv, i);
       } else if ("-printTopology".equals(cmd)) {
         exitCode = printTopology();
+      } else if ("-printAllTopology".equals(cmd)) {
+        exitCode = printAllTopology();
       } else if ("-refreshNamenodes".equals(cmd)) {
         exitCode = refreshNamenodes(argv, i);
       } else if ("-refreshDatanodeThrottlerConfig".equals(cmd)) {

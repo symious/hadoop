@@ -5037,6 +5037,21 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     return arr;
   }
 
+  Map<String, String> getTopologyReport() throws IOException {
+    Map<String, String> topo;
+    checkSuperuserPrivilege(OperationName.GET_TOPOLOGY_REPORT);
+    checkOperation(OperationCategory.UNCHECKED);
+    readLock(OperationName.GET_TOPOLOGY_REPORT);
+    try {
+      checkOperation(OperationCategory.UNCHECKED);
+      topo = getBlockManager().getDatanodeManager().getTopologyMap();
+    } finally {
+      readUnlock(OperationName.GET_TOPOLOGY_REPORT);
+    }
+    logAuditEvent(true, OperationName.GET_TOPOLOGY_REPORT, null);
+    return topo;
+  }
+
   DatanodeStorageReport[] getDatanodeStorageReport(final DatanodeReportType type
       ) throws IOException {
     DatanodeStorageReport[] reports;
