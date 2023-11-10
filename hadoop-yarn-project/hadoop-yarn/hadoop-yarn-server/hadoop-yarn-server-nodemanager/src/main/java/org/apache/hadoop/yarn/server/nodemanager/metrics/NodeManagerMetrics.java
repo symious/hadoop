@@ -133,6 +133,12 @@ public class NodeManagerMetrics {
   @Metric("Increase container's memory in GB")
   MutableCounterLong increaseMemorySize;
 
+  @Metric("Aggregated init memory of all containers in GB")
+  MutableGaugeInt aggregateContainerInitMemGB;
+
+  @Metric("Aggregated current limit memory of all containers in GB")
+  MutableGaugeInt aggregateContainerLimitMemGB;
+
   // CHECKSTYLE:ON:VisibilityModifier
 
   private JvmMetrics jvmMetrics = null;
@@ -569,5 +575,13 @@ public class NodeManagerMetrics {
       decreaseMemorySize
           .incr((long) Math.ceil((originalMemory - targetMemory) / 1024d));
     }
+  }
+
+  public void setAggregateContainerInitMemGB(long aggregateInitMem) {
+    aggregateContainerInitMemGB.set((int)Math.ceil(aggregateInitMem / 1024d / 1024d / 1024d));
+  }
+
+  public void setAggregateContainerLimitMemGB(long aggregateLimitMem) {
+    aggregateContainerLimitMemGB.set((int)Math.ceil(aggregateLimitMem / 1024d / 1024d / 1024d));
   }
 }

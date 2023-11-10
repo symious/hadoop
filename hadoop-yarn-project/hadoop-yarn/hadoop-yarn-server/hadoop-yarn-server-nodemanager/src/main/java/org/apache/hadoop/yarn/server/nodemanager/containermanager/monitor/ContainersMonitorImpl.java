@@ -425,6 +425,7 @@ public class ContainersMonitorImpl extends AbstractService implements
     private long vmemLimit;
     private long pmemLimit;
     private int cpuVcores;
+    private long initLimit;
 
     public ProcessTreeInfo(ContainerId containerId, String pid,
         ResourceCalculatorProcessTree pTree, long vmemLimit, long pmemLimit,
@@ -435,6 +436,7 @@ public class ContainersMonitorImpl extends AbstractService implements
       this.vmemLimit = vmemLimit;
       this.pmemLimit = pmemLimit;
       this.cpuVcores = cpuVcores;
+      this.initLimit = pmemLimit;
     }
 
     public ContainerId getContainerId() {
@@ -471,6 +473,9 @@ public class ContainersMonitorImpl extends AbstractService implements
       return this.pmemLimit;
     }
 
+    public long getInitLimit() {
+      return this.initLimit;
+    }
     /**
      * @return Number of cpu vcores assigned
      */
@@ -588,6 +593,8 @@ public class ContainersMonitorImpl extends AbstractService implements
         long vmemUsageByAllContainers = 0;
         long pmemByAllContainers = 0;
         long cpuUsagePercentPerCoreByAllContainers = 0;
+        long memInitByAllContainers = 0;
+        long memLimitByAllContainers = 0;
         for (Entry<ContainerId, ProcessTreeInfo> entry : trackingContainers
             .entrySet()) {
           ContainerId containerId = entry.getKey();
@@ -637,6 +644,9 @@ public class ContainersMonitorImpl extends AbstractService implements
             // Accounting the total memory in usage for all containers
             vmemUsageByAllContainers += currentVmemUsage;
             pmemByAllContainers += currentPmemUsage;
+            // Accounting the total init/limit memory for all containers
+            memInitByAllContainers += ptInfo.getInitLimit();
+            memLimitByAllContainers += ptInfo.getPmemLimit();
             // Accounting the total cpu usage for all containers
             cpuUsagePercentPerCoreByAllContainers += cpuUsagePercentPerCore;
 
@@ -670,6 +680,8 @@ public class ContainersMonitorImpl extends AbstractService implements
               trackedContainersUtilization.getVirtualMemory());
           nmMetrics.setContainerCpuUtilization(
               trackedContainersUtilization.getCPU());
+          nmMetrics.setAggregateContainerInitMemGB(memInitByAllContainers);
+          nmMetrics.setAggregateContainerLimitMemGB(memLimitByAllContainers);
         }
 
         try {
