@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.hdfs.server.balancer;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BALANCER_HTTP_ADDRESS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BALANCER_HTTP_ADDRESS_KEY;
 import static org.apache.hadoop.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.hadoop.hdfs.protocol.BlockType.CONTIGUOUS;
 
@@ -41,6 +43,8 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.metrics2.source.JvmMetrics;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.hdfs.DFSUtilClient;
@@ -184,6 +188,11 @@ public class Balancer {
   static final Logger LOG = LoggerFactory.getLogger(Balancer.class);
 
   static final Path BALANCER_ID_PATH = new Path("/system/balancer.id");
+
+  private static BalancerMetrics balancerMetrics;
+
+  /** httpServer */
+  private static BalancerHttpServer httpServer;
 
   private static final String USAGE = "Usage: hdfs balancer"
       + "\n\t[-policy <policy>]\tthe balancing policy: "
@@ -338,7 +347,7 @@ public class Balancer {
             p.getExcludedNodes(), p.getDataCenterConstraint(), movedWinWidth,
             moverThreads, dispatcherThreads, maxConcurrentMovesPerNode,
             getBlocksSize, getBlocksMinBlockSize, blockMoveTimeout,
-            maxNoMoveInterval, maxIterationTime, conf);
+            maxNoMoveInterval, maxIterationTime, conf, balancerMetrics);
     this.threshold = p.getThreshold();
     this.policy = p.getBalancingPolicy();
     this.sourceNodes = p.getSourceNodes();
@@ -463,6 +472,8 @@ public class Balancer {
     }
 
     logUtilizationCollections();
+    balancerMetrics.setNumOfOverUtilizedNodes(overUtilized.size(), this.nnc.getNsId());
+    balancerMetrics.setNumOfUnderUtilizedNodes(underUtilized.size(), this.nnc.getNsId());
     
     Preconditions.checkState(dispatcher.getStorageGroupMap().size()
         == overUtilized.size() + underUtilized.size() + aboveAvgUtilized.size()
@@ -707,8 +718,10 @@ public class Balancer {
   /** Run an iteration for all datanodes. */
   Result runOneIteration() {
     try {
+      balancerMetrics.setIterateRunning(true, this.nnc.getNsId());
       final List<DatanodeStorageReport> reports = dispatcher.init();
       final long bytesLeftToMove = init(reports);
+      balancerMetrics.setBytesLeftToMove(bytesLeftToMove, this.nnc.getNsId());
       if (bytesLeftToMove == 0) {
         return newResult(ExitStatus.SUCCESS, bytesLeftToMove, 0);
       } else {
@@ -763,6 +776,7 @@ public class Balancer {
       System.out.println(e + ".  Exiting ...");
       return newResult(ExitStatus.INTERRUPTED);
     } finally {
+      balancerMetrics.setIterateRunning(false, this.nnc.getNsId());
       dispatcher.shutdownNow();
     }
   }
@@ -853,52 +867,75 @@ public class Balancer {
   static int run(Collection<URI> namenodes, Collection<String> nsIds,
       final BalancerParameters p, Configuration conf)
       throws IOException, InterruptedException {
-    if (!p.getRunAsService()) {
-      return doBalance(namenodes, nsIds, p, conf);
-    }
-    if (!serviceRunning) {
-      serviceRunning = true;
-    } else {
-      LOG.warn("Balancer already running as a long-service!");
-      return ExitStatus.ALREADY_RUNNING.getExitCode();
-    }
+    try {
+      DefaultMetricsSystem.initialize("Balancer");
+      JvmMetrics.create("Balancer",
+          conf.get(DFSConfigKeys.DFS_METRICS_SESSION_ID_KEY),
+          DefaultMetricsSystem.instance());
+      balancerMetrics = BalancerMetrics.create();
+      if (conf.getBoolean(DFSConfigKeys.DFS_BALANCER_ENABLE_HTTP_SERVER_KEY,
+          DFSConfigKeys.DFS_BALANCER_ENABLE_HTTP_SERVER_DEFAULT)) {
+        InetSocketAddress socketAddress = NetUtils.createSocketAddr(
+            conf.getTrimmed(DFS_BALANCER_HTTP_ADDRESS_KEY, DFS_BALANCER_HTTP_ADDRESS_DEFAULT));
+        httpServer = new BalancerHttpServer(conf, socketAddress);
+        httpServer.start();
+      }
+      if (!p.getRunAsService()) {
+        return doBalance(namenodes, nsIds, p, conf);
+      }
+      if (!serviceRunning) {
+        serviceRunning = true;
+      } else {
+        LOG.warn("Balancer already running as a long-service!");
+        return ExitStatus.ALREADY_RUNNING.getExitCode();
+      }
 
-    long scheduleInterval = conf.getTimeDuration(
+      long scheduleInterval = conf.getTimeDuration(
           DFSConfigKeys.DFS_BALANCER_SERVICE_INTERVAL_KEY,
           DFSConfigKeys.DFS_BALANCER_SERVICE_INTERVAL_DEFAULT,
           TimeUnit.MILLISECONDS);
-    int retryOnException =
+      int retryOnException =
           conf.getInt(DFSConfigKeys.DFS_BALANCER_SERVICE_RETRIES_ON_EXCEPTION,
               DFSConfigKeys.DFS_BALANCER_SERVICE_RETRIES_ON_EXCEPTION_DEFAULT);
 
-    while (serviceRunning) {
-      try {
-        int retCode = doBalance(namenodes, nsIds, p, conf);
-        if (retCode < 0) {
-          LOG.info("Balance failed, error code: " + retCode);
-          failedTimesSinceLastSuccessfulBalance++;
-        } else {
-          LOG.info("Balance succeed!");
-          failedTimesSinceLastSuccessfulBalance = 0;
+      while (serviceRunning) {
+        try {
+          int retCode = doBalance(namenodes, nsIds, p, conf);
+          if (retCode < 0) {
+            LOG.info("Balance failed, error code: " + retCode);
+            failedTimesSinceLastSuccessfulBalance++;
+          } else {
+            LOG.info("Balance succeed!");
+            failedTimesSinceLastSuccessfulBalance = 0;
+          }
+          exceptionsSinceLastBalance = 0;
+        } catch (Exception e) {
+          if (++exceptionsSinceLastBalance > retryOnException) {
+            // The caller will process and log the exception
+            throw e;
+          }
+          LOG.warn(
+              "Encounter exception while do balance work. Already tried {} times",
+              exceptionsSinceLastBalance, e);
         }
-        exceptionsSinceLastBalance = 0;
-      } catch (Exception e) {
-        if (++exceptionsSinceLastBalance > retryOnException) {
-          // The caller will process and log the exception
-          throw e;
-        }
-        LOG.warn(
-            "Encounter exception while do balance work. Already tried {} times",
-            exceptionsSinceLastBalance, e);
-      }
 
-      // sleep for next round, will retry for next round when it's interrupted
-      LOG.info("Finished one round, will wait for {} for next round",
-          time2Str(scheduleInterval));
-      Thread.sleep(scheduleInterval);
+        // sleep for next round, will retry for next round when it's interrupted
+        LOG.info("Finished one round, will wait for {} for next round",
+            time2Str(scheduleInterval));
+        Thread.sleep(scheduleInterval);
+      }
+      // normal stop
+      return 0;
+    } finally {
+      DefaultMetricsSystem.shutdown();
+      if (httpServer != null) {
+        try {
+          httpServer.stop();
+        } catch (Exception e) {
+          LOG.error("Exception while stopping httpserver", e);
+        }
+      }
     }
-    // normal stop
-    return 0;
   }
 
   static void stop() {

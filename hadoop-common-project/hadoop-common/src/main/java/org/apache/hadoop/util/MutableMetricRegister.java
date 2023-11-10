@@ -22,6 +22,8 @@ import java.util.Map;
 
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
+import org.apache.hadoop.metrics2.lib.MutableGaugeInt;
+import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.metrics2.lib.MutableMetric;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.metrics2.lib.MutableStat;
@@ -46,6 +48,12 @@ public class MutableMetricRegister {
           } else if (metricClass == MutableCounterLong.class) {
             String metricName = StringUtils.capitalize(metricPrefix + key);
             metric = (T) registry.newCounter(metricName, metricName, 0L);
+          } else if (metricClass == MutableGaugeInt.class) {
+            String metricName = StringUtils.capitalize(metricPrefix + key);
+            metric = (T) registry.newGauge(metricName, metricName, 0);
+          } else if (metricClass == MutableGaugeLong.class) {
+            String metricName = StringUtils.capitalize(metricPrefix + key);
+            metric = (T) registry.newGauge(metricName, metricName, 0L);
           } else {
             LOG.warn("Class type {} not supported by {}", metricClass.getName(), registry.info());
             return null;

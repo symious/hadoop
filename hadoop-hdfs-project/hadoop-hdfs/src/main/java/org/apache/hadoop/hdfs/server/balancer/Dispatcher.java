@@ -98,6 +98,8 @@ import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 public class Dispatcher {
   static final Logger LOG = LoggerFactory.getLogger(Dispatcher.class);
 
+  private final BalancerMetrics metrics;
+
   /**
    * the period of time to delay the usage of a DataNode after hitting
    * errors when using it for migrating data
@@ -496,9 +498,16 @@ public class Dispatcher {
         receiveResponse(in);
         nnc.addBytesMoved(reportedBlock.getNumBytes());
         target.getDDatanode().setHasSuccess();
+        if (metrics != null) {
+          metrics.incrBytesMoved(reportedBlock.getNumBytes(), nnc.getNsId());
+          metrics.incrNumBlocksMoved(1, nnc.getNsId());
+        }
         LOG.info("Successfully moved " + this);
       } catch (IOException e) {
         LOG.warn("Failed to move " + this, e);
+        if (metrics != null) {
+          metrics.incrNumBlocksFailMoved(1, nnc.getNsId());
+        }
         target.getDDatanode().setHasFailure();
         // Check that the failure is due to block pinning errors.
         if (e instanceof BlockPinningException) {
@@ -1200,7 +1209,7 @@ public class Dispatcher {
       int maxNoMoveInterval, Configuration conf) {
     this(nnc, includedNodes, excludedNodes, "/", movedWinWidth,
         moverThreads, dispatcherThreads, maxConcurrentMovesPerNode,
-        0L, 0L, 0, maxNoMoveInterval, -1, conf);
+        0L, 0L, 0, maxNoMoveInterval, -1, conf, null);
   }
 
   public Dispatcher(NameNodeConnector nnc, Set<String> includedNodes,
@@ -1208,7 +1217,8 @@ public class Dispatcher {
       long movedWinWidth, int moverThreads,
       int dispatcherThreads, int maxConcurrentMovesPerNode,
       long getBlocksSize, long getBlocksMinBlockSize, int blockMoveTimeout,
-      int maxNoMoveInterval, long maxIterationTime, Configuration conf) {
+      int maxNoMoveInterval, long maxIterationTime, Configuration conf,
+      BalancerMetrics metrics) {
     this.nnc = nnc;
     this.excludedNodes = excludedNodes;
     this.includedNodes = includedNodes;
@@ -1253,6 +1263,7 @@ public class Dispatcher {
         DFSConfigKeys.DFS_BALANCER_LONG_TAIL_BLOCK_THRESHOLD_DEFAULT);
     this.skipAllTimeoutTasks = conf.getBoolean(DFSConfigKeys.DFS_BALANCER_SKIP_ALL_TIMEOUT_TASKS_KEY,
         DFSConfigKeys.DFS_BALANCER_SKIP_ALL_TIMEOUT_TASKS_DEFAULT);
+    this.metrics = metrics;
   }
 
   public DistributedFileSystem getDistributedFileSystem() {
@@ -1456,10 +1467,17 @@ public class Dispatcher {
     // wait for all reportedBlock moving to be done
     waitForMoveCompletion(targets);
     long endTime = Time.monotonicNow();
+    long bytesMoved = getBytesMoved() - bytesLastMoved;
+    long numBlocksMoved = getBblocksMoved() - blocksLastMoved;
+    long duration = endTime - beginTime;
     LOG.info("This iteration cost {}min to move {} bytes {} blocks.",
-        TimeUnit.MINUTES.convert(endTime - beginTime, TimeUnit.MILLISECONDS),
-        StringUtils.byteDesc(getBytesMoved() - bytesLastMoved),
-        (getBblocksMoved() - blocksLastMoved));
+        TimeUnit.MINUTES.convert(duration, TimeUnit.MILLISECONDS),
+        StringUtils.byteDesc(bytesMoved), numBlocksMoved);
+    if (metrics != null) {
+      metrics.setBytesMovedInPreIter(bytesMoved, this.nnc.getNsId());
+      metrics.setNumBlocksMovedInPreIter(numBlocksMoved, this.nnc.getNsId());
+      metrics.setTimeCostOfPreIter(duration, this.nnc.getNsId());
+    }
     return getBytesMoved() - bytesLastMoved;
   }
 

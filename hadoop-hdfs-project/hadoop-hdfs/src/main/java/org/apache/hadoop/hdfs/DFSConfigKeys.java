@@ -1802,6 +1802,11 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.disk.balancer.plan.threshold.percent";
   public static final int DFS_DISK_BALANCER_PLAN_THRESHOLD_DEFAULT = 10;
 
+  public static final String DFS_BALANCER_ENABLE_HTTP_SERVER_KEY = "dfs.balancer.enable.http.server";
+  public static final boolean DFS_BALANCER_ENABLE_HTTP_SERVER_DEFAULT = false;
+  public static final String DFS_BALANCER_HTTP_ADDRESS_KEY = "dfs.balancer.http-address";
+  public static final String DFS_BALANCER_HTTP_ADDRESS_DEFAULT = "0.0.0.0:50072";
+
   public static final String HTTPFS_BUFFER_SIZE_KEY =
       "httpfs.buffer.size";
   public static final int HTTP_BUFFER_SIZE_DEFAULT = 4096;

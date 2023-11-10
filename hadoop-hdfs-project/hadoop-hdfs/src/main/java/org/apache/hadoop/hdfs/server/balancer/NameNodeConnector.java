@@ -287,6 +287,10 @@ public class NameNodeConnector implements Closeable {
     return blockpoolID;
   }
 
+  public String getNsId() {
+    return this.nsId;
+  }
+
   AtomicLong getBytesMoved() {
     return bytesMoved;
   }

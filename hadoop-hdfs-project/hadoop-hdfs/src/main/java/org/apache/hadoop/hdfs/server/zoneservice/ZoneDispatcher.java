@@ -100,7 +100,7 @@ public class ZoneDispatcher extends Dispatcher {
     super(nnc, includedNodes, excludedNodes, "/",
         movedWinWidth, moverThreads, 0,
         maxConcurrentMovesPerNode, getBlocksSize, getBlocksMinBlockSize,
-        blockMoveTimeout, maxNoMoveInterval, -1, conf);
+        blockMoveTimeout, maxNoMoveInterval, -1, conf, null);
     this.blockDispatchAttempts = blockDispatchAttempts;
     this.blockDispatchRetryInterval = blockDispatchRetryInterval;
     this.dispatcherKeepAliveTime = dispatcherKeepAliveTime;
