@@ -49,7 +49,7 @@ import org.junit.Test;
 
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_MAX_BLOCK_ACQUIRE_FAILURES_KEY;
 
-public class TestVerifySingleReplica {
+public class TestVerifyReplica {
 
   private static MiniDFSCluster cluster;
   private static Configuration conf;
@@ -98,6 +98,18 @@ public class TestVerifySingleReplica {
     internalTestFileWithMissingBlocks(testPath);
   }
 
+  @Test
+  public void testSetReplication() throws Exception {
+    Path testPath = new Path("/testOverReplicated");
+    DFSTestUtil.writeFile(fs, testPath, DUMMY_DATA);
+    fs.setReplication(testPath, (short) 3);
+    internalTestWithExpectedReplication(testPath, (short) 2);
+
+    testPath = new Path("/testUnderReplicated");
+    DFSTestUtil.writeFile(fs, testPath, DUMMY_DATA); // Default replication is 1, no need to change
+    internalTestWithExpectedReplication(testPath, (short) 2);
+  }
+
   private void internalTestFileWithMissingBlocks(Path testPath) throws Exception {
     // Then a path that is completely normal
     Path normalPath = new Path("/testFileWithMissingBlocksPresent");
@@ -115,7 +127,7 @@ public class TestVerifySingleReplica {
       bw.flush();
     }
 
-    ToolRunner.run(conf, new VerifySingleReplica(),
+    ToolRunner.run(conf, new VerifyReplica(),
         new String[] { "-i", inputFile.getAbsolutePath(), "-p", previewFile.getAbsolutePath() });
 
     Pair<Set<String>, Set<String>> result = parsePreviewFile(previewFile.getAbsolutePath());
@@ -126,11 +138,40 @@ public class TestVerifySingleReplica {
     Assert.assertEquals(result.getLeft(), filesWithMissingBlocks);
     Assert.assertEquals(result.getRight(), filesToAddReplica);
 
-    ToolRunner.run(conf, new VerifySingleReplica(),
-        new String[] { "-i", inputFile.getAbsolutePath(), "-p", previewFile.getAbsolutePath(), "-e" });
+    ToolRunner.run(conf, new VerifyReplica(),
+        new String[] { "-i", inputFile.getAbsolutePath(), "-p", previewFile.getAbsolutePath(),
+            "-e" });
 
     Assert.assertFalse(fs.exists(testPath));
     Assert.assertEquals(2, fs.getFileStatus(normalPath).getReplication());
+  }
+
+  private void internalTestWithExpectedReplication(Path testPath, short replicas) throws Exception {
+    File inputFile = File.createTempFile("testWithExpectedReplication-input", null);
+    File previewFile = File.createTempFile("testWithExpectedReplication-preview", null);
+    inputFile.deleteOnExit();
+    previewFile.deleteOnExit();
+    try (BufferedWriter bw = new BufferedWriter(new FileWriter(inputFile))) {
+      bw.write(testPath.toString());
+      bw.write("\n");
+      bw.flush();
+    }
+
+    ToolRunner.run(conf, new VerifyReplica(),
+        new String[] { "-i", inputFile.getAbsolutePath(), "-p", previewFile.getAbsolutePath(), "-r",
+            String.valueOf(replicas) });
+
+    Pair<Set<String>, Set<String>> result = parsePreviewFile(previewFile.getAbsolutePath());
+    Set<String> filesToChangeReplication = new HashSet<>();
+    filesToChangeReplication.add(testPath.toString());
+    Assert.assertTrue(result.getLeft().isEmpty());
+    Assert.assertEquals(filesToChangeReplication, result.getRight());
+
+    ToolRunner.run(conf, new VerifyReplica(),
+        new String[] { "-i", inputFile.getAbsolutePath(), "-p", previewFile.getAbsolutePath(), "-r",
+            String.valueOf(replicas), "-e" });
+
+    Assert.assertEquals(replicas, fs.getFileStatus(testPath).getReplication());
   }
 
   private Pair<Set<String>, Set<String>> parsePreviewFile(String previewFile) {
@@ -164,8 +205,8 @@ public class TestVerifySingleReplica {
             new Block[] { blockToPurge.getBlock().getLocalBlock() });
     GenericTestUtils.waitFor(() -> {
       try {
-        return ((HdfsLocatedFileStatus) fs.listFiles(testPath, true)
-            .next()).getLocatedBlocks().get(purgeIdx).getLocations().length == 0;
+        return ((HdfsLocatedFileStatus) fs.listFiles(testPath, true).next()).getLocatedBlocks()
+            .get(purgeIdx).getLocations().length == 0;
       } catch (IOException e) {
         throw new RuntimeException(e);
       }

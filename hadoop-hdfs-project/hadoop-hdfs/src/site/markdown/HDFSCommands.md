@@ -248,13 +248,16 @@ Usage: `hdfs oiv_legacy [OPTIONS] -i INPUT_FILE -o OUTPUT_FILE`
 
 Hadoop offline image viewer for older versions of Hadoop. See [oiv\_legacy Command](./HdfsImageViewer.html#oiv_legacy_Command) for more info.
 
-### `singleReplica`
+### `verifyReplica`
 
-Usage: `hdfs singleReplica -p PREVIEW_FILE [-i INPUT_FILE] [--execute]`
+Usage: `hdfs verifyReplica -p PREVIEW_FILE [-i INPUT_FILE] [-r REPLICAS] [--execute]`
 
-Verifies if some paths have only 1 replica, handles those paths accordingly:
+If the `-r` option is not used, verifies if some paths have only 1 replica, then
 - if all blocks are present, increase the file replica to 2,
 - if some blocks are missing, the file is unsalvageable at this point, delete it.
+
+If the `-r` option is used, check if the paths have the expected number of replicas. 
+If not, set the number of replicas for these paths, else ignore.
 
 | COMMAND\_OPTION                     | Description                                                                               |
 |:------------------------------------|:------------------------------------------------------------------------------------------|
@@ -262,10 +265,11 @@ Verifies if some paths have only 1 replica, handles those paths accordingly:
 
 #### Optional command line arguments:
 
-| COMMAND\_OPTION                 | Description                                                                               |
-|:--------------------------------|:------------------------------------------------------------------------------------------|
-| `-i`,`--inputFile` *input file* | Specify the input file to read paths from. This option is ignored if `--execute` is used. |
-| `-e`,`--execute`                | Delete files/Increase replicas based on preview file.                                     |
+| COMMAND\_OPTION                   | Description                                                                               |
+|:----------------------------------|:------------------------------------------------------------------------------------------|
+| `-i`,`--inputFile` *input file*   | Specify the input file to read paths from. This option is ignored if `--execute` is used. |
+| `-r`,`--replicas` *# of replicas* | Specify the expected number of replicas.                                                  |
+| `-e`,`--execute`                  | Delete files/Increase replicas based on preview file.                                     |
 
 
 ### `snapshotDiff`

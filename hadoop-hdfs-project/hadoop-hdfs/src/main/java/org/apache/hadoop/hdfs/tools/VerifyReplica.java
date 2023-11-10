@@ -52,30 +52,36 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * A tool that takes in a file with a list of paths that supposedly
- * have only 1 replica, verifies if they really have only 1 replica,
- * handles those paths accordingly:
+ * A tool that takes in a file with a list of paths, and handles either of these situations:
+ * <li>verifies if these paths really have only 1 replica, handles those paths accordingly:</li>
+ * <ul>
  * <li>if all blocks are present, increase the file replica to 2,</li>
  * <li>if some blocks are missing, the file is unsalvageable at this point, delete it.</li>
+ * </ul>
+ * <li>in the case an optional expected number of replicas is provided, verifies if these paths
+ * have the expected replication, set the number of replicas if necessary.</li>
+ *
  * Will output a preview file by default. Real setReplication/moveToTrash operations are done
  * with an extra command argument.
  */
-public class VerifySingleReplica extends Configured implements Tool {
-  private final static Logger LOG = LoggerFactory.getLogger(VerifySingleReplica.class);
+public class VerifyReplica extends Configured implements Tool {
+  private final static Logger LOG = LoggerFactory.getLogger(VerifyReplica.class);
 
   @Override
   public int run(String[] args) throws Exception {
-    String description = "Usage: hdfs singleReplica -p PREVIEW_FILE [-i INPUT_FILE] [--execute]\n"
-        + "\tVerifies if some paths have only 1 replica, handles those paths accordingly.\n"
-        + "\tOutputs a preview files without executing any mutation operations by default.\n"
-        + "\tRequired command line arguments:\n"
-        + "\t-p,--previewFile <arg> Path to output preview file "
-        +                          "showing what paths to delete/update to 2 replicas.\n"
-        + "\n"
-        + "\tOptional command line arguments:\n"
-        + "\t-i,--inputFile   <arg> Path to file containing a list of HDFS paths to check. "
-        +                          "Ignored if --execute is used.\n"
-        + "\t-e,--execute           Read the preview output file and carry out the operations.\n";
+    String description =
+        "Usage: hdfs verifyReplica -p PREVIEW_FILE [-i INPUT_FILE] [-r REPLICAS] [--execute]\n"
+            + "\tVerifies if some paths have only 1 replica, handles those paths accordingly.\n"
+            + "\tOutputs a preview files without executing any mutation operations by default.\n"
+            + "\tRequired command line arguments:\n"
+            + "\t-p,--previewFile <arg> Path to output preview file "
+            + "showing what paths to delete/update to 2 replicas.\n" + "\n"
+            + "\tOptional command line arguments:\n"
+            + "\t-i,--inputFile   <arg> Path to file containing a list of HDFS paths to check. "
+            + "Ignored if --execute is used.\n"
+            + "\t-r,--replicas    <arg> (optional) Expected number of replicas. "
+            + "Will increase/decrease source replicas accordingly.\n"
+            + "\t-e,--execute           Read the preview output file and carry out the operations.\n";
 
     if (args.length == 0) {
       System.out.println(description);
@@ -98,6 +104,7 @@ public class VerifySingleReplica extends Configured implements Tool {
     String inputFile = cmd.getOptionValue("i");
     String previewFile = cmd.getOptionValue("p");
     boolean execute = cmd.hasOption("e");
+    String replicas = cmd.getOptionValue("r");
 
     if (execute && inputFile != null) {
       System.out.println("inputFile will be ignored in execute mode.");
@@ -107,16 +114,16 @@ public class VerifySingleReplica extends Configured implements Tool {
     DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(getConf());
 
     if (!execute) {
-      verifyPathsAndSavePreview(dfs, inputFile, previewFile);
+      verifyPathsAndSavePreview(dfs, inputFile, previewFile, replicas);
     } else {
-      deleteOrSetReplicationForPaths(dfs, previewFile);
+      deleteOrSetReplicationForPaths(dfs, previewFile, replicas);
     }
 
     return 0;
   }
 
-  private void verifyPathsAndSavePreview(DistributedFileSystem dfs, String inputFile, String previewFile)
-      throws IOException {
+  private void verifyPathsAndSavePreview(DistributedFileSystem dfs, String inputFile,
+      String previewFile, String replicas) throws IOException {
     // Map of file paths -> file having a missing block or not.
     Map<Path, Boolean> result = new HashMap<>();
 
@@ -133,12 +140,16 @@ public class VerifySingleReplica extends Configured implements Tool {
         }
         line = line.trim();
         if (line.isEmpty()) {
-           continue;
+          continue;
         }
         Path path = new Path(line);
-        RemoteIterator<LocatedFileStatus> ite = dfs.listFiles(path, true);
-        while (ite.hasNext()) {
-          verifyFile(dfs, ite.next(), result);
+        try {
+          RemoteIterator<LocatedFileStatus> ite = dfs.listFiles(path, true);
+          while (ite.hasNext()) {
+            verifyFile(dfs, ite.next(), result, replicas);
+          }
+        } catch (FileNotFoundException fnfe) {
+          LOG.info("Path {} does not exist", line);
         }
       }
     }
@@ -156,21 +167,30 @@ public class VerifySingleReplica extends Configured implements Tool {
     }
   }
 
+  private void verifyFile(DistributedFileSystem dfs, LocatedFileStatus fileStatus,
+      Map<Path, Boolean> result, String replicas) throws IOException {
+    if (replicas == null) {
+      verifyFileSingleReplica(dfs, fileStatus, result);
+    } else {
+      verifyFileExpectedReplicas(fileStatus, result, Short.parseShort(replicas));
+    }
+  }
+
   /**
    * Check if the file has 1 replica or not, and if it does, does it have any missing blocks?
    * Return immediately if file has more than 1 replicas.
    * @param fileStatus {@link LocatedFileStatus} of the file to check
    * @param result map to put verification result into
    */
-  private void verifyFile(DistributedFileSystem dfs, LocatedFileStatus fileStatus, Map<Path, Boolean> result)
-      throws IOException {
+  private void verifyFileSingleReplica(DistributedFileSystem dfs, LocatedFileStatus fileStatus,
+      Map<Path, Boolean> result) throws IOException {
     if (fileStatus.getReplication() != 1) {
-      return ;
+      return;
     }
 
     // Try basic scan first
     fileStatus = dfs.listLocatedStatus(fileStatus.getPath()).next();
-    for (BlockLocation block: fileStatus.getBlockLocations()) {
+    for (BlockLocation block : fileStatus.getBlockLocations()) {
       if (block.getHosts().length == 0) {
         result.put(fileStatus.getPath(), true);
         return;
@@ -179,7 +199,7 @@ public class VerifySingleReplica extends Configured implements Tool {
     byte[] buff = new byte[4];
 
     try {
-      for (BlockLocation block: fileStatus.getBlockLocations()) {
+      for (BlockLocation block : fileStatus.getBlockLocations()) {
         dfs.open(fileStatus.getPath()).read(block.getOffset(), buff, 0, 1);
       }
     } catch (BlockMissingException bme) {
@@ -191,11 +211,27 @@ public class VerifySingleReplica extends Configured implements Tool {
     result.put(fileStatus.getPath(), false);
   }
 
-  private void deleteOrSetReplicationForPaths(DistributedFileSystem dfs, String previewFile)
-      throws IOException {
+  /**
+   * Check if the file has the expected number of replicas or not.
+   * Return if yes, put in result map if no.
+   * @param fileStatus {@link LocatedFileStatus} of the file to check
+   * @param result map to put verification result into
+   * @param replicas expected number of replicas to check
+   */
+  private void verifyFileExpectedReplicas(LocatedFileStatus fileStatus, Map<Path, Boolean> result,
+      short replicas) {
+    if (fileStatus.getReplication() == replicas) {
+      return;
+    }
+    result.put(fileStatus.getPath(), false);
+  }
+
+  private void deleteOrSetReplicationForPaths(DistributedFileSystem dfs, String previewFile,
+      String replicasStr) throws IOException {
     if (!Files.exists(Paths.get(previewFile))) {
       throw new FileNotFoundException("Need to generate a preview file first!");
     }
+    short replicas = replicasStr == null ? 2 : Short.parseShort(replicasStr);
     Set<Path> pathsToDelete = new HashSet<>();
     Set<Path> pathsToSetReplica = new HashSet<>();
 
@@ -206,6 +242,7 @@ public class VerifySingleReplica extends Configured implements Tool {
         Path path = new Path(lineSplit[0]);
         // Missing blocks
         if (Objects.equals(lineSplit[1], "1")) {
+          assert replicasStr == null;
           pathsToDelete.add(path);
         } else {
           pathsToSetReplica.add(path);
@@ -215,7 +252,7 @@ public class VerifySingleReplica extends Configured implements Tool {
     }
 
     for (Path path : pathsToSetReplica) {
-      dfs.setReplication(path, (short) 2);
+      dfs.setReplication(path, replicas);
     }
     Trash trash = new Trash(dfs, dfs.getConf());
     for (Path path : pathsToDelete) {
@@ -233,12 +270,13 @@ public class VerifySingleReplica extends Configured implements Tool {
 
     options.addOption("i", "inputFile", true, "");
     options.addOption("e", "execute", false, "");
+    options.addOption("r", "replicas", true, "");
 
     return options;
   }
 
   public static void main(String[] argv) throws Exception {
-    int rc = ToolRunner.run(new VerifySingleReplica(), argv);
+    int rc = ToolRunner.run(new VerifyReplica(), argv);
     System.exit(rc);
   }
 }
