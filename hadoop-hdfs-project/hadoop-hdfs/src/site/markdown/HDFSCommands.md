@@ -766,3 +766,18 @@ If user wants to talk to `hdfs://MyCluster2/`, then they can pass -fs option (`-
 Since /user was mapped to a cluster `hdfs://MyCluster2/user`, dfsadmin resolve the passed (`-fs hdfs://MyCluster1/user`) to target fs (`hdfs://MyCluster2/user`).
 This way users can get the access to all hdfs child file systems in ViewFsOverloadScheme.
 If there is no `-fs` option provided, then it will try to connect to the configured fs.defaultFS cluster if a cluster running with the fs.defaultFS uri.
+
+### Debugging RW with DN preference
+
+Usage: `hdfs debug debugRead/debugWrite [-favored DN1,..] [-excluded DN2,..] [<local file>] <HDFS path>`
+
+| COMMAND\_OPTION      | Description                                       |
+|:---------------------|:--------------------------------------------------|
+| `[-favored DN1,..]`  | List of favored DNs, delimited by commas.         |
+| `[-excluded DN1,..]` | List of DNs to ignore, delimited by commas.       |
+| [*local file*]       | File to write to HDFS. Required for `debugWrite`. |
+| *HDFS path*          | HDFS path to read from or write to.               |
+
+Narrow down the set of possible DNs to use for reads/writes.
+
+Read mode requires the absence of the *[local file]* argument.

@@ -39,6 +39,7 @@ import java.net.SocketAddress;
 import java.net.URI;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -53,6 +54,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import javax.net.SocketFactory;
 
@@ -119,6 +121,7 @@ import org.apache.hadoop.hdfs.protocol.CorruptFileBlocks;
 import org.apache.hadoop.hdfs.protocol.DSQuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfoWithStorage;
 import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.ECTopologyVerifierResult;
 import org.apache.hadoop.hdfs.protocol.EncryptionZone;
@@ -247,6 +250,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
   private static volatile ThreadPoolExecutor STRIPED_READ_THREAD_POOL;
   private final int smallBufferSize;
   private final long serverDefaultsValidityPeriod;
+  private DatanodePreference datanodePreference = null;
 
   /**
    * Disabled stop DeadNodeDetectorThread for the testing when MiniDFSCluster
@@ -920,7 +924,16 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     }
 
     try (TraceScope ignored = newPathTraceScope("getBlockLocations", src)) {
-      return callGetBlockLocations(namenode, src, start, length);
+      LocatedBlocks locatedBlocks = callGetBlockLocations(namenode, src, start, length);
+      if (datanodePreference == null) {
+        return locatedBlocks;
+      } else {
+        if (locatedBlocks.getErasureCodingPolicy() != null) {
+          LOG.warn("EC files are not supported by debugRead");
+          return locatedBlocks;
+        }
+        return reorderLocatedBlocks(locatedBlocks);
+      }
     }
   }
 
@@ -1188,6 +1201,49 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     }
   }
 
+  private LocatedBlocks reorderLocatedBlocks(LocatedBlocks locatedBlocks) {
+    List<LocatedBlock> lbs =
+        locatedBlocks.getLocatedBlocks().stream().map(this::reorderLocatedBlock)
+            .collect(Collectors.toList());
+
+    LocatedBlocks newLocatedBlocks = new LocatedBlocks(
+            locatedBlocks.getFileLength(),
+            locatedBlocks.isUnderConstruction(),
+            lbs,
+            reorderLocatedBlock(locatedBlocks.getLastLocatedBlock()),
+            locatedBlocks.isLastBlockComplete(),
+            locatedBlocks.getFileEncryptionInfo(),
+            locatedBlocks.getErasureCodingPolicy());
+    return newLocatedBlocks;
+  }
+
+  private LocatedBlock reorderLocatedBlock(LocatedBlock lb) {
+    if (datanodePreference == null) {
+      return lb;
+    }
+    List<DatanodeInfoWithStorage> newDatanodes = new ArrayList<>();
+    // Round 1, just add the favored DNs
+    for (DatanodeInfoWithStorage dn : lb.getLocations()) {
+      String dnAddr = dn.getXferAddr();
+      if (datanodePreference.favoredDNStrings.contains(dnAddr)) {
+        newDatanodes.add(dn);
+      }
+    }
+    // Round 2, add the rest, ignore DNs that should be ignored, also ignored favored DNs
+    // because they are already added
+    for (DatanodeInfoWithStorage dn : lb.getLocations()) {
+      String dnAddr = dn.getXferAddr();
+      if (datanodePreference.favoredDNStrings.contains(dnAddr)
+          || datanodePreference.ignoredDNStrings.contains(dnAddr)) {
+        continue;
+      }
+      newDatanodes.add(dn);
+    }
+    LocatedBlock newBlock =
+        new LocatedBlock(lb, newDatanodes.toArray(new DatanodeInfoWithStorage[0]));
+    return newBlock;
+  }
+
   /**
    * Create an input stream from the {@link HdfsPathHandle} if the
    * constraints encoded from {@link
@@ -1408,10 +1464,16 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     checkOpen();
     final FsPermission masked = applyUMask(permission);
     LOG.debug("{}: masked={}", src, masked);
+    // Overwrite favoredNodes if using debugging command
+    String[] favoredNodesStr = getFavoredNodesStr(favoredNodes);
+    if (datanodePreference != null) {
+      favoredNodesStr = datanodePreference.favoredDNStrings.toArray(new String[0]);
+    }
     final DFSOutputStream result = DFSOutputStream.newStreamForCreate(this,
         src, masked, flag, createParent, replication, blockSize, progress,
-        dfsClientConf.createChecksum(checksumOpt),
-        getFavoredNodesStr(favoredNodes), ecPolicyName, storagePolicy);
+        dfsClientConf.createChecksum(checksumOpt), favoredNodesStr,
+        datanodePreference == null ? null : datanodePreference.ignoredDNStrings, ecPolicyName,
+        storagePolicy);
     beginFileLease(result.getUniqKey(), result);
     return result;
   }
@@ -1465,7 +1527,7 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
       DataChecksum checksum = dfsClientConf.createChecksum(checksumOpt);
       result = DFSOutputStream.newStreamForCreate(this, src, absPermission,
           flag, createParent, replication, blockSize, progress, checksum,
-          null, null, null);
+          null, null, null, null);
     }
     beginFileLease(result.getUniqKey(), result);
     return result;
@@ -3585,5 +3647,29 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
 
   DFSSlowDatanodeCacheMetrics getSlowDatanodeCacheMetricsMetric() {
     return this.clientContext.getSlowDatanodeCacheMetricsMetric();
+  }
+
+  /**
+   * Helper class for debugging
+   */
+  public static class DatanodePreference {
+    private final Set<InetSocketAddress> favoredDNs;
+    private final Set<InetSocketAddress> ignoredDNs;
+    private final Set<String> favoredDNStrings;
+    private final Set<String> ignoredDNStrings;
+
+    public DatanodePreference(Set<InetSocketAddress> favoredDNs,
+        Set<InetSocketAddress> ignoredDNs) {
+      this.favoredDNs = favoredDNs;
+      this.ignoredDNs = ignoredDNs;
+      this.favoredDNStrings =
+          this.favoredDNs.stream().map(x -> x.toString().substring(1)).collect(Collectors.toSet());
+      this.ignoredDNStrings =
+          this.ignoredDNs.stream().map(x -> x.toString().substring(1)).collect(Collectors.toSet());
+    }
+  }
+
+  public void setDatanodePreference(DatanodePreference datanodePreference) {
+    this.datanodePreference = datanodePreference;
   }
 }

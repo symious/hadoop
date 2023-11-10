@@ -125,6 +125,22 @@ public class LocatedBlock {
       : cachedLocs;
   }
 
+  /**
+   * For debugging purpose
+   */
+  public LocatedBlock(LocatedBlock lb, DatanodeInfoWithStorage[] newDatanodes) {
+    this.b = lb.b;
+    this.offset = lb.offset;
+    this.corrupt = lb.corrupt;
+    this.locs = newDatanodes;
+    this.storageIDs = Arrays.stream(newDatanodes).map(DatanodeInfoWithStorage::getStorageID)
+        .toArray(String[]::new);
+    this.storageTypes = Arrays.stream(newDatanodes).map(DatanodeInfoWithStorage::getStorageType)
+        .toArray(StorageType[]::new);
+    this.cachedLocs = EMPTY_LOCS;
+    this.setBlockToken(lb.getBlockToken());
+  }
+
   private static DatanodeInfoWithStorage[] convert(
       DatanodeInfo[] infos, String[] storageIDs, StorageType[] storageTypes) {
     if (null == infos) {

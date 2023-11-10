@@ -23,6 +23,8 @@ import java.io.InterruptedIOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.hadoop.HadoopIllegalArgumentException;
@@ -273,8 +275,8 @@ public class DFSOutputStream extends FSOutputSummer
 
   static DFSOutputStream newStreamForCreate(DFSClient dfsClient, String src,
       FsPermission masked, EnumSet<CreateFlag> flag, boolean createParent,
-      short replication, long blockSize, Progressable progress,
-      DataChecksum checksum, String[] favoredNodes, String ecPolicyName,
+      short replication, long blockSize, Progressable progress, DataChecksum checksum,
+      String[] favoredNodes, Set<String> ignoredNodes, String ecPolicyName,
       String storagePolicy)
       throws IOException {
     try (TraceScope ignored =
@@ -329,6 +331,7 @@ public class DFSOutputStream extends FSOutputSummer
         out = new DFSOutputStream(dfsClient, src, stat,
             flag, progress, checksum, favoredNodes, true);
       }
+      out.streamer.setIgnoredNodes(ignoredNodes);
       out.start();
       return out;
     }
@@ -360,8 +363,7 @@ public class DFSOutputStream extends FSOutputSummer
           bytesPerChecksum);
       streamer = new DataStreamer(stat,
           lastBlock != null ? lastBlock.getBlock() : null, dfsClient, src,
-          progress, checksum, cachingStrategy, byteArrayManager, favoredNodes,
-          addBlockFlags);
+          progress, checksum, cachingStrategy, byteArrayManager, favoredNodes, addBlockFlags);
     }
   }
 

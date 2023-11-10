@@ -116,6 +116,14 @@ import javax.annotation.Nonnull;
 @InterfaceAudience.Private
 class DataStreamer extends Daemon {
   static final Logger LOG = LoggerFactory.getLogger(DataStreamer.class);
+  // DN IPs to immediately fail
+  private Set<String> ignoredNodes = new HashSet<>();
+
+  public void setIgnoredNodes(Set<String> ignoredNodes) {
+    if (ignoredNodes != null) {
+      this.ignoredNodes = ignoredNodes;
+    }
+  }
 
   private class RefetchEncryptionKeyPolicy {
     private int fetchEncryptionKeyTimes = 0;
@@ -1748,7 +1756,7 @@ class DataStreamer extends Daemon {
     StorageType[] nextStorageTypes;
     String[] nextStorageIDs;
     int count = dfsClient.getConf().getNumBlockWriteRetry();
-    boolean success;
+    boolean success = false;
     final ExtendedBlock oldBlock = block.getCurrentBlock();
     do {
       errorState.resetInternalError();
@@ -1765,18 +1773,35 @@ class DataStreamer extends Daemon {
       nextStorageTypes = lb.getStorageTypes();
       nextStorageIDs = lb.getStorageIDs();
 
-      // Connect to first DataNode in the list.
-      success = createBlockOutputStream(nodes, nextStorageTypes, nextStorageIDs,
-          0L, false);
+      DFSClientFaultInjector.get().throttleConnectionBetweenDNs(nodes);
 
-      if (!success) {
-        LOG.warn("Abandoning " + block);
+      boolean earlyTerminateForDebug = false;
+      for (DatanodeInfo dn: nodes) {
+        if (ignoredNodes.contains(dn.getXferAddr())) {
+          earlyTerminateForDebug = true;
+          LOG.info("Debug write ignores dn {}", dn);
+          excludedNodes.put(dn, dn);
+        }
+      }
+      if (earlyTerminateForDebug) {
+        LOG.info("Dropping block {} because destinations contain nodes to exclude",
+            block.getCurrentBlock());
         dfsClient.namenode.abandonBlock(block.getCurrentBlock(),
             stat.getFileId(), src, dfsClient.clientName);
         block.setCurrentBlock(null);
-        final DatanodeInfo badNode = nodes[errorState.getBadNodeIndex()];
-        LOG.warn("Excluding datanode " + badNode);
-        excludedNodes.put(badNode, badNode);
+      } else {
+        // Connect to first DataNode in the list.
+        success = createBlockOutputStream(nodes, nextStorageTypes, nextStorageIDs, 0L, false);
+
+        if (!success) {
+          LOG.warn("Abandoning " + block);
+          dfsClient.namenode.abandonBlock(block.getCurrentBlock(),
+              stat.getFileId(), src, dfsClient.clientName);
+          block.setCurrentBlock(null);
+          final DatanodeInfo badNode = nodes[errorState.getBadNodeIndex()];
+          LOG.warn("Excluding datanode " + badNode);
+          excludedNodes.put(badNode, badNode);
+        }
       }
     } while (!success && --count >= 0);
 

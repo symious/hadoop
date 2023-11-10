@@ -24,15 +24,22 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.util.ECBlockValidatorReport;
 import org.apache.hadoop.hdfs.util.ECFileValidator;
@@ -55,6 +62,8 @@ import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * This class implements debug operations on the HDFS command-line.
@@ -65,6 +74,8 @@ import org.apache.hadoop.util.ToolRunner;
 @InterfaceAudience.Private
 @InterfaceStability.Evolving
 public class DebugAdmin extends Configured implements Tool {
+  private static final Logger LOG = LoggerFactory.getLogger(DebugAdmin.class);
+
   /**
    * All the debug commands we can run.
    */
@@ -73,6 +84,8 @@ public class DebugAdmin extends Configured implements Tool {
       new ComputeMetaCommand(),
       new RecoverLeaseCommand(),
       new VerifyECCommand(),
+      new ReadWithDNPreference(),
+      new WriteWithDNPreference(),
       new HelpCommand()
   };
 
@@ -451,6 +464,138 @@ public class DebugAdmin extends Configured implements Tool {
         }
       }
       return 1;
+    }
+  }
+
+  /**
+   * A tool to test DN connections by reading/writing a set of preferred and ignored nodes
+   */
+  private abstract class RWWithDNPreferenceBase extends DebugCommand {
+    private Set<InetSocketAddress> favoredNodes = new HashSet<>();
+    private Set<InetSocketAddress> ignoredNodes = new HashSet<>();
+    protected DistributedFileSystem dfs;
+
+    RWWithDNPreferenceBase(String name, String usageText, String helpText) {
+      super(name, usageText, helpText);
+    }
+
+    int run(List<String> args) throws IOException {
+      if (args.size() < 1) {
+        System.out.println(usageText);
+        System.out.println(helpText + System.lineSeparator());
+        return 0;
+      }
+
+      handleArguments(args);
+      String hdfsPath = args.remove(args.size() - 1);
+      processPath(hdfsPath, args);
+      return 0;
+    }
+
+    private void handleArguments(List<String> args) throws IOException {
+      String includes = StringUtils.popOptionWithArgument("-favored", args);
+      String excludes = StringUtils.popOptionWithArgument("-excluded", args);
+
+      setDatanodePreference(includes, excludes);
+
+      dfs = AdminHelper.getDFS(getConf());
+      dfs.getClient()
+          .setDatanodePreference(new DFSClient.DatanodePreference(favoredNodes, ignoredNodes));
+    }
+
+    /**
+     * Main logic, need to implement this for child classes
+     */
+    abstract protected void processPath(String hdfsPath, List<String> leftoverArgs)
+        throws IOException;
+
+    private void setDatanodePreference(String favored, String ignored) throws IOException {
+      addDNs(favored, favoredNodes);
+      addDNs(ignored, ignoredNodes);
+    }
+
+    private void addDNs(String dnsString, Set<InetSocketAddress> nodes) {
+      if (dnsString == null) {
+        return;
+      }
+      String[] dns = dnsString.split(",");
+      for (String ip : dns) {
+        if (ip.startsWith("/")) {
+          ip = ip.substring(1);
+        }
+        String[] split = ip.split(":");
+        InetSocketAddress dn = new InetSocketAddress(split[0], Integer.parseInt(split[1]));
+        nodes.add(dn);
+      }
+    }
+  }
+
+  private class ReadWithDNPreference extends RWWithDNPreferenceBase {
+    ReadWithDNPreference() {
+      super("debugRead",
+          "debugRead [-favored DN1,DN2,..] [-excluded DN1,DN2,..] <HDFS path>",
+          "  Test reading with favored/excluded DNs.");
+    }
+
+    @Override
+    protected void processPath(String hdfsPath, List<String> leftoverArgs) throws IOException {
+      Path path = new Path(hdfsPath);
+      FSDataInputStream is = dfs.open(path);
+      File file = new File(path.getName());
+      ByteBuffer buff = ByteBuffer.allocate(4096);
+      byte[] bufferContents = new byte[4096];
+      long position = 0;
+      OutputStream out = Files.newOutputStream(file.toPath());
+      try {
+        int res;
+        while ((res = is.read(position, buff)) != -1) {
+          buff.position(0);
+          buff.get(bufferContents);
+          buff.clear();
+          out.write(bufferContents, 0, res);
+          position += res;
+        }
+      } finally {
+        is.close();
+        out.close();
+      }
+    }
+  }
+
+  private class WriteWithDNPreference extends RWWithDNPreferenceBase {
+    WriteWithDNPreference() {
+      super("debugWrite",
+          "debugWrite [-favored DN1,DN2,..] [-excluded DN1,DN2,..] <local file> <HDFS path>",
+          "  Test reading with favored/excluded DNs.");
+    }
+
+    @Override
+    protected void processPath(String hdfsPath, List<String> leftoverArgs) throws IOException {
+      String localFile = leftoverArgs.get(0);
+      File file = new File(localFile);
+      Path path = new Path(hdfsPath);
+      if (path.getName().equals(localFile)) {
+        try {
+          dfs.getFileStatus(path);
+          throw new IOException("Destination already exists: " + path);
+        } catch (FileNotFoundException ignored) {}
+      } else {
+        path = new Path(path, localFile);
+      }
+      FSDataOutputStream os = dfs.create(path);
+
+      byte[] buff = new byte[4096];
+      InputStream is = Files.newInputStream(file.toPath());
+      try {
+        int res;
+        while ((res = is.read(buff)) != -1) {
+          os.write(buff, 0, res);
+        }
+      } finally {
+        is.close();
+        os.flush();
+        os.close();
+      }
     }
   }
 
