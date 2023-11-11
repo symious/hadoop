@@ -135,6 +135,10 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
     if (schedulerKey.getContainerToUpdate() != null) {
       PendingAsk nodePending = application.getPendingAsk(schedulerKey, node.getNodeName());
       if (nodePending.getCount() == 0) {
+        ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
+            activitiesManager, node, application, schedulerKey,
+            ActivityDiagnosticConstant.NODE_SKIPPED_BECAUSE_OF_NO_OFF_SWITCH_AND_LOCALITY_VIOLATION,
+            ActivityLevel.NODE);
         return ContainerAllocation.PRIORITY_SKIPPED;
       }
     }

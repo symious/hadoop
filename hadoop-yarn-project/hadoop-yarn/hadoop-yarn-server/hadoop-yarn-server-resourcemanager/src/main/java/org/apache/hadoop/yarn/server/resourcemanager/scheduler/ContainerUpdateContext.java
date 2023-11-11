@@ -85,7 +85,7 @@ public class ContainerUpdateContext {
         updateReq.getContainerUpdateType()) {
       SchedulerRequestKey updateKey = new SchedulerRequestKey
           (container.getPriority(),
-              container.getAllocationRequestId(), container.getId());
+              container.getAllocationRequestId(), container.getId(), null);
       cancelPreviousRequest(schedulerNode, updateKey);
       outstandingDecreases.put(container.getId(), updateReq.getCapability());
     } else {
@@ -107,7 +107,7 @@ public class ContainerUpdateContext {
     Container container = rmContainer.getContainer();
     SchedulerRequestKey schedulerKey =
         SchedulerRequestKey.create(updateRequest,
-            rmContainer.getAllocatedSchedulerKey());
+            rmContainer.getAllocatedSchedulerKey(), container.getNodeId());
     Map<Resource, Map<NodeId, Set<ContainerId>>> resourceMap =
         outstandingIncreases.get(schedulerKey);
     if (resourceMap == null) {

@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.scheduler;
 
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.api.records.SchedulingRequest;
@@ -36,6 +37,7 @@ public class SchedulerRequestKey implements
   private final long allocationRequestId;
   private final ContainerId containerToUpdate;
   private final long allocationRequestTimeStamp;
+  private final NodeId nodeId;
 
   /**
    * Factory method to generate a SchedulerRequestKey from a ResourceRequest.
@@ -44,7 +46,7 @@ public class SchedulerRequestKey implements
    */
   public static SchedulerRequestKey create(ResourceRequest req) {
     return new SchedulerRequestKey(req.getPriority(),
-        req.getAllocationRequestId(), null);
+        req.getAllocationRequestId(), null, null);
   }
 
   /**
@@ -54,13 +56,14 @@ public class SchedulerRequestKey implements
    */
   public static SchedulerRequestKey create(SchedulingRequest req) {
     return new SchedulerRequestKey(req.getPriority(),
-        req.getAllocationRequestId(), null);
+        req.getAllocationRequestId(), null, null);
   }
 
   public static SchedulerRequestKey create(UpdateContainerRequest req,
-      SchedulerRequestKey schedulerRequestKey) {
+      SchedulerRequestKey schedulerRequestKey, NodeId nodeId) {
     return new SchedulerRequestKey(schedulerRequestKey.getPriority(),
-        schedulerRequestKey.getAllocationRequestId(), req.getContainerId());
+        schedulerRequestKey.getAllocationRequestId(), req.getContainerId(),
+        nodeId);
   }
 
   /**
@@ -71,15 +74,16 @@ public class SchedulerRequestKey implements
    */
   public static SchedulerRequestKey extractFrom(Container container) {
     return new SchedulerRequestKey(container.getPriority(),
-        container.getAllocationRequestId(), null);
+        container.getAllocationRequestId(), null, null);
   }
 
   public SchedulerRequestKey(Priority priority, long allocationRequestId,
-      ContainerId containerToUpdate) {
+      ContainerId containerToUpdate, NodeId nodeId) {
     this.priority = priority;
     this.allocationRequestId = allocationRequestId;
     this.containerToUpdate = containerToUpdate;
     this.allocationRequestTimeStamp = System.nanoTime();
+    this.nodeId = nodeId;
   }
 
   /**
@@ -106,6 +110,10 @@ public class SchedulerRequestKey implements
 
   public long getAllocationRequestTimeStamp() {
     return allocationRequestTimeStamp;
+  }
+
+  public NodeId getNodeId(){
+    return nodeId;
   }
 
   @Override

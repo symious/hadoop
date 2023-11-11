@@ -19,6 +19,9 @@
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.placement;
 
 import org.apache.commons.collections.IteratorUtils;
+import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.api.records.NodeId;
+import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.activities.DiagnosticsCollector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +42,7 @@ import org.apache.hadoop.yarn.server.scheduler.SchedulerRequestKey;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -105,12 +109,27 @@ public class LocalityAppPlacementAllocator <N extends SchedulerNode>
       return IteratorUtils.singletonIterator(singleNode);
     }
 
-    // singleNode will be null if Multi-node placement lookup is enabled, and
-    // hence could consider sorting policies.
-    return multiNodeSortingManager.getMultiNodeSortIterator(
-        candidateNodeSet.getAllNodes().values(),
-        candidateNodeSet.getPartition(),
-        multiNodeSortPolicyName);
+    if (schedulerRequestKey.getContainerToUpdate() != null) {
+      NodeId nodeId = schedulerRequestKey.getNodeId();
+      SchedulerNode schedulerNode = null;
+      if (nodeId != null) {
+        schedulerNode = candidateNodeSet.getAllNodes().get(nodeId);
+      }
+      if (schedulerNode != null) {
+        if (LOG.isDebugEnabled()) {
+          ContainerId containerId = schedulerRequestKey.getContainerToUpdate();
+          LOG.debug("Try to allocate Container " + containerId +
+              " increase request on node: " +
+              schedulerNode.getRMNode().getHostName());
+        }
+        return IteratorUtils.singletonIterator(schedulerNode);
+      }
+    }
+
+    List<N> allCandidatesList =
+        new ArrayList<>(candidateNodeSet.getAllNodes().values());
+    Collections.shuffle(allCandidatesList);
+    return allCandidatesList.iterator();
   }
 
   private boolean hasRequestLabelChanged(ResourceRequest requestOne,

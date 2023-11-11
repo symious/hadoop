@@ -149,7 +149,7 @@ public class TestActivitiesManager {
         ActivitiesLogger.APP
             .recordAppActivityWithoutAllocation(activitiesManager, node,
                 randomApp,
-                new SchedulerRequestKey(Priority.newInstance(0), 0, null),
+                new SchedulerRequestKey(Priority.newInstance(0), 0, null, null),
                 ActivityDiagnosticConstant.NODE_IS_BLACKLISTED,
                 ActivityState.REJECTED, ActivityLevel.NODE);
         ActivitiesLogger.NODE
@@ -194,7 +194,7 @@ public class TestActivitiesManager {
         ActivitiesLogger.APP
             .recordAppActivityWithoutAllocation(activitiesManager, node,
                 randomApp,
-                new SchedulerRequestKey(Priority.newInstance(0), 0, null),
+                new SchedulerRequestKey(Priority.newInstance(0), 0, null, null),
                 ActivityDiagnosticConstant.NODE_IS_BLACKLISTED,
                 ActivityState.REJECTED, ActivityLevel.NODE);
         ActivitiesLogger.NODE.finishNodeUpdateRecording(activitiesManager,
@@ -235,7 +235,7 @@ public class TestActivitiesManager {
           ActivitiesLogger.APP
               .recordAppActivityWithoutAllocation(activitiesManager, node,
                   randomApp,
-                  new SchedulerRequestKey(Priority.newInstance(0), 0, null),
+                  new SchedulerRequestKey(Priority.newInstance(0), 0, null, null),
                   ActivityDiagnosticConstant.NODE_IS_BLACKLISTED,
                   ActivityState.REJECTED, ActivityLevel.NODE);
         }
@@ -284,7 +284,7 @@ public class TestActivitiesManager {
               SystemClock.getInstance().getTime(), app);
       ActivitiesLogger.APP
           .recordAppActivityWithoutAllocation(newActivitiesManager, node, app,
-              new SchedulerRequestKey(Priority.newInstance(0), 0, null),
+              new SchedulerRequestKey(Priority.newInstance(0), 0, null, null),
               ActivityDiagnosticConstant.NODE_IS_BLACKLISTED,
               ActivityState.REJECTED, ActivityLevel.NODE);
       ActivitiesLogger.APP

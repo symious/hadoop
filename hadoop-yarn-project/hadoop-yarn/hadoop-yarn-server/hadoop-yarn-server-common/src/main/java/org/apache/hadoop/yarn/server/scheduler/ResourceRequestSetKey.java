@@ -64,7 +64,7 @@ public class ResourceRequestSetKey extends SchedulerRequestKey {
    */
   public ResourceRequestSetKey(long allocationRequestId, Priority priority,
       Resource resource, ExecutionType execType) {
-    super(priority, allocationRequestId, null);
+    super(priority, allocationRequestId, null, null);
 
     if (resource == null) {
       this.resource = Resource.newInstance(0, 0);

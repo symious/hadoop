@@ -78,7 +78,7 @@ public class TestSingleConstraintAppPlacementAllocator {
         new MemoryPlacementConstraintManager();
     spyAllocationTagsManager = spy(allocationTagsManager);
     schedulerRequestKey = new SchedulerRequestKey(Priority.newInstance(1), 2L,
-        TestUtils.getMockContainerId(1, 1));
+        TestUtils.getMockContainerId(1, 1), null);
     rmContext.setAllocationTagsManager(spyAllocationTagsManager);
     rmContext.setPlacementConstraintManager(placementConstraintManager);
 
