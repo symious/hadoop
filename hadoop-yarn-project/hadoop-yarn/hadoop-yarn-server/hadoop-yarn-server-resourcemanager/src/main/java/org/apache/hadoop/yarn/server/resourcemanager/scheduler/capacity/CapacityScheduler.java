@@ -806,6 +806,12 @@ public class CapacityScheduler extends
         } catch (InterruptedException ie) {
           // keep interrupt signal
           Thread.currentThread().interrupt();
+        } catch (Exception ex) {
+          CapacitySchedulerMetrics.getMetrics()
+              .incrAsyncScheduleExceptionCount();
+          LOG.error(
+              "ignore this exception in AsyncScheduleThread: " + ex.toString(),
+              ex);
         }
       }
       LOG.info("AsyncScheduleThread[" + getName() + "] exited!");
@@ -849,7 +855,7 @@ public class CapacityScheduler extends
           Thread.currentThread().interrupt();
         } catch (Exception ex) {
           CapacitySchedulerMetrics.getMetrics()
-              .incrResourceCommitterServiceThrowExceptionCount();
+              .incrResourceCommitterExceptionCount();
           LOG.error("ignore this exception: " + ex.toString(), ex);
         }
       }

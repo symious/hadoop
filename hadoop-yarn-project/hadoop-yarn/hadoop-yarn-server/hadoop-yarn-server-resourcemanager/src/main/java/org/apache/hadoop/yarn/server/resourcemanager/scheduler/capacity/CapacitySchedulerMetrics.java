@@ -74,7 +74,10 @@ public class CapacitySchedulerMetrics {
   MutableQuantiles multiNodesPerReserve;
 
   @Metric("# count of exception throw by ResourceCommitterService")
-  MutableCounterInt resourceCommitterServiceThrowExceptionCount;
+  MutableCounterInt resourceCommitterExceptionCount;
+
+  @Metric("# count of exception throw by AsyncScheduleThread")
+  MutableCounterInt asyncScheduleExceptionCount;
 
   private static volatile CapacitySchedulerMetrics INSTANCE = null;
   private static MetricsRegistry registry;
@@ -184,8 +187,12 @@ public class CapacitySchedulerMetrics {
     return pendingBackLogs;
   }
 
-  public void incrResourceCommitterServiceThrowExceptionCount() {
-    resourceCommitterServiceThrowExceptionCount.incr();
+  public void incrResourceCommitterExceptionCount() {
+    resourceCommitterExceptionCount.incr();
+  }
+
+  public void incrAsyncScheduleExceptionCount() {
+    asyncScheduleExceptionCount.incr();
   }
 
 }
