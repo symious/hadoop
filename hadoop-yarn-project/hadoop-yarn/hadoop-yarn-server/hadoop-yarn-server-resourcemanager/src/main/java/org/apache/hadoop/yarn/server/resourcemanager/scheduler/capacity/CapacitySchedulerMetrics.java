@@ -79,6 +79,9 @@ public class CapacitySchedulerMetrics {
   @Metric("# count of exception throw by AsyncScheduleThread")
   MutableCounterInt asyncScheduleExceptionCount;
 
+  @Metric("# count of exception throw by AllocateReservedContainerService")
+  MutableCounterInt allocateReservedContainerExceptionCount;
+
   private static volatile CapacitySchedulerMetrics INSTANCE = null;
   private static MetricsRegistry registry;
 
@@ -193,6 +196,10 @@ public class CapacitySchedulerMetrics {
 
   public void incrAsyncScheduleExceptionCount() {
     asyncScheduleExceptionCount.incr();
+  }
+
+  public void incrAllocateReservedContainerServiceThrowExceptionCount() {
+    allocateReservedContainerExceptionCount.incr();
   }
 
 }

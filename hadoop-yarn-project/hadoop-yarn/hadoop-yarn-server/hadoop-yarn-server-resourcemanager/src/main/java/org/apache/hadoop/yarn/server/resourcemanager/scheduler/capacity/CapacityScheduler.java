@@ -244,6 +244,7 @@ public class CapacityScheduler extends
   @VisibleForTesting
   protected List<AsyncScheduleThread> asyncSchedulerThreads;
   private ResourceCommitterService resourceCommitterService;
+  private AllocateReservedContainerService allocateReservedContainerService;
   private RMNodeLabelsManager labelManager;
   private AppPriorityACLsManager appPriorityACLManager;
   private boolean multiNodePlacementEnabled;
@@ -408,6 +409,10 @@ public class CapacityScheduler extends
         }
         resourceCommitterService = new ResourceCommitterService(this);
         resourceCommitterService.setName("ResourceCommitter");
+
+        allocateReservedContainerService = new AllocateReservedContainerService(this);
+        allocateReservedContainerService.setName("AllocateReserved");
+
         asyncMaxPendingBacklogs = this.conf.getInt(
             CapacitySchedulerConfiguration.
                 SCHEDULE_ASYNCHRONOUSLY_MAXIMUM_PENDING_BACKLOGS,
@@ -467,7 +472,7 @@ public class CapacityScheduler extends
         for (Thread t : asyncSchedulerThreads) {
           t.start();
         }
-
+        allocateReservedContainerService.start();
         resourceCommitterService.start();
       }
     } finally {
@@ -500,6 +505,8 @@ public class CapacityScheduler extends
           t.interrupt();
           t.join(THREAD_JOIN_TIMEOUT_MS);
         }
+        allocateReservedContainerService.interrupt();
+        allocateReservedContainerService.join(THREAD_JOIN_TIMEOUT_MS);
         resourceCommitterService.interrupt();
         resourceCommitterService.join(THREAD_JOIN_TIMEOUT_MS);
       }
@@ -869,6 +876,60 @@ public class CapacityScheduler extends
 
     public int getPendingBacklogs() {
       return backlogs.size();
+    }
+  }
+
+  static class AllocateReservedContainerService extends Thread {
+    private final CapacityScheduler cs;
+    public AllocateReservedContainerService(CapacityScheduler cs) {
+      this.cs = cs;
+      setDaemon(true);
+    }
+
+    @Override
+    public void run() {
+      while (!Thread.currentThread().isInterrupted()) {
+        try {
+
+          // choose partitions
+          List<String> partitions;
+          if (cs.multipleSchedulersParallelly &&
+              cs.globalChoosePartitions.size() > 0) {
+            partitions = cs.globalChoosePartitions;
+          } else {
+            partitions = cs.nodeTracker.getPartitions();
+          }
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("global scheduler choose partitions: " + partitions);
+          }
+
+          for (String partition : partitions) {
+            CandidateNodeSet<FiCaSchedulerNode> candidates =
+                cs.getCandidateNodeSet(partition);
+            if (candidates == null) {
+              continue;
+            }
+            // Try to allocate from reserved containers
+            for (FiCaSchedulerNode node : candidates.getAllNodes().values()) {
+              RMContainer reservedContainer = node.getReservedContainer();
+              if (reservedContainer != null) {
+                cs.allocateFromReservedContainer(node, false,
+                    reservedContainer);
+              }
+            }
+          }
+
+          Thread.sleep(cs.getAsyncScheduleInterval());
+        } catch (InterruptedException e) {
+          LOG.error(e.toString());
+          Thread.currentThread().interrupt();
+        } catch (Exception ex) {
+          CapacitySchedulerMetrics.getMetrics()
+              .incrAllocateReservedContainerServiceThrowExceptionCount();
+          LOG.error("ignore this exception: " + ex.toString(), ex);
+        }
+      }
+      LOG.info("AllocateReservedContainerService exited!");
     }
   }
 
@@ -2011,13 +2072,6 @@ public class CapacityScheduler extends
    */
   private CSAssignment allocateContainersOnMultiNodes(
       CandidateNodeSet<FiCaSchedulerNode> candidates) {
-    // Try to allocate from reserved containers
-    for (FiCaSchedulerNode node : candidates.getAllNodes().values()) {
-      RMContainer reservedContainer = node.getReservedContainer();
-      if (reservedContainer != null) {
-        allocateFromReservedContainer(node, false, reservedContainer);
-      }
-    }
     return allocateOrReserveNewContainers(candidates, false);
   }
 

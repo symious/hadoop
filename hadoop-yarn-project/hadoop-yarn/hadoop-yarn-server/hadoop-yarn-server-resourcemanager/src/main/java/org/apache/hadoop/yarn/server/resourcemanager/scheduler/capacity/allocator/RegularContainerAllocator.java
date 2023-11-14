@@ -143,6 +143,14 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
       }
     }
 
+    if (node.getReservedContainer() != null) {
+      ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
+          activitiesManager, node, application, schedulerKey,
+          ActivityDiagnosticConstant.NODE_HAVE_RESERVED_CONTAINER,
+          ActivityLevel.NODE);
+      return ContainerAllocation.NODE_SKIPPED;
+    }
+
     RMNode rmNode = node.getRMNode();
     if (null != rmNode) {
       if (LOG.isDebugEnabled()) {
