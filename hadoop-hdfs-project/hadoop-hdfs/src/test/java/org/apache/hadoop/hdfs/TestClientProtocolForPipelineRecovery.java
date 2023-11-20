@@ -204,6 +204,7 @@ public class TestClientProtocolForPipelineRecovery {
     // Setting the timeout to be 3 seconds. Normally heartbeat packet
     // would be sent every 1.5 seconds if there is no data traffic.
     Configuration conf = new HdfsConfiguration();
+    conf.set("dfs.client.block.write.replace-datanode-on-failure.enable", "false");
     conf.set(HdfsClientConfigKeys.DFS_CLIENT_SOCKET_TIMEOUT_KEY, "3000");
     MiniDFSCluster cluster = null;
 
@@ -392,6 +393,7 @@ public class TestClientProtocolForPipelineRecovery {
   public void testPipelineRecoveryOnRestartFailure() throws Exception {
     Configuration conf = new HdfsConfiguration();
     conf.set(HdfsClientConfigKeys.DFS_CLIENT_DATANODE_RESTART_TIMEOUT_KEY, "5");
+    conf.set("dfs.client.block.write.replace-datanode-on-failure.enable", "false");
     MiniDFSCluster cluster = null;
     try {
       int numDataNodes = 2;

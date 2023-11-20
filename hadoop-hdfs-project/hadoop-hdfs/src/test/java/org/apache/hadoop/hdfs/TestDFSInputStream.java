@@ -193,6 +193,7 @@ public class TestDFSInputStream {
       throws IOException, InterruptedException {
     Configuration conf = new Configuration();
     conf.set(HdfsClientConfigKeys.DFS_CHECKSUM_TYPE_KEY, "NULL");
+    conf.set("dfs.client.block.write.replace-datanode-on-failure.enable", "false");
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(2)
         .build();
     cluster.waitActive();

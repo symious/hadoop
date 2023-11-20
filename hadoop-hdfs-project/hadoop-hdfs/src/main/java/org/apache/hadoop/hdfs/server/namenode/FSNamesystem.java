@@ -3400,9 +3400,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         writeUnlock(OperationName.RENAME2);
       }
     } catch (AccessControlException e) {
-      String cmd = OperationName.RENAME2 + "_(options=" + Arrays.toString(options) + ")";
-      cmd = cmd.replace(' ', '_');
-      logAuditEvent(false, cmd, src, dst, null);
+      logAuditEvent(false, OperationName.RENAME2, src, dst, null);
       throw e;
     }
     getEditLog().logSync();
@@ -3413,9 +3411,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       collectedBlocks.clear();
     }
 
-    String cmd = OperationName.RENAME2 + "_(options=" + Arrays.toString(options) + ")";
-    cmd = cmd.replace(' ', '_');
-    logAuditEvent(res.success, cmd, src, dst, res.auditStat);
+    logAuditEvent(res.success, OperationName.RENAME2, src, dst, res.auditStat);
   }
 
   /**

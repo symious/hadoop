@@ -30,9 +30,11 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.Options.Rename;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
-import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter;
 import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.log4j.Level;
+import org.apache.log4j.LogManager;
 import org.junit.Test;
 
 public class TestDFSRename {
@@ -186,14 +188,15 @@ public class TestDFSRename {
       final DistributedFileSystem dfs = cluster.getFileSystem();
       Path path = new Path("/test");
       dfs.mkdirs(path);
-      GenericTestUtils.LogCapturer auditLog =
-          GenericTestUtils.LogCapturer.captureLogs(FSNamesystem.auditLog);
+      LogManager.getLogger(NameNode.stateChangeLog.getName()).setLevel(Level.DEBUG);
+      GenericTestUtils.LogCapturer stateChangeLog =
+          GenericTestUtils.LogCapturer.captureLogs(NameNode.stateChangeLog);
       dfs.rename(path, new Path("/dir1"),
           new Rename[] {Rename.OVERWRITE, Rename.TO_TRASH});
-      String auditOut = auditLog.getOutput();
+      String stateChangeLogOut = stateChangeLog.getOutput();
       assertTrue("Rename should have both OVERWRITE and TO_TRASH "
-              + "flags at namenode but had only " + auditOut,
-          auditOut.contains("options=[OVERWRITE, TO_TRASH]"));
+              + "flags at namenode but had only " + stateChangeLogOut,
+          stateChangeLogOut.contains("options=[OVERWRITE, TO_TRASH]"));
     }
   }
 }

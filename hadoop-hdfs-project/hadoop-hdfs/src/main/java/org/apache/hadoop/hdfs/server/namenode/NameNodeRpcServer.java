@@ -1246,7 +1246,9 @@ public class NameNodeRpcServer implements NamenodeProtocols {
       throws IOException {
     checkNNStartup();
     if(stateChangeLog.isDebugEnabled()) {
-      stateChangeLog.debug("*DIR* NameNode.rename: " + src + " to " + dst);
+      stateChangeLog.debug(
+          "*DIR* NameNode.rename: " + src + " to " + dst + " with options=" + Arrays.toString(
+              options));
     }
     if (!checkPathLength(dst)) {
       throw new IOException("rename: Pathname too long.  Limit "

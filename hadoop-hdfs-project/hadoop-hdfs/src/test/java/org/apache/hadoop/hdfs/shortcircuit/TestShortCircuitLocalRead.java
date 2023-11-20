@@ -80,11 +80,15 @@ import org.junit.Test;
  */
 public class TestShortCircuitLocalRead {
   private static TemporarySocketDirectory sockDir;
+  private static File shadowFile;
+  private static String shadowPath;
 
   @BeforeClass
-  public static void init() {
+  public static void init() throws IOException {
     sockDir = new TemporarySocketDirectory();
     DomainSocket.disableBindPathValidation();
+    shadowFile = File.createTempFile("temp_shadow", ".txt");
+    shadowPath = shadowFile.getAbsolutePath();
   }
 
   @AfterClass
@@ -95,29 +99,7 @@ public class TestShortCircuitLocalRead {
   @Before
   public void before() throws Exception {
     Assume.assumeThat(DomainSocket.getLoadingFailureReason(), equalTo(null));
-
-    final String symLinkName = "/etc/hadoop/shadow";
-    final File symLinkFile = new File(symLinkName);
-    if ( ! symLinkFile.delete()) {
-      throw new IOException("Failed to delete symbolic link shadow file ["
-          + symLinkName + "]");
-    }
-
-    Files.createSymbolicLink(Paths.get(symLinkName),
-        Paths.get("/etc/hadoop/shadow.bypass"));
-  }
-
-  @After
-  public void after() throws Exception {
-    final String symLinkName = "/etc/hadoop/shadow";
-    final File symLinkFile = new File(symLinkName);
-    if ( ! symLinkFile.delete()) {
-      throw new IOException("Failed to delete symbolic link shadow file ["
-          + symLinkName + "]");
-    }
-
-    Files.createSymbolicLink(Paths.get(symLinkName),
-        Paths.get("/etc/hadoop/shadow.orig"));
+    Files.createSymbolicLink(shadowFile.toPath(), Paths.get("/etc/hadoop/shadow.bypass"));
   }
 
   static final long seed = 0xDEADBEEFL;
@@ -279,6 +261,7 @@ public class TestShortCircuitLocalRead {
       boolean legacyShortCircuitFails)
       throws IOException, InterruptedException {
     Configuration conf = new Configuration();
+    conf.set(DFSConfigKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, shadowPath);
     conf.setBoolean(HdfsClientConfigKeys.Read.ShortCircuit.KEY, true);
     conf.setBoolean(HdfsClientConfigKeys.Read.ShortCircuit.SKIP_CHECKSUM_KEY,
         ignoreChecksum);

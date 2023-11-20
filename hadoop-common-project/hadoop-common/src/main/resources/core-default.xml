@@ -2437,7 +2437,7 @@
 
 <property>
   <name>ipc.server.log.slow.rpc.threshold.ms</name>
-  <value>0</value>
+  <value>1000</value>
   <description>The threshold in milliseconds for logging slow rpc when ipc.server.log.slow.rpc is enabled.
     Besides of being much slower than other RPC requests, an RPC request has to take at least the threshold value
     defined by this property before it can be considered as slow. By default, this threshold is set to 0 (disabled).

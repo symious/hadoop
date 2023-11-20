@@ -752,12 +752,11 @@ public class TestNameNodeReconfigure {
 
     // try invalid logSlowRPCThresholdTime.
     try {
-      nameNode.reconfigureProperty(IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY,
-          "non-numeric");
+      nameNode.reconfigureProperty(IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY, "non-numeric");
       fail("Should not reach here");
     } catch (ReconfigurationException e) {
-      assertEquals("Could not change property " +
-          "ipc.server.log.slow.rpc.threshold.ms from '0' to 'non-numeric'", e.getMessage());
+      assertEquals("Could not change property " + "ipc.server.log.slow.rpc.threshold.ms from '"
+          + IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_DEFAULT + "' to 'non-numeric'", e.getMessage());
     }
 
     // try correct logSlowRPCThresholdTime.

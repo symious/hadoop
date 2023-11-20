@@ -215,11 +215,8 @@ public class TestDFSStripedInputStream {
       byte[] buf = new byte[fileLen];
       int ret = in.read(startOffset, buf, 0, fileLen);
       assertEquals(remaining, ret);
-      for (int i = 0; i < remaining; i++) {
-        Assert.assertEquals("Byte at " + (startOffset + i) + " should be the " +
-                "same",
-            expected[startOffset + i], buf[i]);
-      }
+      Assert.assertArrayEquals(Arrays.copyOfRange(expected, startOffset, startOffset + remaining),
+          Arrays.copyOfRange(buf, 0, remaining));
     }
     in.close();
   }

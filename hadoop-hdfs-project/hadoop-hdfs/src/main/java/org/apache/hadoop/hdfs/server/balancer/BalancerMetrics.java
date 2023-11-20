@@ -86,6 +86,9 @@ final class BalancerMetrics {
   public void incrBytesMoved(long moved, String nsId) {
     bytesMoved.incr(moved);
 
+    if (nsId == null) {
+      return;
+    }
     MutableCounterLong mutableCounterLong = MutableMetricRegister.tryGetMetric(registry,
         nsId, bytesMovedPerNS, "BytesMoved_", MutableCounterLong.class);
     if (mutableCounterLong != null) {
@@ -99,6 +102,9 @@ final class BalancerMetrics {
   public void incrNumBlocksMoved(int numBlocks, String nsId) {
     numBlocksMoved.incr(numBlocks);
 
+    if (nsId == null) {
+      return;
+    }
     MutableCounterLong mutableCounterLong = MutableMetricRegister.tryGetMetric(registry,
         nsId, numBlocksMovedPerNS, "NumBlocksMoved_", MutableCounterLong.class);
     if (mutableCounterLong != null) {
@@ -112,6 +118,9 @@ final class BalancerMetrics {
   public void incrNumBlocksFailMoved(int numBlocks, String nsId) {
     numBlocksFailMoved.incr(numBlocks);
 
+    if (nsId == null) {
+      return;
+    }
     MutableCounterLong mutableCounterLong = MutableMetricRegister.tryGetMetric(registry,
         nsId, numBlocksFailMovedPerNS, "NumBlocksFailMoved_", MutableCounterLong.class);
     if (mutableCounterLong != null) {
@@ -121,6 +130,9 @@ final class BalancerMetrics {
 
 
   public void setIterateRunning(boolean iterateRunning, String nsId) {
+    if (nsId == null) {
+      return;
+    }
     MutableGaugeInt mutableGaugeInt = MutableMetricRegister.tryGetMetric(registry,
         nsId, iterateRunningPerNS, "IterateRunning_", MutableGaugeInt.class);
     if (mutableGaugeInt != null) {
@@ -129,6 +141,9 @@ final class BalancerMetrics {
   }
 
   public void setBytesLeftToMove(long bytesLeftToMove, String nsId) {
+    if (nsId == null) {
+      return;
+    }
     MutableGaugeLong mutableGaugeLong = MutableMetricRegister.tryGetMetric(registry,
         nsId, bytesLeftToMovePerNS, "BytesLeftToMove_", MutableGaugeLong.class);
     if (mutableGaugeLong != null) {
@@ -137,6 +152,9 @@ final class BalancerMetrics {
   }
 
   public void setNumOfUnderUtilizedNodes(int numOfUnderUtilizedNodes, String nsId) {
+    if (nsId == null) {
+      return;
+    }
     MutableGaugeInt mutableGaugeInt = MutableMetricRegister.tryGetMetric(registry,
         nsId, numOfUnderUtilizedNodesPerNS, "NumOfUnderUtilizedNodes_",
         MutableGaugeInt.class);
@@ -146,6 +164,9 @@ final class BalancerMetrics {
   }
 
   void setNumOfOverUtilizedNodes(int numOfOverUtilizedNodes, String nsId) {
+    if (nsId == null) {
+      return;
+    }
     MutableGaugeInt mutableGaugeInt = MutableMetricRegister.tryGetMetric(registry,
         nsId, numOfOverUtilizedNodesPerNS, "NumOfOverUtilizedNodes_",
         MutableGaugeInt.class);
@@ -156,6 +177,9 @@ final class BalancerMetrics {
 
 
   void setBytesMovedInPreIter(long bytesMoved, String nsId) {
+    if (nsId == null) {
+      return;
+    }
     MutableGaugeLong mutableGaugeLong = MutableMetricRegister.tryGetMetric(registry,
         nsId, byteMovedInPreIterPerNS, "BytesMovedInPreIter_", MutableGaugeLong.class);
     if (mutableGaugeLong != null) {
@@ -164,6 +188,9 @@ final class BalancerMetrics {
   }
 
   void setNumBlocksMovedInPreIter(long numBlocks, String nsId) {
+    if (nsId == null) {
+      return;
+    }
     MutableGaugeLong mutableGaugeLong = MutableMetricRegister.tryGetMetric(registry,
         nsId, numBlocksMovedInPreIterPerNS, "NumBlocksMovedInPreIter_",
         MutableGaugeLong.class);
@@ -173,6 +200,9 @@ final class BalancerMetrics {
   }
 
   void setTimeCostOfPreIter(long duration, String nsId) {
+    if (nsId == null) {
+      return;
+    }
     MutableGaugeLong mutableGaugeLong = MutableMetricRegister.tryGetMetric(registry,
         nsId, timeCostOfPreIterPerNS, "TimeCostOfPreIter_", MutableGaugeLong.class);
     if (mutableGaugeLong != null) {

@@ -882,6 +882,7 @@ public class TestBalancer {
         Collections.shuffle(connectors);
         for(NameNodeConnector nnc : connectors) {
           final Balancer b = new Balancer(nnc, p, conf);
+          Balancer.initializeMetrics();
           final Result r = b.runOneIteration();
           r.print(iteration, nnc, System.out);
 
@@ -1954,7 +1955,8 @@ public class TestBalancer {
     final BalancerParameters p = Balancer.Cli.parse(new String[] {
         "-policy", BalancingPolicy.Node.INSTANCE.getName(),
         "-threshold", "1",
-        "-sortTopNodes"
+        "-sortTopNodes",
+        "-dataCenterConstraint", "/"
     });
 
     client = NameNodeProxies.createProxy(conf,
@@ -1972,6 +1974,7 @@ public class TestBalancer {
             Balancer.class.getSimpleName(), Balancer.BALANCER_ID_PATH, conf,
             BalancerParameters.DEFAULT.getMaxIdleIteration());
     final Balancer b = new Balancer(connectors.get(0), p, conf);
+    Balancer.initializeMetrics();
     Result balancerResult = b.runOneIteration();
 
     cluster.triggerDeletionReports();

@@ -77,6 +77,7 @@ public class TestRBWBlockInvalidation {
     assumeNotWindows();
 
     Configuration conf = new HdfsConfiguration();
+    conf.set("dfs.client.block.write.replace-datanode-on-failure.enable", "false");
     conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, 2);
     conf.setLong(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY, 300);
     conf.setLong(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY, 1);
@@ -149,6 +150,7 @@ public class TestRBWBlockInvalidation {
   @Test(timeout=120000)
   public void testRWRInvalidation() throws Exception {
     Configuration conf = new HdfsConfiguration();
+    conf.set("dfs.client.block.write.replace-datanode-on-failure.enable", "false");
 
     // Set the deletion policy to be randomized rather than the default.
     // The default is based on disk space, which isn't controllable

@@ -293,6 +293,7 @@ public class TestFileAppend4 {
   @Test(timeout = 60000)
   public void testUpdateNeededReplicationsForAppendedFile() throws Exception {
     Configuration conf = new Configuration();
+    conf.set("dfs.client.block.write.replace-datanode-on-failure.enable", "false");
     MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1)
         .build();
     DistributedFileSystem fileSystem = null;

@@ -1300,7 +1300,7 @@ public class TestFileCreation {
 
       final Path f = new Path("/testFileIdMismatch.txt");
       createFile(dfs, f, 3);
-      long someOtherFileId = -1;
+      long someOtherFileId = 1234;
       try {
         cluster.getNameNodeRpc()
             .complete(f.toString(), client.clientName, null, someOtherFileId);

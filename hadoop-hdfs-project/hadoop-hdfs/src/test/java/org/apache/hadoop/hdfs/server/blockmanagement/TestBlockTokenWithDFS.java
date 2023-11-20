@@ -232,6 +232,7 @@ public class TestBlockTokenWithDFS {
     MiniDFSCluster cluster = null;
     int numDataNodes = 2;
     Configuration conf = getConf(numDataNodes);
+    conf.set("dfs.client.block.write.replace-datanode-on-failure.enable", "false");
 
     try {
       cluster = new MiniDFSCluster.Builder(conf).numDataNodes(numDataNodes).build();
@@ -293,6 +294,7 @@ public class TestBlockTokenWithDFS {
     MiniDFSCluster cluster = null;
     int numDataNodes = 2;
     Configuration conf = getConf(numDataNodes);
+    conf.set("dfs.client.block.write.replace-datanode-on-failure.enable", "false");
 
     try {
       cluster = new MiniDFSCluster.Builder(conf).numDataNodes(numDataNodes).build();

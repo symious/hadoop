@@ -938,6 +938,11 @@ public class Balancer {
     }
   }
 
+  @VisibleForTesting
+  public static void initializeMetrics() {
+    balancerMetrics = BalancerMetrics.create();
+  }
+
   static void stop() {
     serviceRunning = false;
   }

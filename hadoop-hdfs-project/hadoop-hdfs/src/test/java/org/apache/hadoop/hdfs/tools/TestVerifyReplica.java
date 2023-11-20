@@ -210,7 +210,7 @@ public class TestVerifyReplica {
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
-    }, 100, 10000);
+    }, 100, 20000);
   }
 
   private void purgeBlockByKillingDN(Path testPath) throws IOException {

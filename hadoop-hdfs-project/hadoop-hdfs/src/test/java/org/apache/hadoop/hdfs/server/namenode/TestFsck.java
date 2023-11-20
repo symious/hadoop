@@ -188,6 +188,7 @@ public class TestFsck {
   @Before
   public void setUp() throws Exception {
     conf = new Configuration();
+    conf.set("dfs.client.block.write.replace-datanode-on-failure.enable", "false");
     conf.setBoolean(DFS_NAMENODE_CORRUPT_BLOCK_DELETE_IMMEDIATELY_ENABLED,
         false);
   }
