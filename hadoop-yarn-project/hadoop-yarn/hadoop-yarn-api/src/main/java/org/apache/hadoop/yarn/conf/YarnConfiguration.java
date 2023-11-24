@@ -987,6 +987,12 @@ public class YarnConfiguration extends Configuration {
   public static final long DEFAULT_RM_WORK_PRESERVING_RECOVERY_SCHEDULING_WAIT_MS =
       10000;
 
+  public static final String RM_ALWAYS_RETURN_CONFIGURED_MAX_ALLOCATION =
+      RM_PREFIX + "always-return-configured-max-allocation";
+  public static final boolean
+      DEFAULT_RM_ALWAYS_RETURN_CONFIGURED_MAX_ALLOCATION =
+      false;
+
   /** Zookeeper interaction configs */
   public static final String RM_ZK_PREFIX = RM_PREFIX + "zk-";
 

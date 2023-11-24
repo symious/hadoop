@@ -219,6 +219,12 @@ public abstract class AbstractYarnScheduler
           YarnConfiguration.DEFAULT_RM_WORK_PRESERVING_RECOVERY_SCHEDULING_WAIT_MS);
     nodeTracker.setConfiguredMaxAllocationWaitTime(
         configuredMaximumAllocationWaitTime);
+    boolean alwaysReturnConfiguredMaxAllocation =
+        conf.getBoolean(
+            YarnConfiguration.RM_ALWAYS_RETURN_CONFIGURED_MAX_ALLOCATION,
+            YarnConfiguration.DEFAULT_RM_ALWAYS_RETURN_CONFIGURED_MAX_ALLOCATION);
+    nodeTracker.setAlwaysReturnConfiguredMaxAllocation(
+        alwaysReturnConfiguredMaxAllocation);
     maxClusterLevelAppPriority = getMaxPriorityFromConf(conf);
     if (!migration) {
       this.releaseCache = new Timer("Pending Container Clear Timer");

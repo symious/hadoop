@@ -70,6 +70,7 @@ public class ClusterNodeTracker<N extends SchedulerNode> {
   // Max allocation
   private final long[] maxAllocation;
   private Resource configuredMaxAllocation;
+  private boolean alwaysReturnConfiguredMaxAllocation = false;
   private boolean forceConfiguredMaxAllocation = true;
   private long configuredMaxAllocationWaitTime;
   private boolean reportedMaxAllocation = false;
@@ -223,6 +224,17 @@ public class ClusterNodeTracker<N extends SchedulerNode> {
     }
   }
 
+  public void setAlwaysReturnConfiguredMaxAllocation(
+      boolean returnConfiguredMaxAllocation) {
+    writeLock.lock();
+    try {
+      this.alwaysReturnConfiguredMaxAllocation =
+          returnConfiguredMaxAllocation;
+    } finally {
+      writeLock.unlock();
+    }
+  }
+
   public void setConfiguredMaxAllocationWaitTime(
       long configuredMaxAllocationWaitTime) {
     writeLock.lock();
@@ -237,6 +249,10 @@ public class ClusterNodeTracker<N extends SchedulerNode> {
   public Resource getMaxAllowedAllocation() {
     readLock.lock();
     try {
+      if (alwaysReturnConfiguredMaxAllocation) {
+        return configuredMaxAllocation;
+      }
+
       if (forceConfiguredMaxAllocation &&
           System.currentTimeMillis() - ResourceManager.getClusterTimeStamp()
               > configuredMaxAllocationWaitTime) {

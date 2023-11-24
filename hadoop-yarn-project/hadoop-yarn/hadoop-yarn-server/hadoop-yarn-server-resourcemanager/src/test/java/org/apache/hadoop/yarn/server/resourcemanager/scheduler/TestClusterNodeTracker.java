@@ -201,4 +201,108 @@ public class TestClusterNodeTracker {
     assertEquals("After removing all nodes, the ClusterNodeTracker did not "
         + "return the configured maximum allocation", maximum, result);
   }
+
+  @Test
+  public void testAlwaysReturnMaxAllowedAllocation() {
+
+    Configuration conf = new Configuration();
+
+    conf.set(YarnConfiguration.RESOURCE_TYPES, "test1");
+
+    ResourceUtils.resetResourceTypes(conf);
+    setup();
+
+    nodeTracker.setAlwaysReturnConfiguredMaxAllocation(true);
+
+    Resource maximum = Resource.newInstance(10240, 10,
+        Collections.singletonMap("test1", 10L));
+
+    nodeTracker.setConfiguredMaxAllocation(maximum);
+
+    Resource result = nodeTracker.getMaxAllowedAllocation();
+
+    assertEquals("With no nodes added, the ClusterNodeTracker return "
+        + "the configured max allocation", maximum, result);
+
+    List<RMNode> smallNodes =
+        MockNodes.newNodes(1, 1, Resource.newInstance(1024, 2,
+            Collections.singletonMap("test1", 4L)));
+    FSSchedulerNode smallNode = new FSSchedulerNode(smallNodes.get(0), false);
+    List<RMNode> mediumNodes =
+        MockNodes.newNodes(1, 1, Resource.newInstance(4096, 2,
+            Collections.singletonMap("test1", 2L)));
+    FSSchedulerNode mediumNode = new FSSchedulerNode(mediumNodes.get(0), false);
+    List<RMNode> largeNodes =
+        MockNodes.newNodes(1, 1, Resource.newInstance(16384, 4,
+            Collections.singletonMap("test1", 1L)));
+    FSSchedulerNode largeNode = new FSSchedulerNode(largeNodes.get(0), false);
+
+    nodeTracker.addNode(mediumNode);
+
+    result = nodeTracker.getMaxAllowedAllocation();
+
+    assertEquals(
+        "With a single node added, the ClusterNodeTracker still " +
+            "return the configured max allocation", maximum, result);
+
+    nodeTracker.addNode(smallNode);
+
+    result = nodeTracker.getMaxAllowedAllocation();
+
+    assertEquals(
+        "With two nodes added, the ClusterNodeTracker still " +
+            "return the configured max allocation", maximum, result);
+
+    nodeTracker.removeNode(smallNode.getNodeID());
+
+    result = nodeTracker.getMaxAllowedAllocation();
+
+    assertEquals(
+        "After removing a node, the ClusterNodeTracker still " +
+            "return the configured max allocation", maximum, result);
+
+    nodeTracker.addNode(largeNode);
+
+    result = nodeTracker.getMaxAllowedAllocation();
+
+    assertEquals(
+        "With two nodes added, the ClusterNodeTracker still " +
+            "return the configured max allocation", maximum, result);
+
+    nodeTracker.removeNode(largeNode.getNodeID());
+
+    result = nodeTracker.getMaxAllowedAllocation();
+
+    assertEquals(
+        "After removing a node, the ClusterNodeTracker still " +
+            "return the configured max allocation", maximum, result);
+
+    nodeTracker.removeNode(mediumNode.getNodeID());
+
+    result = nodeTracker.getMaxAllowedAllocation();
+
+    assertEquals(
+        "After removing all nodes, the ClusterNodeTracker still " +
+            "return the configured max allocation", maximum, result);
+
+    nodeTracker.addNode(smallNode);
+    nodeTracker.addNode(mediumNode);
+    nodeTracker.addNode(largeNode);
+
+    result = nodeTracker.getMaxAllowedAllocation();
+
+    assertEquals(
+        "With three nodes added, the ClusterNodeTracker still " +
+            "return the configured max allocation", maximum, result);
+
+    nodeTracker.removeNode(smallNode.getNodeID());
+    nodeTracker.removeNode(mediumNode.getNodeID());
+    nodeTracker.removeNode(largeNode.getNodeID());
+
+    result = nodeTracker.getMaxAllowedAllocation();
+
+    assertEquals(
+        "After removing all nodes, the ClusterNodeTracker still " +
+            "return the configured max allocation", maximum, result);
+  }
 }
