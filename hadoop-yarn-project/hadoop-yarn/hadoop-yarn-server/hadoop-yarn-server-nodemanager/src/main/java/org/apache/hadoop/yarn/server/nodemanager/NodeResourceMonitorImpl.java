@@ -342,6 +342,7 @@ public class NodeResourceMonitorImpl extends AbstractService implements
     conf.setInt(YarnConfiguration.NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT, coreRatio);
     conf.setInt(YarnConfiguration.NM_PMEM_MB, Long.valueOf(memory).intValue());
     conf.setInt(YarnConfiguration.NM_VCORES, vcoreNumber);
+    conf.setLong(YarnConfiguration.NM_ELASTIC_PMEM_MB, memory);
     NodeManagerMetrics metric = this.nmContext.getNodeManagerMetrics();
     metric.setTotalCpuCore(coreNumber);
     metric.setTotalVCore(vcoreNumber);
