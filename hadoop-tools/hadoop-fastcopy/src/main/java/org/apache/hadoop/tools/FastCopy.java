@@ -59,12 +59,15 @@ import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+import org.apache.hadoop.hdfs.protocol.LocatedStripedBlock;
 import org.apache.hadoop.hdfs.server.namenode.NotReplicatedYetException;
+import org.apache.hadoop.hdfs.util.StripedBlockUtil;
 import org.apache.hadoop.io.EnumSetWritable;
 import org.apache.hadoop.ipc.Client;
 import org.apache.hadoop.ipc.RPC;
@@ -247,27 +250,42 @@ public class FastCopy {
    * Aligns the source and destination locations such that common locations
    * appear at the same index.
    *
-   * @param dstLocs
-   *          the destination datanodes
    * @param srcLocs
    *          the source datanodes
+   * @param dstLocs
+   *          the destination datanodes
    */
-  public static void alignDatanodes(
-      DatanodeInfo[] dstLocs, DatanodeInfo[] srcLocs) {
-    for (int i = 0; i < dstLocs.length; i++) {
-      for (int j = 0; j < srcLocs.length; j++) {
-        if (i == j)
-          continue;
-        if (dstLocs[i].equals(srcLocs[j])) {
-          if (i < j) {
-            swap(i, j, srcLocs);
-          } else {
+  public static void alignDatanodes(DatanodeInfo[] srcLocs, DatanodeInfo[] dstLocs) {
+    for (int i = 0; i < srcLocs.length; i++) {
+      for (int j = i; j < dstLocs.length; j++) {
+        if (srcLocs[i].equals(dstLocs[j])) {
+          if (i != j) {
             swap(i, j, dstLocs);
           }
           break;
         }
       }
     }
+  }
+
+  /**
+   * Gets the block index for a given datanode in the oldSrcLocs array based on the indices array.
+   *
+   * @param oldSrcLocs   the original source datanodes array
+   * @param datanodeInfo the datanode to find the index for
+   * @param indices      an array of indices
+   * @return the index for the given datanode or -1 if not found
+   */
+  private int getBlockIndex(DatanodeInfo[] oldSrcLocs, DatanodeInfo datanodeInfo, byte[] indices) {
+    if (indices == null) {
+      return -1;
+    }
+    for (int i = 0; i < oldSrcLocs.length; i++) {
+      if (oldSrcLocs[i].equals(datanodeInfo)) {
+        return indices[i];
+      }
+    }
+    return -1;
   }
 
   private class FastFileCopy implements Callable<CopyResult> {
@@ -530,12 +548,13 @@ public class FastCopy {
      * @param dst
      *          the destination block
      */
-    private void copyBlock(LocatedBlock src, LocatedBlock dst) {
+    private void copyBlock(LocatedBlock src, LocatedBlock dst, ErasureCodingPolicy ecPolicy)
+        throws IOException {
       // Sorting source and destination locations so that we don't rely at all
       // on the ordering of the locations that we receive from the NameNode.
       DatanodeInfo[] dstLocs = dst.getLocations();
       DatanodeInfo[] srcLocs = src.getLocations();
-      alignDatanodes(dstLocs, srcLocs);
+      alignDatanodes(srcLocs, dstLocs);
 
       // We use minimum here, since its better for the NameNode to handle the
       // extra locations in either list. The locations that match up are the
@@ -545,8 +564,31 @@ public class FastCopy {
       ExtendedBlock dstBlock = dst.getBlock();
       initializeBlockStatus(dstBlock, blocksToCopy);
       for (int i = 0; i < blocksToCopy; i++) {
-        blockRPCExecutor.submit(new BlockCopyRPC(srcBlock, dstBlock,
-            srcLocs[i], dstLocs[i]));
+        if (src.isStriped()) {
+          if (ecPolicy == null) {
+            throw new IOException("Unable to copy striped block, " +
+                "erasure coding policy is not available, source block: " + src.getBlock() +
+                " destination block:" + dst.getBlock());
+          }
+          int blkIndex = getBlockIndex(srcLocs, srcLocs[i],
+              ((LocatedStripedBlock)src).getBlockIndices());
+          if (blkIndex == -1) {
+            throw new IOException("Unable to copy striped block, " +
+                "get block index error, source block: " + src.getBlock() +
+                " destination block:" + dst.getBlock());
+          }
+          ExtendedBlock srcECBlock = new ExtendedBlock(srcBlock);
+          srcECBlock.setBlockId(srcBlock.getBlockId() + blkIndex);
+          srcECBlock.setNumBytes(StripedBlockUtil.getInternalBlockLength(
+              srcBlock.getNumBytes(), ecPolicy, blkIndex));
+          ExtendedBlock dstECBlock = new ExtendedBlock(dstBlock);
+          dstECBlock.setBlockId(dstECBlock.getBlockId() + blkIndex);
+          blockRPCExecutor.submit(new BlockCopyRPC(srcECBlock, dstECBlock,
+              srcLocs[i], dstLocs[i]));
+        } else {
+          blockRPCExecutor.submit(new BlockCopyRPC(srcBlock, dstBlock,
+              srcLocs[i], dstLocs[i]));
+        }
       }
     }
 
@@ -638,9 +680,16 @@ public class FastCopy {
         boolean isUnderConstruction = false;
         LinkedList<LocatedBlock> blocksList = new LinkedList<>();
         LocatedBlock previousAdded = null;
+        ErasureCodingPolicy ecPolicy = null;
+        String ecPolicyName = null;
         do {
           lastStart = lastEnd;
           LocatedBlocks blocks = srcNamenode.getBlockLocations(src, lastStart, addition);
+          if (blocks.getErasureCodingPolicy() != null) {
+            ecPolicy = blocks.getErasureCodingPolicy();
+            ecPolicyName = ecPolicy.getName();
+            LOG.debug("File: " + src + " ecPolicyName: " + ecPolicyName);
+          }
           if (fileLen == 0) {
             if (blocks.getFileLength() == 0) {
               break;
@@ -679,7 +728,7 @@ public class FastCopy {
             srcFileStatus.getPermission(),
             clientName, flagWritable, true,
             srcFileStatus.getReplication(), srcFileStatus.getBlockSize(),
-            CryptoProtocolVersion.supported(), null, null);
+            CryptoProtocolVersion.supported(), ecPolicyName, null);
 
         // Instruct each datanode to create a copy of the respective block.
         int blocksAdded = 0;
@@ -723,7 +772,7 @@ public class FastCopy {
             LOG.debug("Fast Copy : Block " + destinationLocatedBlock.getBlock()
                 + " added to namenode");
           }
-          copyBlock(srcLocatedBlock, destinationLocatedBlock);
+          copyBlock(srcLocatedBlock, destinationLocatedBlock, ecPolicy);
 
           // Wait for the block copies to reach a threshold.
           waitForBlockCopy(blocksAdded);
