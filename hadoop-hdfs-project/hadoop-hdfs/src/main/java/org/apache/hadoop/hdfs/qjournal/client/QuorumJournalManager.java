@@ -104,8 +104,6 @@ public class QuorumJournalManager implements JournalManager {
   private boolean isActiveWriter;
   
   private final AsyncLoggerSet loggers;
-
-  private static final int OUTPUT_BUFFER_CAPACITY_DEFAULT = 512 * 1024;
   private int outputBufferCapacity;
   private final URLConnectionFactory connectionFactory;
 
@@ -191,7 +189,10 @@ public class QuorumJournalManager implements JournalManager {
         DFSConfigKeys.DFS_QJOURNAL_HTTP_READ_TIMEOUT_DEFAULT);
     this.connectionFactory = URLConnectionFactory
         .newDefaultURLConnectionFactory(connectTimeoutMs, readTimeoutMs, conf);
-    setOutputBufferCapacity(OUTPUT_BUFFER_CAPACITY_DEFAULT);
+    int outputBufferCapacity = conf.getInt(
+        DFSConfigKeys.DFS_QJOURNAL_WRITE_OUTPUT_BUFFER_CAPACITY_KEY,
+        DFSConfigKeys.DFS_QJOURNAL_WRITE_OUTPUT_BUFFER_CAPACITY_DEFAULT);
+    setOutputBufferCapacity(outputBufferCapacity);
   }
   
   protected List<AsyncLogger> createLoggers(
@@ -458,6 +459,9 @@ public class QuorumJournalManager implements JournalManager {
           + "capacity (" + size + ") greater than the IPC max data length ("
           + CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH + " = "
           + ipcMaxDataLength + "). This will cause journals to reject edits.");
+    } else if (size <= 512) {
+      throw new IllegalArgumentException("Attempted to use QJM output buffer "
+          + "capacity (" + size + ") lesser than 512");
     }
     outputBufferCapacity = size;
   }

@@ -5829,6 +5829,14 @@
 </property>
 
 <property>
+  <name>dfs.qjournal.write.output.buffer.capacity</name>
+  <value>524288</value>
+  <description>
+    The output buffer capacity of the double buffer used by QuorumJournalManager.
+  </description>
+</property>
+
+<property>
   <name>dfs.qjournal.parallel-read.num-threads</name>
   <value>5</value>
   <description>

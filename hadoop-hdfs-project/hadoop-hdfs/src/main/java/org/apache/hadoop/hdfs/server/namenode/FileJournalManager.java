@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.namenode;
 
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,7 +67,7 @@ public class FileJournalManager implements JournalManager {
   private final Configuration conf;
   private final StorageDirectory sd;
   private final StorageErrorReporter errorReporter;
-  private int outputBufferCapacity = 512*1024;
+  private int outputBufferCapacity;
 
   private static final Pattern EDITS_REGEX = Pattern.compile(
     NameNodeFile.EDITS.getName() + "_(\\d+)-(\\d+)");
@@ -96,6 +97,13 @@ public class FileJournalManager implements JournalManager {
     this.conf = conf;
     this.sd = sd;
     this.errorReporter = errorReporter;
+    this.outputBufferCapacity = conf.getInt(
+        DFSConfigKeys.DFS_QJOURNAL_WRITE_OUTPUT_BUFFER_CAPACITY_KEY,
+        DFSConfigKeys.DFS_QJOURNAL_WRITE_OUTPUT_BUFFER_CAPACITY_DEFAULT);
+    if (outputBufferCapacity <= 512) {
+      throw new IllegalArgumentException("Attempted to use output buffer "
+          + "capacity (" + outputBufferCapacity + ") lesser than 512");
+    }
   }
 
   @Override 
