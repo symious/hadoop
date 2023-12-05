@@ -431,6 +431,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_NAMENODE_EDITS_ASYNC_LOGGING =
       "dfs.namenode.edits.asynclogging";
   public static final boolean DFS_NAMENODE_EDITS_ASYNC_LOGGING_DEFAULT = true;
+  public static final String  DFS_NAMENODE_EDITS_ASYNC_PENDING_QUEUE_CAPACITY_KEY =
+      "dfs.namenode.edits.async.pending.queue.capacity";
+  public static final int     DFS_NAMENODE_EDITS_ASYNC_PENDING_QUEUE_CAPACITY_DEFAULT = 4096;
 
   public static final String DFS_NAMENODE_PROVIDED_ENABLED = "dfs.namenode.provided.enabled";
   public static final boolean DFS_NAMENODE_PROVIDED_ENABLED_DEFAULT = false;

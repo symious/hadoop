@@ -28,6 +28,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.namenode.metrics.NameNodeMetrics;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
@@ -47,8 +48,7 @@ class FSEditLogAsync extends FSEditLog implements Runnable {
   private static final ThreadLocal<Edit> THREAD_EDIT = new ThreadLocal<Edit>();
 
   // requires concurrent access from caller threads and syncing thread.
-  private final BlockingQueue<Edit> editPendingQ =
-      new ArrayBlockingQueue<Edit>(4096);
+  private final BlockingQueue<Edit> editPendingQ;
 
   // only accessed by syncing thread so no synchronization required.
   // queue is unbounded because it's effectively limited by the size
@@ -59,6 +59,13 @@ class FSEditLogAsync extends FSEditLog implements Runnable {
 
   FSEditLogAsync(Configuration conf, NNStorage storage, List<URI> editsDirs) {
     super(conf, storage, editsDirs);
+    int capacity = conf.getInt(DFSConfigKeys.DFS_NAMENODE_EDITS_ASYNC_PENDING_QUEUE_CAPACITY_KEY,
+        DFSConfigKeys.DFS_NAMENODE_EDITS_ASYNC_PENDING_QUEUE_CAPACITY_DEFAULT);
+    if (capacity <= 0) {
+      throw new IllegalArgumentException("Attempt to set the pendingQueue capacity to " + capacity
+          + ". It should be greater than 0");
+    }
+    this.editPendingQ = new ArrayBlockingQueue<>(capacity);
     // op instances cannot be shared due to queuing for background thread.
     cache.disableCache();
   }

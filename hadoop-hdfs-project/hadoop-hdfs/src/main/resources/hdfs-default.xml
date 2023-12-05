@@ -5363,6 +5363,15 @@
 </property>
 
 <property>
+  <name>dfs.namenode.edits.async.pending.queue.capacity</name>
+  <value>4096</value>
+  <description>
+    The capacity of the pending queue used by FSEditLogAsync.
+    It is only used if dfs.namenode.edits.asynclogging is set to true.
+  </description>
+</property>
+
+<property>
   <name>dfs.namenode.edits.dir.minimum</name>
   <value>1</value>
   <description>
