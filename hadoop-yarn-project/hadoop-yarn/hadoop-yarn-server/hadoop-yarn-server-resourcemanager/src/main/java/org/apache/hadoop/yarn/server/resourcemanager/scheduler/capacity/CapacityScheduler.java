@@ -2343,6 +2343,7 @@ public class CapacityScheduler extends
     writeLock.lock();
     try {
       Set<String> updateLabels = new HashSet<String>();
+      Set<String> updateSchedulingNodeTypeLabels = new HashSet<String>();
       for (Entry<NodeId, Set<String>> entry : labelUpdateEvent
           .getUpdatedNodeToLabels().entrySet()) {
         NodeId id = entry.getKey();
@@ -2351,16 +2352,23 @@ public class CapacityScheduler extends
 
         if (node != null) {
           String oldLabel = node.getPartition();
+
           Set<String> newLabels = new HashSet<>();
-          for (String label : labels) {
-            if (StringUtils.isNotBlank(label)) {
-              newLabels.add(label);
-              updateLabels.add(label);
+          for (String newLabel : labels) {
+            if (StringUtils.isNotBlank(newLabel)) {
+              newLabels.add(newLabel);
+              updateLabels.add(newLabel);
+              if (!newLabel.equals(oldLabel)) {
+                updateSchedulingNodeTypeLabels.add(newLabel);
+              }
             }
           }
 
           if (StringUtils.isNotBlank(oldLabel)) {
             updateLabels.add(oldLabel);
+            if (!newLabels.contains(oldLabel)) {
+              updateSchedulingNodeTypeLabels.add(oldLabel);
+            }
           }
 
           // eg: ('node1', '') -> ('node1', 'partition_x')
@@ -2430,8 +2438,8 @@ public class CapacityScheduler extends
 
         //update label nodes scheduler type
         if (scheduleAsynchronously && multipleSchedulersParallelly) {
-          for (String label : updateLabels) {
-            schedulingNodeTypeSettingPolicy.updateByLabel(rmContext, label);
+          for (String label : updateSchedulingNodeTypeLabels) {
+              schedulingNodeTypeSettingPolicy.updateByLabel(rmContext, label);
           }
         }
 
