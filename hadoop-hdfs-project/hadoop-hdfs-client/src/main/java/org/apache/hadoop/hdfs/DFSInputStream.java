@@ -1522,7 +1522,11 @@ public class DFSInputStream extends FSInputStream
       int bytesToRead = (int) Math.min(remaining,
           blk.getBlockSize() - targetStart);
       long targetEnd = targetStart + bytesToRead - 1;
-      avoidSlowDatanodes(blk);
+      // Skip avoidSlowDataNodes logic for stripe block.
+      // TODO: Need to design how to deal with the EC slow nodes.
+      if (!blk.isStriped()) {
+        avoidSlowDatanodes(blk);
+      }
       try {
         if (dfsClient.isHedgedReadsEnabled() && !blk.isStriped()) {
           hedgedFetchBlockByteRange(blk, targetStart,
