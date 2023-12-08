@@ -1032,6 +1032,12 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
     }
   }
 
+  @Override
+  public void invalidateMissingBlock(String bpid, Block block)
+      throws IOException {
+    this.invalidate(bpid, new Block[]{block});
+  }
+
   @Override // FSDatasetSpi
   public void cache(String bpid, long[] cacheBlks) {
     throw new UnsupportedOperationException(

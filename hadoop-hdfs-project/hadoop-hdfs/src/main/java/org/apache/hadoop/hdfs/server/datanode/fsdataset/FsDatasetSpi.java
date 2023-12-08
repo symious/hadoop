@@ -476,6 +476,13 @@ public interface FsDatasetSpi<V extends FsVolumeSpi> extends FSDatasetMBean {
   void invalidate(String bpid, Block invalidBlks[]) throws IOException;
 
   /**
+   * Invalidate a block which is not found on disk.
+   * @param bpid the block pool ID.
+   * @param block The block to be invalidated.
+   */
+  void invalidateMissingBlock(String bpid, Block block) throws IOException;
+
+  /**
    * Caches the specified blocks
    * @param bpid Block pool id
    * @param blockIds - block ids to cache
