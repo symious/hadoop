@@ -5372,6 +5372,16 @@
 </property>
 
 <property>
+  <name>dfs.namenode.edits.notify.pending.queue.capacity</name>
+  <value>16384</value>
+  <description>
+    The capacity of the notifying pending queue used by Notifier thread
+    in FSEditLogAsync. It is only used if
+    dfs.namenode.edits.asynclogging is set to true.
+  </description>
+</property>
+
+<property>
   <name>dfs.namenode.edits.dir.minimum</name>
   <value>1</value>
   <description>

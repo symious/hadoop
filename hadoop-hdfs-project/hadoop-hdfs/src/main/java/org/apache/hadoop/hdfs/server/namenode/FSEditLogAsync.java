@@ -45,6 +45,7 @@ class FSEditLogAsync extends FSEditLog implements Runnable {
   // use separate mutex to avoid possible deadlock when stopping the thread.
   private final Object syncThreadLock = new Object();
   private Thread syncThread;
+  private Thread notifyThread;
   private static final ThreadLocal<Edit> THREAD_EDIT = new ThreadLocal<Edit>();
 
   // requires concurrent access from caller threads and syncing thread.
@@ -54,6 +55,9 @@ class FSEditLogAsync extends FSEditLog implements Runnable {
   // queue is unbounded because it's effectively limited by the size
   // of the edit log buffer - ie. a sync will eventually be forced.
   private final Deque<Edit> syncWaitQ = new ArrayDeque<Edit>();
+
+  // requires concurrent access from syncing thread and notifying thread.
+  private final BlockingQueue<Edit> notifyPendingQ;
 
   private long lastFull = 0;
 
@@ -66,13 +70,25 @@ class FSEditLogAsync extends FSEditLog implements Runnable {
           + ". It should be greater than 0");
     }
     this.editPendingQ = new ArrayBlockingQueue<>(capacity);
+
+    int notifyQueueCapacity = conf.getInt(
+        DFSConfigKeys.DFS_NAMENODE_EDITS_NOTIFY_PENDING_QUEUE_CAPACITY_KEY,
+        DFSConfigKeys.DFS_NAMENODE_EDITS_NOTIFY_PENDING_QUEUE_CAPACITY_DEFAULT);
+    if (notifyQueueCapacity < 1) {
+      LOG.warn("The notifyQueueCapacity value({}) is invalid, will use the default value {}.",
+          notifyQueueCapacity,
+          DFSConfigKeys.DFS_NAMENODE_EDITS_NOTIFY_PENDING_QUEUE_CAPACITY_DEFAULT);
+      notifyQueueCapacity = DFSConfigKeys.DFS_NAMENODE_EDITS_NOTIFY_PENDING_QUEUE_CAPACITY_DEFAULT;
+    }
+    this.notifyPendingQ = new ArrayBlockingQueue<>(notifyQueueCapacity);
     // op instances cannot be shared due to queuing for background thread.
     cache.disableCache();
   }
 
   private boolean isSyncThreadAlive() {
     synchronized(syncThreadLock) {
-      return syncThread != null && syncThread.isAlive();
+      return syncThread != null && syncThread.isAlive()
+          && notifyThread != null && notifyThread.isAlive();
     }
   }
 
@@ -81,6 +97,8 @@ class FSEditLogAsync extends FSEditLog implements Runnable {
       if (!isSyncThreadAlive()) {
         syncThread = new Thread(this, this.getClass().getSimpleName());
         syncThread.start();
+        notifyThread = new Thread(new Notifier(), "FSEditLogAsync Notifier");
+        notifyThread.start();
       }
     }
   }
@@ -95,6 +113,16 @@ class FSEditLogAsync extends FSEditLog implements Runnable {
           // we're quitting anyway.
         } finally {
           syncThread = null;
+        }
+      }
+      if (notifyThread != null) {
+        try {
+          notifyThread.interrupt();
+          notifyThread.join();
+        } catch (InterruptedException e) {
+          // we're quitting anyway.
+        } finally {
+          notifyThread = null;
         }
       }
     }
@@ -269,7 +297,8 @@ class FSEditLogAsync extends FSEditLog implements Runnable {
             syncEx = ex;
           }
           while ((edit = syncWaitQ.poll()) != null) {
-            edit.logSyncNotify(syncEx);
+            edit.setNotifyException(syncEx);
+            notifyPendingQ.put(edit);
           }
         }
       }
@@ -301,6 +330,7 @@ class FSEditLogAsync extends FSEditLog implements Runnable {
   private abstract static class Edit {
     final FSEditLog log;
     final FSEditLogOp op;
+    RuntimeException notifyException = null;
 
     Edit(FSEditLog log, FSEditLogOp op) {
       this.log = log;
@@ -315,7 +345,11 @@ class FSEditLogAsync extends FSEditLog implements Runnable {
     // wait for background thread to finish syncing.
     abstract void logSyncWait();
     // wake up the thread in logSyncWait.
-    abstract void logSyncNotify(RuntimeException ex);
+    abstract void logSyncNotify();
+
+    void setNotifyException(RuntimeException ex) {
+      this.notifyException = ex;
+    }
   }
 
   // the calling thread is synchronously waiting for the edit to complete.
@@ -351,10 +385,10 @@ class FSEditLogAsync extends FSEditLog implements Runnable {
     }
 
     @Override
-    public void logSyncNotify(RuntimeException ex) {
+    public void logSyncNotify() {
       synchronized(lock) {
         done = true;
-        syncEx = ex;
+        syncEx = notifyException;
         lock.notifyAll();
       }
     }
@@ -383,12 +417,12 @@ class FSEditLogAsync extends FSEditLog implements Runnable {
     }
 
     @Override
-    public void logSyncNotify(RuntimeException syncEx) {
+    public void logSyncNotify() {
       try {
-        if (syncEx == null) {
+        if (notifyException == null) {
           call.sendResponse();
         } else {
-          call.abortResponse(syncEx);
+          call.abortResponse(notifyException);
         }
       } catch (Exception e) {} // don't care if not sent.
     }
@@ -396,6 +430,25 @@ class FSEditLogAsync extends FSEditLog implements Runnable {
     @Override
     public String toString() {
       return "["+getClass().getSimpleName()+" op:"+op+" call:"+call+"]";
+    }
+  }
+
+  // Notify client async to improve the performance of the SyncThread,
+  // so that the throughput of FSEditLogAsync can be improved.
+  private class Notifier implements Runnable {
+    @Override
+    public void run() {
+      try {
+        Edit edit;
+        while (true) {
+          edit = notifyPendingQ.take();
+          edit.logSyncNotify();
+        }
+      } catch (InterruptedException ie) {
+        LOG.info(Thread.currentThread().getName() + " was interrupted, exiting");
+      } catch (Throwable t) {
+        terminate(t);
+      }
     }
   }
 }
