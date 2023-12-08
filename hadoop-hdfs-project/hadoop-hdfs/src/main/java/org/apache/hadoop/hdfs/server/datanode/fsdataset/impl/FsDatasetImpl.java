@@ -2185,8 +2185,12 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     //    when it with only 1 replication left now.
     // So remove if from volume map notify namenode is ok.
     try (AutoCloseableLock lock = lockManager.writeLock(LockLevel.BLOCK_POOl, bpid)) {
-      ReplicaInfo replica = volumeMap.remove(bpid, block);
-      invalidate(bpid, replica);
+      ReplicaInfo replica = volumeMap.get(bpid, block);
+      // Check if this block loses data or metaData.
+      if (replica != null && (!replica.blockDataExists() || !replica.metadataExists())) {
+        replica = volumeMap.remove(bpid, block);
+        invalidate(bpid, replica);
+      }
     }
   }
 
