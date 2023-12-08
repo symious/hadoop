@@ -31,6 +31,7 @@ import org.junit.rules.Timeout;
 import java.util.HashSet;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class TestDFSNetworkTopologyWithDataCenter {
@@ -237,5 +238,119 @@ public class TestDFSNetworkTopologyWithDataCenter {
       dd = (DatanodeDescriptor) n;
       assertEquals("host7", dd.getHostName());
     }
+  }
+
+  @Test
+  public void testRacksAndNodesWithDataCenter() {
+    assertEquals(20, CLUSTER.getNumOfLeaves());
+    assertEquals(8, CLUSTER.getNumOfNonEmptyRacks());
+    assertEquals(8, CLUSTER.getNumOfRacks());
+    assertEquals(2, CLUSTER.getNumOfNonEmptyRacks("/d1"));
+    assertEquals(5, CLUSTER.getDataCenterNodes().
+        getOrDefault("/d1", 0).intValue());
+    assertEquals(2, CLUSTER.getDataCenterRacks().
+        getOrDefault("/d1", 0).intValue());
+    assertEquals(0, CLUSTER.getNumOfNonEmptyRacks("/d5"));
+    assertEquals(0, CLUSTER.getDataCenterNodes().
+        getOrDefault("/d5", 0).intValue());
+    assertEquals(0, CLUSTER.getDataCenterRacks().
+        getOrDefault("/d5", 0).intValue());
+
+    // Add 3 new nodes and 2 new racks distributed in "/d5/r1", "/d5/r1", "/d5/r2".
+    // 2 nodes are in "/d5/r1" and 1 node is in "/d5/r2".
+    String[] racks = new String[] {"/d5/r1", "/d5/r1","/d5/r2"};
+    String[] hosts = new String[] {"host21", "host22","host23"};
+    StorageType[] types = {StorageType.ARCHIVE, StorageType.SSD};
+    DatanodeStorageInfo[] storages = DFSTestUtil.
+        createDatanodeStorageInfos(3, racks, hosts, types);
+    DatanodeDescriptor[] dataNodes = DFSTestUtil.toDatanodeDescriptor(storages);
+    for (DatanodeDescriptor dataNode : dataNodes) {
+      CLUSTER.add(dataNode);
+    }
+
+    // Validate the state after adding nodes.
+    assertEquals(23, CLUSTER.getNumOfLeaves());
+    assertEquals(10, CLUSTER.getNumOfNonEmptyRacks());
+    assertEquals(10, CLUSTER.getNumOfRacks());
+    assertEquals(2, CLUSTER.getNumOfNonEmptyRacks("/d1"));
+    assertEquals(5, CLUSTER.getDataCenterNodes().
+        getOrDefault("/d1", 0).intValue());
+    assertEquals(2, CLUSTER.getDataCenterRacks().
+        getOrDefault("/d1", 0).intValue());
+    assertEquals(2, CLUSTER.getNumOfNonEmptyRacks("/d5"));
+    assertEquals(3, CLUSTER.getDataCenterNodes().
+        getOrDefault("/d5", 0).intValue());
+    assertEquals(2, CLUSTER.getDataCenterRacks().
+        getOrDefault("/d5", 0).intValue());
+
+    // Remove "host21" and verify the state change.
+    // "/d5" will reduce a node.
+    CLUSTER.remove(dataNodes[0]);
+    assertFalse(CLUSTER.contains(dataNodes[0]));
+    assertEquals(22, CLUSTER.getNumOfLeaves());
+    assertEquals(10, CLUSTER.getNumOfNonEmptyRacks());
+    assertEquals(10, CLUSTER.getNumOfRacks());
+    assertEquals(2, CLUSTER.getNumOfNonEmptyRacks("/d1"));
+    assertEquals(5, CLUSTER.getDataCenterNodes().
+        getOrDefault("/d1", 0).intValue());
+    assertEquals(2, CLUSTER.getDataCenterRacks().
+        getOrDefault("/d1", 0).intValue());
+    assertEquals(2, CLUSTER.getNumOfNonEmptyRacks("/d5"));
+    assertEquals(2, CLUSTER.getDataCenterNodes().
+        getOrDefault("/d5", 0).intValue());
+    assertEquals(2, CLUSTER.getDataCenterRacks().
+        getOrDefault("/d5", 0).intValue());
+
+    // Remove "host23" and verify the state change.
+    // "/d5" will reduce a rack and a node.
+    CLUSTER.remove(dataNodes[2]);
+    assertFalse(CLUSTER.contains(dataNodes[2]));
+    assertEquals(21, CLUSTER.getNumOfLeaves());
+    assertEquals(9, CLUSTER.getNumOfNonEmptyRacks());
+    assertEquals(9, CLUSTER.getNumOfRacks());
+    assertEquals(2, CLUSTER.getNumOfNonEmptyRacks("/d1"));
+    assertEquals(5, CLUSTER.getDataCenterNodes().
+        getOrDefault("/d1", 0).intValue());
+    assertEquals(2, CLUSTER.getDataCenterRacks().
+        getOrDefault("/d1", 0).intValue());
+    assertEquals(1, CLUSTER.getNumOfNonEmptyRacks("/d5"));
+    assertEquals(1, CLUSTER.getDataCenterNodes().
+        getOrDefault("/d5", 0).intValue());
+    assertEquals(1, CLUSTER.getDataCenterRacks().
+        getOrDefault("/d5", 0).intValue());
+
+    // Set "host22" is decommissionNode.
+    CLUSTER.decommissionNode(dataNodes[1]);
+    assertTrue(CLUSTER.contains(dataNodes[1]));
+    assertEquals(21, CLUSTER.getNumOfLeaves());
+    assertEquals(8, CLUSTER.getNumOfNonEmptyRacks());
+    assertEquals(9, CLUSTER.getNumOfRacks());
+    assertEquals(2, CLUSTER.getNumOfNonEmptyRacks("/d1"));
+    assertEquals(5, CLUSTER.getDataCenterNodes().
+        getOrDefault("/d1", 0).intValue());
+    assertEquals(2, CLUSTER.getDataCenterRacks().
+        getOrDefault("/d1", 0).intValue());
+    assertEquals(0, CLUSTER.getNumOfNonEmptyRacks("/d5"));
+    assertEquals(0, CLUSTER.getDataCenterNodes().
+        getOrDefault("/d5", 0).intValue());
+    assertEquals(0, CLUSTER.getDataCenterRacks().
+        getOrDefault("/d5", 0).intValue());
+
+    // Set "host22" is recommissionNode.
+    CLUSTER.recommissionNode(dataNodes[1]);
+    assertTrue(CLUSTER.contains(dataNodes[1]));
+    assertEquals(21, CLUSTER.getNumOfLeaves());
+    assertEquals(9, CLUSTER.getNumOfNonEmptyRacks());
+    assertEquals(9, CLUSTER.getNumOfRacks());
+    assertEquals(2, CLUSTER.getNumOfNonEmptyRacks("/d1"));
+    assertEquals(5, CLUSTER.getDataCenterNodes().
+        getOrDefault("/d1", 0).intValue());
+    assertEquals(2, CLUSTER.getDataCenterRacks().
+        getOrDefault("/d1", 0).intValue());
+    assertEquals(1, CLUSTER.getNumOfNonEmptyRacks("/d5"));
+    assertEquals(1, CLUSTER.getDataCenterNodes().
+        getOrDefault("/d5", 0).intValue());
+    assertEquals(1, CLUSTER.getDataCenterRacks().
+        getOrDefault("/d5", 0).intValue());
   }
 }

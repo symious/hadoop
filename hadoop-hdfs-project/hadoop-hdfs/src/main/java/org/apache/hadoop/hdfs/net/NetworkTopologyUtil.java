@@ -83,4 +83,15 @@ public class NetworkTopologyUtil {
     }
     return selectStorages;
   }
+
+  /**
+   * Compares whether the data centers of two nodes are the same.
+   *
+   * @param node1 The first node.
+   * @param node2 The second node.
+   * @return True if the data centers of the two nodes are the same; otherwise, false.
+   */
+  public static boolean compareDataCenters(Node node1, Node node2) {
+    return getDataCenter(node1).equals(getDataCenter(node2));
+  }
 }

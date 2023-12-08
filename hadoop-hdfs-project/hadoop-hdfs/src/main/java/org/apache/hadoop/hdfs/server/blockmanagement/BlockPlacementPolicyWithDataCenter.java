@@ -138,6 +138,14 @@ public class BlockPlacementPolicyWithDataCenter extends
           excludedNodes, blockSize, maxNodesPerRack, results,
           avoidStaleNodes, storageTypes);
     }
+
+    // If the local machine is in the excludedNodes, return null.
+    // this avoids an unnecessary call to clusterMap.contains(localMachine) in subsequent logic,
+    // preventing potential performance issues.
+    if (excludedNodes.contains(localMachine)) {
+      return null;
+    }
+
     if (preferLocalNode && localMachine instanceof DatanodeDescriptor
         && clusterMap.contains(localMachine)) {
       DatanodeDescriptor localDatanode = (DatanodeDescriptor) localMachine;

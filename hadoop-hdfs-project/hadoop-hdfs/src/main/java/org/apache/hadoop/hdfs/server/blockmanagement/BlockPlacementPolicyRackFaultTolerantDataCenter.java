@@ -17,22 +17,54 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
-import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageType;
+import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.net.NodeBase;
+import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY;
 
 /**
  * The class is responsible for choosing the desired number of targets
- * for placing block replicas.
+ * for placing block replicas on an environment with datacenter awareness.
  * The strategy is that it tries its best to place the replicas to most racks.
  */
-@InterfaceAudience.Private
-public class BlockPlacementPolicyRackFaultTolerant extends BlockPlacementPolicyDefault {
+public class BlockPlacementPolicyRackFaultTolerantDataCenter extends
+    BlockPlacementPolicyWithDataCenter {
 
+  private String defaultDC;
+  private String defaultScope = null;
+
+  @Override
+  public void initialize(Configuration conf, FSClusterStats stats,
+      NetworkTopology clusterMap, Host2NodesMap host2datanodeMap) {
+    this.defaultDC = conf.get(
+        DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY,
+        DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_DEFAULT);
+    this.defaultScope = this.defaultDC == null ? null : "/" + this.defaultDC;
+    if (this.defaultScope == null) {
+      throw new IllegalArgumentException("The default scope shouldn't be null!");
+    }
+    super.initialize(conf, stats, clusterMap, host2datanodeMap);
+  }
+
+  /**
+   * Refer to {@link BlockPlacementPolicyRackFaultTolerant#getMaxNodesPerRack}
+   * when making changes.
+   */
   @Override
   protected int[] getMaxNodesPerRack(int numOfChosen, int numOfReplicas) {
     int clusterSize = clusterMap.getNumOfLeaves();
@@ -59,6 +91,94 @@ public class BlockPlacementPolicyRackFaultTolerant extends BlockPlacementPolicyD
   }
 
   /**
+   * Calculate the maximum number of replicas to allocate per rack based
+   * on the specified data center.
+   * @param dataCenter The data center for which to calculate the maximum nodes per rack.
+   * @param numOfChosen The number of already chosen nodes.
+   * @param numOfReplicas The number of additional nodes to allocate.
+   * @return
+   */
+  private int getMaxNodesPerRackWithDataCenter(String dataCenter,
+      int numOfChosen, int numOfReplicas) {
+    // Obtain the total number of nodes in the specified data center.
+    int clusterSize = clusterMap.getDataCenterNodes().getOrDefault(dataCenter, 0);
+    int totalNumOfReplicas = numOfChosen + numOfReplicas;
+    if (totalNumOfReplicas > clusterSize) {
+      totalNumOfReplicas = clusterSize;
+    }
+    // No calculation needed when there is only one rack or picking one node.
+    int numOfRacks = clusterMap.getDataCenterRacks().getOrDefault(dataCenter, 0);
+    // HDFS-14527 return default when numOfRacks = 0 to avoid
+    // ArithmeticException when calc maxNodesPerRack at following logic.
+    if (numOfRacks <= 1 || totalNumOfReplicas <= 1) {
+      return totalNumOfReplicas;
+    }
+    // If more racks than replicas, put one replica per rack.
+    if (totalNumOfReplicas < numOfRacks) {
+      return 1;
+    }
+    // If more replicas than racks, evenly spread the replicas.
+    // This calculation rounds up.
+    return (totalNumOfReplicas - 1) / numOfRacks + 1;
+  }
+
+  /**
+   * Refer to {@link BlockPlacementPolicyRackFaultTolerant#chooseTargetInOrder}
+   * when making changes.
+   */
+  @Override
+  protected Node chooseTargetInOrder(int numOfReplicas,
+      Node writer,
+      final Set<Node> excludedNodes,
+      final long blocksize,
+      final int maxNodesPerRack,
+      final List<DatanodeStorageInfo> results,
+      final boolean avoidStaleNodes,
+      final boolean newBlock,
+      EnumMap<StorageType, Integer> storageTypes)
+      throws NotEnoughReplicasException {
+    try {
+      return chooseTarget(numOfReplicas, writer, excludedNodes,
+          blocksize, maxNodesPerRack, results, avoidStaleNodes, newBlock, storageTypes);
+    } catch (NotEnoughReplicasException e) {
+      // Fallback case for no nodes found
+      if (results.isEmpty() && this.defaultScope != null) {
+        LOG.debug("Failed to choose any DNs for writer {}, falling back to {}.",
+            writer.getNetworkLocation(), this.defaultDC);
+        writer = chooseRandom(1, this.defaultScope, excludedNodes,
+            blocksize, maxNodesPerRack, results, avoidStaleNodes, storageTypes).
+            getDatanodeDescriptor();
+        if (--numOfReplicas == 0) {
+          return writer;
+        }
+        chooseTarget(numOfReplicas, writer, excludedNodes,
+            blocksize, maxNodesPerRack, results, avoidStaleNodes, false, storageTypes);
+        return writer;
+      }
+      // Fallback case for pipeline rebuild
+      if (!results.isEmpty() && this.defaultScope != null) {
+        boolean allInDefaultDC = true;
+        for (DatanodeStorageInfo dsi : results) {
+          if (!dsi.getDatanodeDescriptor().getNetworkLocation().startsWith(this.defaultScope)) {
+            allInDefaultDC = false;
+            break;
+          }
+        }
+        if (allInDefaultDC) {
+          LOG.debug("All chosen nodes are from default DC " + this.defaultDC
+              + ", choosing more nodes from default DC for writer "
+              + writer.getNetworkLocation());
+          chooseTarget(numOfReplicas, results.get(0).getDatanodeDescriptor(), excludedNodes,
+              blocksize, maxNodesPerRack, results, avoidStaleNodes, false, storageTypes);
+          return writer;
+        }
+      }
+      // Rethrow if cannot fallback to default DC.
+      throw e;
+    }
+  }
+
+  /**
    * Choose numOfReplicas in order:
    * 1. If total replica expected is less than numOfRacks in cluster, it choose
    * randomly.
@@ -78,21 +198,39 @@ public class BlockPlacementPolicyRackFaultTolerant extends BlockPlacementPolicyD
    * Either way it always prefer local storage.
    * @return local node of writer
    */
-  @Override
-  protected Node chooseTargetInOrder(int numOfReplicas,
-                                 Node writer,
-                                 final Set<Node> excludedNodes,
-                                 final long blocksize,
-                                 final int maxNodesPerRack,
-                                 final List<DatanodeStorageInfo> results,
-                                 final boolean avoidStaleNodes,
-                                 final boolean newBlock,
-                                 EnumMap<StorageType, Integer> storageTypes)
-                                 throws NotEnoughReplicasException {
+  protected Node chooseTarget(int numOfReplicas,
+      Node writer,
+      final Set<Node> excludedNodes,
+      final long blocksize,
+      int maxNodesPerRack,
+      final List<DatanodeStorageInfo> results,
+      final boolean avoidStaleNodes,
+      final boolean newBlock,
+      EnumMap<StorageType, Integer> storageTypes)
+      throws NotEnoughReplicasException {
     int totalReplicaExpected = results.size() + numOfReplicas;
-    int numOfRacks = clusterMap.getNumOfNonEmptyRacks();
 
     try {
+      // Determine the data center base on the writer.
+      if (newBlock) {
+        writer = chooseOnce(1, writer, excludedNodes, blocksize,
+            maxNodesPerRack, results, avoidStaleNodes, storageTypes);
+        if (--numOfReplicas == 0) {
+          return writer;
+        }
+      } else {
+        if (!NetworkTopologyUtil.compareDataCenters(writer,
+            results.get(0).getDatanodeDescriptor())) {
+          writer = results.get(0).getDatanodeDescriptor();
+        }
+      }
+
+      // Get the data center of the chosen writer node.
+      String dataCenter = NetworkTopologyUtil.getDataCenter(writer);
+      // Calculate the maximum number of nodes per rack based on the data center.
+      maxNodesPerRack = getMaxNodesPerRackWithDataCenter(
+          dataCenter, results.size(), numOfReplicas);
+      int numOfRacks = clusterMap.getNumOfNonEmptyRacks(dataCenter);
       if (totalReplicaExpected < numOfRacks ||
           totalReplicaExpected % numOfRacks == 0) {
         writer = chooseOnce(numOfReplicas, writer, excludedNodes, blocksize,
@@ -206,14 +344,14 @@ public class BlockPlacementPolicyRackFaultTolerant extends BlockPlacementPolicyD
    * @return local node of writer.
    */
   private Node chooseOnce(int numOfReplicas,
-                            Node writer,
-                            final Set<Node> excludedNodes,
-                            final long blocksize,
-                            final int maxNodesPerRack,
-                            final List<DatanodeStorageInfo> results,
-                            final boolean avoidStaleNodes,
-                            EnumMap<StorageType, Integer> storageTypes)
-                            throws NotEnoughReplicasException {
+      Node writer,
+      final Set<Node> excludedNodes,
+      final long blocksize,
+      final int maxNodesPerRack,
+      final List<DatanodeStorageInfo> results,
+      final boolean avoidStaleNodes,
+      EnumMap<StorageType, Integer> storageTypes)
+      throws NotEnoughReplicasException {
     if (numOfReplicas == 0) {
       return writer;
     }
@@ -234,8 +372,10 @@ public class BlockPlacementPolicyRackFaultTolerant extends BlockPlacementPolicyD
       }
     }
 
-    DatanodeStorageInfo datanodeStorageInfo = chooseRandom(numOfReplicas, NodeBase.ROOT,
-        excludedNodes, blocksize, maxNodesPerRack, results, avoidStaleNodes, storageTypes);
+    DatanodeStorageInfo datanodeStorageInfo = chooseRandom(writer, numOfReplicas,
+        NodeBase.ROOT, excludedNodes, blocksize, maxNodesPerRack,
+        results, avoidStaleNodes, storageTypes);
+
     if (isInResult) {
       writer = datanodeStorageInfo.getDatanodeDescriptor();
     }
@@ -243,6 +383,10 @@ public class BlockPlacementPolicyRackFaultTolerant extends BlockPlacementPolicyD
     return writer;
   }
 
+  /**
+   * Refer to {@link BlockPlacementPolicyRackFaultTolerant#verifyBlockPlacement}
+   * when making changes.
+   */
   @Override
   public BlockPlacementStatus verifyBlockPlacement(DatanodeInfo[] locs,
       int numberOfReplicas) {
@@ -257,15 +401,26 @@ public class BlockPlacementPolicyRackFaultTolerant extends BlockPlacementPolicyD
     for (DatanodeInfo dn : locs) {
       racks.add(dn.getNetworkLocation());
     }
+    String dataCenter = NetworkTopologyUtil.getDataCenter(locs[0].getNetworkLocation());
     return new BlockPlacementStatusDefault(racks.size(), numberOfReplicas,
-        clusterMap.getNumOfNonEmptyRacks());
+        clusterMap.getNumOfNonEmptyRacks(dataCenter));
   }
 
+  /**
+   * Refer to {@link BlockPlacementPolicyRackFaultTolerant#pickupReplicaSet}
+   * when making changes.
+   */
   @Override
   protected Collection<DatanodeStorageInfo> pickupReplicaSet(
       Collection<DatanodeStorageInfo> moreThanOne,
       Collection<DatanodeStorageInfo> exactlyOne,
       Map<String, List<DatanodeStorageInfo>> rackMap) {
     return moreThanOne.isEmpty() ? exactlyOne : moreThanOne;
+  }
+
+  @VisibleForTesting
+  public void setDefaultDC(String defaultDC) {
+    this.defaultDC = defaultDC;
+    this.defaultScope = "/" + defaultDC;
   }
 }

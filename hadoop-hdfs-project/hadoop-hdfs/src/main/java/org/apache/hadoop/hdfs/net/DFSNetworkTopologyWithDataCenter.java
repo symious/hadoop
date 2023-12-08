@@ -31,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.Set;
 
 /**
  * The HDFS specific network topology class which is data center awareness.
@@ -227,5 +228,80 @@ public class DFSNetworkTopologyWithDataCenter extends DFSNetworkTopology{
     } finally {
       netlock.readLock().unlock();
     }
+  }
+
+  /**
+   * Internal function for update empty rack number
+   * for add or recommission a node.
+   * When remove node will update the count for nodes in the data center,
+   * if that rack was previously empty will update the count for racks in the data center.
+   * @param node node to be added; can be null
+   */
+  protected void interAddNodeWithEmptyRack(Node node) {
+    if (node == null) {
+      return;
+    }
+
+    String rackName = node.getNetworkLocation();
+    String nodeName = node.getName();
+    Set<String> nodes = rackMap.get(rackName);
+    if (nodes == null || !nodes.contains(node.getName())) {
+      super.interAddNodeWithEmptyRack(node);
+      nodes = rackMap.get(rackName);
+      if (nodes.contains(nodeName)) {
+        String dataCenter = getDataCenter(rackName);
+        // If the node added to the rack,
+        // update the count of nodes in the data center.
+        dataCenterNodes.compute(dataCenter, (k, v) -> (v == null) ? 1 : v + 1);
+        // If the rack was empty before, update the count of racks in the data center.
+        if (nodes.size() == 1) {
+          dataCenterRacks.compute(dataCenter, (k, v) -> (v == null) ? 1 : v + 1);
+        }
+      }
+    }
+  }
+
+  /**
+   * Internal function for update empty rack number
+   * for remove or decommission a node.
+   * When remove node will update the count for nodes in the data center,
+   * and if that rack was previously empty will update the count for racks in the data center.
+   * @param node node to be removed; can be null
+   */
+  protected void interRemoveNodeWithEmptyRack(Node node) {
+    if (node == null) {
+      return;
+    }
+    String rackName = node.getNetworkLocation();
+    String nodeName = node.getName();
+    String dataCenter = getDataCenter(rackName);
+    Set<String> nodes = rackMap.get(rackName);
+    boolean exist = nodes != null && nodes.contains(nodeName);
+    // Try to remove it.
+    super.interRemoveNodeWithEmptyRack(node);
+    if (exist) {
+      nodes = rackMap.get(rackName);
+      if (nodes == null || !nodes.contains(nodeName)) {
+        // Removed this node.
+        dataCenterNodes.merge(dataCenter, -1, Integer::sum);
+        // If there are no nodes left in the data center, remove it.
+        if (dataCenterNodes.get(dataCenter) == 0) {
+          dataCenterNodes.remove(dataCenter);
+        }
+
+        if (nodes == null || nodes.isEmpty()) {
+          // The rack is empty, remove this rack.
+          dataCenterRacks.merge(dataCenter, -1, Integer::sum);
+          // If there are no empty racks left in the data center, remove it.
+          if (dataCenterRacks.get(dataCenter) == 0) {
+            dataCenterRacks.remove(dataCenter);
+          }
+        }
+      }
+    }
+  }
+
+  public int getNumOfNonEmptyRacks(String dataCenter) {
+    return dataCenterRacks.getOrDefault(dataCenter, 0);
   }
 }

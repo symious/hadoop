@@ -112,12 +112,13 @@ public class NetworkTopology {
   /** rack counter */
   protected int numOfRacks = 0;
   /** empty rack map, rackname->nodenumber. */
-  private final HashMap<String, Set<String>> rackMap =
-      new HashMap<String, Set<String>>();
+  protected final HashMap<String, Set<String>> rackMap = new HashMap<>();
   /** decommission nodes, contained stoped nodes. */
   private final HashSet<String> decommissionNodes = new HashSet<>();
   /** empty rack counter. */
   private int numOfEmptyRacks = 0;
+  protected final HashMap<String, Integer> dataCenterRacks = new HashMap<>();
+  protected final HashMap<String, Integer> dataCenterNodes = new HashMap<>();
 
   /**
    * Whether or not this cluster has ever consisted of more than 1 rack,
@@ -1014,6 +1015,11 @@ public class NetworkTopology {
     return numOfRacks - numOfEmptyRacks;
   }
 
+  /** @return the number of nonempty racks */
+  public int getNumOfNonEmptyRacks(String dataCenter) {
+    return getNumOfNonEmptyRacks();
+  }
+
   /**
    * Update empty rack number when add a node like recommission.
    * @param node node to be added; can be null
@@ -1061,10 +1067,11 @@ public class NetworkTopology {
    * for add or recommission a node.
    * @param node node to be added; can be null
    */
-  private void interAddNodeWithEmptyRack(Node node) {
+  protected void interAddNodeWithEmptyRack(Node node) {
     if (node == null) {
       return;
     }
+
     String rackname = node.getNetworkLocation();
     Set<String> nodes = rackMap.get(rackname);
     if (nodes == null) {
@@ -1082,7 +1089,7 @@ public class NetworkTopology {
    * for remove or decommission a node.
    * @param node node to be removed; can be null
    */
-  private void interRemoveNodeWithEmptyRack(Node node) {
+  protected void interRemoveNodeWithEmptyRack(Node node) {
     if (node == null) {
       return;
     }
@@ -1111,5 +1118,13 @@ public class NetworkTopology {
     }
     numOfEmptyRacks = count;
     LOG.debug("Current numOfEmptyRacks is {}", numOfEmptyRacks);
+  }
+
+  public HashMap<String, Integer> getDataCenterNodes() {
+    return dataCenterNodes;
+  }
+
+  public HashMap<String, Integer> getDataCenterRacks() {
+    return dataCenterRacks;
   }
 }

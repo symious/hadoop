@@ -25,7 +25,6 @@ import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTest
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageType;
-import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.net.Node;
 
@@ -45,21 +44,9 @@ public class BlockPlacementPolicyWithDefaultFallbackDataCenter
   private String defaultDC;
   private String defaultScope = null;
 
-  @VisibleForTesting
-  public void setDefaultDC(String defaultDC) {
-    this.defaultDC = defaultDC;
-    this.defaultScope = "/" + defaultDC;
-  }
-
   @Override
   public void initialize(Configuration conf, FSClusterStats stats,
       NetworkTopology clusterMap, Host2NodesMap host2datanodeMap) {
-    if (clusterMap instanceof DFSNetworkTopologyWithDataCenter) {
-      this.dcClusterMap = (DFSNetworkTopologyWithDataCenter) clusterMap;
-    } else {
-      throw new IllegalArgumentException(this.getClass().getCanonicalName()
-             + " must work with DFSNetworkTopologyWithDataCenter!");
-    }
     this.defaultDC = conf.get(
         DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY,
         DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_DEFAULT);
@@ -110,5 +97,11 @@ public class BlockPlacementPolicyWithDefaultFallbackDataCenter
       // Rethrow if cannot fallback to default DC.
       throw e;
     }
+  }
+
+  @VisibleForTesting
+  public void setDefaultDC(String defaultDC) {
+    this.defaultDC = defaultDC;
+    this.defaultScope = "/" + defaultDC;
   }
 }

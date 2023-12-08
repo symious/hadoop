@@ -621,6 +621,13 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
       return chooseRandom(NodeBase.ROOT, excludedNodes, blocksize,
           maxNodesPerRack, results, avoidStaleNodes, storageTypes);
     }
+
+    // If the local machine is in the excludedNodes, return null.
+    // this avoids an unnecessary call to clusterMap.contains(localMachine) in subsequent logic,
+    // preventing potential performance issues.
+    if (excludedNodes.contains(localOrFavoredNode)) {
+      return null;
+    }
     if ((preferLocalNode || isFavoredNode)
         && localOrFavoredNode instanceof DatanodeDescriptor
         && clusterMap.contains(localOrFavoredNode)) {
