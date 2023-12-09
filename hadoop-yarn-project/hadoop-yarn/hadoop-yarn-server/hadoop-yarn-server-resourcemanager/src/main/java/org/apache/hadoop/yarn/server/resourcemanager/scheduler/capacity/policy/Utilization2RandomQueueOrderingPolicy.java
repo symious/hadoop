@@ -205,9 +205,14 @@ public class Utilization2RandomQueueOrderingPolicy
     this.reloadQueuesThreadCount = reloadQueuesThreadCount;
     this.cacheTimeout = cacheTime;
 
-    this.cache = CacheBuilder.newBuilder()
-        .refreshAfterWrite(cacheTimeout, TimeUnit.MILLISECONDS)
-        .build(new QueuesCacheLoader());
+    if (cacheTimeout > 0) {
+      this.cache = CacheBuilder.newBuilder()
+          .refreshAfterWrite(cacheTimeout, TimeUnit.MILLISECONDS)
+          .build(new QueuesCacheLoader());
+    } else {
+      this.cache = CacheBuilder.newBuilder().build(new QueuesCacheLoader());
+    }
+
   }
 
   @Override
@@ -225,6 +230,9 @@ public class Utilization2RandomQueueOrderingPolicy
 
     try {
       String key = parentQueuePath + "," + partition;
+      if (cacheTimeout <= 0) {
+        cache.refresh(key);
+      }
       List<List<CSQueue>> allQueues = cache.get(key);
       List<CSQueue> lowUtilizationQueues = allQueues.get(0);
       List<CSQueue> highUtilizationQueues = allQueues.get(1);
