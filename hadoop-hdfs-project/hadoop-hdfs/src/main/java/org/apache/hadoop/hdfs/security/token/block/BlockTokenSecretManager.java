@@ -75,7 +75,7 @@ public class BlockTokenSecretManager extends
   private long keyUpdateInterval;
   private volatile long tokenLifetime;
   private int serialNo;
-  private BlockKey currentKey;
+  private volatile BlockKey currentKey;
   private BlockKey nextKey;
   private final Map<Integer, BlockKey> allKeys;
   private String blockPoolId;
@@ -473,10 +473,7 @@ public class BlockTokenSecretManager extends
    */
   @Override
   protected byte[] createPassword(BlockTokenIdentifier identifier) {
-    BlockKey key = null;
-    synchronized (this) {
-      key = currentKey;
-    }
+    BlockKey key = currentKey;
     if (key == null) {
       throw new IllegalStateException("currentKey hasn't been initialized.");
     }
