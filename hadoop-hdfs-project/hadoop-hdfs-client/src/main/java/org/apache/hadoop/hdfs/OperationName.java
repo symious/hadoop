@@ -152,4 +152,5 @@ public class OperationName {
   public static String UPDATE_PIPELINE = "updatePipeline";
   public static String UNSET_ERASURE_CODING_POLICY = "unsetErasureCodingPolicy";
   public static String UNSET_STORAGE_POLICY = "unsetStoragePolicy";
+  public static String PROCESS_TIME_OUT_EXCESS_BLOCKS = "processTimeOutExcessBlocks";
 }

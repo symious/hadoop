@@ -45,6 +45,11 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_AL
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY;
@@ -763,5 +768,58 @@ public class TestNameNodeReconfigure {
     nameNode.reconfigureProperty(IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY,
         "20000");
     assertEquals(nnrs.getClientRpcServer().getLogSlowRPCThresholdTime(), 20000);
+  }
+
+  @Test
+  public void testReconfigureExcessRedundancyTimeoutCheckParameters()
+      throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode(0);
+    final BlockManager bm = nameNode.getNamesystem().getBlockManager();
+    // verify default value.
+    assertFalse(bm.isExcessRedundancyTimeoutCheckEnabled());
+
+    // try correct value.
+    nameNode.reconfigurePropertyImpl(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED,
+        "True");
+    assertTrue(bm.isExcessRedundancyTimeoutCheckEnabled());
+
+    // revert to defaults.
+    nameNode.reconfigurePropertyImpl(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED,
+        null);
+    assertFalse(bm.isExcessRedundancyTimeoutCheckEnabled());
+
+    // try invalid excessRedundancyTimeoutCheckLimit.
+    try {
+      nameNode.reconfigureProperty(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT,
+          "non-numeric");
+      fail("Should not reach here");
+    } catch (ReconfigurationException e) {
+      assertEquals("Could not change property " +
+          "dfs.namenode.excess.redundancy.timeout.check.limit from '"
+          + DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT_DEFAULT
+          + "' to 'non-numeric'", e.getMessage());
+    }
+
+    // try correct excessRedundancyTimeoutCheckLimit.
+    nameNode.reconfigureProperty(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT,
+        "20000");
+    assertEquals(bm.getExcessRedundancyTimeoutCheckLimit(), 20000);
+
+    // try invalid excessRedundancyTimeout.
+    try {
+      nameNode.reconfigureProperty(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY,
+          "non-numeric");
+      fail("Should not reach here");
+    } catch (ReconfigurationException e) {
+      assertEquals("Could not change property " +
+          "dfs.namenode.excess.redundancy.timeout-sec from '"
+          + DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_DEFAULT
+          + "' to 'non-numeric'", e.getMessage());
+    }
+
+    // try correct excessRedundancyTimeout.
+    nameNode.reconfigureProperty(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY,
+        "100");
+    assertEquals(bm.getExcessRedundancyTimeout(), 100 * 1000);
   }
 }

@@ -29,6 +29,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.server.namenode.Namesystem;
 import org.apache.hadoop.hdfs.server.protocol.StorageReport;
 import org.apache.hadoop.hdfs.server.protocol.VolumeFailureSummary;
@@ -251,14 +252,14 @@ class HeartbeatManager implements DatanodeStatistics {
         return;
       }
       // Remove blocks from excessRedundancyMap by datanode.
-      Collection<BlockInfo> excessBlocks = blockManager.removeBlocksFromExcessRedundancyMap(d);
+      Collection<Block> excessBlocks = blockManager.removeBlocksFromExcessRedundancyMap(d);
       // Remove blocks from invalidateBlocks in blockManager.
       blockManager.removeBlocksFromInvalidateBlocks(d);
       // Remove blocks from invalidateBlocks in datanode.
       d.clearInvalidateBlocks();
       // Add blocks into postponed queue, add excessBlocks != null to avoid the mock test UT failed.
       if (excessBlocks != null && !excessBlocks.isEmpty()) {
-        for (BlockInfo block : excessBlocks) {
+        for (Block block : excessBlocks) {
           blockManager.postponeBlock(block);
         }
       }

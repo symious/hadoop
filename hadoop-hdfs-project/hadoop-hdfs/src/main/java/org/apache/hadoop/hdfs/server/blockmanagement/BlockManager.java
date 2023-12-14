@@ -30,6 +30,7 @@ import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -49,6 +50,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import javax.management.ObjectName;
 
 import org.apache.hadoop.HadoopIllegalArgumentException;
@@ -59,6 +61,7 @@ import org.apache.hadoop.hdfs.AddBlockFlag;
 import org.apache.hadoop.fs.FileEncryptionInfo;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSUtilClient;
+import org.apache.hadoop.hdfs.OperationName;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
@@ -86,13 +89,14 @@ import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeStorageInfo.AddBloc
 import org.apache.hadoop.hdfs.server.blockmanagement.NumberReplicas.StoredReplicaState;
 import org.apache.hadoop.hdfs.server.blockmanagement.PendingDataNodeMessages.ReportedBlockInfo;
 import org.apache.hadoop.hdfs.server.blockmanagement.PendingReconstructionBlocks.PendingBlockInfo;
+import org.apache.hadoop.hdfs.server.blockmanagement.ExcessRedundancyMap.ExcessBlockInfo;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.BlockUCState;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.ReplicaState;
 import org.apache.hadoop.hdfs.server.namenode.CachedBlock;
+import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.INode.BlocksMapUpdateInfo;
 import org.apache.hadoop.hdfs.server.namenode.INodesInPath;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
-import org.apache.hadoop.hdfs.server.namenode.Namesystem;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAContext;
 import org.apache.hadoop.hdfs.server.namenode.metrics.NameNodeMetrics;
 import org.apache.hadoop.hdfs.server.namenode.sps.StoragePolicySatisfyManager;
@@ -174,7 +178,7 @@ public class BlockManager implements BlockStatsMXBean {
 
   private static final long BLOCK_RECOVERY_TIMEOUT_MULTIPLIER = 30;
 
-  private final Namesystem namesystem;
+  private final FSNamesystem namesystem;
 
   private final BlockManagerSafeMode bmSafeMode;
 
@@ -484,7 +488,22 @@ public class BlockManager implements BlockStatsMXBean {
   /** Invalidate redundant decommission replicas or not. */
   private volatile boolean deletingRedundantDCReplicas;
 
-  public BlockManager(final Namesystem namesystem, boolean haEnabled,
+  /**
+   * Timeout for excess redundancy block.
+   */
+  private volatile long excessRedundancyTimeout;
+
+  /**
+   * Limits number of blocks used to check for excess redundancy timeout.
+   */
+  private volatile long excessRedundancyTimeoutCheckLimit;
+
+  /**
+   * Whether to check for excess redundancy timeout.
+   */
+  private volatile boolean excessRedundancyTimeoutCheckEnabled;
+
+  public BlockManager(final FSNamesystem namesystem, boolean haEnabled,
       final Configuration conf) throws IOException {
     this.namesystem = namesystem;
     datanodeManager = new DatanodeManager(this, namesystem, conf);
@@ -641,6 +660,15 @@ public class BlockManager implements BlockStatsMXBean {
         conf.getBoolean(DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA,
             DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA_DEFAULT));
     setDelRedundantDataCenters(conf.get(DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS));
+
+    setExcessRedundancyTimeout(conf.getLong(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY,
+        DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_DEFAULT));
+    setExcessRedundancyTimeoutCheckLimit(conf.getLong(
+        DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT,
+        DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT_DEFAULT));
+    setExcessRedundancyTimeoutCheckEnabled(conf.getBoolean(
+        DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED,
+        DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED_DEFAULT));
 
     LOG.info("defaultReplication         = {}", defaultReplication);
     LOG.info("maxReplication             = {}", maxReplication);
@@ -1792,7 +1820,7 @@ public class BlockManager implements BlockStatsMXBean {
   }
 
   /** Remove the blocks to the given DatanodeDescriptor from excessRedundancyMap. */
-  LightWeightHashSet<BlockInfo> removeBlocksFromExcessRedundancyMap(
+  LightWeightHashSet<Block> removeBlocksFromExcessRedundancyMap(
       final DatanodeDescriptor node) {
     assert namesystem.hasWriteLock();
     return excessRedundancyMap.remove(node);
@@ -3024,7 +3052,73 @@ public class BlockManager implements BlockStatsMXBean {
           (Time.monotonicNow() - startTime), endSize, (startSize - endSize));
     }
   }
-  
+
+  /**
+   * Process timed-out blocks in the excess redundancy map.
+   */
+  void processTimedOutExcessBlocks() {
+    if (excessRedundancyMap.size() == 0 || !excessRedundancyTimeoutCheckEnabled) {
+      return;
+    }
+    namesystem.writeLock(OperationName.PROCESS_TIME_OUT_EXCESS_BLOCKS);
+    long now = Time.monotonicNow();
+    int processed = 0;
+    try {
+      Iterator<Map.Entry<String, LightWeightHashSet<Block>>> iter =
+          excessRedundancyMap.getExcessRedundancyMap().entrySet().iterator();
+      while (iter.hasNext() && processed < excessRedundancyTimeoutCheckLimit) {
+        Map.Entry<String, LightWeightHashSet<Block>> entry = iter.next();
+        String datanodeUuid = entry.getKey();
+        LightWeightHashSet<Block> blocks = entry.getValue();
+        // Sort blocks by timestamp in descending order.
+        List<ExcessBlockInfo> sortedBlocks = blocks.stream()
+            .filter(block -> block instanceof ExcessBlockInfo)
+            .map(block -> (ExcessBlockInfo) block)
+            .sorted(Comparator.comparingLong(ExcessBlockInfo::getTimeStamp))
+            .collect(Collectors.toList());
+
+        for (ExcessBlockInfo excessBlockInfo : sortedBlocks) {
+          if (processed >= excessRedundancyTimeoutCheckLimit) {
+            break;
+          }
+
+          processed++;
+          // If the datanode doesn't have any excess block that has exceeded the timeout,
+          // can exit this loop.
+          if (now <= excessBlockInfo.getTimeStamp() + excessRedundancyTimeout) {
+            break;
+          }
+
+          BlockInfo blockInfo = excessBlockInfo.getBlockInfo();
+          BlockInfo bi = blocksMap.getStoredBlock(blockInfo);
+          if (bi == null || bi.isDeleted()) {
+            continue;
+          }
+
+          Iterator<DatanodeStorageInfo> iterator = blockInfo.getStorageInfos();
+          while (iterator.hasNext()) {
+            DatanodeStorageInfo datanodeStorageInfo = iterator.next();
+            DatanodeDescriptor datanodeDescriptor = datanodeStorageInfo.getDatanodeDescriptor();
+            if (datanodeDescriptor.getDatanodeUuid().equals(datanodeUuid) &&
+                datanodeStorageInfo.getState().equals(State.NORMAL)) {
+              final Block b = getBlockOnStorage(blockInfo, datanodeStorageInfo);
+              if (!containsInvalidateBlock(datanodeDescriptor, b)) {
+                addToInvalidates(b, datanodeDescriptor);
+                LOG.debug("Excess block timeout ({}, {}) is added to invalidated.",
+                    b, datanodeDescriptor);
+              }
+              excessBlockInfo.resetTimeStamp();
+              break;
+            }
+          }
+        }
+      }
+    } finally {
+      namesystem.writeUnlock(OperationName.PROCESS_TIME_OUT_EXCESS_BLOCKS);
+      LOG.info("processTimedOutExcessBlocks {} msecs.", (Time.monotonicNow() - now));
+    }
+  }
+
   Collection<Block> processReport(
       final DatanodeStorageInfo storageInfo,
       final BlockListAsLongs report) throws IOException {
@@ -5342,6 +5436,7 @@ public class BlockManager implements BlockStatsMXBean {
             computeDatanodeWork();
             processPendingReconstructions();
             rescanPostponedMisreplicatedBlocks();
+            processTimedOutExcessBlocks();
             lastRedundancyCycleTS.set(Time.monotonicNow());
           }
           TimeUnit.MILLISECONDS.sleep(redundancyRecheckIntervalMs);
@@ -5858,5 +5953,52 @@ public class BlockManager implements BlockStatsMXBean {
   @VisibleForTesting
   public int getMinBlocksForWrite(BlockType blockType) {
     return placementPolicies.getPolicy(blockType).getMinBlocksForWrite();
+  }
+
+  /**
+   * Sets the timeout (in seconds) for excess redundancy blocks, if the provided timeout is
+   * less than or equal to 0, the default value is used (converted to milliseconds).
+   * @param timeout The time (in seconds) to set as the excess redundancy block timeout.
+   */
+  public void setExcessRedundancyTimeout(long timeout) {
+    if (timeout <= 0) {
+      this.excessRedundancyTimeout = DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_DEFAULT * 1000L;
+    } else {
+      this.excessRedundancyTimeout = timeout * 1000L;
+    }
+  }
+
+  /**
+   * Sets the limit number of blocks for checking excess redundancy timeout.
+   * If the provided limit is less than or equal to 0, the default limit is used.
+   *
+   * @param limit The limit number of blocks used to check for excess redundancy timeout.
+   */
+  public void setExcessRedundancyTimeoutCheckLimit(long limit) {
+    if (excessRedundancyTimeoutCheckLimit <= 0) {
+      this.excessRedundancyTimeoutCheckLimit =
+          DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT_DEFAULT;
+    } else {
+      this.excessRedundancyTimeoutCheckLimit = limit;
+    }
+  }
+
+  public void setExcessRedundancyTimeoutCheckEnabled(boolean value) {
+    this.excessRedundancyTimeoutCheckEnabled = value;
+  }
+
+  @VisibleForTesting
+  public long getExcessRedundancyTimeout() {
+    return excessRedundancyTimeout;
+  }
+
+  @VisibleForTesting
+  public long getExcessRedundancyTimeoutCheckLimit() {
+    return excessRedundancyTimeoutCheckLimit;
+  }
+
+  @VisibleForTesting
+  public boolean isExcessRedundancyTimeoutCheckEnabled() {
+    return excessRedundancyTimeoutCheckEnabled;
   }
 }

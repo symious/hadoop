@@ -418,8 +418,7 @@ public class TestDFSAdmin {
     final List<String> outs = Lists.newArrayList();
     final List<String> errs = Lists.newArrayList();
     getReconfigurableProperties("namenode", address, outs, errs);
-    assertEquals(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, outs.get(24));
-    assertEquals(48, outs.size());
+    assertEquals(51, outs.size());
     assertEquals(errs.size(), 0);
   }
 

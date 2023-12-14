@@ -21,8 +21,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.util.LightWeightHashSet;
+import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -35,7 +37,7 @@ import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTest
 class ExcessRedundancyMap {
   public static final Logger blockLog = NameNode.blockStateChangeLog;
 
-  private final Map<String, LightWeightHashSet<BlockInfo>> map =new HashMap<>();
+  private final Map<String, LightWeightHashSet<Block>> map =new HashMap<>();
   private final AtomicLong size = new AtomicLong(0L);
 
   /**
@@ -50,7 +52,7 @@ class ExcessRedundancyMap {
    */
   @VisibleForTesting
   synchronized int getSize4Testing(String dnUuid) {
-    final LightWeightHashSet<BlockInfo> set = map.get(dnUuid);
+    final LightWeightHashSet<Block> set = map.get(dnUuid);
     return set == null? 0: set.size();
   }
 
@@ -64,14 +66,14 @@ class ExcessRedundancyMap {
    *         datanode and the given block?
    */
   synchronized boolean contains(DatanodeDescriptor dn, BlockInfo blk) {
-    final LightWeightHashSet<BlockInfo> set = map.get(dn.getDatanodeUuid());
+    final LightWeightHashSet<Block> set = map.get(dn.getDatanodeUuid());
     return set != null && set.contains(blk);
   }
 
   synchronized boolean containsWithGSCheck(DatanodeDescriptor dn, BlockInfo blk) {
-    final LightWeightHashSet<BlockInfo> set = map.get(dn.getDatanodeUuid());
+    final LightWeightHashSet<Block> set = map.get(dn.getDatanodeUuid());
     if (set != null) {
-      BlockInfo excessBlock = set.getElement(blk);
+      Block excessBlock = set.getElement(blk);
       if (excessBlock == null) {
         return false;
       } else {
@@ -89,12 +91,12 @@ class ExcessRedundancyMap {
    * @return true if the block is added.
    */
   synchronized boolean add(DatanodeDescriptor dn, BlockInfo blk) {
-    LightWeightHashSet<BlockInfo> set = map.get(dn.getDatanodeUuid());
+    LightWeightHashSet<Block> set = map.get(dn.getDatanodeUuid());
     if (set == null) {
       set = new LightWeightHashSet<>();
       map.put(dn.getDatanodeUuid(), set);
     }
-    final boolean added = set.add(blk);
+    final boolean added = set.add(new ExcessBlockInfo(blk));
     if (added) {
       size.incrementAndGet();
       blockLog.debug("BLOCK* ExcessRedundancyMap.add({}, {})", dn, blk);
@@ -109,7 +111,7 @@ class ExcessRedundancyMap {
    * @return true if the block is removed.
    */
   synchronized boolean remove(DatanodeDescriptor dn, BlockInfo blk) {
-    final LightWeightHashSet<BlockInfo> set = map.get(dn.getDatanodeUuid());
+    final LightWeightHashSet<Block> set = map.get(dn.getDatanodeUuid());
     if (set == null) {
       return false;
     }
@@ -131,13 +133,54 @@ class ExcessRedundancyMap {
    *
    * @return the block list of redundancies corresponding to the given datanode.
    */
-  synchronized LightWeightHashSet<BlockInfo> remove(DatanodeDescriptor dn) {
-    final LightWeightHashSet<BlockInfo> set = map.remove(dn.getDatanodeUuid());
+  synchronized LightWeightHashSet<Block> remove(DatanodeDescriptor dn) {
+    final LightWeightHashSet<Block> set = map.remove(dn.getDatanodeUuid());
     if (set == null) {
       return new LightWeightHashSet<>();
     }
     size.addAndGet(set.size() * -1);
     blockLog.debug("BLOCK* ExcessRedundancyMap.remove {}", dn);
     return set;
+  }
+
+  Map<String, LightWeightHashSet<Block>> getExcessRedundancyMap() {
+    return map;
+  }
+
+  /**
+   * An object that contains information about a block that is being excess redundancy.
+   * It records the timestamp when added excess redundancy map of this block.
+   */
+  static class ExcessBlockInfo extends Block {
+    private long timeStamp;
+    private final BlockInfo blockInfo;
+
+    ExcessBlockInfo(BlockInfo blockInfo) {
+      super(blockInfo.getBlockId(), blockInfo.getNumBytes(), blockInfo.getGenerationStamp());
+      this.timeStamp = Time.monotonicNow();
+      this.blockInfo = blockInfo;
+    }
+
+    public BlockInfo getBlockInfo() {
+      return blockInfo;
+    }
+
+    long getTimeStamp() {
+      return timeStamp;
+    }
+
+    void resetTimeStamp() {
+      timeStamp = Time.monotonicNow();
+    }
+
+    @Override
+    public int hashCode() {
+      return super.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      return super.equals(obj);
+    }
   }
 }

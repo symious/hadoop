@@ -161,6 +161,12 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DELETE_REDUNDANT
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MSYNC_RPC_BIND_HOST_KEY;
@@ -439,7 +445,10 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_START_MISSING_BLOCK_SCANNER_KEY,
           DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY,
           IPC_SERVER_LOG_SLOW_RPC,
-          IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY));
+          IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY,
+          DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY,
+          DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT,
+          DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2517,6 +2526,10 @@ public class NameNode extends ReconfigurableBase implements
     } else if (property.equals(IPC_SERVER_LOG_SLOW_RPC) ||
         (property.equals(IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY))) {
       return reconfigureLogSlowRPC(property, newVal);
+    } else if (property.equals(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED) ||
+        property.equals(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT) ||
+        property.equals(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY)) {
+      return reconfigureExcessRedundancyTimeoutCheckParameters(property, newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -3169,6 +3182,47 @@ public class NameNode extends ReconfigurableBase implements
       return result;
     } catch (IllegalArgumentException e) {
       throw new ReconfigurationException(property, newVal, getConf().get(property), e);
+    }
+  }
+
+  String reconfigureExcessRedundancyTimeoutCheckParameters(final String property,
+      final String newVal) throws ReconfigurationException {
+    BlockManager bm = namesystem.getBlockManager();
+    namesystem.writeLock();
+    String result = null;
+    try {
+      switch (property) {
+      case DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED: {
+        boolean enable = (newVal == null ?
+            DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED_DEFAULT :
+            Boolean.parseBoolean(newVal));
+        result = Boolean.toString(enable);
+        bm.setExcessRedundancyTimeoutCheckEnabled(enable);
+        break;
+      }
+      case DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT: {
+        long value = (newVal == null ?
+            DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT_DEFAULT :
+            Long.parseLong(newVal));
+        bm.setExcessRedundancyTimeoutCheckLimit(value);
+        result = Long.toString(value);
+        break;
+      }
+      case DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY: {
+        long value = (newVal == null ?
+            DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_DEFAULT :
+            Long.parseLong(newVal));
+        bm.setExcessRedundancyTimeout(value);
+        result = Long.toString(value);
+        break;
+      }
+      }
+      LOG.info("RECONFIGURE* changed {} to {}", property, newVal);
+      return result;
+    } catch (IllegalArgumentException e) {
+      throw new ReconfigurationException(property, newVal, getConf().get(property), e);
+    } finally {
+      namesystem.writeUnlock();
     }
   }
 
