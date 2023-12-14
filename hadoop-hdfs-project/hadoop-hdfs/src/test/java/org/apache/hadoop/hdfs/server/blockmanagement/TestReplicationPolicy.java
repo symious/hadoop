@@ -1451,7 +1451,7 @@ public class TestReplicationPolicy extends BaseReplicationPolicyTest {
   public void
       testConvertLastBlockToUnderConstructionDoesNotCauseSkippedReplication()
           throws IOException {
-    Namesystem mockNS = mock(Namesystem.class);
+    FSNamesystem mockNS = mock(FSNamesystem.class);
     when(mockNS.hasWriteLock()).thenReturn(true);
 
     BlockManager bm = new BlockManager(mockNS, false, new HdfsConfiguration());
@@ -1523,7 +1523,7 @@ public class TestReplicationPolicy extends BaseReplicationPolicyTest {
   @Test(timeout = 60000)
   public void testupdateNeededReplicationsDoesNotCauseSkippedReplication()
       throws IOException {
-    Namesystem mockNS = mock(Namesystem.class);
+    FSNamesystem mockNS = mock(FSNamesystem.class);
     when(mockNS.hasReadLock()).thenReturn(true);
 
     BlockManager bm = new BlockManager(mockNS, false, new HdfsConfiguration());
