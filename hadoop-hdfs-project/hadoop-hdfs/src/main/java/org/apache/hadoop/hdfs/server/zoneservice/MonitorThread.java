@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice;
 
-import com.google.common.collect.Maps;
+import org.apache.hadoop.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
