@@ -486,25 +486,27 @@ public class DataNodeMetrics {
       names.add(localHostAddress);
       names.add(remoteHostAddress);
       List<String> racks = dnsToSwitchMapping.resolve(names);
-      String localLocation = racks.get(0);
-      String remoteLocation = racks.get(1);
-      // locality: rack-local
-      if (localLocation.equals(remoteLocation)) {
-        writesFromLocalRack.incr();
-        localRackBytesWritten.incr(size);
-        return;
-      }
+      if (racks != null && racks.size() == names.size()) {
+        String localLocation = racks.get(0);
+        String remoteLocation = racks.get(1);
+        // locality: rack-local
+        if (localLocation.equals(remoteLocation)) {
+          writesFromLocalRack.incr();
+          localRackBytesWritten.incr(size);
+          return;
+        }
 
-      // locality: datacenter-local
-      if (DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation).equals(
-          DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation))) {
-        writesFromLocalDataCenter.incr();
-        localDataCenterBytesWritten.incr(size);
-        return;
+        // locality: datacenter-local
+        if (DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation).equals(
+            DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation))) {
+          writesFromLocalDataCenter.incr();
+          localDataCenterBytesWritten.incr(size);
+          return;
+        }
+        // locality: datacenter-off
+        writesFromRemoteDataCenter.incr();
+        remoteDataCenterBytesWritten.incr(size);
       }
-      // locality: datacenter-off
-      writesFromRemoteDataCenter.incr();
-      remoteDataCenterBytesWritten.incr(size);
     }
   }
 
@@ -536,29 +538,31 @@ public class DataNodeMetrics {
       names.add(localHostAddress);
       names.add(remoteHostAddress);
       List<String> racks = dnsToSwitchMapping.resolve(names);
-      String localLocation = racks.get(0);
-      String remoteLocation = racks.get(1);
-      // locality: rack-local
-      if (localLocation.equals(remoteLocation)) {
-        readsFromLocalRack.incr();
-        localRackBytesRead.incr(size);
-        return;
+      if (racks != null && racks.size() == names.size()) {
+        String localLocation = racks.get(0);
+        String remoteLocation = racks.get(1);
+        // locality: rack-local
+        if (localLocation.equals(remoteLocation)) {
+          readsFromLocalRack.incr();
+          localRackBytesRead.incr(size);
+          return;
+        }
+
+        // locality: datacenter-local
+        String localDC = DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation);
+        String remoteDC = DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation);
+        if (localDC.equals(remoteDC)) {
+          readsFromLocalDataCenter.incr();
+          localDataCenterBytesRead.incr(size);
+          return;
+        }
+
+        // locality: datacenter-off
+        readsFromRemoteDataCenter.incr();
+        remoteDataCenterBytesRead.incr(size);
+
+        incrCrossDCTraffic(remoteDC, localDC, true, size);
       }
-
-      // locality: datacenter-local
-      String localDC = DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation);
-      String remoteDC = DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation);
-      if (localDC.equals(remoteDC)) {
-        readsFromLocalDataCenter.incr();
-        localDataCenterBytesRead.incr(size);
-        return;
-      }
-
-      // locality: datacenter-off
-      readsFromRemoteDataCenter.incr();
-      remoteDataCenterBytesRead.incr(size);
-
-      incrCrossDCTraffic(remoteDC, localDC, true, size);
     }
   }
 

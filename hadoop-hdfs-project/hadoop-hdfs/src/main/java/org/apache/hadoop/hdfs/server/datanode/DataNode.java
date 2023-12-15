@@ -1138,14 +1138,18 @@ public class DataNode extends ReconfigurableBase
       hosts.add(remoteHost);
       List<String> topologies = this.switchMapping.resolve(hosts);
       LOG.debug("Topology of {} is {}.", hosts, topologies);
-      String localDC = DFSNetworkTopologyWithDataCenter.getDataCenter(topologies.get(0));
-      String remoteDC = DFSNetworkTopologyWithDataCenter.getDataCenter(topologies.get(1));
-      LOG.debug("LocalDC is {} and remoteDC is {}.", localDC, remoteDC);
+      if (topologies != null && topologies.size() == hosts.size()) {
+        String localDC = DFSNetworkTopologyWithDataCenter.getDataCenter(topologies.get(0));
+        String remoteDC = DFSNetworkTopologyWithDataCenter.getDataCenter(topologies.get(1));
+        LOG.debug("LocalDC is {} and remoteDC is {}.", localDC, remoteDC);
 
-      String trafficInOrOut = localIsTrafficOut ? "out" : "in";
+        String trafficInOrOut = localIsTrafficOut ? "out" : "in";
 
-      this.auditLogger.logAuditEvent(remoteHost, remotePort, remoteDC, cmd, blockInfo,
-          trafficSize, trafficInOrOut, localDC, !localDC.equals(remoteDC));
+        this.auditLogger.logAuditEvent(remoteHost, remotePort, remoteDC, cmd, blockInfo,
+            trafficSize, trafficInOrOut, localDC, !localDC.equals(remoteDC));
+      } else {
+        LOG.warn("Topologies is null, please check topology-mapping.csv and topology_script.py");
+      }
     }
   }
 
@@ -4647,9 +4651,13 @@ public class DataNode extends ReconfigurableBase
     hosts.add(remoteHost);
     List<String> topologies = this.switchMapping.resolve(hosts);
 
-    String localDC = DFSNetworkTopologyWithDataCenter.getDataCenter(topologies.get(0));
-    String remoteDC = DFSNetworkTopologyWithDataCenter.getDataCenter(topologies.get(1));
-
-    return !localDC.equals(remoteDC);
+    if (topologies != null && topologies.size() == hosts.size()) {
+      String localDC = DFSNetworkTopologyWithDataCenter.getDataCenter(topologies.get(0));
+      String remoteDC = DFSNetworkTopologyWithDataCenter.getDataCenter(topologies.get(1));
+      return !localDC.equals(remoteDC);
+    } else {
+      LOG.warn("Topologies is null, please check topology-mapping.csv and topology_script.py");
+    }
+    return false;
   }
 }
