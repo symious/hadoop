@@ -279,6 +279,10 @@ final class FSDirTruncateOp {
           uc, uc.getTruncateBlock().getNumBytes());
     }
     if (shouldRecoverNow) {
+      boolean added = blockManager.addBlockRecoveryAttempt(truncatedBlockUC);
+      if (!added) {
+        throw new IOException("The " + truncatedBlockUC + " may be recovering right now");
+      }
       truncatedBlockUC.getUnderConstructionFeature().initializeBlockRecovery(
           truncatedBlockUC, newBlock.getGenerationStamp(), true);
     }
