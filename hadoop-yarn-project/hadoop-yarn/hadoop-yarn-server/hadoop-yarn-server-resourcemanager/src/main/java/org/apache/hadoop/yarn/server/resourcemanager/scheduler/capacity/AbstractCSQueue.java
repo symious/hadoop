@@ -1316,9 +1316,20 @@ public abstract class AbstractCSQueue implements CSQueue {
    * schedulingMode.
    */
   boolean hasPendingResourceRequest(String nodePartition,
-      Resource cluster, SchedulingMode schedulingMode) {
-    return SchedulerUtils.hasPendingResourceRequest(resourceCalculator,
-        queueUsage, nodePartition, cluster, schedulingMode);
+      Resource cluster, SchedulingMode schedulingMode,
+      Set<String> otherLookupPartitions) {
+    if (SchedulerUtils.hasPendingResourceRequest(resourceCalculator,
+        queueUsage, nodePartition, cluster, schedulingMode)) {
+      return true;
+    } else {
+      for (String otherPartition : otherLookupPartitions) {
+        if (SchedulerUtils.hasPendingResourceRequest(resourceCalculator,
+            queueUsage, otherPartition, cluster, schedulingMode)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   public boolean accessibleToPartition(String nodePartition) {

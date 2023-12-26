@@ -35,6 +35,8 @@ import java.util.stream.Collectors;
 
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.placement.CandidateNodeSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -824,13 +826,14 @@ public class AppSchedulingInfo {
    */
   public boolean precheckNode(SchedulerRequestKey schedulerKey,
       SchedulerNode schedulerNode, SchedulingMode schedulingMode,
-      Optional<DiagnosticsCollector> dcOpt) {
+      Optional<DiagnosticsCollector> dcOpt,
+      CandidateNodeSet<FiCaSchedulerNode> candidates) {
     this.readLock.lock();
     try {
       AppPlacementAllocator ap =
           schedulerKeyToAppPlacementAllocator.get(schedulerKey);
       return (ap != null) && (ap.getPlacementAttempt() < retryAttempts) &&
-          ap.precheckNode(schedulerNode, schedulingMode, dcOpt);
+          ap.precheckNode(schedulerNode, schedulingMode, dcOpt, candidates);
     } finally {
       this.readLock.unlock();
     }

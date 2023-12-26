@@ -1243,7 +1243,7 @@ public class LeafQueue extends AbstractCSQueue {
     // Check if this queue need more resource, simply skip allocation if this
     // queue doesn't need more resources.
     if (!hasPendingResourceRequest(candidates.getPartition(), clusterResource,
-        schedulingMode)) {
+        schedulingMode, candidates.getOtherLookupPartitions())) {
       if (LOG.isDebugEnabled()) {
         LOG.debug("Skip this queue=" + getQueuePath()
             + ", because it doesn't need more resource, schedulingMode="

@@ -75,6 +75,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -1267,7 +1268,7 @@ public class TestCapacitySchedulerAsyncScheduling {
     // make sure unconfirmed resource is decreased correctly
     Assert.assertTrue(spyCs.getApplicationAttempt(am1.getApplicationAttemptId())
         .hasPendingResourceRequest(RMNodeLabelsManager.NO_LABEL,
-            SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY));
+            SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY, new HashSet<>()));
 
     // allocation on nm2,
     // test return null when get scheduler container to release
@@ -1277,7 +1278,7 @@ public class TestCapacitySchedulerAsyncScheduling {
     // make sure unconfirmed resource is decreased correctly
     Assert.assertTrue(spyCs.getApplicationAttempt(am1.getApplicationAttemptId())
         .hasPendingResourceRequest(RMNodeLabelsManager.NO_LABEL,
-            SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY));
+            SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY, new HashSet<>()));
 
     rm.stop();
   }

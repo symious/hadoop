@@ -1316,15 +1316,8 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
   public Set<String> getBlacklistedNodes() {
     return this.appSchedulingInfo.getBlackListCopy();
   }
-  
-  @Private
-  public boolean hasPendingResourceRequest(String nodePartition,
-      SchedulingMode schedulingMode) {
-    // We need to consider unconfirmed allocations
-    if (schedulingMode == SchedulingMode.IGNORE_PARTITION_EXCLUSIVITY) {
-      nodePartition = RMNodeLabelsManager.NO_LABEL;
-    }
 
+  private Resource getPartitionPendingResource(String nodePartition){
     Resource pending = attemptResourceUsage.getPending(nodePartition);
 
     // TODO, need consider node partition here
@@ -1335,8 +1328,27 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
           .createResource(unconfirmedAllocatedMem.get(),
               unconfirmedAllocatedVcores.get()));
     }
+    return pending;
+  }
 
-    return !Resources.isNone(pending);
+  @Private
+  public boolean hasPendingResourceRequest(String nodePartition,
+      SchedulingMode schedulingMode, Set<String> otherPartitions) {
+    // We need to consider unconfirmed allocations
+    if (schedulingMode == SchedulingMode.IGNORE_PARTITION_EXCLUSIVITY) {
+      nodePartition = RMNodeLabelsManager.NO_LABEL;
+    }
+
+    Resource pending = getPartitionPendingResource(nodePartition);
+
+    if (!Resources.isNone(pending)) {
+      return true;
+    } else {
+      for (String otherPartition : otherPartitions) {
+        return !Resources.isNone(getPartitionPendingResource(otherPartition));
+      }
+    }
+    return false;
   }
 
   /*

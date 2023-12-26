@@ -28,6 +28,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.SchedulingMode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.ContainerRequest;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.PendingAsk;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode;
 import org.apache.hadoop.yarn.server.scheduler.SchedulerRequestKey;
 
 import java.util.Collection;
@@ -155,14 +156,14 @@ public abstract class AppPlacementAllocator<N extends SchedulerNode> {
    * @param schedulerNode schedulerNode
    * @param schedulingMode schedulingMode
    * @param dcOpt optional diagnostics collector
+   * @param candidates candidates node
    * @return accepted/not
    */
-  public abstract boolean precheckNode(SchedulerNode schedulerNode,
-      SchedulingMode schedulingMode,
-      Optional<DiagnosticsCollector> dcOpt);
 
   public abstract boolean precheckNode(SchedulerNode schedulerNode,
-      SchedulingMode schedulingMode);
+      SchedulingMode schedulingMode,
+      Optional<DiagnosticsCollector> dcOpt,
+      CandidateNodeSet<FiCaSchedulerNode> candidates);
 
   /**
    * It is possible that one request can accept multiple node partition,

@@ -574,7 +574,8 @@ public class ParentQueue extends AbstractCSQueue {
     // Check if this queue need more resource, simply skip allocation if this
     // queue doesn't need more resources.
     if (!super.hasPendingResourceRequest(candidates.getPartition(),
-        clusterResource, schedulingMode)) {
+        clusterResource, schedulingMode,
+        candidates.getOtherLookupPartitions())) {
       if (LOG.isDebugEnabled()) {
         long now = System.currentTimeMillis();
         // Do logging every 1 sec to avoid excessive logging.

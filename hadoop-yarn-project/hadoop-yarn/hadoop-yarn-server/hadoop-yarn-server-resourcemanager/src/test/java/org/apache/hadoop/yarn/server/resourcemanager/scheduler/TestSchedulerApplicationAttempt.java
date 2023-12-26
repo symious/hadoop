@@ -25,6 +25,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -412,29 +413,30 @@ public class TestSchedulerApplicationAttempt {
     app.updateResourceRequests(requests);
 
     assertTrue("Reported no pending resource requests for no label when "
-        + "resource requests for no label are pending (exclusive partitions)",
+            + "resource requests for no label are pending (exclusive partitions)",
         app.hasPendingResourceRequest("",
-            SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY));
+            SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY, new HashSet<>()));
     assertTrue("Reported no pending resource requests for label with pending "
-        + "resource requests (exclusive partitions)",
+            + "resource requests (exclusive partitions)",
         app.hasPendingResourceRequest("label1",
-            SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY));
+            SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY,
+            new HashSet<>()));
     assertFalse("Reported pending resource requests for label with no pending "
-        + "resource requests (exclusive partitions)",
+            + "resource requests (exclusive partitions)",
         app.hasPendingResourceRequest("label2",
-            SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY));
+            SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY, new HashSet<>()));
 
     assertTrue("Reported no pending resource requests for no label when "
-        + "resource requests for no label are pending (relaxed partitions)",
+            + "resource requests for no label are pending (relaxed partitions)",
         app.hasPendingResourceRequest("",
-            SchedulingMode.IGNORE_PARTITION_EXCLUSIVITY));
+            SchedulingMode.IGNORE_PARTITION_EXCLUSIVITY, new HashSet<>()));
     assertTrue("Reported no pending resource requests for label with pending "
-        + "resource requests (relaxed partitions)",
+            + "resource requests (relaxed partitions)",
         app.hasPendingResourceRequest("label1",
-            SchedulingMode.IGNORE_PARTITION_EXCLUSIVITY));
+            SchedulingMode.IGNORE_PARTITION_EXCLUSIVITY, new HashSet<>()));
     assertTrue("Reported no pending resource requests for label with no "
-        + "pending resource requests (relaxed partitions)",
+            + "pending resource requests (relaxed partitions)",
         app.hasPendingResourceRequest("label2",
-            SchedulingMode.IGNORE_PARTITION_EXCLUSIVITY));
+            SchedulingMode.IGNORE_PARTITION_EXCLUSIVITY, new HashSet<>()));
   }
 }

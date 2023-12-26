@@ -24,7 +24,9 @@ import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNode;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A simple CandidateNodeSet which keeps an unordered map
@@ -34,6 +36,7 @@ public class SimpleCandidateNodeSet<N extends SchedulerNode>
 
   private Map<NodeId, N> map;
   private String partition;
+  private Set<String> otherLookupPartitions = new HashSet<>();
 
   public SimpleCandidateNodeSet(N node) {
     if (null != node) {
@@ -51,6 +54,26 @@ public class SimpleCandidateNodeSet<N extends SchedulerNode>
     this.partition = partition;
   }
 
+  public SimpleCandidateNodeSet(N node, Set<String> otherLookupPartitions) {
+    if (null != node) {
+      // Only one node in the initial CandidateNodeSet
+      this.map = ImmutableMap.of(node.getNodeID(), node);
+      this.partition = node.getPartition();
+      this.otherLookupPartitions = otherLookupPartitions;
+    } else {
+      this.map = Collections.emptyMap();
+      this.partition = NodeLabel.DEFAULT_NODE_LABEL_PARTITION;
+      this.otherLookupPartitions = new HashSet<>();
+    }
+  }
+
+  public SimpleCandidateNodeSet(Map<NodeId, N> map, String partition,
+      Set<String> otherLookupPartitions) {
+    this.map = map;
+    this.partition = partition;
+    this.otherLookupPartitions = otherLookupPartitions;
+  }
+
   @Override
   public Map<NodeId, N> getAllNodes() {
     return map;
@@ -65,4 +88,10 @@ public class SimpleCandidateNodeSet<N extends SchedulerNode>
   public String getPartition() {
     return partition;
   }
+
+  @Override
+  public Set<String> getOtherLookupPartitions() {
+    return this.otherLookupPartitions;
+  }
+
 }

@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -33,6 +34,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -203,6 +205,9 @@ public class CapacityScheduler extends
   private int maxAssignPerHeartbeat;
 
   private int maxPendingCountOnMultiLabel;
+
+  private String[] crossLabelSrcs;
+  private Map<String, Set<String>> crossLabelsConfigMap;
 
   private CSConfigurationProvider csConfProvider;
 
@@ -394,6 +399,9 @@ public class CapacityScheduler extends
 
       this.maxPendingCountOnMultiLabel = this.conf.getMaxPendingCountOnMultiLabel();
 
+      this.crossLabelSrcs = this.conf.getCrossLabelSrcs();
+      this.crossLabelsConfigMap = getNewCrossLabels();
+
       // number of threads for async scheduling
       int maxAsyncSchedulingThreads = this.conf.getInt(
           CapacitySchedulerConfiguration.SCHEDULE_ASYNCHRONOUSLY_MAXIMUM_THREAD,
@@ -560,6 +568,9 @@ public class CapacityScheduler extends
             "offswitchPerHeartbeatLimit = " + offswitchPerHeartbeatLimit);
 
         this.maxPendingCountOnMultiLabel = this.conf.getMaxPendingCountOnMultiLabel();
+
+        this.crossLabelSrcs = this.conf.getCrossLabelSrcs();
+        this.crossLabelsConfigMap = getNewCrossLabels();
 
         this.multipleSchedulersParallelly = this.conf.getMultipleSchedulersParallelly();
 
@@ -1804,8 +1815,7 @@ public class CapacityScheduler extends
 
     if (!nodesByPartition.isEmpty()) {
       candidates = new SimpleCandidateNodeSet<FiCaSchedulerNode>(
-
-          nodesByPartition, partition);
+          nodesByPartition, partition, getCrossLabelsByName(partition));
     }
     return candidates;
   }
@@ -1813,14 +1823,16 @@ public class CapacityScheduler extends
   private CandidateNodeSet<FiCaSchedulerNode> getCandidateNodeSet(
       FiCaSchedulerNode node, boolean withNodeHeartbeat) {
     CandidateNodeSet<FiCaSchedulerNode> candidates = null;
-    candidates = new SimpleCandidateNodeSet<>(node);
+    candidates = new SimpleCandidateNodeSet<>(node,
+        getCrossLabelsByName(node.getPartition()));
     if (multiNodePlacementEnabled &&
         (multiNodeForHeartBeatEnabled || !withNodeHeartbeat)) {
       Map<NodeId, FiCaSchedulerNode> nodesByPartition =
           getNodesHeartbeated(node.getPartition(), withNodeHeartbeat);
       if (!nodesByPartition.isEmpty()) {
         candidates = new SimpleCandidateNodeSet<FiCaSchedulerNode>(
-            nodesByPartition, node.getPartition());
+            nodesByPartition, node.getPartition(),
+            getCrossLabelsByName(node.getPartition()));
       }
     }
     return candidates;
@@ -1970,7 +1982,8 @@ public class CapacityScheduler extends
 
     LeafQueue queue = ((LeafQueue) reservedApplication.getQueue());
     CSAssignment assignment = queue.assignContainers(getClusterResource(),
-        new SimpleCandidateNodeSet<>(node),
+        new SimpleCandidateNodeSet<>(node,
+            getCrossLabelsByName(node.getPartition())),
         // TODO, now we only consider limits for parent for non-labeled
         // resources, should consider labeled resources as well.
         new ResourceLimits(labelManager
@@ -3742,6 +3755,37 @@ public class CapacityScheduler extends
 
   public int getMaxPendingCountOnMultiLabel() {
     return this.maxPendingCountOnMultiLabel;
+  }
+
+  private Map<String, Set<String>> getNewCrossLabels() {
+    final String defaultLabel = "default";
+    Map<String, Set<String>> crossLabelsMap = new ConcurrentHashMap<>();
+    try {
+      for (String crossLabelSrc : crossLabelSrcs) {
+        if (crossLabelSrc.equals(defaultLabel)) {
+          crossLabelSrc = RMNodeLabelsManager.NO_LABEL;
+        }
+        String[] dstLabels =
+            this.conf.getCrossLabelDstsBySrc(crossLabelSrc);
+        if (dstLabels != null && dstLabels.length > 0) {
+          Set<String> crossLabelDstSet = Arrays.stream(dstLabels)
+              .map(
+                  s -> s.equals(defaultLabel) ? RMNodeLabelsManager.NO_LABEL :
+                      s)
+              .collect(Collectors.toSet());
+          crossLabelsMap.put(crossLabelSrc, crossLabelDstSet);
+        }
+      }
+    } catch (Exception e) {
+      LOG.error("crossLabelsConfig format error!", e);
+    }
+    LOG.info("New CrossLabels: " + crossLabelsMap);
+    return crossLabelsMap;
+  }
+
+  private Set<String> getCrossLabelsByName(String label) {
+    Set<String> crossLabelSet = this.crossLabelsConfigMap.get(label);
+    return crossLabelSet != null ? crossLabelSet : new HashSet<>();
   }
 
 }

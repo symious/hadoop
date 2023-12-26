@@ -21,6 +21,7 @@ package org.apache.hadoop.yarn.server.resourcemanager.scheduler.placement;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.collections.IteratorUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.activities.DiagnosticsCollector;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.yarn.api.records.ExecutionType;
@@ -385,14 +386,8 @@ public class SingleConstraintAppPlacementAllocator<N extends SchedulerNode>
 
   @Override
   public boolean precheckNode(SchedulerNode schedulerNode,
-      SchedulingMode schedulingMode) {
-    return precheckNode(schedulerNode, schedulingMode, Optional.empty());
-  }
-
-  @Override
-  public boolean precheckNode(SchedulerNode schedulerNode,
-      SchedulingMode schedulingMode,
-      Optional<DiagnosticsCollector> dcOpt) {
+      SchedulingMode schedulingMode, Optional<DiagnosticsCollector> dcOpt,
+      CandidateNodeSet<FiCaSchedulerNode> candidates) {
     // We will only look at node label = nodeLabelToLookAt according to
     // schedulingMode and partition of node.
     String nodePartitionToLookAt;
@@ -401,11 +396,14 @@ public class SingleConstraintAppPlacementAllocator<N extends SchedulerNode>
     } else{
       nodePartitionToLookAt = RMNodeLabelsManager.NO_LABEL;
     }
-
+    Set<String> otherLookupPartitions = candidates.getOtherLookupPartitions();
+    boolean containLookupPartitions =
+        otherLookupPartitions.contains(nodePartitionToLookAt);
     readLock.lock();
     try {
       // Check node partition as well as cardinality/pending resources.
-      boolean rst = this.targetNodePartition.equals(nodePartitionToLookAt);
+      boolean rst = this.targetNodePartition.equals(nodePartitionToLookAt) ||
+          containLookupPartitions;
       if (!rst) {
         if (dcOpt.isPresent()) {
           dcOpt.get().collectPartitionDiagnostics(targetNodePartition,
@@ -417,7 +415,6 @@ public class SingleConstraintAppPlacementAllocator<N extends SchedulerNode>
     } finally {
       readLock.unlock();
     }
-
   }
 
   @Override

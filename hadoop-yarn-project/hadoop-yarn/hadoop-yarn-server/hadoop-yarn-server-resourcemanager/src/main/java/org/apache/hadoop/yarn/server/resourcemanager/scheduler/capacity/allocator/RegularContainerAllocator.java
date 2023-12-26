@@ -123,9 +123,11 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
    * We will consider stuffs like exclusivity, pending resource, node partition,
    * headroom, etc.
    */
-  private ContainerAllocation preCheckForNodeCandidateSet(FiCaSchedulerNode node,
+  private ContainerAllocation preCheckForNodeCandidateSet(
+      FiCaSchedulerNode node,
       SchedulingMode schedulingMode, ResourceLimits resourceLimits,
-      SchedulerRequestKey schedulerKey) {
+      SchedulerRequestKey schedulerKey,
+      CandidateNodeSet<FiCaSchedulerNode> candidates) {
     /*
       Pre-check if current node can fulfill the given schedulerKey.
       SchedulerKey contains containerToUpdate means this is a increase request.
@@ -212,7 +214,8 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
     Optional<DiagnosticsCollector> dcOpt = activitiesManager == null ?
         Optional.empty() :
         activitiesManager.getOptionalDiagnosticsCollector();
-    if (!appInfo.precheckNode(schedulerKey, node, schedulingMode, dcOpt)) {
+    if (!appInfo
+        .precheckNode(schedulerKey, node, schedulingMode, dcOpt, candidates)) {
       ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
           activitiesManager, node, application, schedulerKey,
           ActivityDiagnosticConstant.
@@ -947,7 +950,7 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
 
       if (reservedContainer == null) {
         result = preCheckForNodeCandidateSet(node,
-            schedulingMode, resourceLimits, schedulerKey);
+            schedulingMode, resourceLimits, schedulerKey, candidates);
         if (null != result &&
             AllocationState.NODE_SKIPPED == result.getAllocationState()) {
           continue;
@@ -1021,7 +1024,7 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
     if (reservedContainer == null) {
       // Check if application needs more resource, skip if it doesn't need more.
       if (!application.hasPendingResourceRequest(candidates.getPartition(),
-          schedulingMode)) {
+          schedulingMode, candidates.getOtherLookupPartitions())) {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Skip app_attempt=" + application.getApplicationAttemptId()
               + ", because it doesn't need more resource, schedulingMode="

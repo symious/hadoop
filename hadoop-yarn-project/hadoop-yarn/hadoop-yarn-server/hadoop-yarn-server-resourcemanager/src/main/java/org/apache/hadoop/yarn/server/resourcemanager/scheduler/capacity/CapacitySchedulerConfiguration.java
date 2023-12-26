@@ -113,6 +113,12 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
 
   public static final String DEFAULT_MULTI_LABEL_ACCESS_CONFIG = "*";
 
+  public static final String CROSS_LABEL_PREFIX = "cross-label";
+
+  public static final String CROSS_LABEL_SRCS_SUFFIX = "srcs";
+
+  public static final String CROSS_LABEL_DSTS_SUFFIX = "dsts";
+
   @Private
   public static final String OPPORTUNISTIC_ENABLED =
       "opportunistic-enabled";
@@ -571,6 +577,17 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   public int getMaxPendingCountOnMultiLabel() {
     return getInt(PREFIX + MAX_PENDING_COUNT_ON_MULTI_LABEL,
         DEFAULT_MAX_PENDING_COUNT_ON_MULTI_LABEL);
+  }
+
+  public String[] getCrossLabelSrcs() {
+    return getTrimmedStrings(
+        PREFIX + CROSS_LABEL_PREFIX + DOT + CROSS_LABEL_SRCS_SUFFIX, null);
+  }
+
+  public String[] getCrossLabelDstsBySrc(String srcLabel) {
+    return getTrimmedStrings(
+        PREFIX + CROSS_LABEL_PREFIX + DOT + srcLabel + DOT +
+            CROSS_LABEL_DSTS_SUFFIX, null);
   }
 
   /**

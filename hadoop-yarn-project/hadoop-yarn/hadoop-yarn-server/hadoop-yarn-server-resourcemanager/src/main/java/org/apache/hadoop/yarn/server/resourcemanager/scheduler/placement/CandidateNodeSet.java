@@ -24,6 +24,7 @@ import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNode;
 
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A group of nodes which can be allocated by scheduler.
@@ -58,4 +59,10 @@ public interface CandidateNodeSet<N extends SchedulerNode> {
    * @return node partition
    */
   String getPartition();
+
+  /**
+   * Node partitions of cross labels.
+   * @return node partitions
+   */
+  Set<String> getOtherLookupPartitions();
 }

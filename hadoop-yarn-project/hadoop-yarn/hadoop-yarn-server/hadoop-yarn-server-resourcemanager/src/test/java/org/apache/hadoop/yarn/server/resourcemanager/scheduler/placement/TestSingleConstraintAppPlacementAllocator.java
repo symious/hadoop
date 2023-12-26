@@ -39,6 +39,7 @@ import org.junit.Test;
 import org.mockito.Mockito;
 
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.LongBinaryOperator;
 
@@ -331,13 +332,17 @@ public class TestSingleConstraintAppPlacementAllocator {
     when(node1.getNodeID()).thenReturn(NodeId.fromString("host1:123"));
 
     Assert.assertTrue(allocator
-        .precheckNode(node1, SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY));
+        .precheckNode(node1, SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY,
+            Optional.empty(),
+            new SimpleCandidateNodeSet<>(node1)));
 
     SchedulerNode node2 = mock(SchedulerNode.class);
     when(node1.getPartition()).thenReturn("");
     when(node1.getNodeID()).thenReturn(NodeId.fromString("host2:123"));
     Assert.assertFalse(allocator
-        .precheckNode(node2, SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY));
+        .precheckNode(node2, SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY,
+            Optional.empty(),
+            new SimpleCandidateNodeSet<>(node1)));
   }
 
   @Test
