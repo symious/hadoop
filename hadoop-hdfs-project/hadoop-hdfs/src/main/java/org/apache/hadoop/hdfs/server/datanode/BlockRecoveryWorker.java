@@ -448,6 +448,15 @@ public class BlockRecoveryWorker {
             + ", length=" + block.getNumBytes() + ", safeLength=" + safeLength
             + ", syncList=" + syncBlocks);
       }
+      DatanodeProtocolClientSideTranslatorPB nn = getActiveNamenodeForBP(bpid);
+      // Let namenode delete this block directly if the safeLength is 0.
+      if (safeLength == 0) {
+        LOG.info("Removing block {}, length={}, safeLength=0, syncList={}.",
+            block, block.getNumBytes(), syncBlocks);
+        nn.commitBlockSynchronization(block, recoveryId, 0,
+            true, true, DatanodeID.EMPTY_ARRAY, null);
+        return;
+      }
 
       // If some internal blocks reach the safe length, convert them to RUR
       List<BlockRecord> rurList = new ArrayList<>(locs.length);
@@ -480,7 +489,6 @@ public class BlockRecoveryWorker {
       }
       ExtendedBlock newBlock = new ExtendedBlock(bpid, block.getBlockId(),
           safeLength, recoveryId);
-      DatanodeProtocolClientSideTranslatorPB nn = getActiveNamenodeForBP(bpid);
       nn.commitBlockSynchronization(block, newBlock.getGenerationStamp(),
           newBlock.getNumBytes(), true, false, newLocs, newStorages);
     }
