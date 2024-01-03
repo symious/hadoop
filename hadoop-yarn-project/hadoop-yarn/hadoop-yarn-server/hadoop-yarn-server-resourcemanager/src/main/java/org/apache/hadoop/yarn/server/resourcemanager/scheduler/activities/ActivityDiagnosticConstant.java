@@ -79,6 +79,8 @@ public class ActivityDiagnosticConstant {
       "Request skipped because off-switch request is null";
   public final static String REQUEST_SKIPPED_IN_IGNORE_EXCLUSIVITY_MODE =
       "Request skipped in Ignore Exclusivity mode for AM allocation";
+  public final static String REQUEST_SKIPPED_IN_LABEL_BLACKLIST =
+      "Request skipped in Ignore label blacklist for AM allocation";
   public final static String REQUEST_SKIPPED_BECAUSE_OF_RESERVATION =
       "Request skipped based on reservation algo";
   public final static String

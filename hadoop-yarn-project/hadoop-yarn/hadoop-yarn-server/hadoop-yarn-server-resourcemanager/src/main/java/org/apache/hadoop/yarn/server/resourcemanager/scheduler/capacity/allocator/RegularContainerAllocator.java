@@ -19,6 +19,7 @@
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.allocator;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -29,6 +30,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.activities.ActivityLevel;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.activities.DiagnosticsCollector;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -115,6 +117,32 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
     }
     return Resources.fitsIn(rc, required,
         Resources.add(currentResourceLimits.getHeadroom(), resourceCouldBeUnReserved));
+  }
+
+  //check if nodePartition in configured label blacklist
+  private boolean checkAMCanAssignOnLabels(FiCaSchedulerNode node,
+      SchedulerRequestKey schedulerKey) {
+    String[] amBlacklistLabels =
+        ((CapacityScheduler) rmContext.getScheduler()).getConfiguration()
+            .getAMBlacklistLabels();
+    for (String blackLabel : amBlacklistLabels) {
+      if (node.getPartition().equals(blackLabel)) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Skip allocating AM container to app_attempt={},"
+                  + " don't allow to allocate AM container in label blacklist:{}",
+              application.getApplicationAttemptId(), amBlacklistLabels);
+        }
+        application.updateAppSkipNodeDiagnostics(
+            "Skipping assigning AM container to Node in label blacklist: " +
+                Arrays.toString(amBlacklistLabels));
+        ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
+            activitiesManager, node, application, schedulerKey,
+            ActivityDiagnosticConstant.REQUEST_SKIPPED_IN_LABEL_BLACKLIST,
+            ActivityLevel.REQUEST);
+        return false;
+      }
+    }
+    return true;
   }
 
   /*
@@ -207,6 +235,12 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
             ActivityLevel.REQUEST);
         return ContainerAllocation.APP_SKIPPED;
       }
+    }
+
+    if (schedulingMode == SchedulingMode.RESPECT_PARTITION_EXCLUSIVITY &&
+        application.isWaitingForAMContainer() &&
+        !checkAMCanAssignOnLabels(node, schedulerKey)) {
+      return ContainerAllocation.APP_SKIPPED;
     }
 
     // Is the nodePartition of pending request matches the node's partition

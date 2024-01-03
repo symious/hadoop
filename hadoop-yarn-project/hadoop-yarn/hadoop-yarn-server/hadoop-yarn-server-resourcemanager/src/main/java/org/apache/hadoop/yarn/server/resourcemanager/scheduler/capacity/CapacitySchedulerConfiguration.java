@@ -119,6 +119,10 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
 
   public static final String CROSS_LABEL_DSTS_SUFFIX = "dsts";
 
+  public static final String AM_BLACKLIST_LABELS = "am-blacklist-labels";
+
+  public static final String DEFAULT_AM_BLACKLIST_LABELS = null;
+
   @Private
   public static final String OPPORTUNISTIC_ENABLED =
       "opportunistic-enabled";
@@ -588,6 +592,11 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     return getTrimmedStrings(
         PREFIX + CROSS_LABEL_PREFIX + DOT + srcLabel + DOT +
             CROSS_LABEL_DSTS_SUFFIX, null);
+  }
+
+  public String[] getAMBlacklistLabels() {
+    return getTrimmedStrings(PREFIX + AM_BLACKLIST_LABELS,
+        DEFAULT_AM_BLACKLIST_LABELS);
   }
 
   /**
