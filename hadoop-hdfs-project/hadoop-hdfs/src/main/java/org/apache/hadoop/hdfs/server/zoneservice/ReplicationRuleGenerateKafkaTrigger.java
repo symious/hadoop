@@ -274,18 +274,22 @@ public class ReplicationRuleGenerateKafkaTrigger {
     @Override
     public void run() {
       try {
-        long start = now();
         JSONObject jsonObject = new JSONObject(record);
         String clientDC = jsonObject.getString("clientDC");
         String dnDC = jsonObject.getString("dnDC");
         String ns = jsonObject.getString("ns");
         String path = jsonObject.getString("path");
         long crossReadSize = jsonObject.getLong("size");
+        if (!validDataCenters.contains(clientDC) || !validDataCenters.contains(dnDC)) {
+          LOG.warn("Can not add invalid replication rule: {}.", record);
+          return;
+        }
         if (filterPaths.contains(path)) {
           LOG.warn("Can not add replication rule: {} and filterPaths contain {} skip.", record,
               path);
           return;
         }
+        long start = now();
         ContentSummary contentSummary = fs.getContentSummary(new Path(path));
         long pathSize = contentSummary.getLength();
 
