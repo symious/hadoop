@@ -36,7 +36,6 @@ import javax.cache.integration.CacheLoader;
 import javax.cache.integration.CacheLoaderException;
 import javax.cache.spi.CachingProvider;
 
-import org.apache.commons.lang3.NotImplementedException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.retry.RetryPolicies;
 import org.apache.hadoop.io.retry.RetryPolicy;
@@ -93,6 +92,9 @@ public final class FederationStateStoreFacade {
   private static final String GET_SUBCLUSTERS_CACHEID = "getSubClusters";
   private static final String GET_POLICIES_CONFIGURATIONS_CACHEID =
       "getPoliciesConfigurations";
+
+  private static final String GET_APPLICATION_HOME_SUBCLUSTER_CACHEID =
+      "getApplicationHomeSubCluster";
 
   private static final FederationStateStoreFacade FACADE =
       new FederationStateStoreFacade();
@@ -445,10 +447,20 @@ public final class FederationStateStoreFacade {
    */
   public SubClusterId getApplicationHomeSubCluster(ApplicationId appId)
       throws YarnException {
-    GetApplicationHomeSubClusterResponse response =
-        stateStore.getApplicationHomeSubCluster(
-            GetApplicationHomeSubClusterRequest.newInstance(appId));
-    return response.getApplicationHomeSubCluster().getHomeSubCluster();
+    try {
+      if (isCachingEnabled()) {
+        SubClusterId value = SubClusterId.class.cast(
+            cache.get(buildGetApplicationHomeSubClusterRequest(appId)));
+        return value;
+      } else {
+        GetApplicationHomeSubClusterResponse response =
+            stateStore.getApplicationHomeSubCluster(
+                GetApplicationHomeSubClusterRequest.newInstance(appId));
+        return response.getApplicationHomeSubCluster().getHomeSubCluster();
+      }
+    } catch (Throwable ex) {
+      throw new YarnException(ex);
+    }
   }
 
   /**
@@ -613,6 +625,30 @@ public final class FederationStateStoreFacade {
     return cacheRequest;
   }
 
+  private Object buildGetApplicationHomeSubClusterRequest(
+      ApplicationId applicationId) {
+    final String cacheKey = buildCacheKey(getClass().getSimpleName(),
+        GET_APPLICATION_HOME_SUBCLUSTER_CACHEID, applicationId.toString());
+    CacheUtil.CacheRequest<String, SubClusterId> cacheRequest =
+        new CacheUtil.CacheRequest<>(
+            cacheKey,
+            input -> {
+
+              GetApplicationHomeSubClusterRequest request =
+                  GetApplicationHomeSubClusterRequest
+                      .newInstance(applicationId);
+              GetApplicationHomeSubClusterResponse response =
+                  stateStore.getApplicationHomeSubCluster(request);
+
+              ApplicationHomeSubCluster appHomeSubCluster =
+                  response.getApplicationHomeSubCluster();
+              SubClusterId subClusterId = appHomeSubCluster.getHomeSubCluster();
+
+              return subClusterId;
+            });
+    return cacheRequest;
+  }
+
   protected String buildCacheKey(String typeName, String methodName,
       String argName) {
     StringBuilder buffer = new StringBuilder();
@@ -623,6 +659,17 @@ public final class FederationStateStoreFacade {
       buffer.append(argName);
     }
     return buffer.toString();
+  }
+
+
+  @VisibleForTesting
+  public Cache<Object, Object> getCache() {
+    return cache;
+  }
+
+  @VisibleForTesting
+  protected Object getAppHomeSubClusterCacheRequest(ApplicationId applicationId) {
+    return buildGetApplicationHomeSubClusterRequest(applicationId);
   }
 
 }
