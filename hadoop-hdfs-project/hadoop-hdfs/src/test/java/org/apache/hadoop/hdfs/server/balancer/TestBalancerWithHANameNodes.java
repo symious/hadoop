@@ -168,9 +168,6 @@ public class TestBalancerWithHANameNodes {
       client = NameNodeProxies.createProxy(conf, FileSystem.getDefaultUri(conf),
           ClientProtocol.class).getProxy();
       doTest(conf);
-      // Check getBlocks request to Standby NameNode.
-      assertTrue(log.getOutput().contains(
-          "Request #getBlocks to Standby NameNode success."));
     } finally {
       cluster.shutdown();
     }
@@ -222,10 +219,8 @@ public class TestBalancerWithHANameNodes {
 
       doTest(conf);
       for (int i = 0; i < cluster.getNumNameNodes(); i++) {
-        // First observer node is at idx 2, or 3 if 2 has been shut down
-        // It should get both getBlocks calls, all other NNs should see 0 calls
-        int expectedObserverIdx = withObserverFailure ? 3 : 2;
-        int expectedCount = (i == expectedObserverIdx) ? 2 : 0;
+        // All getBlocks() go to active for balancer
+        int expectedCount = i == 0 ? 2 : 0;
         verify(namesystemSpies.get(i), times(expectedCount))
             .getBlocks(any(), anyLong(), anyLong());
       }

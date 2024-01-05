@@ -459,7 +459,7 @@ public class QuorumJournalManager implements JournalManager {
           + "capacity (" + size + ") greater than the IPC max data length ("
           + CommonConfigurationKeys.IPC_MAXIMUM_DATA_LENGTH + " = "
           + ipcMaxDataLength + "). This will cause journals to reject edits.");
-    } else if (size <= 512) {
+    } else if (size < 512) {
       throw new IllegalArgumentException("Attempted to use QJM output buffer "
           + "capacity (" + size + ") lesser than 512");
     }

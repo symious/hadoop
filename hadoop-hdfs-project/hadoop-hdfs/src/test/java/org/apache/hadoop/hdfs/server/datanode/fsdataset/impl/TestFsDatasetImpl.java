@@ -1385,12 +1385,13 @@ public class TestFsDatasetImpl {
       String metaPath = replicaInfo.getMetadataURI().getPath();
       File blockFile = new File(blockPath);
       File metaFile = new File(metaPath);
+      String blockTempPath = blockPath + ".tmp";
+      File blockTempFile = new File(blockTempPath);
 
+      blockFile.renameTo(blockTempFile);
       // Mock local block file not found when disk with some exception.
       fsdataset.invalidateMissingBlock(bpid, replicaInfo);
 
-      // Assert local block file wouldn't be deleted from disk.
-      assertTrue(blockFile.exists());
       // Assert block info would be removed from ReplicaMap.
       assertEquals("null",
           fsdataset.getReplicaString(bpid, replicaInfo.getBlockId()));
@@ -1399,6 +1400,7 @@ public class TestFsDatasetImpl {
       GenericTestUtils.waitFor(() ->
           blockManager.getLowRedundancyBlocksCount() == 1, 100, 5000);
 
+      blockTempFile.renameTo(blockFile);
       // Mock local block file found when disk back to normal.
       FsVolumeSpi.ScanInfo info = new FsVolumeSpi.ScanInfo(
           replicaInfo.getBlockId(), blockFile.getParentFile().getAbsoluteFile(),

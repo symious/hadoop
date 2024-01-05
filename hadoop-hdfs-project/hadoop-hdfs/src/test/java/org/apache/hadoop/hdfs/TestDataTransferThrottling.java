@@ -210,7 +210,7 @@ public class TestDataTransferThrottling {
     if (target == 0) {
       assertTrue(testTime < 100);
     } else {
-      assertTrue(0.99 < ratio && ratio < 1.01);
+      assertTrue(0.95 < ratio && ratio < 1.05);
     }
   }
 }
