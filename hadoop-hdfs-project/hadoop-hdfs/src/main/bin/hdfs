@@ -230,23 +230,18 @@ function hdfscmd_case
       HADOOP_CLASSNAME=org.apache.hadoop.util.VersionInfo
     ;;
     zonemover)
-      HADOOP_SUBCMD_SUPPORTDAEMONIZATION="true"
       HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneMover
     ;;
     zoneenhancedmover)
-      HADOOP_SUBCMD_SUPPORTDAEMONIZATION="true"
       HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneMoverWithSetReplication
     ;;
     zonechecker)
-      HADOOP_SUBCMD_SUPPORTDAEMONIZATION="true"
       HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneChecker
     ;;
     zoneservice)
-      HADOOP_SUBCMD_SUPPORTDAEMONIZATION="true"
       HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneService
     ;;
     zoneautobalancer)
-      HADOOP_SUBCMD_SUPPORTDAEMONIZATION="true"
       HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneAutoBalancerService
     ;;
     zkfc)
