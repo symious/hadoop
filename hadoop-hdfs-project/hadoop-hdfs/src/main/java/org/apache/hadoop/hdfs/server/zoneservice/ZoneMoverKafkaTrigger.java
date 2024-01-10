@@ -188,9 +188,9 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   private static List<String> extractCompletePath(String rawMessage)
       throws ArrayIndexOutOfBoundsException {
     List<String> result;
-    String[] s1 = rawMessage.split("src=");
-    String[] s2 = s1[1].split("dst=");
-    String[] s3 = s2[1].split("perm=");
+    String[] s1 = rawMessage.split("src=", 2);
+    String[] s2 = s1[1].split("dst=", 2);
+    String[] s3 = s2[1].split("perm=", 2);
     result = new ArrayList<>(Arrays.asList(s1[0].split("[ \t]")));
     result.add("src=" + s2[0].trim());
     result.add("dst=" + s3[0].trim());

@@ -64,6 +64,17 @@ public class TestZoneMoverKafkaTrigger {
     assertEquals(jsonObject.get("allowed"), "true");
     assertEquals(jsonObject.get("src"), "/test/test.file");
     assertEquals(jsonObject.get("dst"), "/test/test.file.new");
+
+    final String specialHDFSAuditLog = "2024-01-08 14:30:59,215 INFO FSNamesystem.audit: " +
+        "allowed=true\tugi=hdfs_test (auth:SIMPLE)\tip=/10.10.20.100\tcmd=complete\t" +
+        "src=/projects/feature_src=online_labeled_data/project=item_rebate/topic=checkout/_SUCCESS\t" +
+        "dst=2564424474\tperm=null\tproto=rpc\tcallerContext=clientIp:10.20.50.90," +
+        "clientPort:54178,clientId:c39147d6c58d456f827567109e498e15,clientCallId:265";
+    JSONObject jsonObject1 = ZoneMoverKafkaTrigger.message2json(specialHDFSAuditLog);
+    assertEquals(jsonObject1.get("allowed"), "true");
+    assertEquals(jsonObject1.get("src"),
+        "/projects/feature_src=online_labeled_data/project=item_rebate/topic=checkout/_SUCCESS");
+    assertEquals(jsonObject1.get("dst"), "2564424474");
   }
 
   @Test
