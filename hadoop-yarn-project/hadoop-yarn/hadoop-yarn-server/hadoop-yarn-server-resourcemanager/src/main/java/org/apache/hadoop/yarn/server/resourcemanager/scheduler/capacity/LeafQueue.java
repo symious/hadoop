@@ -27,17 +27,6 @@ import java.util.concurrent.ConcurrentMap;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.time.DateUtils;
-import org.apache.hadoop.yarn.api.records.ApplicationResourceUsageReport;
-import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore;
-import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStoreEventType;
-import org.apache.hadoop.yarn.server.resourcemanager.recovery.ZKRMStateStore;
-import org.apache.hadoop.yarn.server.resourcemanager.recovery.records.ApplicationAttemptStateData;
-import org.apache.hadoop.yarn.server.resourcemanager.recovery.records.ApplicationStateData;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptEvent;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptEventType;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.event.RMAppAttemptStatusupdateEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -135,6 +124,7 @@ public class LeafQueue extends AbstractCSQueue {
   private volatile ResourceLimits cachedResourceLimitsForHeadroom = null;
 
   private volatile OrderingPolicy<FiCaSchedulerApp> orderingPolicy = null;
+
 
   // Map<Partition, Map<SchedulingMode, Map<User, CachedUserLimit>>>
   // Not thread safe: only the last level is a ConcurrentMap
@@ -1261,6 +1251,8 @@ public class LeafQueue extends AbstractCSQueue {
     boolean needAssignToQueueCheck = true;
     IteratorSelector sel = new IteratorSelector();
     sel.setPartition(candidates.getPartition());
+    sel.setAppSelector(scheduler.getAppSelectorManager()
+        .getMappedAppSelector(candidates.getPartition()));
 
     long startTime = System.nanoTime();
     if (LOG.isDebugEnabled()) {

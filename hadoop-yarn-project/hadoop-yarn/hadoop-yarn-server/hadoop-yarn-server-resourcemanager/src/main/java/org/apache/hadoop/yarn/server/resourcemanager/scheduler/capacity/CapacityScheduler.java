@@ -191,6 +191,8 @@ public class CapacityScheduler extends
 
   private WorkflowPriorityMappingsManager workflowPriorityMappingsMgr;
 
+  private AppSelectorManager appSelectorManager;
+
   // timeout to join when we stop this service
   protected final long THREAD_JOIN_TIMEOUT_MS = 1000;
 
@@ -377,6 +379,8 @@ public class CapacityScheduler extends
       this.queueManager.setCapacitySchedulerContext(this);
 
       this.workflowPriorityMappingsMgr = new WorkflowPriorityMappingsManager();
+
+      this.appSelectorManager = new AppSelectorManager();
 
       this.activitiesManager = new ActivitiesManager(rmContext);
       activitiesManager.init(conf);
@@ -1032,6 +1036,8 @@ public class CapacityScheduler extends
 
       this.workflowPriorityMappingsMgr.initialize(this);
 
+      this.appSelectorManager.initialize(conf);
+
       // Notify Preemption Manager
       preemptionManager.refreshQueues(null, this.getRootQueue());
     } catch (Exception e) {
@@ -1046,6 +1052,8 @@ public class CapacityScheduler extends
     updatePlacementRules();
 
     this.workflowPriorityMappingsMgr.initialize(this);
+
+    this.appSelectorManager.initialize(newConf);
 
     // Notify Preemption Manager
     preemptionManager.refreshQueues(null, this.getRootQueue());
@@ -3674,6 +3682,11 @@ public class CapacityScheduler extends
   @Override
   public boolean isConfigurationMutable() {
     return csConfProvider instanceof MutableConfigurationProvider;
+  }
+
+  @Override
+  public AppSelectorManager getAppSelectorManager() {
+    return this.appSelectorManager;
   }
 
   @Override

@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy;
 
+import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceUsage;
 
@@ -78,4 +79,6 @@ public interface SchedulableEntity {
    * @return reOrderTime
    */
   void setReOrderTime(long reOrderTime);
+
+  public ApplicationSubmissionContext getAppSubmissionContext();
 }

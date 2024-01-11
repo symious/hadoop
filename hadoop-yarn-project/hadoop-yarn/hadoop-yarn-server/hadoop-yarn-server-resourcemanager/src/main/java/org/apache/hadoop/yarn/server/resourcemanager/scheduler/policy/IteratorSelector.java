@@ -28,6 +28,7 @@ public class IteratorSelector {
       new IteratorSelector();
 
   private String partition;
+  private AppSelector appSelector;
 
   /**
    * The partition for this iterator selector.
@@ -45,4 +46,11 @@ public class IteratorSelector {
     this.partition = p;
   }
 
+  public AppSelector getAppSelector() {
+    return appSelector;
+  }
+
+  public void setAppSelector(AppSelector selector) {
+    this.appSelector = selector;
+  }
 }

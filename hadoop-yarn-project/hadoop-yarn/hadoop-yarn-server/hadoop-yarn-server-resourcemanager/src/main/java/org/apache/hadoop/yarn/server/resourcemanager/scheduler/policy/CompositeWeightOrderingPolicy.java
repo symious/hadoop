@@ -18,7 +18,6 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy;
 
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
@@ -30,41 +29,72 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Random;
 import java.util.concurrent.ConcurrentSkipListSet;
 
-public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends AbstractComparatorOrderingPolicy<S> {
+public class CompositeWeightOrderingPolicy<S extends SchedulableEntity>
+    extends AbstractComparatorOrderingPolicy<S> {
+
+  private static final String APP_HIGH_FLAG_PRIORITY =
+      "apps.high.flag.priority";
+  private static final int DEFAULT_APP_HIGH_FLAG_PRIORITY = 60;
+
+  private static final String APP_USED_FLAG_MEMORY = "apps.used.flag.memory";
+
+  private static final int DEFAULT_APP_USED_FLAG_MEMORY = 100 * 1024 * 1024;
+
+  private static final String APP_PENDING_FLAG_TIME = "apps.pending.flag.time";
+
+  private static final int DEFAULT_APP_PENDING_FLAG_TIME = 120 * 60 * 1000;
+
+  private static final String APP_PRIORITY_WEIGHT_FACTOR =
+      "apps.priority.weight.factor";
+
+  private static final double DEFAULT_APP_PRIORITY_WEIGHT_FACTOR = 0.6;
+
+  private static final String APP_USED_MEMORY_WEIGHT_FACTOR =
+      "apps.used.memory.weight.factor";
+
+  private static final double DEFAULT_APP_USED_MEMORY_WEIGHT_FACTOR = 0.2;
+
+  private static final String APP_TIME_WEIGHT_FACTOR =
+      "apps.time.weight.factor";
+
+  private static final double DEFAULT_APP_TIME_WEIGHT_FACTOR = 0.2;
+
+  private static final String APPS_ORDER_CACHE_TIME = "apps.order.cache.time";
+
+  private static final String APPS_FULL_REORDER_INTERVAL_SECOND =
+      "apps.full.reorder.interval.second";
 
   private static final Logger LOG =
       LoggerFactory.getLogger(CompositeWeightOrderingPolicy.class);
 
   private String queueName;
-  private long cacheTime;
 
   private final static Random random = new Random(System.currentTimeMillis());
-  private int fullReorderIntervalSecond;
+
   protected long nextFullOrderTime;
 
   //global scheduler will have multiple threads, update visibility
   private volatile long lastUpdateTime;
 
-  //default: 60
-  private double highFlagPriority;
+  private long cacheTime = 0;
 
-  //default: 100 TB
-  private double usedFlagMemory;
+  private int fullReorderIntervalSecond = 60;
 
-  //default: 120 minutes
-  private double pendingFlagTime;
+  private double highFlagPriority = DEFAULT_APP_HIGH_FLAG_PRIORITY;
 
-  //default: 0.6
-  private double priorityWeightFactor;
+  private double usedFlagMemory = DEFAULT_APP_USED_FLAG_MEMORY;
 
-  //default: 0.2
-  private double usedMemoryWeightFactor;
+  private double pendingFlagTime = DEFAULT_APP_PENDING_FLAG_TIME;
 
-  //default: 0.2
-  private double pendingTimeWeightFactor;
+  private double priorityWeightFactor = DEFAULT_APP_PRIORITY_WEIGHT_FACTOR;
+
+  private double usedMemoryWeightFactor = DEFAULT_APP_USED_MEMORY_WEIGHT_FACTOR;
+
+  private double pendingTimeWeightFactor = DEFAULT_APP_TIME_WEIGHT_FACTOR;
 
   public String getQueueName() {
     return queueName;
@@ -150,8 +180,7 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
     return weightComparator;
   }
 
-  public void setWeightComparator(
-      CompoundComparator weightComparator) {
+  public void setWeightComparator(CompoundComparator weightComparator) {
     this.weightComparator = weightComparator;
   }
 
@@ -174,21 +203,21 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
         r2_priority_weight = (r2_priority_weight < 1) ? r2_priority_weight : 1;
         r2_priority_weight = r2_priority_weight * priorityWeightFactor;
 
-        double r1_used_resources_weight =
-            r1.getSchedulingResourceUsage()
-                .getCachedUsed(CommonNodeLabelsManager.ANY)
-                .getMemorySize() / usedFlagMemory;
+        double r1_used_resources_weight = r1.getSchedulingResourceUsage()
+            .getCachedUsed(CommonNodeLabelsManager.ANY).getMemorySize()
+            / usedFlagMemory;
         r1_used_resources_weight =
-            (r1_used_resources_weight < 1) ? (1.0 - r1_used_resources_weight) : 0;
+            (r1_used_resources_weight < 1) ? (1.0 - r1_used_resources_weight) :
+                0;
         r1_used_resources_weight =
             r1_used_resources_weight * usedMemoryWeightFactor;
 
-        double r2_used_resources_weight =
-            r2.getSchedulingResourceUsage()
-                .getCachedUsed(CommonNodeLabelsManager.ANY)
-                .getMemorySize() / usedFlagMemory;
+        double r2_used_resources_weight = r2.getSchedulingResourceUsage()
+            .getCachedUsed(CommonNodeLabelsManager.ANY).getMemorySize()
+            / usedFlagMemory;
         r2_used_resources_weight =
-            (r2_used_resources_weight < 1) ? (1.0 - r2_used_resources_weight) : 0;
+            (r2_used_resources_weight < 1) ? (1.0 - r2_used_resources_weight) :
+                0;
         r2_used_resources_weight =
             r2_used_resources_weight * usedMemoryWeightFactor;
 
@@ -207,25 +236,25 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
             r2_pending_time_weight * pendingTimeWeightFactor;
 
         double r1_composite_weight =
-            r1_priority_weight + r1_used_resources_weight +
-                r1_pending_time_weight;
+            r1_priority_weight + r1_used_resources_weight
+                + r1_pending_time_weight;
 
         double r2_composite_weight =
-            r2_priority_weight + r2_used_resources_weight +
-                r2_pending_time_weight;
+            r2_priority_weight + r2_used_resources_weight
+                + r2_pending_time_weight;
 
         if (LOG.isDebugEnabled()) {
           LOG.debug("appId: " + r1.getId() + " ,r1_priority_weight: "
               + r1_priority_weight + " ,r1_used_resources_weight: "
-              + r1_used_resources_weight
-              + " ,r1_pending_time_weight: " + r1_pending_time_weight +
-              " ,r1_composite_weight: " + r1_composite_weight);
+              + r1_used_resources_weight + " ,r1_pending_time_weight: "
+              + r1_pending_time_weight + " ,r1_composite_weight: "
+              + r1_composite_weight);
 
           LOG.debug("appId: " + r2.getId() + " ,r2_priority_weight: "
               + r2_priority_weight + " ,r2_used_resources_weight: "
-              + r2_used_resources_weight
-              + " ,r2_pending_time_weight: " + r2_pending_time_weight +
-              " ,r2_composite_weight: " + r2_composite_weight);
+              + r2_used_resources_weight + " ,r2_pending_time_weight: "
+              + r2_pending_time_weight + " ,r2_composite_weight: "
+              + r2_composite_weight);
         }
 
         return Double.compare(r2_composite_weight, r1_composite_weight);
@@ -240,14 +269,12 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
 
   public CompositeWeightOrderingPolicy() {
     List<Comparator<SchedulableEntity>> comparators =
-      new ArrayList<Comparator<SchedulableEntity>>();
+        new ArrayList<Comparator<SchedulableEntity>>();
     comparators.add(new InitUsedResourcesComparator());
     comparators.add(new WeightComparator());
     comparators.add(new StartTimeComparator());
     comparators.add(new FifoComparator());
-    weightComparator = new CompoundComparator(
-      comparators
-      );
+    weightComparator = new CompoundComparator(comparators);
     this.comparator = weightComparator;
     this.schedulableEntities = new ConcurrentSkipListSet<S>(comparator);
   }
@@ -263,25 +290,24 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
             entitiesToReorder.put(s.getId(), s);
           }
         }
-        int waitSecond = fullReorderIntervalSecond +
-            random.nextInt(fullReorderIntervalSecond);
+        int waitSecond = fullReorderIntervalSecond + random
+            .nextInt(fullReorderIntervalSecond);
         nextFullOrderTime = now + waitSecond * 1000;
         if (LOG.isDebugEnabled()) {
-          LOG.debug("queueName: " + this.queueName + " ,now: " + now +
-              " ,nextFullOrderTime: " + nextFullOrderTime + " ,wait second: " +
-              waitSecond);
+          LOG.debug("queueName: " + this.queueName + " ,now: " + now
+              + " ,nextFullOrderTime: " + nextFullOrderTime + " ,wait second: "
+              + waitSecond);
         }
       }
       long start = System.nanoTime();
       int size = entitiesToReorder.size();
-      for (Map.Entry<String, S> entry :
-          entitiesToReorder.entrySet()) {
+      for (Map.Entry<String, S> entry : entitiesToReorder.entrySet()) {
         reorderSchedulableEntity(entry.getValue());
       }
       long end = System.nanoTime();
       if (LOG.isDebugEnabled()) {
-        LOG.debug("queueName: " + this.queueName + " ,reorder " + size +
-            " apps, cost time: " + (end - start) / 1000 + " us!");
+        LOG.debug("queueName: " + this.queueName + " ,reorder " + size
+            + " apps, cost time: " + (end - start) / 1000 + " us!");
       }
       entitiesToReorder.clear();
     }
@@ -292,75 +318,122 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity> extends 
     long now = System.currentTimeMillis();
     if (cacheTime <= 0 || (now - lastUpdateTime > cacheTime)) {
       if (LOG.isDebugEnabled()) {
-        LOG.debug("queueName: " + this.queueName + " ,now: " + now +
-            " ,lastUpdateTime: " + lastUpdateTime +
-            " ,over cacheTime: " + cacheTime + " ,start to reorder apps!");
+        LOG.debug("queueName: " + this.queueName + " ,now: " + now
+            + " ,lastUpdateTime: " + lastUpdateTime + " ,over cacheTime: "
+            + cacheTime + " ,start to reorder apps!");
       }
       reorderScheduleEntities();
       lastUpdateTime = now;
     }
-    return schedulableEntities.iterator();
-  }
+    Iterator<S> iterator = schedulableEntities.iterator();
+    AppSelector selector = sel.getAppSelector();
+    if (selector == null) {
+      return iterator;
+    } else {
+      Iterator<S> filteringIterator = new Iterator() {
+        private S cached;
+        private boolean hasCached;
 
-  @VisibleForTesting
-  public long getAppsCacheTime() {
-    return cacheTime;
-  }
+        @Override
+        public boolean hasNext() {
+          if (hasCached) {
+            return true;
+          }
+          while (iterator.hasNext()) {
+            cached = iterator.next();
+            if (selector.accept(cached)) {
+              hasCached = true;
+              return true;
+            }
+          }
+          return false;
+        }
 
-  @VisibleForTesting
-  public void setAppsCacheTime(long cacheTime) {
-    this.cacheTime = cacheTime;
+        @Override
+        public Object next() {
+          if (hasCached) {
+            hasCached = false;
+            return cached;
+          }
+          if (!hasNext()) {
+            throw new NoSuchElementException();
+          }
+          return next();
+        }
+      };
+      return filteringIterator;
+    }
   }
 
   @Override
   public void configure(Map<String, String> conf) {
     this.queueName = conf.get("queueName");
-    this.cacheTime = Long.parseLong(conf.get("appsOrderCacheTime"));
-    this.fullReorderIntervalSecond =
-        Integer.parseInt(conf.get("fullReorderIntervalSecond"));
-    this.nextFullOrderTime =
-        System.currentTimeMillis() + (fullReorderIntervalSecond +
-            random.nextInt(fullReorderIntervalSecond)) * 1000;
-    this.highFlagPriority = Double.parseDouble(conf.get("highFlagPriority"));
-    this.usedFlagMemory = Double.parseDouble(conf.get("usedFlagMemory"));
-    this.pendingFlagTime = Double.parseDouble(conf.get("pendingFlagTime"));
-    this.priorityWeightFactor =
-        Double.parseDouble(conf.get("priorityWeightFactor"));
-    this.usedMemoryWeightFactor =
-        Double.parseDouble(conf.get("usedMemoryWeightFactor"));
-
-    if (this.priorityWeightFactor + this.usedMemoryWeightFactor <= 1) {
-      this.pendingTimeWeightFactor =
-          1.0 - (priorityWeightFactor + usedMemoryWeightFactor);
-    } else {
-      this.priorityWeightFactor =
-          CapacitySchedulerConfiguration.DEFAULT_APP_PRIORITY_WEIGHT_FACTOR;
-      this.usedMemoryWeightFactor =
-          CapacitySchedulerConfiguration.DEFAULT_APP_USED_MEMORY_WEIGHT_FACTOR;
-      this.pendingTimeWeightFactor =
-          CapacitySchedulerConfiguration.DEFAULT_APP_PENDING_TIME_WEIGHT_FACTOR;
-      LOG.warn("Invalid WeightFactor config, fall back to default config, " +
-              "priorityWeightFactor: " + this.priorityWeightFactor +
-              " ,usedMemoryWeightFactor: " + this.usedMemoryWeightFactor +
-          " ,pendingTimeWeightFactor: " + pendingTimeWeightFactor);
+    if (conf.containsKey(APPS_ORDER_CACHE_TIME)) {
+      this.cacheTime =
+          Long.parseLong(conf.get(APPS_FULL_REORDER_INTERVAL_SECOND));
     }
-    LOG.info("Final take effect results, " +
-        "priorityWeightFactor: " + this.priorityWeightFactor +
-        " ,usedMemoryWeightFactor: " + this.usedMemoryWeightFactor +
-        " ,pendingTimeWeightFactor: " + pendingTimeWeightFactor);
+    if (conf.containsKey(APPS_FULL_REORDER_INTERVAL_SECOND)) {
+      this.fullReorderIntervalSecond =
+          Integer.parseInt(conf.get(APPS_FULL_REORDER_INTERVAL_SECOND));
+    }
+    this.nextFullOrderTime = System.currentTimeMillis() +
+        (fullReorderIntervalSecond + random.nextInt(fullReorderIntervalSecond))
+            * 1000;
+    if (conf.containsKey(APP_HIGH_FLAG_PRIORITY)) {
+      this.highFlagPriority =
+          Double.parseDouble(conf.get(APP_HIGH_FLAG_PRIORITY));
+    }
+    if (conf.containsKey(APP_USED_FLAG_MEMORY)) {
+      this.usedFlagMemory = Double.parseDouble(conf.get(APP_USED_FLAG_MEMORY));
+    }
+    if (conf.containsKey(APP_PENDING_FLAG_TIME)) {
+      this.pendingFlagTime =
+          Double.parseDouble(conf.get(APP_PENDING_FLAG_TIME));
+    }
+    if (conf.containsKey(APP_PRIORITY_WEIGHT_FACTOR)) {
+      this.priorityWeightFactor =
+          Double.parseDouble(conf.get(APP_PRIORITY_WEIGHT_FACTOR));
+    }
+    if (conf.containsKey(APP_USED_MEMORY_WEIGHT_FACTOR)) {
+      this.usedMemoryWeightFactor =
+          Double.parseDouble(conf.get(APP_USED_MEMORY_WEIGHT_FACTOR));
+    }
+    if (conf.containsKey(APP_TIME_WEIGHT_FACTOR)) {
+      this.pendingTimeWeightFactor =
+          Double.parseDouble(conf.get(APP_TIME_WEIGHT_FACTOR));
+    }
+    validateWeightFactor();
+    LOG.info("highFlagPriority: " + highFlagPriority + " ,usedFlagMemory: "
+        + usedFlagMemory + " ,pendingFlagTime: " + pendingFlagTime
+        + " ,getAppOrderCacheTime: " + cacheTime
+        + " ,fullReorderIntervalSecond: " + fullReorderIntervalSecond
+        + " ,validateWeightFactor: " + priorityWeightFactor
+        + " ,usedMemoryWeightFactor: " + usedMemoryWeightFactor
+        + " ,pendingTimeWeightFactor: " + pendingTimeWeightFactor);
+  }
+
+  private void validateWeightFactor() {
+    if (priorityWeightFactor + usedMemoryWeightFactor + pendingTimeWeightFactor
+        != 1) {
+      LOG.warn("Invalid WeightFactor config, fall back to default config, "
+          + "priorityWeightFactor: " + this.priorityWeightFactor
+          + " ,usedMemoryWeightFactor: " + this.usedMemoryWeightFactor
+          + " ,pendingTimeWeightFactor: " + pendingTimeWeightFactor);
+      priorityWeightFactor = DEFAULT_APP_PRIORITY_WEIGHT_FACTOR;
+      usedMemoryWeightFactor = DEFAULT_APP_USED_MEMORY_WEIGHT_FACTOR;
+      pendingTimeWeightFactor = DEFAULT_APP_TIME_WEIGHT_FACTOR;
+    }
   }
 
   @Override
-  public void containerAllocated(S schedulableEntity,
-    RMContainer r) {
-      entityRequiresReordering(schedulableEntity);
-    }
+  public void containerAllocated(S schedulableEntity, RMContainer r) {
+    entityRequiresReordering(schedulableEntity);
+  }
 
   @Override
-  public void containerReleased(S schedulableEntity,
-    RMContainer r) {
-      entityRequiresReordering(schedulableEntity);
-    }
+  public void containerReleased(S schedulableEntity, RMContainer r) {
+    entityRequiresReordering(schedulableEntity);
+  }
 
   @Override
   public void demandUpdated(S schedulableEntity) {

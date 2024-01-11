@@ -120,7 +120,44 @@ public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
       reorderScheduleEntities();
       lastUpdateTime = now;
     }
-    return schedulableEntities.iterator();
+    Iterator<S> iterator = schedulableEntities.iterator();
+    AppSelector selector = sel.getAppSelector();
+    if (selector == null) {
+      return iterator;
+    } else {
+      Iterator<S> filteringIterator = new Iterator() {
+        private S cached;
+        private boolean hasCached;
+
+        @Override
+        public boolean hasNext() {
+          if (hasCached) {
+            return true;
+          }
+          while (iterator.hasNext()) {
+            cached = iterator.next();
+            if (selector.accept(cached)) {
+              hasCached = true;
+              return true;
+            }
+          }
+          return false;
+        }
+
+        @Override
+        public Object next() {
+          if (hasCached) {
+            hasCached = false;
+            return cached;
+          }
+          if (!hasNext()) {
+            throw new NoSuchElementException();
+          }
+          return next();
+        }
+      };
+      return filteringIterator;
+    }
   }
 
   private double getMagnitude(SchedulableEntity r) {

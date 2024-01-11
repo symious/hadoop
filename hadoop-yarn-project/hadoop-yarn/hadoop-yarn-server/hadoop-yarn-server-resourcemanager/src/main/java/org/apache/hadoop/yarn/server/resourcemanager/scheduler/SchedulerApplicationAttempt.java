@@ -213,6 +213,8 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
   private final long startTime;
   private long reOrderTime;
 
+  private ApplicationSubmissionContext appSubmissionContext;
+
   public SchedulerApplicationAttempt(ApplicationAttemptId applicationAttemptId, 
       String user, Queue queue, AbstractUsersManager abstractUsersManager,
       RMContext rmContext) {
@@ -226,7 +228,7 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
         rmContext.getRMApps()
             .containsKey(applicationAttemptId.getApplicationId())) {
       RMApp rmApp = rmContext.getRMApps().get(applicationAttemptId.getApplicationId());
-      ApplicationSubmissionContext appSubmissionContext =
+      appSubmissionContext =
           rmApp
               .getApplicationSubmissionContext();
       appAttempt = rmApp.getCurrentAppAttempt();
@@ -1536,5 +1538,10 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
   @Override
   public void setReOrderTime(long reOrderTime) {
     this.reOrderTime = reOrderTime;
+  }
+
+  @Override
+  public ApplicationSubmissionContext getAppSubmissionContext() {
+    return this.appSubmissionContext;
   }
 }

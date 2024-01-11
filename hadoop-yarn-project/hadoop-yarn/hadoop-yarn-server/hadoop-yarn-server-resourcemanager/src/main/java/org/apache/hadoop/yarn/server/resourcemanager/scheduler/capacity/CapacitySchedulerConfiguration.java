@@ -856,112 +856,6 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     return userLimit;
   }
 
-  /**
-   * APP_HIGH_FLAG_PRIORITY, default 60
-   */
-  private static final String APP_HIGH_FLAG_PRIORITY =
-      PREFIX + "apps.high.flag.priority";
-
-  public static final double DEFAULT_APP_HIGH_FLAG_PRIORITY = 60;
-
-  public double getAppHighFlagPriority() {
-    double appHighFlagPriority =
-        getDouble(APP_HIGH_FLAG_PRIORITY, DEFAULT_APP_HIGH_FLAG_PRIORITY);
-    return (appHighFlagPriority > 0) ? appHighFlagPriority :
-        DEFAULT_APP_HIGH_FLAG_PRIORITY;
-  }
-
-  /**
-   * APP_USED_FLAG_MEMORY, default 100TB
-   */
-  private static final String APP_USED_FLAG_MEMORY =
-      PREFIX + "apps.used.flag.memory";
-
-  public static final double DEFAULT_APP_USED_FLAG_MEMORY = 100 * 1024 * 1024;
-
-  public double getAppUsedFlagMemory() {
-    double appUsedFlagMemory =
-        getDouble(APP_USED_FLAG_MEMORY, DEFAULT_APP_USED_FLAG_MEMORY);
-    return (appUsedFlagMemory > 0) ? appUsedFlagMemory :
-        DEFAULT_APP_USED_FLAG_MEMORY;
-  }
-
-  /**
-   * APP_PENDING_FLAG_TIME, default 120 minutes
-   */
-  private static final String APP_PENDING_FLAG_TIME =
-      PREFIX + "apps.pending.flag.time";
-
-  public static final double DEFAULT_APP_PENDING_FLAG_TIME = 120 * 60 * 1000;
-
-  public double getAppPendingFlagTime() {
-    double appPendingFlagTime =
-        getDouble(APP_PENDING_FLAG_TIME, DEFAULT_APP_PENDING_FLAG_TIME);
-    return (appPendingFlagTime > 0) ? appPendingFlagTime :
-        DEFAULT_APP_PENDING_FLAG_TIME;
-  }
-
-  /**
-   * priorityWeightFactor, default 0.6
-   */
-  private static final String APP_PRIORITY_WEIGHT_FACTOR =
-      PREFIX + "apps.priority.weight.factor";
-
-  public static final double DEFAULT_APP_PRIORITY_WEIGHT_FACTOR = 0.6;
-
-  public double getAppPriorityWeightFactor() {
-    double appPriorityWeightFactor = getDouble(APP_PRIORITY_WEIGHT_FACTOR,
-        DEFAULT_APP_PRIORITY_WEIGHT_FACTOR);
-    return (appPriorityWeightFactor > 0 && appPriorityWeightFactor < 1) ?
-        appPriorityWeightFactor :
-        DEFAULT_APP_PRIORITY_WEIGHT_FACTOR;
-  }
-
-  /**
-   * usedMemoryWeightFactor, default 0.2
-   */
-  private static final String APP_USED_MEMORY_WEIGHT_FACTOR =
-      PREFIX + "apps.used.memory.weight.factor";
-
-  public static final double DEFAULT_APP_USED_MEMORY_WEIGHT_FACTOR = 0.2;
-
-  public double getAppUsedMemoryWeightFactor() {
-    double appUsedMemoryWeightFactor =
-        getDouble(APP_USED_MEMORY_WEIGHT_FACTOR,
-            DEFAULT_APP_USED_MEMORY_WEIGHT_FACTOR);
-    return
-        (appUsedMemoryWeightFactor > 0 && appUsedMemoryWeightFactor < 1) ?
-            appUsedMemoryWeightFactor :
-            DEFAULT_APP_USED_MEMORY_WEIGHT_FACTOR;
-  }
-
-  public static final double DEFAULT_APP_PENDING_TIME_WEIGHT_FACTOR = 0.2;
-
-  /**
-   * Apps order cache time, default 0, without cache
-   */
-  private static final String APPS_ORDER_CACHE_TIME =
-      PREFIX + "apps.order.cache.time";
-
-  public static final long DEFAULT_APP_ORDER_CACHE_TIME = 0;
-
-  public long getAppOrderCacheTime() {
-    return getLong(APPS_ORDER_CACHE_TIME, DEFAULT_APP_ORDER_CACHE_TIME);
-  }
-
-  /**
-   * Apps full reorder time, default 60s
-   */
-  private static final String APPS_FULL_REORDER_INTERVAL_SECOND =
-      PREFIX + "apps.full.reorder.interval.second";
-
-  public static final int DEFAULT_APPS_FULL_REORDER_INTERVAL_SECOND = 60;
-
-  public int getFullReOrderIntervalSecond() {
-    return getInt(APPS_FULL_REORDER_INTERVAL_SECOND,
-        DEFAULT_APPS_FULL_REORDER_INTERVAL_SECOND);
-  }
-
   // TODO (wangda): We need to better distinguish app ordering policy and queue
   // ordering policy's classname / configuration options, etc. And dedup code
   // if possible.
@@ -974,7 +868,7 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     LOG.info("queue: " + queue + " ,AppOrderingPolicy: " + policyType);
     
     OrderingPolicy<S> orderingPolicy;
-    
+    String policyName = policyType;
     if (policyType.trim().equals(FIFO_APP_ORDERING_POLICY)) {
        policyType = FifoOrderingPolicy.class.getName();
     }
@@ -999,54 +893,26 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
       throw new RuntimeException(message, e);
     }
 
-    double highFlagPriority = getAppHighFlagPriority();
-    double usedFlagMemory = getAppUsedFlagMemory();
-    double pendingFlagTime = getAppPendingFlagTime();
-    double priorityWeightFactor = getAppPriorityWeightFactor();
-    double usedMemoryWeightFactor = getAppUsedMemoryWeightFactor();
-    long cacheTime = getAppOrderCacheTime();
-    int fullReorderIntervalSecond = getFullReOrderIntervalSecond();
-    LOG.info(
-        "highFlagPriority: " + highFlagPriority + " ,usedFlagMemory: " +
-            usedFlagMemory + " ,pendingFlagTime: " + pendingFlagTime +
-            " ,priorityWeightFactor: " + priorityWeightFactor +
-            " ,usedMemoryWeightFactor: " + usedMemoryWeightFactor +
-            " ,getAppOrderCacheTime: " + cacheTime +
-            " ,fullReorderIntervalSecond: " + fullReorderIntervalSecond);
-
+    Map<String, String> globalConfig = new HashMap<String, String>();
+    String globalConfPrefix = PREFIX + ORDERING_POLICY + "." + policyName;
     Map<String, String> config = new HashMap<String, String>();
     String confPrefix = getQueuePrefix(queue) + ORDERING_POLICY + ".";
     for (Map.Entry<String, String> kv : this) {
       if (kv.getKey().startsWith(confPrefix)) {
          config.put(kv.getKey().substring(confPrefix.length()), kv.getValue());
       }
-
-      //add queue name
-      config.put("queueName", queue);
-
-      //add cache time
-      config.put("appsOrderCacheTime", String.valueOf(cacheTime));
-
-      //add fullOrderIntervalSecond
-      config.put("fullReorderIntervalSecond",
-          String.valueOf(fullReorderIntervalSecond));
-
-      //add highFlagPriority
-      config.put("highFlagPriority", String.valueOf(highFlagPriority));
-
-      //add usedFlagMemory
-      config.put("usedFlagMemory", String.valueOf(usedFlagMemory));
-
-      //add pendingFlagTime
-      config.put("pendingFlagTime", String.valueOf(pendingFlagTime));
-
-      //add priorityWeightFactor
-      config.put("priorityWeightFactor", String.valueOf(priorityWeightFactor));
-
-      //add usedMemoryWeightFactor
-      config.put("usedMemoryWeightFactor",
-          String.valueOf(usedMemoryWeightFactor));
+      if (kv.getKey().startsWith(globalConfPrefix)) {
+        globalConfig.put(kv.getKey().substring(globalConfPrefix.length()),
+            kv.getValue());
+      }
     }
+    for (String key : globalConfig.keySet()) {
+      if (!config.containsKey(key)) {
+        config.put(key, globalConfig.get(key));
+      }
+    }
+    //add queue name
+    config.put("queueName", queue);
     orderingPolicy.configure(config);
     return orderingPolicy;
   }

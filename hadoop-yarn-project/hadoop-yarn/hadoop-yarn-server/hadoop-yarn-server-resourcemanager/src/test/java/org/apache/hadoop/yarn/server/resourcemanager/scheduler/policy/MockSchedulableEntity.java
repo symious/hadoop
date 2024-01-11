@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy;
 
+import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceUsage;
@@ -34,6 +35,7 @@ public class MockSchedulableEntity implements SchedulableEntity {
   private String partition = "";
   private long startTime;
   private long reOrderTime;
+  private ApplicationSubmissionContext appSubmissionContext;
 
   public MockSchedulableEntity() { }
   
@@ -131,5 +133,14 @@ public class MockSchedulableEntity implements SchedulableEntity {
   @Override
   public void setReOrderTime(long reOrderTime) {
     this.reOrderTime = reOrderTime;
+  }
+
+  public void setAppSubmissionContext(ApplicationSubmissionContext context) {
+    this.appSubmissionContext = context;
+  }
+
+  @Override
+  public ApplicationSubmissionContext getAppSubmissionContext() {
+    return appSubmissionContext;
   }
 }
