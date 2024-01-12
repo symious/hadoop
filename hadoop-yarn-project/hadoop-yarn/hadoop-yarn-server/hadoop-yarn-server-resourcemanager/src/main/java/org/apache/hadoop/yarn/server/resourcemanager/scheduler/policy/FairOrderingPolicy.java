@@ -199,8 +199,10 @@ public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
       sizeBasedWeight =
         Boolean.parseBoolean(conf.get(ENABLE_SIZE_BASED_WEIGHT));
     }
+    if (conf.containsKey(APPS_ORDER_CACHE_TIME)) {
+      this.cacheTime = Long.valueOf(conf.get(APPS_ORDER_CACHE_TIME));
+    }
     this.queueName = conf.get("queueName");
-    this.cacheTime = Long.valueOf(conf.get("appsOrderCacheTime"));
   }
 
   @Override

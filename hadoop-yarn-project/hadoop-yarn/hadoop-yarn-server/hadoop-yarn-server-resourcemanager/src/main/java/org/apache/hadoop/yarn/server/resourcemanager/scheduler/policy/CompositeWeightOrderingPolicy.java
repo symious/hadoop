@@ -37,36 +37,34 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity>
     extends AbstractComparatorOrderingPolicy<S> {
 
   private static final String APP_HIGH_FLAG_PRIORITY =
-      "apps.high.flag.priority";
+      "apps-high-flag-priority";
   private static final int DEFAULT_APP_HIGH_FLAG_PRIORITY = 60;
 
-  private static final String APP_USED_FLAG_MEMORY = "apps.used.flag.memory";
+  private static final String APP_USED_FLAG_MEMORY = "apps-used-flag-memory";
 
   private static final int DEFAULT_APP_USED_FLAG_MEMORY = 100 * 1024 * 1024;
 
-  private static final String APP_PENDING_FLAG_TIME = "apps.pending.flag.time";
+  private static final String APP_PENDING_FLAG_TIME = "apps-pending-flag-time";
 
   private static final int DEFAULT_APP_PENDING_FLAG_TIME = 120 * 60 * 1000;
 
   private static final String APP_PRIORITY_WEIGHT_FACTOR =
-      "apps.priority.weight.factor";
+      "apps-priority-weight-factor";
 
   private static final double DEFAULT_APP_PRIORITY_WEIGHT_FACTOR = 0.6;
 
   private static final String APP_USED_MEMORY_WEIGHT_FACTOR =
-      "apps.used.memory.weight.factor";
+      "apps-used-memory-weight-factor";
 
   private static final double DEFAULT_APP_USED_MEMORY_WEIGHT_FACTOR = 0.2;
 
   private static final String APP_TIME_WEIGHT_FACTOR =
-      "apps.time.weight.factor";
+      "apps-time-weight-factor";
 
   private static final double DEFAULT_APP_TIME_WEIGHT_FACTOR = 0.2;
 
-  private static final String APPS_ORDER_CACHE_TIME = "apps.order.cache.time";
-
   private static final String APPS_FULL_REORDER_INTERVAL_SECOND =
-      "apps.full.reorder.interval.second";
+      "apps-full-reorder-interval-second";
 
   private static final Logger LOG =
       LoggerFactory.getLogger(CompositeWeightOrderingPolicy.class);
@@ -370,7 +368,7 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity>
     this.queueName = conf.get("queueName");
     if (conf.containsKey(APPS_ORDER_CACHE_TIME)) {
       this.cacheTime =
-          Long.parseLong(conf.get(APPS_FULL_REORDER_INTERVAL_SECOND));
+          Long.parseLong(conf.get(APPS_ORDER_CACHE_TIME));
     }
     if (conf.containsKey(APPS_FULL_REORDER_INTERVAL_SECOND)) {
       this.fullReorderIntervalSecond =
@@ -407,7 +405,7 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity>
         + usedFlagMemory + " ,pendingFlagTime: " + pendingFlagTime
         + " ,getAppOrderCacheTime: " + cacheTime
         + " ,fullReorderIntervalSecond: " + fullReorderIntervalSecond
-        + " ,validateWeightFactor: " + priorityWeightFactor
+        + " ,priorityWeightFactor: " + priorityWeightFactor
         + " ,usedMemoryWeightFactor: " + usedMemoryWeightFactor
         + " ,pendingTimeWeightFactor: " + pendingTimeWeightFactor);
   }

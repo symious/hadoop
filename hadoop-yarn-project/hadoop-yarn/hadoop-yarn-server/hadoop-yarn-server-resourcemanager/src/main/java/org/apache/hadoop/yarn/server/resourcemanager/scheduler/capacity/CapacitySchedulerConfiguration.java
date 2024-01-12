@@ -903,7 +903,7 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     }
 
     Map<String, String> globalConfig = new HashMap<String, String>();
-    String globalConfPrefix = PREFIX + ORDERING_POLICY + "." + policyName;
+    String globalConfPrefix = PREFIX + ORDERING_POLICY + "." + policyName + ".";
     Map<String, String> config = new HashMap<String, String>();
     String confPrefix = getQueuePrefix(queue) + ORDERING_POLICY + ".";
     for (Map.Entry<String, String> kv : this) {

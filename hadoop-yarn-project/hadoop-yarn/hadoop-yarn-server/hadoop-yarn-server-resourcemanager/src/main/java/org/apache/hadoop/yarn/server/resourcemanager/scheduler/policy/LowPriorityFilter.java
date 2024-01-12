@@ -10,7 +10,7 @@ public class LowPriorityFilter<S extends SchedulableEntity>
 
   @Override
   public boolean filter(S s) {
-    if (s.getPriority().getPriority() <= priorityThreshold) {
+    if (s.getPriority().getPriority() < priorityThreshold) {
       return true;
     }
     return false;
