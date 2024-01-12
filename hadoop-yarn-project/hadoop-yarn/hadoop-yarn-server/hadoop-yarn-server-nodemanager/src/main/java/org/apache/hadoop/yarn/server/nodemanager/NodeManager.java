@@ -1138,10 +1138,6 @@ public class NodeManager extends CompositeService
       conf.setInt(YarnConfiguration.NM_RESOURCE_PERCENTAGE_PHYSICAL_CPU_LIMIT, nodeCpuPercentage);
       conf.setInt(YarnConfiguration.NM_PMEM_MB, Long.valueOf(mem).intValue());
       conf.setInt(YarnConfiguration.NM_VCORES, vcore);
-      Long elasticMB = conf.getLong(YarnConfiguration.NM_ELASTIC_PMEM_MB, mem);
-      if (elasticMB > mem) {
-        conf.setLong(YarnConfiguration.NM_ELASTIC_PMEM_MB, mem);
-      }
     } catch (IOException e) {
       String errorMessage = "Unexpected error starting getNodeResourceFromAllocationFile";
       LOG.error(errorMessage, e);
