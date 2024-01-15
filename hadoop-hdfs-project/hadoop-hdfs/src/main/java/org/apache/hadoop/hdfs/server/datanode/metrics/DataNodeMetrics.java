@@ -42,8 +42,6 @@ import org.apache.hadoop.metrics2.lib.MutableRatesWithAggregation;
 import org.apache.hadoop.metrics2.lib.MutableStat;
 import org.apache.hadoop.metrics2.source.JvmMetrics;
 import org.apache.hadoop.net.DNSToSwitchMapping;
-import org.apache.hadoop.net.ScriptBasedMapping;
-import org.apache.hadoop.util.ReflectionUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -224,6 +222,8 @@ public class DataNodeMetrics {
   private MutableRate heartbeatInterval;
   @Metric("Time spent to create new BlockSender instances")
   private MutableRate blockSenderInitializationNanos;
+  @Metric("Number of blocks in IBRs that failed due to null storage")
+  MutableCounterLong nullStorageBlockReports;
 
   final MetricsRegistry registry = new MetricsRegistry("datanode");
   @Metric("Milliseconds spent on calling NN rpc")
@@ -901,5 +901,9 @@ public class DataNodeMetrics {
 
   public void addBlockSenderInitializationNanos(long latency) {
     blockSenderInitializationNanos.add(latency);
+  }
+
+  public void incrNullStorageBlockReports() {
+    nullStorageBlockReports.incr();
   }
 }

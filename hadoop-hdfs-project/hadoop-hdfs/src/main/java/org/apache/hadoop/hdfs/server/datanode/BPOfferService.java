@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.datanode;
 
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
@@ -324,6 +325,10 @@ class BPOfferService {
     final ReceivedDeletedBlockInfo info = new ReceivedDeletedBlockInfo(
         block.getLocalBlock(), status, delHint);
     final DatanodeStorage storage = dn.getFSDataset().getStorage(storageUuid);
+    if (storage == null) {
+      LOG.warn("Trying to add RDBI for null storage UUID {}. Trace: {}", storageUuid,
+          Joiner.on("\n").join(Thread.currentThread().getStackTrace()));
+    }
 
     for (BPServiceActor actor : bpServices) {
       actor.getIbrManager().notifyNamenodeBlock(info, storage,
