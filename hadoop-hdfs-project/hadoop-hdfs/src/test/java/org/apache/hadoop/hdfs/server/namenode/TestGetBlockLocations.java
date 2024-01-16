@@ -20,9 +20,24 @@ package org.apache.hadoop.hdfs.server.namenode;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.PermissionStatus;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSTestUtil;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter;
+import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeManager;
 import org.apache.hadoop.hdfs.server.namenode.FSDirectory.DirOp;
 import org.apache.hadoop.hdfs.server.namenode.NameNode.OperationCategory;
+import org.apache.hadoop.ipc.CallerContext;
+import org.apache.hadoop.net.StaticMapping;
+import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -30,9 +45,12 @@ import org.mockito.stubbing.Answer;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.List;
 
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CALLER_CONTEXT_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_SIZE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED;
 import static org.apache.hadoop.util.Time.now;
 import static org.mockito.Mockito.anyLong;
 import static org.mockito.Mockito.anyString;
@@ -153,4 +171,91 @@ public class TestGetBlockLocations {
     return fsn;
   }
 
+  @Test
+  public void testCallerContextAddBlocksForIDCGetBlockLocations() throws IOException {
+    // Setup the cluster.
+    final String[] hosts = {"host0", "host1", "host2"};
+    final String[] racks = {"/dc0/rack0", "/dc0/rack1", "/dc0/rack2"};
+    Configuration conf = new HdfsConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, 3);
+    conf.setBoolean(HADOOP_CALLER_CONTEXT_ENABLED_KEY, true);
+    conf.setBoolean(DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED, true);
+    conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+        BlockPlacementPolicyWithDataCenter.class,
+        BlockPlacementPolicy.class);
+    conf.setBoolean(DFSConfigKeys.DFS_USE_DFS_NETWORK_TOPOLOGY_KEY, true);
+    conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY,
+        DFSNetworkTopologyWithDataCenter.class,
+        DFSNetworkTopology.class);
+
+    try (MiniDFSCluster cluster = new MiniDFSCluster
+        .Builder(conf).numDataNodes(hosts.length)
+        .hosts(hosts).racks(racks).build()) {
+      cluster.waitActive();
+      DistributedFileSystem fs = cluster.getFileSystem();
+      org.apache.hadoop.fs.Path path = new org.apache.hadoop.fs.Path("/test.txt");
+      DFSTestUtil.createFile(fs, path, 1024, 1024 * 3, 1024, (short)3,
+          0L);
+
+      // Create DatanodeManager instance.
+      FSNamesystem fsn = cluster.getNamesystem();
+      DatanodeManager dm = fsn.getBlockManager().getDatanodeManager();
+
+      List<LocatedBlock> blocks = DFSTestUtil.getAllBlocks(fs, path);
+      Assert.assertEquals(3, blocks.size());
+      Assert.assertEquals(3, blocks.get(0).getLocations().length);
+      String clientMachine = "host3";
+
+      // Client in /dc0 and will not cross idc read.
+      StaticMapping.addNodeToRack(clientMachine, "/dc0/rack1");
+      LocatedBlocks locatedBlocks = fsn.getBlockLocations(clientMachine, path.toString(), 0,
+          1024);
+      Assert.assertEquals(1, locatedBlocks.getLocatedBlocks().size());
+      Assert.assertNull(CallerContext.getCurrent());
+
+      // Client in /dc1 and will cross idc read.
+      StaticMapping.addNodeToRack(clientMachine, "/dc1/rack1");
+
+      // Read data size is the size of one block,
+      // the first and last blockId will be recorded in CallerContext.
+      locatedBlocks = fsn.getBlockLocations(clientMachine, path.toString(), 0,
+          1024);
+      Assert.assertEquals(1, locatedBlocks.getLocatedBlocks().size());
+      Assert.assertTrue(CallerContext.getCurrent().getContext().contains("blkIdList:" +
+          blocks.get(0).getBlock().getBlockId() + "$" +
+          blocks.get(2).getBlock().getBlockId()));
+      CallerContext.setCurrent(null);
+
+      // Read data size is the size of two block,
+      // the all blockId will be recorded in CallerContext.
+      locatedBlocks = fsn.getBlockLocations(clientMachine, path.toString(), 0,
+          1024 * 2);
+      Assert.assertEquals(2, locatedBlocks.getLocatedBlocks().size());
+      Assert.assertTrue(CallerContext.getCurrent().getContext().contains("blkIdList:" +
+          blocks.get(0).getBlock().getBlockId() + "$" +
+          blocks.get(1).getBlock().getBlockId() + "$" +
+          blocks.get(2).getBlock().getBlockId()));
+      CallerContext.setCurrent(null);
+
+      // Read data size is the size of three block,
+      // the all blockId will be recorded in CallerContext.
+      locatedBlocks = fsn.getBlockLocations(clientMachine, path.toString(), 0,
+          1024 * 3);
+      Assert.assertEquals(3, locatedBlocks.getLocatedBlocks().size());
+      Assert.assertTrue(CallerContext.getCurrent().getContext().contains("blkIdList:" +
+          blocks.get(0).getBlock().getBlockId() + "$" +
+          blocks.get(1).getBlock().getBlockId() + "$" +
+          blocks.get(2).getBlock().getBlockId()));
+      CallerContext.setCurrent(null);
+
+      // Set enableAuditLogAddBlocks is false,
+      // reading data, will not record blkIdList in CallerContext.
+      dm.setEnableAuditLogAddBlocks(false);
+      locatedBlocks = fsn.getBlockLocations(clientMachine, path.toString(), 0,
+          1024 * 3);
+      Assert.assertEquals(3, locatedBlocks.getLocatedBlocks().size());
+      Assert.assertFalse(CallerContext.getCurrent().getContext().contains("blkIdList"));
+      CallerContext.setCurrent(null);
+    }
+  }
 }

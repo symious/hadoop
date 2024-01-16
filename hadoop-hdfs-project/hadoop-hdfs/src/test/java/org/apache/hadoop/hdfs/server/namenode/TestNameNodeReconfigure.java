@@ -39,6 +39,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_ALLOW_USERS;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AVOID_SLOW_DATANODE_FOR_READ_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS;
@@ -821,5 +822,24 @@ public class TestNameNodeReconfigure {
     nameNode.reconfigureProperty(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY,
         "100");
     assertEquals(bm.getExcessRedundancyTimeout(), 100 * 1000);
+  }
+
+  @Test
+  public void testReconfigureAuditLogAddBlocksEnable()
+      throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode(0);
+    final DatanodeManager dm = nameNode.namesystem.getBlockManager().getDatanodeManager();
+    // verify default value.
+    assertFalse(dm.isEnableAuditLogAddBlocks());
+
+    // try correct value.
+    nameNode.reconfigurePropertyImpl(DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED,
+        "True");
+    assertTrue(dm.isEnableAuditLogAddBlocks());
+
+    // revert to defaults.
+    nameNode.reconfigurePropertyImpl(DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED,
+        null);
+    assertFalse(dm.isEnableAuditLogAddBlocks());
   }
 }

@@ -149,6 +149,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_ALLOW_USERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_MIN_BLOCKS_FOR_WRITE_DEFAULT;
@@ -448,7 +450,8 @@ public class NameNode extends ReconfigurableBase implements
           IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY,
           DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY,
           DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT,
-          DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED));
+          DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED,
+          DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2530,6 +2533,8 @@ public class NameNode extends ReconfigurableBase implements
         property.equals(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT) ||
         property.equals(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY)) {
       return reconfigureExcessRedundancyTimeoutCheckParameters(property, newVal);
+    } else if (property.equals(DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED)) {
+      return reconfigureAuditLogAddBlocksEnable(newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -3224,6 +3229,17 @@ public class NameNode extends ReconfigurableBase implements
     } finally {
       namesystem.writeUnlock();
     }
+  }
+
+  private String reconfigureAuditLogAddBlocksEnable(String newValue) {
+    boolean enable;
+    if (newValue == null) {
+      enable = DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED_DEFAULT;
+    } else {
+      enable = Boolean.parseBoolean(newValue);
+    }
+    this.namesystem.getBlockManager().getDatanodeManager().setEnableAuditLogAddBlocks(enable);
+    return String.valueOf(enable);
   }
 
   @Override //NameNodeStatusMXBean

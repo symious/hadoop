@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
+import static org.apache.hadoop.hdfs.protocol.HdfsConstants.BLOCK_IDS_STR;
 import static org.apache.hadoop.hdfs.protocol.HdfsConstants.CLIENT_DC_STR;
 import static org.apache.hadoop.hdfs.protocol.HdfsConstants.DATANODE_DC_STR;
 import static org.apache.hadoop.hdfs.protocol.HdfsConstants.FILE_LENGTH_DC_STR;
@@ -81,6 +82,7 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 /**
  * Manage datanodes, include decommission and other activities.
@@ -218,6 +220,10 @@ public class DatanodeManager {
   private final boolean useDfsNetworkTopology;
 
   private static final String IP_PORT_SEPARATOR = ":";
+
+
+  /** Whether to add block ids for namenode audit log when cross idc read file. */
+  private volatile boolean enableAuditLogAddBlocks;
 
   @Nullable
   private SlowPeerTracker slowPeerTracker;
@@ -397,6 +403,9 @@ public class DatanodeManager {
     this.blocksPerPostponedMisreplicatedBlocksRescan = conf.getLong(
         DFSConfigKeys.DFS_NAMENODE_BLOCKS_PER_POSTPONEDBLOCKS_RESCAN_KEY,
         DFSConfigKeys.DFS_NAMENODE_BLOCKS_PER_POSTPONEDBLOCKS_RESCAN_KEY_DEFAULT);
+    this.enableAuditLogAddBlocks = conf.getBoolean(
+        DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED,
+        DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED_DEFAULT);
     RefreshRegistry.defaultRegistry().register(
         DatanodeManagerRefreshHandler.DATANODE_MANAGER_REFRESH_HANDLER_IDENTIFIER,
         new DatanodeManagerRefreshHandler(this));
@@ -587,10 +596,20 @@ public class DatanodeManager {
     }
   }
 
+  @VisibleForTesting
+  public boolean isEnableAuditLogAddBlocks() {
+    return enableAuditLogAddBlocks;
+  }
+
+  public void setEnableAuditLogAddBlocks(boolean enableAuditLogAddBlocks) {
+    this.enableAuditLogAddBlocks = enableAuditLogAddBlocks;
+  }
+
   /** Check if the read traffic is inter-dc. */
   @VisibleForTesting
   public boolean checkInterDCRead(final String clientMachine,
-      final List<LocatedBlock> locatedblocks, final long fileLength, String fakeRack) {
+      final List<LocatedBlock> locatedblocks, final long fileLength, String fakeRack,
+      final LocatedBlock lastBlock) {
     if (locatedblocks.size() == 0) {
       return false;
     }
@@ -639,8 +658,23 @@ public class DatanodeManager {
     }
     NameNode.getNameNodeMetrics().incrCrossDCTraffic(clientDC, firstDnDC, true, fileLength);
 
+    String blockIds = "";
+    if (this.enableAuditLogAddBlocks) {
+      // Here only get blockId.
+      Set<Long> blockIdSet = locatedblocks.stream()
+          .map(locatedBlock -> locatedBlock.getBlock().getBlockId())
+          .collect(Collectors.toSet());
+
+      // The lastBlock is not part of getLocatedBlocks(), might need to add.
+      if (lastBlock != null) {
+        blockIdSet.add(lastBlock.getBlock().getBlockId());
+      }
+      blockIds = blockIdSet.stream().map(String::valueOf)
+          .collect(Collectors.joining("$"));
+    }
+
     // for trafficInOrOut is referenced to DN, so set to true.
-    appendInterDCReadToCallerContext(fileLength, clientDC, firstDnDC, true);
+    appendInterDCReadToCallerContext(fileLength, clientDC, firstDnDC, true, blockIds);
     return true;
   }
 
@@ -651,7 +685,7 @@ public class DatanodeManager {
    * to caller context.
    */
   private void appendInterDCReadToCallerContext(
-      long fileLength, String clientDC, String dnDC, boolean isTrafficOut) {
+      long fileLength, String clientDC, String dnDC, boolean isTrafficOut, String blockIds) {
     final CallerContext ctx = CallerContext.getCurrent();
     String origContext = ctx == null ? null : ctx.getContext();
     byte[] origSignature = ctx == null ? null : ctx.getSignature();
@@ -663,6 +697,7 @@ public class DatanodeManager {
             .append(DATANODE_DC_STR, dnDC)
             .append(TRAFFIC_DC_STR, trafficInOrOut)
             .append(FILE_LENGTH_DC_STR, Long.toString(fileLength))
+            .append(BLOCK_IDS_STR, blockIds)
             .setSignature(origSignature)
             .build());
   }

@@ -354,6 +354,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.namenode.delete.redundant.decommission.replica";
   public static final boolean DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA_DEFAULT = false;
 
+  public static final String DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED =
+      "dfs.namenode.audit.log.add.blocks.enabled";
+  public static final boolean DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED_DEFAULT = false;
+
   @Deprecated
   public static final String  DFS_WEBHDFS_USER_PATTERN_KEY =
       HdfsClientConfigKeys.DFS_WEBHDFS_USER_PATTERN_KEY;

@@ -6537,4 +6537,11 @@
       A target replication that the namenode will recompute the quota usage by this replication.
     </description>
   </property>
+  <property>
+    <name>dfs.namenode.audit.log.add.blocks.enabled</name>
+    <value>false</value>
+    <description>
+      If true, will add block ids for namenode audit log when cross idc read file.
+    </description>
+  </property>
 </configuration>

@@ -2335,7 +2335,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       blockManager.getDatanodeManager().sortLocatedBlocks(clientMachine, blkList, fakeRack);
       if (blockManager.getDataCenterAwareness()) {
         blockManager.getDatanodeManager().checkInterDCRead(clientMachine,
-            blocks.getLocatedBlocks(), blocks.getFileLength(), fakeRack);
+            blocks.getLocatedBlocks(), blocks.getFileLength(), fakeRack,
+            blocks.getLastLocatedBlock());
       }
 
       // lastBlock is not part of getLocatedBlocks(), might need to sort it too

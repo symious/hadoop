@@ -134,6 +134,7 @@ public final class HdfsConstants {
   public static final String DATANODE_DC_STR = "dnDC";
   public static final String FILE_LENGTH_DC_STR = "size";
   public static final String TRAFFIC_DC_STR = "traffic";
+  public static final String BLOCK_IDS_STR = "blkIds";
 
   // SafeMode actions
   public enum SafeModeAction {
