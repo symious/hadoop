@@ -9,6 +9,10 @@ public class EnvFilter<S extends SchedulableEntity>
 
   @Override
   public boolean filter(S s) {
+    if (s.getAppSubmissionContext() == null ||
+          s.getAppSubmissionContext().getAMContainerSpec() == null) {
+        return false;
+    }
     Map<String, String> amEnvs =
         s.getAppSubmissionContext().getAMContainerSpec().getEnvironment();
     for (Map.Entry<String, String> entry : filterEnvs.entrySet()) {
