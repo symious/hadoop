@@ -42,11 +42,11 @@ import org.apache.hadoop.yarn.server.scheduler.SchedulerRequestKey;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -67,6 +67,8 @@ public class LocalityAppPlacementAllocator <N extends SchedulerNode>
       RMNodeLabelsManager.NO_LABEL;
   private MultiNodeSortingManager<N> multiNodeSortingManager = null;
   private String multiNodeSortPolicyName;
+
+  private Random random = new Random();
 
   private final ReentrantReadWriteLock.ReadLock readLock;
   private final ReentrantReadWriteLock.WriteLock writeLock;
@@ -129,8 +131,11 @@ public class LocalityAppPlacementAllocator <N extends SchedulerNode>
 
     List<N> allCandidatesList =
         new ArrayList<>(candidateNodeSet.getAllNodes().values());
-    Collections.shuffle(allCandidatesList);
-    return allCandidatesList.iterator();
+    int sum = allCandidatesList.size();
+    int index = random.nextInt(sum);
+    Iterator<N> it1 = allCandidatesList.subList(index, sum).iterator();
+    Iterator<N> it2 = allCandidatesList.subList(0, index).iterator();
+    return IteratorUtils.chainedIterator(it1, it2);
   }
 
   private boolean hasRequestLabelChanged(ResourceRequest requestOne,
