@@ -1,24 +1,19 @@
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class EnvFilter<S extends SchedulableEntity>
     implements SchedulableEntityFilter<S> {
 
-  private Map<String, String> filterEnvs;
+  private Map<String, String> filterEnvs = new HashMap<>();
 
   @Override
   public boolean filter(S s) {
-    if (s.getAppSubmissionContext() == null ||
-          s.getAppSubmissionContext().getAMContainerSpec() == null) {
-        return false;
-    }
-    Map<String, String> amEnvs =
-        s.getAppSubmissionContext().getAMContainerSpec().getEnvironment();
-    for (Map.Entry<String, String> entry : filterEnvs.entrySet()) {
-      if (!amEnvs.containsKey(entry.getKey()) || !amEnvs.get(entry.getKey())
-          .equals(entry.getValue()))
-        return false;
+    Map<String, String> amEnvs = s.getApplicationSchedulingEnvs();
+    // if filterEnvs is not subset of amEnvs, return false
+    if (!amEnvs.entrySet().containsAll(filterEnvs.entrySet())) {
+      return false;
     }
     return true;
   }

@@ -18,12 +18,13 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy;
 
-import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceUsage;
 import org.apache.hadoop.yarn.util.SystemClock;
 import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
+
+import java.util.Map;
 
 
 public class MockSchedulableEntity implements SchedulableEntity {
@@ -35,7 +36,7 @@ public class MockSchedulableEntity implements SchedulableEntity {
   private String partition = "";
   private long startTime;
   private long reOrderTime;
-  private ApplicationSubmissionContext appSubmissionContext;
+  private Map<String, String> applicationSchedulingEnvs;
 
   public MockSchedulableEntity() { }
   
@@ -135,12 +136,12 @@ public class MockSchedulableEntity implements SchedulableEntity {
     this.reOrderTime = reOrderTime;
   }
 
-  public void setAppSubmissionContext(ApplicationSubmissionContext context) {
-    this.appSubmissionContext = context;
+  public void setApplicationSchedulingEnvs(Map<String, String> schedulingEnvs) {
+    this.applicationSchedulingEnvs = schedulingEnvs;
   }
 
   @Override
-  public ApplicationSubmissionContext getAppSubmissionContext() {
-    return appSubmissionContext;
+  public Map<String, String> getApplicationSchedulingEnvs() {
+    return applicationSchedulingEnvs;
   }
 }

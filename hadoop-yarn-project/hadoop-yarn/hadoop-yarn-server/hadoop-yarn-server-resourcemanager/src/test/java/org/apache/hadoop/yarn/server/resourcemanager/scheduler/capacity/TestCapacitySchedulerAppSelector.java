@@ -78,22 +78,24 @@ public class TestCapacitySchedulerAppSelector
     priorityConfig.put("priorityThreshold", "40");
     SchedulableEntityFilter priorityFilter =
         AppSelectorFilterUtils.getFilter("low_priority", priorityConfig);
-    MockSchedulableEntity entity = new MockSchedulableEntity(1, 40, false);
+    MockSchedulableEntity entity = new MockSchedulableEntity(1, 39, false);
     assertEquals(true, priorityFilter.filter(entity));
 
     Map<String, String> envConfig = new HashMap<>();
     envConfig.put("rssEnabled", "true");
     SchedulableEntityFilter envFilter =
         AppSelectorFilterUtils.getFilter("env", envConfig);
-    MockSchedulableEntity entity2 = new MockSchedulableEntity(2, 40, false);
+    MockSchedulableEntity entity2 = new MockSchedulableEntity(2, 39, false);
     Map<String, String> appEnvs = new HashMap<>();
     appEnvs.put("rssEnabled", "true");
-    ContainerLaunchContext clc = ContainerLaunchContext
-        .newInstance(null, appEnvs, null, null, null, null);
-    ApplicationSubmissionContext asc = ApplicationSubmissionContext
-        .newInstance(null, null, null, null, clc, false, false, 1, null);
-    entity2.setAppSubmissionContext(asc);
+    entity2.setApplicationSchedulingEnvs(appEnvs);
     assertEquals(true, envFilter.filter(entity2));
+
+    MockSchedulableEntity entity3 = new MockSchedulableEntity(2, 39, false);
+    Map<String, String> appEnvs3 = new HashMap<>();
+    appEnvs3.put("rssEnabled", null);
+    entity3.setApplicationSchedulingEnvs(appEnvs3);
+    assertEquals(false, envFilter.filter(entity3));
   }
 
   @Test
@@ -112,23 +114,20 @@ public class TestCapacitySchedulerAppSelector
     MockSchedulableEntity msp1 = new MockSchedulableEntity(1, 20, false);
     MockSchedulableEntity msp2 = new MockSchedulableEntity(2, 30, false);
     MockSchedulableEntity msp3 = new MockSchedulableEntity(3, 80, false);
-    MockSchedulableEntity msp4 = new MockSchedulableEntity(4, 40, false);
+    MockSchedulableEntity msp4 = new MockSchedulableEntity(4, 39, false);
 
     msp1.setId("1");
-    msp1.setAppSubmissionContext(
-        constructApplicationSubmissionContext(new HashMap<String, String>() {{
-        }}));
+    msp1.setApplicationSchedulingEnvs(new HashMap<String, String>() {{
+        }});
     msp2.setId("2");
-    msp2.setAppSubmissionContext(
-        constructApplicationSubmissionContext(new HashMap<String, String>() {{
+    msp2.setApplicationSchedulingEnvs(new HashMap<String, String>() {{
           put("rssEnabled", "true");
-        }}));
+        }});
     msp3.setId("3");
     msp4.setId("4");
-    msp4.setAppSubmissionContext(
-        constructApplicationSubmissionContext(new HashMap<String, String>() {{
+    msp4.setApplicationSchedulingEnvs(new HashMap<String, String>() {{
           put("rssEnabled", "true");
-        }}));
+        }});
 
     schedOrder.addSchedulableEntity(msp1);
     schedOrder.addSchedulableEntity(msp2);
@@ -150,14 +149,5 @@ public class TestCapacitySchedulerAppSelector
     for (int i = 0; i < ids.length; i++) {
       assertEquals(iter2.next().getId(), ids[i]);
     }
-  }
-
-  public ApplicationSubmissionContext constructApplicationSubmissionContext(
-      Map<String, String> appEnvs) {
-    ContainerLaunchContext clc = ContainerLaunchContext
-        .newInstance(null, appEnvs, null, null, null, null);
-    ApplicationSubmissionContext asc = ApplicationSubmissionContext
-        .newInstance(null, null, null, null, clc, false, false, 1, null);
-    return asc;
   }
 }

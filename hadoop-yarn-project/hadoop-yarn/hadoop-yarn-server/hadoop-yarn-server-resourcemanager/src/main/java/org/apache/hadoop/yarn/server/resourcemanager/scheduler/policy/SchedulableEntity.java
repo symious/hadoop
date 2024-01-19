@@ -22,6 +22,8 @@ import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceUsage;
 
+import java.util.Map;
+
 
 /**
  * A SchedulableEntity is a process to be scheduled.
@@ -80,5 +82,5 @@ public interface SchedulableEntity {
    */
   void setReOrderTime(long reOrderTime);
 
-  public ApplicationSubmissionContext getAppSubmissionContext();
+  public Map<String, String> getApplicationSchedulingEnvs();
 }
