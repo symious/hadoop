@@ -65,8 +65,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_HTTP_ADDRESS_
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_HTTP_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONE_GENERATE_REPLICATION_RULE_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONE_GENERATE_REPLICATION_RULE_ENABLED_KEY_DEFAULT;
 import static org.apache.hadoop.util.ExitUtil.terminate;
 
 public class ZoneService extends ReconfigurableBase  {
@@ -354,8 +354,8 @@ public class ZoneService extends ReconfigurableBase  {
 
   private void initReplicationRuleGenerateKafkaTrigger(Configuration conf) throws IOException {
     boolean replicationRuleGenerateEnabled = conf.getBoolean(
-        DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY,
-        DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY_DEFAULT);
+        DFS_ZONE_GENERATE_REPLICATION_RULE_ENABLED_KEY,
+        DFS_ZONE_GENERATE_REPLICATION_RULE_ENABLED_KEY_DEFAULT);
     if (replicationRuleGenerateEnabled && replicationRuleGenerateKafkaTrigger == null) {
       LOG.info("Start replication rule generate kafka trigger.");
       replicationRuleGenerateKafkaTrigger = new ReplicationRuleGenerateKafkaTrigger(conf);

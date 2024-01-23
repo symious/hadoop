@@ -828,54 +828,58 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONESERVICE_AUTO_BALANCER_AUDIT_LOG_DEFAULT = "/var/log/hadoop/hdfs/zone-service-audit.log";
   public static final String  DFS_ZONESERVICE_AUTO_BALANCER_FAIL_RETRY_INTERVAL_KEY = "dfs.zoneservice.auto.balancer.fail.retry.interval";
   public static final int     DFS_ZONESERVICE_AUTO_BALANCER_FAIL_RETRY_INTERVAL_DEFAULT = 12;
-  //ZoneService Generte ReplicationRule kafka trigger related keys
-  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_BOOTSTRAP_SERVERS =
+  //ZoneService Generate ReplicationRule kafka trigger related keys
+  public static final String  DFS_ZONE_GENERATE_REPLICATION_RULE_KAFKA_BOOTSTRAP_SERVERS =
       "dfs.zone.generate.replicationrule.kafka.bootstrap.servers";
-  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_TOPIC =
+  public static final String DFS_ZONE_GENERATE_REPLICATION_RULE_KAFKA_TOPIC =
       "dfs.zone.generate.replicationrule.kafka.topic";
-  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_GROUP_ID =
+  public static final String DFS_ZONE_GENERATE_REPLICATION_RULE_KAFKA_GROUP_ID =
       "dfs.zone.generate.replicationrule.kafka.group.id";
-  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_USERNAME =
+  public static final String DFS_ZONE_GENERATE_REPLICATION_RULE_KAFKA_USERNAME =
       "dfs.zone.generate.replicationrule.kafka.username";
-  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_PASSWORD =
+  public static final String DFS_ZONE_GENERATE_REPLICATION_RULE_KAFKA_PASSWORD =
       "dfs.zone.generate.replicationrule.kafka.password";
-  public static final String DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_POLL_TIMEOUT_MS =
+  public static final String DFS_ZONE_GENERATE_REPLICATION_RULE_KAFKA_POLL_TIMEOUT_MS =
       "dfs.zone.generate.replicationrule.kafka-poll.timeout";
-  public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_POLL_TIMEOUT_DEFAULT = 100;
+  public static final int DFS_ZONE_GENERATE_REPLICATION_RULE_KAFKA_POLL_TIMEOUT_DEFAULT = 100;
 
-  public static final String DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_REQUEST_TIMEOUT_MS =
+  public static final String DFS_ZONE_GENERATE_REPLICATION_RULE_KAFKA_REQUEST_TIMEOUT_MS =
       "dfs.zone.generate.replicationrule.kafka-request.timeout";
-  public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_REQUEST_TIMEOUT_DEFAULT = 30000;
+  public static final int DFS_ZONE_GENERATE_REPLICATION_RULE_KAFKA_REQUEST_TIMEOUT_DEFAULT = 30000;
 
-  public static final String DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_MAX_POLL_RECORDS_KEY =
+  public static final String DFS_ZONE_GENERATE_REPLICATION_RULE_KAFKA_MAX_POLL_RECORDS_KEY =
       "dfs.zone.generate.replicationrule.max-poll.records";
-  public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_MAX_POLL_RECORDS_DEFAULT = 50;
+  public static final int DFS_ZONE_GENERATE_REPLICATION_RULE_KAFKA_MAX_POLL_RECORDS_DEFAULT = 50;
 
-  public static final String DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_MAX_POLL_INTERVAL_MS =
+  public static final String DFS_ZONE_GENERATE_REPLICATION_RULE_KAFKA_MAX_POLL_INTERVAL_MS =
       "dfs.zone.generate.replicationrule.kafka.max-poll.interval.ms";
-  public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_KAFKA_MAX_POLL_INTERVAL_MS_DEFAULT = 300000;
+  public static final int DFS_ZONE_GENERATE_REPLICATION_RULE_KAFKA_MAX_POLL_INTERVAL_MS_DEFAULT = 300000;
 
-  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY =
+  public static final String DFS_ZONE_GENERATE_REPLICATION_RULE_KAFKA_SESSION_TIMEOUT_MS =
+      "dfs.zone.generate.replicationrule.kafka.session.timeout.ms";
+  public static final int DFS_ZONE_GENERATE_REPLICATION_RULE_KAFKA_SESSION_TIMEOUT_MS_DEFAULT = 30000;
+
+  public static final String DFS_ZONE_GENERATE_REPLICATION_RULE_ENABLED_KEY =
       "dfs.zone.generate.replicationrule.enabled";
-  public static final boolean DFS_ZONE_GENERTE_REPLICATION_RULE_ENABLED_KEY_DEFAULT =
+  public static final boolean DFS_ZONE_GENERATE_REPLICATION_RULE_ENABLED_KEY_DEFAULT =
       false;
-  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_KEY =
+  public static final String  DFS_ZONE_GENERATE_REPLICATION_RULE_KEY =
       "dfs.zone.generate.replicationrule";
   //clientDC:1,dnDC:2
-  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_DEFAULT = "1:2";
-  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_PATH_SIZE_LIMIT_KEY =
+  public static final String  DFS_ZONE_GENERATE_REPLICATION_RULE_DEFAULT = "1:2";
+  public static final String  DFS_ZONE_GENERATE_REPLICATION_RULE_PATH_SIZE_LIMIT_KEY =
       "dfs.zone.generate.replicationrule.path.size.limit";
   //default pathSizeLimit is 200TB.
-  public static final long  DFS_ZONE_GENERTE_REPLICATION_RULE_PATH_SIZE_LIMIT_DEFAULT =
+  public static final long  DFS_ZONE_GENERATE_REPLICATION_RULE_PATH_SIZE_LIMIT_DEFAULT =
       219902325555200L;
-  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_MIN_CROSS_RAEAD_SIZE_KEY =
+  public static final String  DFS_ZONE_GENERATE_REPLICATION_RULE_MIN_CROSS_RAEAD_SIZE_KEY =
       "dfs.zone.generate.replicationrule.min.crossread.size";
   //default min for cross-read size is 2TB.
-  public static final long  DFS_ZONE_GENERTE_REPLICATION_RULE_MIN_CROSS_RAEAD_SIZE_DEFAULT =
+  public static final long  DFS_ZONE_GENERATE_REPLICATION_RULE_MIN_CROSS_RAEAD_SIZE_DEFAULT =
       2199023255552L;
-  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_FILTER_PATHS_CAPACITY_LIMIT_KEY =
+  public static final String  DFS_ZONE_GENERATE_REPLICATION_RULE_FILTER_PATHS_CAPACITY_LIMIT_KEY =
       "dfs.zone.generate.replicationrule.filterpaths.capacity.limit";
-  public static final long  DFS_ZONE_GENERTE_REPLICATION_RULE_FILTER_PATHS_CAPACITY_LIMIT_DEFAULT =
+  public static final long  DFS_ZONE_GENERATE_REPLICATION_RULE_FILTER_PATHS_CAPACITY_LIMIT_DEFAULT =
       10000L;
 
   public static final String  DFS_ZONE_SUPPORT_MIGRATE_REPLICA_ENABLED_KEY =
@@ -886,10 +890,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONE_SUPPORT_MIGRATE_REPLICA_RULES_KEY =
       "dfs.zone.support.migrate-replica-rules";
 
-  public static final String  DFS_ZONE_GENERTE_REPLICATION_RULE_MAX_RATE_LIMIET_KEY =
+  public static final String  DFS_ZONE_GENERATE_REPLICATION_RULE_MAX_RATE_LIMIET_KEY =
       "dfs.zone.generate.replicationrule.max-rate.limit";
 
-  public static final int DFS_ZONE_GENERTE_REPLICATION_RULE_MAX_RATE_LIMIET_DEFAULT = 50;
+  public static final int DFS_ZONE_GENERATE_REPLICATION_RULE_MAX_RATE_LIMIET_DEFAULT = 50;
 
   // ZoneProgressTracker configs
   public static final String DFS_ZONE_PROGRESS_TRACKER_PRINT_PERIOD_KEY =
