@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.nodemanager.containermanager;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.protobuf.ByteString;
 import org.apache.hadoop.util.ReflectionUtils;
@@ -1750,6 +1751,7 @@ public class ContainerManagerImpl extends CompositeService implements
             (CMgrCompletedContainersEvent) event;
         List<ContainerId> containerCleanIds = containersFinishedEvent
             .getContainersToCleanup();
+        List<ContainerId> containersToCleanup = new ArrayList<>();
         for (int i = 0; i < containerCleanIds.size(); i++) {
           ContainerId containerId = containerCleanIds.get(i);
           ApplicationId appId =
@@ -1775,18 +1777,10 @@ public class ContainerManagerImpl extends CompositeService implements
           }
           if (container.isRecovering() &&
               (dis <= waitForContainerRecoverDuringKillMillis)) {
-            List<ContainerId> containersToCleanup = new ArrayList<>();
-            for (int j = i; j < containerCleanIds.size(); j++) {
-              containersToCleanup.add(containerId);
-            }
-            context.getDispatcher().getEventHandler()
-                .handle(
-                    new CMgrCompletedContainersEvent(containersToCleanup,
-                        CMgrCompletedContainersEvent.Reason
-                            .BY_RESOURCEMANAGER));
+            containersToCleanup.add(containerId);
             LOG.info("resend FINISH_CONTAINERS event to " + containerId
                 + " because container is recovering");
-            break;
+            continue;
           } else if (container.isRecovering()) {
             LOG.info("drop FINISH_CONTAINERS event to " + containerId
                 + " because container is recovering beyond " +
@@ -1797,6 +1791,13 @@ public class ContainerManagerImpl extends CompositeService implements
               new ContainerKillEvent(containerId,
                   ContainerExitStatus.KILLED_BY_RESOURCEMANAGER,
                   "Container Killed by ResourceManager"));
+        }
+        if (!CollectionUtils.isEmpty(containersToCleanup)) {
+          context.getDispatcher().getEventHandler()
+              .handle(
+                  new CMgrCompletedContainersEvent(containersToCleanup,
+                      CMgrCompletedContainersEvent.Reason
+                          .BY_RESOURCEMANAGER));
         }
         break;
       case UPDATE_CONTAINERS:
