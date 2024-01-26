@@ -997,6 +997,7 @@ public abstract class Server {
       return traceScope;
     }
 
+    @Override
     public CallerContext getCallerContext() {
       return callerContext;
     }
