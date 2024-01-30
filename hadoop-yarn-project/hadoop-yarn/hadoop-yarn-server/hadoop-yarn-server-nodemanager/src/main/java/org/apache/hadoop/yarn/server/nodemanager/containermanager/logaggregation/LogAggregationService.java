@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.nodemanager.containermanager.logaggregation;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
@@ -336,6 +337,7 @@ public class LogAggregationService extends AbstractService implements
   private void stopContainer(ContainerId containerId,
       ContainerType containerType, int exitCode) {
 
+    recordLogMetrics(containerId);
     // A container is complete. Put this containers' logs up for aggregation if
     // this containers' logs are needed.
     AppLogAggregator aggregator = this.appLogAggregators.get(
@@ -347,6 +349,24 @@ public class LogAggregationService extends AbstractService implements
     }
     aggregator.startContainerLogAggregation(
         new ContainerLogContext(containerId, containerType, exitCode));
+  }
+
+  private void recordLogMetrics(ContainerId containerId) {
+    if (context.getContainers().get(containerId) != null) {
+      String logDir = this.context.getContainers().get(containerId).getLogDir();
+      File containerlogDir = new File(logDir);
+      if (!containerlogDir.isDirectory()) {
+        return;
+      }
+      File[] filesList = containerlogDir.listFiles();
+      if (filesList == null)
+        return;
+      long logSize = 0;
+      for (File file : filesList) {
+        logSize += file.length();
+      }
+      context.getNodeManagerMetrics().recordLogSize(logSize);
+    }
   }
 
   @SuppressWarnings("unchecked")
