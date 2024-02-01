@@ -44,6 +44,9 @@ import java.io.InputStreamReader;
 import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -151,8 +154,11 @@ public class ShadowFileRpcPasswordMapping extends Configured
   @Override
   public void start() {
     if (cacheRefreshService == null && cacheRefreshAsync) {
-      LOG.info("Initialize RPC password cache refresh async service!");
-      initializeCacheRefreshService();
+      Path path = Paths.get(shadowFile);
+      if (Files.exists(path)) {
+        LOG.info("Initialize RPC Password cache refresh async service!");
+        initializeCacheRefreshService();
+      }
     }
   }
 
@@ -348,5 +354,10 @@ public class ShadowFileRpcPasswordMapping extends Configured
     metrics.refreshFailure.add(Time.now() - start);
     metrics.refreshFailuresTotal.incr();
     throw new ShadowFileException(reason);
+  }
+
+  @VisibleForTesting
+  public CacheRefreshService getCacheRefreshService() {
+    return cacheRefreshService;
   }
 }

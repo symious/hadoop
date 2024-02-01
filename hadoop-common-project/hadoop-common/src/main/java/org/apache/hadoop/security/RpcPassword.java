@@ -83,13 +83,7 @@ public class RpcPassword {
         CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_MAPPING,
         ShadowFileRpcPasswordMapping.class,
         RpcPasswordMappingServiceProvider.class), conf);
-    //Start RPC password refresh async only for NameNode server
-    String serverCategory =
-        conf.get(CommonConfigurationKeys.IPC_SERVER_RPC_CATEGORY_INTERNAL,
-            CommonConfigurationKeys.IPC_SERVER_RPC_CATEGORY_INTERNAL_DEFAULT);
-    if (serverCategory.equals(NAMENODE_SIGNAL)){
-      impl.start();
-    }
+    impl.start();
 
     cacheTimeout = conf.getLong(
         CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_SECS,

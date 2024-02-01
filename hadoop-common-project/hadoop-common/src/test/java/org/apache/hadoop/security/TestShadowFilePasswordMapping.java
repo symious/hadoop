@@ -27,6 +27,9 @@ import java.io.File;
 import java.io.IOException;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -132,6 +135,26 @@ public class TestShadowFilePasswordMapping {
       MD5FileUtils.getDigestFileForFile(shadowFile1).delete();
     }
   }
+
+  @Test
+  public void testCacheNotStarted() {
+    ShadowFileRpcPasswordMapping mapping = new ShadowFileRpcPasswordMapping();
+    Configuration conf = new Configuration();
+    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_REFRESH_ASYNC, "true");
+    conf.set(CommonConfigurationKeys.
+        HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, "NOT_EXIST_FILE");
+    mapping.setConf(conf);
+    mapping.start();
+    assertNull(mapping.getCacheRefreshService());
+
+
+
+    ClassLoader classLoader = getClass().getClassLoader();
+    File shadowFile1 = new File(classLoader.getResource(TEST_SHADOW_FILE_1).getFile());
+    conf.set(CommonConfigurationKeys.
+        HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, shadowFile1.getAbsolutePath());
+    mapping.setConf(conf);
+    mapping.start();
+    assertNotNull(mapping.getCacheRefreshService());
+  }
 }
-
-
