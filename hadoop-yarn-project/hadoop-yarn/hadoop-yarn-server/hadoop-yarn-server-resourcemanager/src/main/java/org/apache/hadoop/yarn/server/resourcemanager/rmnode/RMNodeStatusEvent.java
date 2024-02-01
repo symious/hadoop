@@ -112,4 +112,8 @@ public class RMNodeStatusEvent extends RMNodeEvent {
   public boolean getCheckDiskSpace() {
     return nodeStatus.getCheckFreeSpace();
   }
+
+  public float getCpuUsage() {
+    return nodeStatus.getCpuUsage();
+  }
 }

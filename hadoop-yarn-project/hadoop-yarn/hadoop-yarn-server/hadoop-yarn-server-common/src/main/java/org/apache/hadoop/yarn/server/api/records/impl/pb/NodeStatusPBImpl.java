@@ -510,6 +510,18 @@ public class NodeStatusPBImpl extends NodeStatus {
     this.builder.setCheckFreeSpace(checkFreeSpace);
   }
 
+  @Override
+  public float getCpuUsage() {
+    NodeStatusProtoOrBuilder p = this.viaProto ? this.proto : this.builder;
+    return (p.getCpuUsage());
+  }
+
+  @Override
+  public void setCpuUsage(float cpuUsage) {
+    maybeInitBuilder();
+    this.builder.setCpuUsage(cpuUsage);
+  }
+
   private NodeIdProto convertToProtoFormat(NodeId nodeId) {
     return ((NodeIdPBImpl)nodeId).getProto();
   }

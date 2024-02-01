@@ -647,6 +647,10 @@ public class AdminService extends CompositeService implements
         newConf.getInt(RM_SCHEDULER_FREE_DISK_SPACE_WATERMARK,
             RM_SCHEDULER_FREE_DISK_SPACE_WATERMARK_DEFAULT));
 
+    rmConf.setFloat(RM_SCHEDULER_CPU_USAGE_WATERMARK_HIGH,
+        newConf.getFloat(RM_SCHEDULER_CPU_USAGE_WATERMARK_HIGH,
+            RM_SCHEDULER_CPU_USAGE_WATERMARK_HIGH_DEFAULT));
+
     // Update CoLocate Config
     rmConf.setBoolean(RM_NODES_COLOCATE_ENABLED,
         newConf.getBoolean(RM_NODES_COLOCATE_ENABLED, DEFAULT_RM_NODES_COLOCATE_ENABLED));

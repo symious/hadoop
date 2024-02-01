@@ -109,6 +109,8 @@ import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_BADNODE
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_BADNODE_CHECK_LABEL_LIST_DEFAULT;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_BADNODE_CHECK_NO_LABEL;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_CHECK_DISK_USAGE_WATERMARK_DEFAULT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_CPU_USAGE_WATERMARK_HIGH;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_CPU_USAGE_WATERMARK_HIGH_DEFAULT;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_DISK_USAGE_WATERMARK_HIGH;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_FAILED_CONTAINERS_WATERMARK;
 import static org.apache.hadoop.yarn.conf.YarnConfiguration.RM_SCHEDULER_FAILED_CONTAINERS_WATERMARK_DEFAULT;
@@ -167,6 +169,7 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
   private static final int DEFAULT_SLOW_NODE_DISK_FULL = 308;
   private static final int DEFAULT_SLOW_NODE_MEMORY_FULL = 508;
   private static final int DEFAULT_SLOW_NODE_HIGH_FAILED = 608;
+  private static final int DEFAULT_SLOW_NODE_HIGH_CPU_USAGE = 708;
 
   //Record status of Co-locate
   private boolean isCoLocate =  Boolean.FALSE;
@@ -1562,6 +1565,7 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       int availableMem = statusEvent.getAvailableMem();
       int freeDiskSpace = statusEvent.getFreeDiskSpace();
       boolean checkDiskSpace = statusEvent.getCheckDiskSpace();
+      float cpuUsage = statusEvent.getCpuUsage();
 
       Configuration slowNodeConfig = rmNode.context.getYarnConfiguration();
       float load1WatermarkHigh = slowNodeConfig.getFloat(RM_SCHEDULER_LOAD1_WATERMARK_HIGH,
@@ -1576,14 +1580,17 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       int freeDiskSpaceWatermark = slowNodeConfig.getInt(RM_SCHEDULER_FREE_DISK_SPACE_WATERMARK,
           RM_SCHEDULER_FREE_DISK_SPACE_WATERMARK_DEFAULT);
 
+      float cpuUsageWatermarkHigh = slowNodeConfig.getFloat(RM_SCHEDULER_CPU_USAGE_WATERMARK_HIGH,
+          RM_SCHEDULER_CPU_USAGE_WATERMARK_HIGH_DEFAULT);
+
       if (LOG.isDebugEnabled()) {
-        LOG.debug("CHECKING:" + " Info of NODE: " + rmNode.getHostName() +
-            ", Load1: " + load1 + ", load5: " + load5 + ", disk:" + diskUsed +
-            ", availableMem:" + availableMem + ", freeDiskSpace:" + freeDiskSpace +
-            ", watermark: load1: " +
-            load1WatermarkHigh + ", load5:" + load5WatermarkHigh +
-            ", disk line:" + diskWatermarkHigh + ", availableMem:" +
-            availableMemWatermark + ", freeDiskSpace Line:" + freeDiskSpaceWatermark);
+        LOG.debug("CHECKING:" + " Info of NODE: " + rmNode.getHostName() + ", Load1: " + load1 +
+            ", load5: " + load5 + ", disk:" + diskUsed + ", availableMem:" + availableMem +
+            ", freeDiskSpace:" + freeDiskSpace + ", cpu usage:" + cpuUsage +
+            ", watermark: load1: " + load1WatermarkHigh + ", load5:" + load5WatermarkHigh +
+            ", disk line:" + diskWatermarkHigh + ", availableMem:" + availableMemWatermark +
+            ", freeDiskSpace Line:" + freeDiskSpaceWatermark + ", cpuUsage:" +
+            cpuUsageWatermarkHigh);
       }
 
       if (load1 > load1WatermarkHigh) {
@@ -1595,6 +1602,12 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       if (load5 > load5WatermarkHigh) {
         metrics.incrHighLoad5Skipped();
         this.setSlowNode(DEFAULT_SLOW_NODE_HIGH_LOAD5);
+        return false;
+      }
+
+      if (cpuUsage > cpuUsageWatermarkHigh) {
+        metrics.incrHighCpuUsageSkipped();
+        this.setSlowNode(DEFAULT_SLOW_NODE_HIGH_CPU_USAGE);
         return false;
       }
 

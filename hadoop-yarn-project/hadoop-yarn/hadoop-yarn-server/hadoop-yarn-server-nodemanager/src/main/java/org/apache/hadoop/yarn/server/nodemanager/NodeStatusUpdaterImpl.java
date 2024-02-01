@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.nodemanager;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.net.ConnectException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
@@ -636,6 +637,15 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     Float load5 = sysInfo.getLoad5() / coreNumber;
     nodeStatus.setLoad5(load5);
 
+    java.lang.management.OperatingSystemMXBean osMXBean = ManagementFactory.getOperatingSystemMXBean();
+
+    if (osMXBean instanceof com.sun.management.OperatingSystemMXBean) {
+      com.sun.management.OperatingSystemMXBean sunOsMXBean =
+          (com.sun.management.OperatingSystemMXBean) osMXBean;
+      Float cpuUsage = Double.valueOf(sunOsMXBean.getSystemCpuLoad()).floatValue();
+      nodeStatus.setCpuUsage(cpuUsage);
+    }
+
     int availableMem =
         (int) (sysInfo.getAvailablePhysicalMemorySize() / 1024 / 1024 / 1024);
     nodeStatus.setAvailableMem(availableMem);
@@ -646,7 +656,8 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     if (LOG.isDebugEnabled()) {
       LOG.debug("Info of Node, core: " + coreNumber + ", load1: " + load1 +
           ", load5: " + load5 + ", availableMem:" + availableMem +
-          ", periodFailedContainers: " + periodFailedContainers + ", freeDiskSpace in GB: " + nodeStatus.getFreeDiskSpace());
+          ", periodFailedContainers: " + periodFailedContainers + ", freeDiskSpace in GB: " +
+          nodeStatus.getFreeDiskSpace() + ", CPU usage:" + nodeStatus.getCpuUsage());
     }
     return nodeStatus;
   }

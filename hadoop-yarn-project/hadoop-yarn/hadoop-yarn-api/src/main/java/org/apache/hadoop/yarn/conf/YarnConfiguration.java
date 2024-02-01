@@ -418,6 +418,11 @@ public class YarnConfiguration extends Configuration {
   public static final float RM_SCHEDULER_LOAD1_WATERMARK_HIGH_DEFAULT = 1.2f;
   public static final float RM_SCHEDULER_LOAD5_WATERMARK_HIGH_DEFAULT = 1.2f;
 
+  public static final String RM_SCHEDULER_CPU_USAGE_WATERMARK_HIGH =
+      RM_PREFIX + "cpu.usage.watermark.high";
+
+  public static final float RM_SCHEDULER_CPU_USAGE_WATERMARK_HIGH_DEFAULT = 0.85f;
+
   // How much mem is safe
   public static final String RM_SCHEDULER_AVAILABLE_MEM_WATERMARK =
       RM_PREFIX + "available.mem.watermark";

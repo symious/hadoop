@@ -188,4 +188,12 @@ public abstract class NodeStatus {
   @Private
   @Unstable
   public abstract void setCheckFreeSpace(boolean checkFreeSpace);
+
+  @Public
+  @Stable
+  public abstract float getCpuUsage();
+
+  @Private
+  @Unstable
+  public abstract void setCpuUsage(float cpuUsage);
 }

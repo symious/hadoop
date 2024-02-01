@@ -64,6 +64,7 @@ public class ClusterMetrics {
   @Metric("Vcore Capability") MutableGaugeLong capabilityVirtualCores;
   @Metric("#Total number of high load1 skipped times") MutableGaugeLong highLoad1Skipped;
   @Metric("#Total number of high load5 skipped times") MutableGaugeLong highLoad5Skipped;
+  @Metric("#Total number of high cpu usage skipped times") MutableGaugeLong highCpuUsageSkipped;
   @Metric("#Total number of high disk Usage skipped times") MutableGaugeLong highDiskUsageSkipped;
   @Metric("#Total number of low available mem skipped times") MutableGaugeLong lowAvailableMemSkipped;
   @Metric("#Total number of failed containers skipped times") MutableGaugeLong
@@ -360,6 +361,15 @@ public class ClusterMetrics {
   public void incrHighLoad5Skipped() {
     highLoad5Skipped.incr();
   }
+
+  public long geHighCpuUsageSkipped() {
+    return highCpuUsageSkipped.value();
+  }
+
+  public void incrHighCpuUsageSkipped() {
+    highCpuUsageSkipped.incr();
+  }
+
 
   public long getHighDiskUsageSkipped() {
     return highDiskUsageSkipped.value();
