@@ -1188,6 +1188,22 @@
 </property>
 
 <property>
+  <name>dfs.namenode.decommission.external.monitor.time.threshold</name>
+  <value>86400000</value>
+  <description>The time threshold for ExternalMonitor is used to determine
+    whether namenode can take over the decommission operations for a DN.
+  </description>
+</property>
+
+<property>
+  <name>dfs.namenode.decommission.external.monitor.number.threshold</name>
+  <value>100</value>
+  <description>The number threshold for ExternalMonitor is used to determine
+    whether namenode can take over the decommission operations for a DN.
+  </description>
+</property>
+
+<property>
   <name>dfs.namenode.decommission.monitor.class</name>
   <value>org.apache.hadoop.hdfs.server.blockmanagement.DatanodeAdminDefaultMonitor</value>
   <description>

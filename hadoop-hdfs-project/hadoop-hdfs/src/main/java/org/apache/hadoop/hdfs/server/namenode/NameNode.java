@@ -159,6 +159,10 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_PLACEMENT_
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_NUMBER_THRESHOLD_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_NUMBER_THRESHOLD_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_TIME_THRESHOLD_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_TIME_THRESHOLD_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_DEFAULT;
@@ -433,6 +437,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_INVALIDATE_WORK_PCT_PER_ITERATION,
           DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY,
           DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES,
+          DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_TIME_THRESHOLD_KEY,
+          DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_NUMBER_THRESHOLD_KEY,
           DFS_LEASE_HARDLIMIT_KEY,
           DFS_NAMENODE_QUOTA_INIT_THREADS_KEY,
           DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY,
@@ -2506,6 +2512,10 @@ public class NameNode extends ReconfigurableBase implements
       return reconfDecommissionBlocksPerInterval(property, newVal);
     } else if (property.equals(DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES)) {
       return reconfDecommissionMaxConcurrentTrackedNodes(property, newVal);
+    } else if (property.equals(DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_TIME_THRESHOLD_KEY)) {
+      return reconfDecommissionExternalMonitorTimeThreshold(property, newVal);
+    } else if (property.equals(DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_NUMBER_THRESHOLD_KEY)) {
+      return reconfDecommissionExternalMonitorNumberThreshold(property, newVal);
     } else if (property.equals(DFS_LEASE_HARDLIMIT_KEY)) {
       return reconfLeaseHardLimit(property, newVal);
     } else if (property.equals(DFS_NAMENODE_QUOTA_INIT_THREADS_KEY)) {
@@ -2908,6 +2918,36 @@ public class NameNode extends ReconfigurableBase implements
       LOG.info("RECONFIGURE* changed decommissionMaxConcurrentTrackedNodes to "
           + namesystem.getBlockManager().getDatanodeManager()
           .getDatanodeAdminManager().getMaxConcurrentTrackedNodes());
+    }
+  }
+
+  private String reconfDecommissionExternalMonitorTimeThreshold(
+      String property, String newVal) throws ReconfigurationException {
+    try {
+      long timeThreshold = newVal == null
+          ? DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_TIME_THRESHOLD_DEFAULT:
+          Long.parseLong(newVal);
+      namesystem.getBlockManager().getDatanodeManager().getDatanodeAdminManager()
+          .refreshExternalMonitorTimeThreshold(timeThreshold);
+      return String.valueOf(timeThreshold);
+    } catch (UnsupportedOperationException | IllegalArgumentException e) {
+      throw new ReconfigurationException(property, newVal, getConf().get(property), e);
+    }
+  }
+
+  private String reconfDecommissionExternalMonitorNumberThreshold(
+      String property, String newVal) throws ReconfigurationException {
+    try {
+      long numberThreshold = (newVal == null ?
+          DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_NUMBER_THRESHOLD_DEFAULT:
+          Long.parseLong(newVal));
+      namesystem.getBlockManager().getDatanodeManager()
+          .getDatanodeAdminManager()
+          .refreshExternalMonitorNumberThreshold(numberThreshold);
+      return String.valueOf(numberThreshold);
+    } catch (UnsupportedOperationException | IllegalArgumentException e) {
+      throw new ReconfigurationException(property, newVal, getConf().get(
+          property), e);
     }
   }
 

@@ -48,6 +48,7 @@ import java.util.stream.Collectors;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoContiguous;
+import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeAdminExternalMonitor;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import org.apache.commons.text.TextStringBuilder;
 import org.apache.hadoop.fs.BlockLocation;
@@ -84,6 +85,7 @@ import org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeStatistics;
 import org.apache.hadoop.hdfs.tools.DFSAdmin;
 import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Level;
 import org.junit.Assert;
@@ -188,7 +190,7 @@ public class TestDecommission extends AdminStatesBaseTest {
    * Tests decommission for non federated cluster
    */
   @Test(timeout=360000)
-  public void testDecommission() throws IOException {
+  public void testDecommission() throws IOException, InterruptedException {
     testDecommission(1, 6);
   }
 
@@ -247,7 +249,8 @@ public class TestDecommission extends AdminStatesBaseTest {
    * Test decommission for federeated cluster
    */
   @Test(timeout=360000)
-  public void testDecommissionFederation() throws IOException {
+  public void testDecommissionFederation()
+      throws IOException, InterruptedException {
     testDecommission(2, 2);
   }
 
@@ -372,7 +375,7 @@ public class TestDecommission extends AdminStatesBaseTest {
   }
 
   private void testDecommission(int numNamenodes, int numDatanodes)
-      throws IOException {
+      throws IOException, InterruptedException {
     LOG.info("Starting test testDecommission");
     startCluster(numNamenodes, numDatanodes);
     
@@ -421,6 +424,18 @@ public class TestDecommission extends AdminStatesBaseTest {
         }
         assertTrue("Checked if block was replicated after decommission, tried "
             + tries + " times.", tries < 20);
+        BlockManager blockManager = getCluster().getNamesystem(0).getBlockManager();
+        DatanodeDescriptor descriptor = blockManager.getDatanodeManager()
+            .getDatanode(decomNode.getDatanodeUuid());
+        if (descriptor.numBlocks() > 0) {
+          DatanodeAdminExternalMonitor monitor = new DatanodeAdminExternalMonitor();
+          monitor.setTimeThreshold(1);
+          monitor.setBlockManager(blockManager);
+          long beginTime = Time.monotonicNow();
+          Thread.sleep(10);
+          assertTrue("Checked if all blocks satisfy block placement policy after decommission",
+              monitor.allBlocksSatisfyPolicy(descriptor, beginTime));
+        }
         cleanupFile(fileSys, file1);
       }
     }

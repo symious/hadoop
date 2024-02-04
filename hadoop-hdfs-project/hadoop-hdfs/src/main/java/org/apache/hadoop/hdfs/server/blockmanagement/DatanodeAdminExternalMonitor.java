@@ -19,28 +19,25 @@ package org.apache.hadoop.hdfs.server.blockmanagement;
 
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
+import org.apache.hadoop.hdfs.server.namenode.INodeId;
 import org.apache.hadoop.hdfs.util.CyclicIteration;
 import org.apache.hadoop.hdfs.util.LightWeightLinkedSet;
+import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
+import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TreeMap;
 
 public class DatanodeAdminExternalMonitor extends DatanodeAdminDefaultMonitor {
-  private final TreeMap<DatanodeDescriptor, Integer>
-      outOfServiceNodeBlocksNum;
-
-  /**
-   * The number of nodes that have been checked on this tick. Used for
-   * statistics.
-   */
-  private int numNodesChecked = 0;
+  private final TreeMap<DatanodeDescriptor, Integer> outOfServiceNodeBlocksNum;
+  private final HashMap<DatanodeDescriptor, Long> outOfServiceNode2StartTime;
 
   /**
    * The last datanode in outOfServiceNodeBlocks that we've processed.
@@ -53,7 +50,13 @@ public class DatanodeAdminExternalMonitor extends DatanodeAdminDefaultMonitor {
 
   public DatanodeAdminExternalMonitor() {
     outOfServiceNodeBlocksNum = new TreeMap<>();
+    outOfServiceNode2StartTime = new HashMap<>();
   }
+
+  private volatile long timeThreshold =
+      DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_TIME_THRESHOLD_DEFAULT;
+  private volatile long numberThreshold =
+      DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_NUMBER_THRESHOLD_DEFAULT;
 
   @Override
   protected void processPendingNodes() {
@@ -61,7 +64,9 @@ public class DatanodeAdminExternalMonitor extends DatanodeAdminDefaultMonitor {
     while (!getPendingNodes().isEmpty() &&
         (maxConcurrentTrackedNodes == 0 ||
             outOfServiceNodeBlocksNum.size() < maxConcurrentTrackedNodes)) {
-      outOfServiceNodeBlocksNum.put(getPendingNodes().poll(), -1);
+      DatanodeDescriptor dn = getPendingNodes().poll();
+      outOfServiceNodeBlocksNum.put(dn, -1);
+      outOfServiceNode2StartTime.put(dn, Time.monotonicNow());
     }
   }
 
@@ -70,21 +75,20 @@ public class DatanodeAdminExternalMonitor extends DatanodeAdminDefaultMonitor {
     while(!getCancelledNodes().isEmpty()) {
       DatanodeDescriptor dn = getCancelledNodes().poll();
       outOfServiceNodeBlocksNum.remove(dn);
+      outOfServiceNode2StartTime.remove(dn);
     }
   }
 
   @Override
   protected void check() {
-    final Iterator<Map.Entry<DatanodeDescriptor, Integer>>
-        it = new CyclicIteration<>(outOfServiceNodeBlocksNum,
-        iterkey).iterator();
+    final Iterator<Map.Entry<DatanodeDescriptor, Integer>> it =
+        new CyclicIteration<>(outOfServiceNodeBlocksNum, iterkey).iterator();
     final List<DatanodeDescriptor> toRemove = new ArrayList<>();
     final List<DatanodeDescriptor> unhealthyDns = new ArrayList<>();
 
-    while (it.hasNext() && namesystem.isRunning()) {
+    while (it.hasNext() && !exceededNumBlocksPerCheck() && namesystem.isRunning()) {
       numNodesChecked++;
-      final Map.Entry<DatanodeDescriptor, Integer>
-          entry = it.next();
+      final Map.Entry<DatanodeDescriptor, Integer> entry = it.next();
       final DatanodeDescriptor dn = entry.getKey();
       try {
         Integer blocksNum = entry.getValue();
@@ -139,7 +143,7 @@ public class DatanodeAdminExternalMonitor extends DatanodeAdminDefaultMonitor {
           outOfServiceNodeBlocksNum.put(dn, blocksNum);
         }
 
-        if (blocksNum == 0) {
+        if (blocksNum == 0 || allBlocksSatisfyPolicy(dn, outOfServiceNode2StartTime.get(dn))) {
           // If the full scan is clean AND the node liveness is okay,
           // we can finally mark as DECOMMISSIONED or IN_MAINTENANCE.
           if (isHealthy) {
@@ -196,6 +200,7 @@ public class DatanodeAdminExternalMonitor extends DatanodeAdminDefaultMonitor {
       getUnhealthyNodesToRequeue(unhealthyDns, numDecommissioningNodes).forEach(dn -> {
         getPendingNodes().add(dn);
         outOfServiceNodeBlocksNum.remove(dn);
+        outOfServiceNode2StartTime.remove(dn);
       });
     }
     // Remove the datanodes that are DECOMMISSIONED or in service after
@@ -205,26 +210,99 @@ public class DatanodeAdminExternalMonitor extends DatanodeAdminDefaultMonitor {
           "Removing node %s that is not yet decommissioned or in service!",
           dn);
       outOfServiceNodeBlocksNum.remove(dn);
+      outOfServiceNode2StartTime.remove(dn);
     }
   }
 
   @Override
   protected void processConf() {
-    numBlocksPerCheck = conf.getInt(
-        DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY,
-        DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_DEFAULT);
-    if (numBlocksPerCheck <= 0) {
-      LOG.error("{} must be greater than zero. Defaulting to {}",
-          DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_KEY,
-          DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_DEFAULT);
-      numBlocksPerCheck =
-          DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_DEFAULT;
-    }
+    super.processConf();
+    setTimeThreshold(conf.getLong(
+        DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_TIME_THRESHOLD_KEY,
+        DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_TIME_THRESHOLD_DEFAULT));
+    setNumberThreshold(conf.getLong(
+        DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_NUMBER_THRESHOLD_KEY,
+        DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_NUMBER_THRESHOLD_DEFAULT));
     LOG.info("Initialized the External Decommission and Maintenance monitor");
+  }
+
+  public void setTimeThreshold(long newValue) {
+    if (newValue <= 0) {
+      LOG.error("{} must be greater than zero. Defaulting to {}",
+          DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_TIME_THRESHOLD_KEY,
+          DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_TIME_THRESHOLD_DEFAULT);
+      newValue = DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_TIME_THRESHOLD_DEFAULT;
+    }
+    LOG.info("Changing the time threshold from {} to {} for {}.", timeThreshold, newValue,
+        DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_TIME_THRESHOLD_KEY);
+    timeThreshold = newValue;
+  }
+
+  public void setNumberThreshold(long newValue) {
+    if (newValue <= 0) {
+      LOG.error("{} must be greater than zero. Defaulting to {}",
+          DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_NUMBER_THRESHOLD_KEY,
+          DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_NUMBER_THRESHOLD_DEFAULT);
+      newValue = DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_NUMBER_THRESHOLD_DEFAULT;
+    }
+    LOG.info("Changing the number threshold from {} to {} for {}.", numberThreshold, newValue,
+        DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_NUMBER_THRESHOLD_KEY);
+    numberThreshold = newValue;
   }
 
   @Override
   public boolean isTrackingNode(DatanodeDescriptor dn) {
     return outOfServiceNodeBlocksNum.containsKey(dn) || getPendingNodes().contains(dn);
+  }
+
+  /**
+   * Only check whether this DN can be decommissioned or inMaintenance if it has been
+   * processed for a long time and the number of remaining blocks is less than a certain threshold.
+   * @return true if this DN can be decommissioned or inMaintenance.
+   */
+  @VisibleForTesting
+  public boolean allBlocksSatisfyPolicy(DatanodeDescriptor dn, long beginTime) {
+    if (dn.numBlocks() > numberThreshold || (Time.monotonicNow() - beginTime) < timeThreshold) {
+      return false;
+    }
+
+    // Check whether all the remaining block meet the block storage placement policy.
+    for (Iterator<BlockInfo> it = dn.getBlockIterator(); it.hasNext(); ) {
+      numBlocksChecked++;
+      BlockInfo block = it.next();
+      BlockInfo storedBlock = blockManager.blocksMap.getStoredBlock(block);
+      if (storedBlock == null) {
+        LOG.warn("This block {} in {} is leaked.", block, dn);
+        continue;
+      }
+      long bcId = block.getBlockCollectionId();
+      if (bcId == INodeId.INVALID_INODE_ID) {
+        // Orphan block, will be invalidated eventually. Skip.
+        continue;
+      }
+
+      if (storedBlock.isComplete()) {
+        final NumberReplicas num = blockManager.countNodes(block);
+        if (blockManager.hasEnoughEffectiveReplicas(block, num, 0)) {
+          // Block has enough replica, can continue to check the next block.
+          LOG.trace("Block {} does not need replication.", block);
+        } else {
+          LOG.info("Block {} in {} still needs more replication.", block, dn);
+          // means that namenode can not change the state to `decommissioned` for this DN.
+          return false;
+        }
+      } else {
+        if (block.getGenerationStamp() < storedBlock.getGenerationStamp()) {
+          // Block has a stale GS, can continue to check the next block.
+          LOG.trace("Block {} has a old GS {}, the current GS is {}.",
+              block, block.getGenerationStamp(), storedBlock.getGenerationStamp());
+        } else {
+          LOG.info("Block {} in {} is still in RBW.", block, dn);
+          // means that namenode can not change the state to `decommissioned` for this DN.
+          return false;
+        }
+      }
+    }
+    return true;
   }
 }

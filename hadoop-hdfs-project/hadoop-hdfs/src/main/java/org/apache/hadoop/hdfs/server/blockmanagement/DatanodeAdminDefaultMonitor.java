@@ -78,7 +78,7 @@ public class DatanodeAdminDefaultMonitor extends DatanodeAdminMonitorBase
   /**
    * The number of blocks that have been checked on this tick.
    */
-  private int numBlocksChecked = 0;
+  protected int numBlocksChecked = 0;
   /**
    * The number of blocks checked after (re)holding lock.
    */
@@ -87,7 +87,7 @@ public class DatanodeAdminDefaultMonitor extends DatanodeAdminMonitorBase
    * The number of nodes that have been checked on this tick. Used for
    * statistics.
    */
-  private int numNodesChecked = 0;
+  protected int numNodesChecked = 0;
   /**
    * The last datanode in outOfServiceNodeBlocks that we've processed.
    */
@@ -116,7 +116,7 @@ public class DatanodeAdminDefaultMonitor extends DatanodeAdminMonitorBase
     LOG.info("Initialized the Default Decommission and Maintenance monitor");
   }
 
-  private boolean exceededNumBlocksPerCheck() {
+  protected boolean exceededNumBlocksPerCheck() {
     LOG.trace("Processed {} blocks so far this tick", numBlocksChecked);
     return numBlocksChecked >= numBlocksPerCheck;
   }
@@ -157,6 +157,7 @@ public class DatanodeAdminDefaultMonitor extends DatanodeAdminMonitorBase
     // Check decommission or maintenance progress.
     namesystem.writeLock();
     try {
+      processCancelledNodes();
       processPendingNodes();
       check();
     } catch (Exception e) {

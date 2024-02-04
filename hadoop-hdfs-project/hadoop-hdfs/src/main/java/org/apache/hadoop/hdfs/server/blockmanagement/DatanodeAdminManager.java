@@ -186,6 +186,18 @@ public class DatanodeAdminManager {
     this.monitor.setMaxConcurrentTrackedNodes(maxConcurrentTrackedNodes);
   }
 
+  public void refreshExternalMonitorTimeThreshold(long timeThreshold) {
+    if (this.monitor instanceof DatanodeAdminExternalMonitor) {
+      ((DatanodeAdminExternalMonitor) monitor).setTimeThreshold(timeThreshold);
+    }
+  }
+
+  public void refreshExternalMonitorNumberThreshold(long numberThreshold) {
+    if (this.monitor instanceof DatanodeAdminExternalMonitor) {
+      ((DatanodeAdminExternalMonitor) monitor).setNumberThreshold(numberThreshold);
+    }
+  }
+
   public void refreshDMMonitor(Configuration conf) {
     boolean updateMonitor = false;
     int intervalSecs = (int) conf.getTimeDuration(

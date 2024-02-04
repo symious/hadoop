@@ -1222,6 +1222,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final int     DFS_NAMENODE_DECOMMISSION_BLOCKS_PER_INTERVAL_DEFAULT = 500000;
   public static final String  DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES = "dfs.namenode.decommission.max.concurrent.tracked.nodes";
   public static final int     DFS_NAMENODE_DECOMMISSION_MAX_CONCURRENT_TRACKED_NODES_DEFAULT = 100;
+  public static final String  DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_TIME_THRESHOLD_KEY = "dfs.namenode.decommission.external.monitor.time.threshold";
+  public static final long    DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_TIME_THRESHOLD_DEFAULT = TimeUnit.DAYS.toMillis(1);
+  public static final String  DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_NUMBER_THRESHOLD_KEY = "dfs.namenode.decommission.external.monitor.number.threshold";
+  public static final long    DFS_NAMENODE_DECOMMISSION_EXTERNAL_MONITOR_NUMBER_THRESHOLD_DEFAULT = 100;
   public static final String  DFS_NAMENODE_DECOMMISSION_MONITOR_CLASS
       = "dfs.namenode.decommission.monitor.class";
   public static final String
