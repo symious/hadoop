@@ -214,6 +214,7 @@ public class TestNameNodeMXBean {
               (Map<String, Map<String, Object>>) JSON.parse(alivenodeinfo1);
       for (Map<String, Object> liveNode : liveNodes1.values()) {
         assertTrue(liveNode.containsKey("location"));
+        assertTrue(liveNode.containsKey("uuid"));
       }
 
       // get attributes DeadNodes
