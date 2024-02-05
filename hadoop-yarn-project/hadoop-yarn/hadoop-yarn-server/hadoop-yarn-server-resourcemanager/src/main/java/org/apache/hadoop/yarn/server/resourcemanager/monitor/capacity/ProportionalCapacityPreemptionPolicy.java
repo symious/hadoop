@@ -294,6 +294,15 @@ public class ProportionalCapacityPreemptionPolicy
         CapacitySchedulerConfiguration.DEFAULT_INTRAQUEUE_PREEMPTION_ENABLED);
     if (isIntraQueuePreemptionEnabled) {
       candidatesSelectionPolicies.add(new IntraQueueCandidatesSelector(this));
+
+      // Do we need to enable intra queue ensure AM Resource Preemption
+      boolean isIntraQueueEnsureAMResourcePreemptionEnabled = config.getBoolean(
+          CapacitySchedulerConfiguration.INTRAQUEUE_ENSURE_AM_RESOURCE_PREEMPTION_ENABLED,
+          CapacitySchedulerConfiguration.DEFAULT_INTRAQUEUE_ENSURE_AM_RESOURCE_PREEMPTION_ENABLED);
+      if (isIntraQueueEnsureAMResourcePreemptionEnabled) {
+        candidatesSelectionPolicies
+            .add(new IntraQueueEnsureAMResourceSelector(this));
+      }
     }
 
     LOG.info("Capacity Scheduler configuration changed, updated preemption " +

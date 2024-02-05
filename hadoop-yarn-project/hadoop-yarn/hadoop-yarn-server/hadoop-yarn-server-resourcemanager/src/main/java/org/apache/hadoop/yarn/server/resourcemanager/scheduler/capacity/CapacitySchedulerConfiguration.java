@@ -1829,6 +1829,11 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   private static final String INTRA_QUEUE_PREEMPTION_CONFIG_PREFIX =
       "intra-queue-preemption.";
 
+  private static final String
+      INTRA_QUEUE_ENSURE_AM_RESOURCE_PREEMPTION_CONFIG_PREFIX =
+      "intra-queue-ensure-am-resource-preemption.";
+
+
   /** If true, run the policy but do not affect the cluster with preemption and
    * kill events. */
   public static final String PREEMPTION_OBSERVE_ONLY =
@@ -1918,6 +1923,16 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
       PREEMPTION_CONFIG_PREFIX +
       INTRA_QUEUE_PREEMPTION_CONFIG_PREFIX + "enabled";
   public static final boolean DEFAULT_INTRAQUEUE_PREEMPTION_ENABLED = false;
+
+  /**
+   * For intra-queue ensure AM resource preemption
+   * can help to preempt non-AM containers to guarantee AM resource.
+   */
+  public static final String INTRAQUEUE_ENSURE_AM_RESOURCE_PREEMPTION_ENABLED =
+      PREEMPTION_CONFIG_PREFIX +
+          INTRA_QUEUE_ENSURE_AM_RESOURCE_PREEMPTION_CONFIG_PREFIX + "enabled";
+  public static final boolean
+      DEFAULT_INTRAQUEUE_ENSURE_AM_RESOURCE_PREEMPTION_ENABLED = false;
 
   /**
    * For intra-queue preemption, consider those queues which are above used cap
