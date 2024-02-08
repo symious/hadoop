@@ -781,3 +781,16 @@ Usage: `hdfs debug debugRead/debugWrite [-favored DN1,..] [-excluded DN2,..] [<l
 Narrow down the set of possible DNs to use for reads/writes.
 
 Read mode requires the absence of the *[local file]* argument.
+
+### Check if a path is readable
+
+Usage: `hdfs debug verifyRead -path <HDFS path>`
+
+| COMMAND\_OPTION | Description         |
+|:----------------|:--------------------|
+| *HDFS path*     | HDFS path to check. |
+
+Check if the file at path is readable:
+* User has read access to the file.
+* No missing block.
+* All blocks have at least 1 readable replica.

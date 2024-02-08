@@ -26,6 +26,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -40,9 +41,16 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.HdfsBlockLocation;
 import org.apache.hadoop.hdfs.DFSClient;
+import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.server.datanode.ReplicaNotFoundException;
 import org.apache.hadoop.hdfs.util.ECBlockValidatorReport;
 import org.apache.hadoop.hdfs.util.ECFileValidator;
+import org.apache.hadoop.ipc.RPC;
+import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.Uninterruptibles;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -86,6 +94,7 @@ public class DebugAdmin extends Configured implements Tool {
       new VerifyECCommand(),
       new ReadWithDNPreference(),
       new WriteWithDNPreference(),
+      new VerifyReadableCommand(),
       new HelpCommand()
   };
 
@@ -595,6 +604,94 @@ public class DebugAdmin extends Configured implements Tool {
         is.close();
         os.flush();
         os.close();
+      }
+    }
+  }
+
+  private class VerifyReadableCommand extends DebugCommand {
+    DistributedFileSystem dfs;
+    VerifyReadableCommand() {
+      super("verifyReadable",
+          "verifyReadable [-path <path>]",
+          "  Verify if a path is fully readable and have no missing blocks.");
+    }
+
+    @Override
+    int run(List<String> args) throws IOException {
+      if (args.size() == 0) {
+        System.out.println(usageText);
+        System.out.println(helpText + System.lineSeparator());
+        return 1;
+      }
+      dfs = AdminHelper.getDFS(getConf());
+      String pathStr = StringUtils.popOptionWithArgument("-path", args);
+      return handlePath(new Path(pathStr));
+    }
+
+    private int handlePath(Path path) throws IOException {
+
+      HdfsBlockLocation[] locs;
+      try {
+        locs =
+            (HdfsBlockLocation[]) dfs.getFileBlockLocations(path, 0, dfs.getFileStatus(path).getLen());
+      } catch (FileNotFoundException e) {
+        System.err.println("Path not found: " + path);
+        return 1;
+      }
+
+      // First pass: check for block with no live replicas
+      for (HdfsBlockLocation loc: locs) {
+        if (loc.getLocatedBlock().getLocations().length == 0) {
+          System.err.println("Path: " + path + ". No live replicas found: " + loc);
+          return 1;
+        }
+      }
+
+      for (HdfsBlockLocation loc: locs) {
+        if (!verifyBlock(loc.getLocatedBlock())) {
+          System.err.println("Path: " + path + ". Block not readable: " + loc);
+          return 1;
+        }
+      }
+      System.out.println("No issue found with path " + path);
+      return 0;
+    }
+
+    private boolean verifyBlock(LocatedBlock loc) {
+      for (DatanodeInfo dn : loc.getLocations()) {
+        if (verifyReplica(loc, dn)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    private boolean verifyReplica(LocatedBlock loc, DatanodeInfo dn) {
+      ClientDatanodeProtocol cdp = null;
+
+      try {
+        try {
+          DfsClientConf clientConf = dfs.getClient().getConf();
+          cdp = DFSUtilClient.createClientDatanodeProtocolProxy(dn, getConf(), clientConf.getSocketTimeout(), clientConf.isConnectToDnViaHostname(), loc);
+          return cdp.getReplicaVisibleLength(loc.getBlock()) > 0;
+        } catch (RemoteException e) {
+          throw e.unwrapRemoteException();
+        }
+      } catch (ReplicaNotFoundException e) {
+        System.err.println("Block " + loc.getBlock() + " replica does not exist on DN " + dn);
+        return false;
+      } catch (ConnectException e) {
+        System.err.println("Block " + loc.getBlock() + " DN failed connection " + dn);
+        return false;
+      } catch (IOException e) {
+        LOG.warn("Uncaught exception", e);
+        // No need to throw exception since a failed call is a failed call
+        // But log it for handling
+        return false;
+      } finally {
+        if (cdp != null) {
+          RPC.stopProxy(cdp);
+        }
       }
     }
   }
