@@ -326,6 +326,9 @@ hadoop-hdfs:
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs
     $COMMON_SCRIPTS
+  after_script:
+      - |
+        [ -e ./hadoop-hdfs-project/hadoop-hdfs/target/surefire-reports/ ] && for FILE in ./hadoop-hdfs-project/hadoop-hdfs/target/surefire-reports/TEST-*.xml; do sed -i -e '/<system-out>.*<\/system-out>/d' \$FILE; sed -i -e '/<system-out>/,/<\/system-out>/d' \$FILE; done
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always

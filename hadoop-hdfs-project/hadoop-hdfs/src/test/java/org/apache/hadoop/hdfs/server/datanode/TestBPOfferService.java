@@ -104,8 +104,7 @@ public class TestBPOfferService {
 
   private static final String FAKE_BPID = "fake bpid";
   private static final String FAKE_CLUSTERID = "fake cluster";
-  protected static final Logger LOG = LoggerFactory.getLogger(
-      TestBPOfferService.class);
+  protected static final Logger LOG = LoggerFactory.getLogger(TestBPOfferService.class);
   private static final ExtendedBlock FAKE_BLOCK =
     new ExtendedBlock(FAKE_BPID, 12345L);
   private static final File TEST_BUILD_DATA = PathUtils.getTestDir(TestBPOfferService.class);
