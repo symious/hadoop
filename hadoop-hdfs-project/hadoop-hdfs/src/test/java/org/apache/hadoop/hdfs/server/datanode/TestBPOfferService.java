@@ -283,6 +283,8 @@ public class TestBPOfferService {
       waitForBlockReport(mockNN1);
       waitForBlockReport(mockNN2);
 
+      DatanodeStorage storage = Mockito.mock(DatanodeStorage.class);
+      Mockito.doReturn(storage).when(mockFSDataset).getStorage("");
       // When we receive a block, it should report it to both NNs
       bpos.notifyNamenodeReceivedBlock(FAKE_BLOCK, null, "", false);
 
@@ -1093,6 +1095,8 @@ public class TestBPOfferService {
       waitForBlockReport(mockNN1);
       waitForBlockReport(mockNN2);
 
+      DatanodeStorage storage = Mockito.mock(DatanodeStorage.class);
+      Mockito.doReturn(storage).when(mockFSDataset).getStorage("");
       // When we receive a block, it should report it to both NNs
       bpos.notifyNamenodeReceivedBlock(FAKE_BLOCK, null, "", false);
 

@@ -221,7 +221,7 @@ public class TestGetBlockLocations {
       locatedBlocks = fsn.getBlockLocations(clientMachine, path.toString(), 0,
           1024);
       Assert.assertEquals(1, locatedBlocks.getLocatedBlocks().size());
-      Assert.assertTrue(CallerContext.getCurrent().getContext().contains("blkIdList:" +
+      Assert.assertTrue(CallerContext.getCurrent().getContext().contains("blkIds:" +
           blocks.get(0).getBlock().getBlockId() + "$" +
           blocks.get(2).getBlock().getBlockId()));
       CallerContext.setCurrent(null);
@@ -231,7 +231,7 @@ public class TestGetBlockLocations {
       locatedBlocks = fsn.getBlockLocations(clientMachine, path.toString(), 0,
           1024 * 2);
       Assert.assertEquals(2, locatedBlocks.getLocatedBlocks().size());
-      Assert.assertTrue(CallerContext.getCurrent().getContext().contains("blkIdList:" +
+      Assert.assertTrue(CallerContext.getCurrent().getContext().contains("blkIds:" +
           blocks.get(0).getBlock().getBlockId() + "$" +
           blocks.get(1).getBlock().getBlockId() + "$" +
           blocks.get(2).getBlock().getBlockId()));
@@ -242,7 +242,7 @@ public class TestGetBlockLocations {
       locatedBlocks = fsn.getBlockLocations(clientMachine, path.toString(), 0,
           1024 * 3);
       Assert.assertEquals(3, locatedBlocks.getLocatedBlocks().size());
-      Assert.assertTrue(CallerContext.getCurrent().getContext().contains("blkIdList:" +
+      Assert.assertTrue(CallerContext.getCurrent().getContext().contains("blkIds:" +
           blocks.get(0).getBlock().getBlockId() + "$" +
           blocks.get(1).getBlock().getBlockId() + "$" +
           blocks.get(2).getBlock().getBlockId()));
@@ -254,7 +254,7 @@ public class TestGetBlockLocations {
       locatedBlocks = fsn.getBlockLocations(clientMachine, path.toString(), 0,
           1024 * 3);
       Assert.assertEquals(3, locatedBlocks.getLocatedBlocks().size());
-      Assert.assertFalse(CallerContext.getCurrent().getContext().contains("blkIdList"));
+      Assert.assertFalse(CallerContext.getCurrent().getContext().contains("blkIds"));
       CallerContext.setCurrent(null);
     }
   }
