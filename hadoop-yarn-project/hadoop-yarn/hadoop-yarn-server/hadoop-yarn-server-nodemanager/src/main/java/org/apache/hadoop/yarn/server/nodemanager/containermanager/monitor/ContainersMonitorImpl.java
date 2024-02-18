@@ -261,7 +261,7 @@ public class ContainersMonitorImpl extends AbstractService implements
           YarnConfiguration.DEFAULT_NM_FD_NUM_LIMIT);
     }
 
-    if (elasticMemoryEnforcement) {
+    if (elasticMemoryEnforcement && elasticCgroupImpl) {
       if (!CGroupElasticMemoryController.isAvailable()) {
         // Test for availability outside the constructor
         // to be able to write non-Linux unit tests for
@@ -269,7 +269,7 @@ public class ContainersMonitorImpl extends AbstractService implements
         throw new YarnException(
             "CGroup Elastic Memory controller enabled but " +
             "it is not available. Exiting.");
-      } else if (elasticCgroupImpl) {
+      } else {
         this.oomListenerThread = new CGroupElasticMemoryController(
             conf,
             context,
