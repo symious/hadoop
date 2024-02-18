@@ -242,7 +242,7 @@ public class DataNodeMetrics {
     this.name = name;
     this.jvmMetrics = jvmMetrics;    
     registry.tag(SessionId, sessionId);
-    this.overallDNCrossDCTraffic = registry.newStat("OverallCrossDCTraffic",
+    this.overallDNCrossDCTraffic = registry.newStat("OverallDNCrossDCTraffic",
         "OverallCrossDCTraffic", "Ops", "Size");
     
     final int len = intervals.length;
@@ -497,8 +497,10 @@ public class DataNodeMetrics {
         }
 
         // locality: datacenter-local
-        if (DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation).equals(
-            DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation))) {
+        String localDC = DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation);
+        String remoteDC = DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation);
+
+        if (localDC.equals(remoteDC)) {
           writesFromLocalDataCenter.incr();
           localDataCenterBytesWritten.incr(size);
           return;
@@ -506,6 +508,7 @@ public class DataNodeMetrics {
         // locality: datacenter-off
         writesFromRemoteDataCenter.incr();
         remoteDataCenterBytesWritten.incr(size);
+        incrCrossDCTraffic(remoteDC, localDC, false, size, "DNCrossDCTrafficByWriteBlock");
       }
     }
   }
@@ -561,7 +564,32 @@ public class DataNodeMetrics {
         readsFromRemoteDataCenter.incr();
         remoteDataCenterBytesRead.incr(size);
 
-        incrCrossDCTraffic(remoteDC, localDC, true, size);
+        incrCrossDCTraffic(remoteDC, localDC, true, size, "DNCrossDCTrafficByReadBlock");
+      }
+    }
+  }
+
+  public void incrCrossDCFromCopyBlock(String localHostAddress,
+      String remoteHostAddress, long size) {
+    // Skip node-local.
+    if (remoteHostAddress.equals(DataNode.LOCAL_HOST) ||
+        localHostAddress.equals(remoteHostAddress)) {
+      return;
+    }
+
+    if (dnsToSwitchMapping != null) {
+      List<String> names = new ArrayList<>();
+      names.add(localHostAddress);
+      names.add(remoteHostAddress);
+      List<String> racks = dnsToSwitchMapping.resolve(names);
+      if (racks != null && racks.size() == names.size()) {
+        String localLocation = racks.get(0);
+        String remoteLocation = racks.get(1);
+        String localDC = DFSNetworkTopologyWithDataCenter.getDataCenter(localLocation);
+        String remoteDC = DFSNetworkTopologyWithDataCenter.getDataCenter(remoteLocation);
+        if (!localDC.equals(remoteDC)) {
+          incrCrossDCTraffic(remoteDC, localDC, true, size, "DNCrossDCTrafficByCopyBlock");
+        }
       }
     }
   }
@@ -819,14 +847,15 @@ public class DataNodeMetrics {
     }
   }
 
-  private void incrCrossDCTraffic(String remoteDC, String localDC, boolean isTrafficOut, long size) {
-    String metricKey = getTrafficKey(remoteDC, localDC, isTrafficOut);
+  private void incrCrossDCTraffic(String remoteDC, String localDC, boolean isTrafficOut,
+      long size, String metricNameSuffix) {
+    String metricKey = getTrafficKey(remoteDC, localDC, isTrafficOut) + metricNameSuffix;
     MutableStat metricValue = dnCrossDCTraffic.get(metricKey);
     if (metricValue == null) {
       synchronized (this) {
         metricValue = dnCrossDCTraffic.get(metricKey);
         if (metricValue == null) {
-          String metricName = StringUtils.capitalize(metricKey + "DNCrossDCTraffic");
+          String metricName = StringUtils.capitalize(metricKey);
           metricValue = registry.newStat(metricName, metricName, "Ops", "Size", false);
           dnCrossDCTraffic.put(metricKey, metricValue);
         }

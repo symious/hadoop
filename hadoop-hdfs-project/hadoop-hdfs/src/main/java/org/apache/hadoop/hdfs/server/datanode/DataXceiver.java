@@ -1127,7 +1127,7 @@ class DataXceiver extends Receiver implements Runnable {
 
     BlockSender blockSender = null;
     boolean isOpSuccess = true;
-
+    long read = 0;
     try {
       // check if the block exists or not
       blockSender = new BlockSender(block, 0, -1, false, false, true, datanode, 
@@ -1141,8 +1141,7 @@ class DataXceiver extends Receiver implements Runnable {
 
       long beginRead = Time.monotonicNow();
       // send block content to the target
-      long read = blockSender.sendBlock(reply, baseStream,
-                                        dataXceiverServer.balanceThrottler);
+      read = blockSender.sendBlock(reply, baseStream, dataXceiverServer.balanceThrottler);
       long duration = Time.monotonicNow() - beginRead;
       datanode.metrics.incrBytesRead((int) read);
       datanode.metrics.incrBlocksRead();
@@ -1177,6 +1176,8 @@ class DataXceiver extends Receiver implements Runnable {
 
     //update metrics    
     datanode.metrics.addCopyBlockOp(elapsed());
+    datanode.metrics.incrCrossDCFromCopyBlock(
+        peer.getLocalHostAddress(), peer.getRemoteHostAddress(), read);
   }
 
   @Override
