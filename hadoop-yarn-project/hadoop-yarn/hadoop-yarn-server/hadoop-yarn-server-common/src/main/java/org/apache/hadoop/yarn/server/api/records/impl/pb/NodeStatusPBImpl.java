@@ -28,10 +28,12 @@ import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.ResourceUtilization;
+import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationIdPBImpl;
 import org.apache.hadoop.yarn.api.records.impl.pb.ContainerPBImpl;
 import org.apache.hadoop.yarn.api.records.impl.pb.ContainerStatusPBImpl;
 import org.apache.hadoop.yarn.api.records.impl.pb.NodeIdPBImpl;
+import org.apache.hadoop.yarn.api.records.impl.pb.ProtoUtils;
 import org.apache.hadoop.yarn.api.records.impl.pb.ResourceUtilizationPBImpl;
 import org.apache.hadoop.yarn.proto.YarnProtos;
 import org.apache.hadoop.yarn.proto.YarnProtos.ApplicationIdProto;
@@ -44,6 +46,7 @@ import org.apache.hadoop.yarn.proto.YarnServerCommonProtos.NodeStatusProto;
 import org.apache.hadoop.yarn.proto.YarnServerCommonProtos.NodeStatusProtoOrBuilder;
 import org.apache.hadoop.yarn.proto.YarnServerCommonProtos.OpportunisticContainersStatusProto;
 
+import org.apache.hadoop.yarn.proto.YarnServiceProtos.UpdateContainerRequestProto;
 import org.apache.hadoop.yarn.server.api.records.OpportunisticContainersStatus;
 import org.apache.hadoop.yarn.server.api.records.NodeHealthStatus;
 import org.apache.hadoop.yarn.server.api.records.NodeStatus;
@@ -58,6 +61,7 @@ public class NodeStatusPBImpl extends NodeStatus {
   private NodeHealthStatus nodeHealthStatus = null;
   private List<ApplicationId> keepAliveApplications = null;
   private List<Container> increasedContainers = null;
+  private List<UpdateContainerRequest> updateContainerRequests = null;
 
   public NodeStatusPBImpl() {
     builder = NodeStatusProto.newBuilder();
@@ -90,6 +94,9 @@ public class NodeStatusPBImpl extends NodeStatus {
     }
     if (this.increasedContainers != null) {
       addIncreasedContainersToProto();
+    }
+    if (this.updateContainerRequests != null) {
+      addUpdateContainerRequestsToProto();
     }
   }
 
@@ -206,6 +213,33 @@ public class NodeStatusPBImpl extends NodeStatus {
       }
     };
     builder.addAllIncreasedContainers(iterable);
+  }
+
+  private synchronized void addUpdateContainerRequestsToProto() {
+    maybeInitBuilder();
+    builder.clearUpdateContainerRequests();
+    if (updateContainerRequests == null) {
+      return;
+    }
+    Iterable<UpdateContainerRequestProto> iterable = new Iterable<UpdateContainerRequestProto>() {
+      @Override
+      public Iterator<UpdateContainerRequestProto> iterator() {
+        return new Iterator<UpdateContainerRequestProto>() {
+          private Iterator<UpdateContainerRequest> iter =
+              updateContainerRequests.iterator();
+          @Override
+          public boolean hasNext() {
+            return iter.hasNext();
+          }
+
+          @Override
+          public UpdateContainerRequestProto next() {
+            return ProtoUtils.convertToProtoFormat(iter.next());
+          }
+        };
+      }
+    };
+    builder.addAllUpdateContainerRequests(iterable);
   }
 
   @Override
@@ -402,6 +436,31 @@ public class NodeStatusPBImpl extends NodeStatus {
       return;
     }
     this.increasedContainers = increasedContainers;
+  }
+
+  @Override
+  public synchronized List<UpdateContainerRequest> getUpdateContainerRequests() {
+    if (updateContainerRequests != null) {
+      return updateContainerRequests;
+    }
+    NodeStatusProtoOrBuilder p = viaProto ? proto : builder;
+    List<UpdateContainerRequestProto> list = p.getUpdateContainerRequestsList();
+    this.updateContainerRequests = new ArrayList<>();
+    for (UpdateContainerRequestProto c : list) {
+      this.updateContainerRequests.add(ProtoUtils.convertFromProtoFormat(c));
+    }
+    return updateContainerRequests;
+  }
+
+  @Override
+  public synchronized void setUpdateContainerRequests(
+      List<UpdateContainerRequest> updateRequests) {
+    maybeInitBuilder();
+    if (updateRequests == null) {
+      builder.clearUpdateContainerRequests();
+      return;
+    }
+    this.updateContainerRequests = updateRequests;
   }
 
   @Override

@@ -131,12 +131,6 @@ public class NMCollectorService extends CompositeService implements
           nmTimelinePublisher.setTimelineServiceAddress(appId,
               collector.getCollectorAddr());
         }
-        DynamicResourcePublisher dynamicResourcePublisher =
-            context.getDynamicResourcePublisher();
-        if (dynamicResourcePublisher != null) {
-          collector.setCollectorToken(dynamicResourcePublisher.getToken(appId));
-          dynamicResourcePublisher.setAppCollectorData(appId, collector);
-        }
       }
       Map<ApplicationId, AppCollectorData> registeringCollectors
           = context.getRegisteringCollectors();

@@ -48,22 +48,13 @@ public class DynamicResourcePublisher extends CompositeService {
   private Dispatcher dispatcher;
 
   private Context context;
-  private String port;
   private final YarnRPC rpc;
-
-  private final Map<ApplicationId, AppCollectorData> appToDataMap;
-
-  private final Map<ApplicationId, Token> tokenMap;
 
   private volatile CollectorNodemanagerProtocol nmCollectorService;
 
   public DynamicResourcePublisher(Context context) {
     super(DynamicResourcePublisher.class.getName());
     this.context = context;
-    port = context.getConf().get(YarnConfiguration.AMRM_PROXY_ADDRESS,
-        YarnConfiguration.DEFAULT_AMRM_PROXY_ADDRESS).split(":")[1];
-    appToDataMap = new ConcurrentHashMap<>();
-    tokenMap = new ConcurrentHashMap<>();
     rpc = YarnRPC.create(context.getConf());
   }
 
@@ -107,51 +98,10 @@ public class DynamicResourcePublisher extends CompositeService {
   protected void handleDynamicResourceEvent(DynamicResourceEvent event)
       throws IOException, InterruptedException, YarnException {
     switch (event.getType()) {
-      case PUBLISH_UPDATE_CONTAINER_REQUEST:
-        publish(event.getApplicationId(), event.getUpdateContainerRequest());
-        break;
       case EXECUTE_INCREASE_RESOURCE:
         increaseResource(event.getApplicationId(), event.getUpdatedContainer());
-      case STOP_APPLICATION:
-        removeApplication(event.getApplicationId());
-        break;
       default:
         LOG.error("Unknown DynamicResourceEvent type: " + event.getType());
-    }
-  }
-
-  private void publish(ApplicationId appId,
-      UpdateContainerRequest updateContainerRequest)
-      throws IOException, YarnException {
-    if (appToDataMap.containsKey(appId)) {
-      AppCollectorData appData = appToDataMap.get(appId);
-      if (appData.getCollectorToken() == null) {
-        LOG.info(appId
-            + " doesn't have AMRMProxy token, skip this update container request.");
-        return;
-      }
-      UserGroupInformation user = UserGroupInformation.createRemoteUser("yarn");
-      String nodeId = appData.getCollectorAddr().split(":")[0];
-      InetSocketAddress addr = NetUtils.createSocketAddr(nodeId + ":" + port);
-      Token<AMRMTokenIdentifier> token = ConverterUtils.convertFromYarn(appData.getCollectorToken(), (Text) null);
-      token.setService(new Text(addr.getAddress().getHostAddress() + ":" + addr.getPort()));
-      user.addToken(token);
-
-      ApplicationMasterProtocol rmClient =
-          user.doAs(new PrivilegedAction<ApplicationMasterProtocol>() {
-            @Override
-            public ApplicationMasterProtocol run() {
-              return (ApplicationMasterProtocol) rpc
-                  .getProxy(ApplicationMasterProtocol.class, addr,
-                      context.getConf());
-            }
-          });
-      LOG.info("Publish update container request: " + updateContainerRequest);
-      AllocateRequest allocateRequest = AllocateRequest.newBuilder()
-          .updateRequests(Arrays.asList(updateContainerRequest)).build();
-      rmClient.allocate(allocateRequest);
-    } else {
-      LOG.info("Doesn't contain appId: " + appId);
     }
   }
 
@@ -179,81 +129,5 @@ public class DynamicResourcePublisher extends CompositeService {
     List<org.apache.hadoop.yarn.api.records.Token> increaseTokens = new ArrayList<>();
     increaseTokens.add(updatedContainer.getContainer().getContainerToken());
     proxy.updateContainer(ContainerUpdateRequest.newInstance(increaseTokens));
-  }
-
-  private void removeApplication(ApplicationId appId) {
-    appToDataMap.remove(appId);
-    tokenMap.remove(appId);
-  }
-
-  public void stopApplication(ApplicationId appId) {
-    dispatcher.getEventHandler().handle(
-        new DynamicResourceEvent(DynamicResourceEventType.STOP_APPLICATION,
-            appId));
-  }
-
-  public void updateAMRMProxyToken(ApplicationId appId, Token t) {
-    LOG.info("Update AMRMProxy token for " + appId);
-    tokenMap.put(appId, t);
-    if (appToDataMap.containsKey(appId)) {
-      org.apache.hadoop.yarn.api.records.Token newToken =
-          org.apache.hadoop.yarn.api.records.Token
-              .newInstance(t.getIdentifier(), t.getKind().toString(),
-                  t.getPassword(), t.getService().toString());
-
-      AppCollectorData appData = appToDataMap.get(appId);
-      if (!appData.getCollectorToken().equals(newToken)) {
-        LOG.info("Update " + appId + " AMRMProxy token for AppCollectorData");
-        appData.setCollectorToken(newToken);
-        ReportNewCollectorInfoRequest request = ReportNewCollectorInfoRequest
-            .newInstance(appId, appData.getCollectorAddr(),
-                appData.getCollectorToken());
-        try {
-          getNMCollectorService().reportNewCollectorInfo(request);
-        } catch (YarnException e) {
-          e.printStackTrace();
-        } catch (IOException e) {
-          e.printStackTrace();
-        }
-      }
-    }
-  }
-
-  public org.apache.hadoop.yarn.api.records.Token getToken(
-      ApplicationId appId) {
-    if (!tokenMap.containsKey(appId))
-      return null;
-    Token t = tokenMap.get(appId);
-    return org.apache.hadoop.yarn.api.records.Token
-        .newInstance(t.getIdentifier(), t.getKind().toString(), t.getPassword(),
-            t.getService().toString());
-  }
-
-  public void setAppCollectorData(ApplicationId appId, AppCollectorData data) {
-    appToDataMap.put(appId, data);
-    LOG.info("Set app collector for "+ appId + " data content: " + data.toString());
-  }
-
-  protected CollectorNodemanagerProtocol getNMCollectorService() {
-    if (nmCollectorService == null) {
-      synchronized (this) {
-        if (nmCollectorService == null) {
-          Configuration conf = getConfig();
-          InetSocketAddress nmCollectorServiceAddress = conf.getSocketAddr(
-              YarnConfiguration.NM_BIND_HOST,
-              YarnConfiguration.NM_COLLECTOR_SERVICE_ADDRESS,
-              YarnConfiguration.DEFAULT_NM_COLLECTOR_SERVICE_ADDRESS,
-              YarnConfiguration.DEFAULT_NM_COLLECTOR_SERVICE_PORT);
-          LOG.info("nmCollectorServiceAddress: " + nmCollectorServiceAddress);
-          final YarnRPC rpc = YarnRPC.create(conf);
-
-          // TODO Security settings.
-          nmCollectorService = (CollectorNodemanagerProtocol) rpc.getProxy(
-              CollectorNodemanagerProtocol.class,
-              nmCollectorServiceAddress, conf);
-        }
-      }
-    }
-    return nmCollectorService;
   }
 }

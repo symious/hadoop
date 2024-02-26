@@ -1935,10 +1935,10 @@ public class YarnConfiguration extends Configuration {
   public static final int
       DEFAULT_NM_DYNAMIC_ADJUSTMENT_DEFAULT_POLICY_INTERVAL_MS = 300000;
 
-  public static final String NM_DYNAMIC_ADJUSTMENT_CONTAINER_LAUNCH_TIME_THRESOLD =
-      NM_PREFIX + "dynamic.adjustment.container-launch-time.thresold";
+  public static final String NM_DYNAMIC_ADJUSTMENT_CONTAINER_LAUNCH_TIME_THRESHOLD =
+      NM_PREFIX + "dynamic.adjustment.container-launch-time.threshold";
   public static final int
-      DEFAULT_NM_DYNAMIC_ADJUSTMENT_CONTAINER_LAUNCH_TIME_THRESOLD = 30000;
+      DEFAULT_NM_DYNAMIC_ADJUSTMENT_CONTAINER_LAUNCH_TIME_THRESHOLD = 30000;
 
   public static final String NM_MEMORY_RESOURCE_CGROUPS_SWAPPINESS =
       NM_MEMORY_RESOURCE_PREFIX + "cgroups.swappiness";

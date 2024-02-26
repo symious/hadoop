@@ -612,12 +612,6 @@ public class ApplicationImpl implements Application {
       if (nmTimelinePublisher != null) {
         nmTimelinePublisher.stopTimelineClient(app.getAppId());
       }
-
-      DynamicResourcePublisher dynamicResourcePublisher =
-          app.context.getDynamicResourcePublisher();
-      if (dynamicResourcePublisher != null) {
-        dynamicResourcePublisher.stopApplication(app.getAppId());
-      }
     }
 
     @Override

@@ -9,20 +9,7 @@ public class DynamicResourceEvent
     extends AbstractEvent<DynamicResourceEventType> {
 
   private ApplicationId appId;
-  private UpdateContainerRequest updateContainerRequest;
   private UpdatedContainer updatedContainer;
-
-  public DynamicResourceEvent(DynamicResourceEventType type, ApplicationId appId) {
-    super(type);
-    this.appId = appId;
-  }
-
-  public DynamicResourceEvent(DynamicResourceEventType type, ApplicationId appId,
-      UpdateContainerRequest request) {
-    super(type);
-    this.appId = appId;
-    this.updateContainerRequest = request;
-  }
 
   public DynamicResourceEvent(DynamicResourceEventType type,
       ApplicationId appId, UpdatedContainer updatedContainer) {
@@ -33,10 +20,6 @@ public class DynamicResourceEvent
 
   public ApplicationId getApplicationId() {
     return appId;
-  }
-
-  public UpdateContainerRequest getUpdateContainerRequest() {
-    return updateContainerRequest;
   }
 
   public UpdatedContainer getUpdatedContainer() {

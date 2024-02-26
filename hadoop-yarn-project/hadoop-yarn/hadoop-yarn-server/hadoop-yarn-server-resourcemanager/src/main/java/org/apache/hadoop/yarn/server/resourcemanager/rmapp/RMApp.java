@@ -39,6 +39,7 @@ import org.apache.hadoop.yarn.api.records.NodeUpdateType;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.ReservationId;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.api.protocolrecords.LogAggregationReport;
@@ -162,6 +163,8 @@ public interface RMApp extends EventHandler<RMAppEvent> {
    * @return the number of nodes added to the {@link Map}
    */
   int pullRMNodeUpdates(Map<RMNode, NodeUpdateType> updatedNodes);
+
+  int pullUpdateContainerRequests(List<UpdateContainerRequest> updateRequests);
 
   /**
    * The finish time of the {@link RMApp}

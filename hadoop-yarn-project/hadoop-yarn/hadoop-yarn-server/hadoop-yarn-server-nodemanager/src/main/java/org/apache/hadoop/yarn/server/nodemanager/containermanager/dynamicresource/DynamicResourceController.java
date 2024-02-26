@@ -68,11 +68,8 @@ public class DynamicResourceController extends Thread {
             ca.getContainer().getContainerTokenIdentifier().getVersion(),
             ca.getContainerId(), ca.getContainerUpdateType(), target,
             ca.getContainer().getContainerTokenIdentifier().getExecutionType());
-        context.getDynamicResourcePublisher().publishDynamicResourceEvent(
-            new DynamicResourceEvent(
-                DynamicResourceEventType.PUBLISH_UPDATE_CONTAINER_REQUEST,
-                ucr.getContainerId().getApplicationAttemptId()
-                    .getApplicationId(), ucr));
+
+        context.getTobeUpdatedContainers().put(ca.getContainerId(), ucr);
       }
       adjustments.clear();
       try {

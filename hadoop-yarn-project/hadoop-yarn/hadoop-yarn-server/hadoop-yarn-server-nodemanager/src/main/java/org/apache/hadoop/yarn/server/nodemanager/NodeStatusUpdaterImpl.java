@@ -44,8 +44,6 @@ import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.server.api.records.ApplicationLevel;
-import org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManagerImpl;
-import org.apache.hadoop.yarn.server.nodemanager.containermanager.dynamicresource.DynamicResourcePublisher;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.ContainerLocalizer;
 
 import org.apache.hadoop.util.SysInfo;
@@ -69,6 +67,7 @@ import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceUtilization;
 import org.apache.hadoop.yarn.api.records.NodeAttribute;
+import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.exceptions.YarnException;
@@ -608,6 +607,10 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
           createKeepAliveApplicationList(), nodeHealthStatus,
           containersUtilization, nodeUtilization, increasedContainers);
 
+    List<UpdateContainerRequest> updateContainerRequests =
+        getTobeUpdateContainerRequests();
+    nodeStatus.setUpdateContainerRequests(updateContainerRequests);
+
     nodeStatus.setOpportunisticContainersStatus(
         getOpportunisticContainersStatus());
 
@@ -730,6 +733,15 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
       this.context.getIncreasedContainers().remove(container.getId());
     }
     return increasedContainers;
+  }
+
+  private List<UpdateContainerRequest> getTobeUpdateContainerRequests() {
+    List<UpdateContainerRequest> tobeUpdateContainers = new ArrayList<>(
+        this.context.getTobeUpdatedContainers().values());
+    for (UpdateContainerRequest c : tobeUpdateContainers) {
+      this.context.getTobeUpdatedContainers().remove(c.getContainerId());
+    }
+    return tobeUpdateContainers;
   }
 
   // Update NM's Resource.
@@ -1726,12 +1738,6 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
             if (nmTimelinePublisher != null) {
               nmTimelinePublisher.setTimelineServiceAddress(
                   application.getAppId(), collectorData.getCollectorAddr());
-            }
-            DynamicResourcePublisher dynamicResourcePublisher =
-                context.getDynamicResourcePublisher();
-            if (dynamicResourcePublisher != null) {
-              dynamicResourcePublisher
-                  .setAppCollectorData(application.getAppId(), collectorData);
             }
             // Update information for the node manager itself.
             knownCollectors.put(appId, collectorData);

@@ -6,10 +6,7 @@ import org.apache.hadoop.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerUpdateType;
-import org.apache.hadoop.yarn.api.records.Resource;
-import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
-import org.apache.hadoop.yarn.server.api.ContainerType;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.monitor.ContainerMetrics;
 import org.apache.hadoop.yarn.util.resource.ResourceCalculator;
@@ -25,7 +22,7 @@ public class DefaultPolicy implements Policy {
   private long minInterval;
   private Cache<Object, Object> cache;
   private long minAllocationMb;
-  private long launchTimeThresold;
+  private long launchTimeThreshold;
 
   @Override
   public ContainerAdjustment apply(Container container) {
@@ -33,7 +30,7 @@ public class DefaultPolicy implements Policy {
     ContainerMetrics containerMetrics =
         ContainerMetrics.getContainerMetrics(containerId);
     if (containerMetrics == null || (
-        Time.now() - container.getContainerLaunchTime() < launchTimeThresold)) {
+        Time.now() - container.getContainerLaunchTime() < launchTimeThreshold)) {
       return null;
     }
 
@@ -45,50 +42,45 @@ public class DefaultPolicy implements Policy {
     LOG.debug("MemoryUsage for container: " + containerId + ". max: " + max
         + " latest: " + latest + " init: " + init + " limit: " + limit);
 
-    if (latest <= max) {
-      if (cache.getIfPresent(containerId) != null) {
+    if (Time.now() - container.getLastChangeResourceTime() < minInterval) {
+      return null;
+    }
+    if (limit < max) {
+      long target = Math.min(init, max);
+      if (target == limit) {
         return null;
       }
-      if (limit < max) {
-        long target = Math.min(init, max);
-        if (target == limit) {
-          return null;
-        }
+      long normalized = ResourceCalculator
+          .roundUp(Math.max(minAllocationMb, target), minAllocationMb);
+
+      LOG.info("Increase resource from " + limit + " to " + normalized
+          + " for container: " + containerId);
+
+      return new ContainerAdjustment(containerId, container,
+          ContainerUpdateType.INCREASE_RESOURCE,
+          container.getContainerTokenIdentifier().getResource(),
+          normalized - limit);
+    } else {
+      if ((double) max / (double) limit > 0.8) {
+        return null;
+      } else {
+        long target = limit - (limit - max) / 2;
         long normalized = ResourceCalculator
             .roundUp(Math.max(minAllocationMb, target), minAllocationMb);
-
-        cache.put(containerId, System.currentTimeMillis());
-        LOG.info("Increase resource from " + limit + " to " + normalized
+        LOG.debug(
+            "Before normalized: " + target + " After normalized: " + normalized
+                + " for container: " + containerId);
+        if (normalized == limit) {
+          return null;
+        }
+        LOG.info("Decrease resource from " + limit + " to " + normalized
             + " for container: " + containerId);
 
         return new ContainerAdjustment(containerId, container,
-            ContainerUpdateType.INCREASE_RESOURCE,
+            ContainerUpdateType.DECREASE_RESOURCE,
             container.getContainerTokenIdentifier().getResource(),
             normalized - limit);
-      } else {
-        if ((double)max / (double)limit > 0.8) {
-          return null;
-        } else {
-          long target = limit - (limit - max) / 2;
-          long normalized = ResourceCalculator
-              .roundUp(Math.max(minAllocationMb, target), minAllocationMb);
-          LOG.debug("Before normalized: " + target + " After normalized: " + normalized
-              + " for container: " + containerId);
-          if (normalized == limit) {
-            return null;
-          }
-          cache.put(containerId, System.currentTimeMillis());
-          LOG.info("Decrease resource from " + limit + " to " + normalized
-              + " for container: " + containerId);
-
-          return new ContainerAdjustment(containerId, container,
-              ContainerUpdateType.DECREASE_RESOURCE,
-              container.getContainerTokenIdentifier().getResource(),
-              normalized - limit);
-        }
       }
-    } else {
-      return null;
     }
   }
 
@@ -102,8 +94,8 @@ public class DefaultPolicy implements Policy {
     this.minAllocationMb =
         conf.getLong(YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB,
             YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_MB);
-    this.launchTimeThresold = conf.getLong(
-        YarnConfiguration.NM_DYNAMIC_ADJUSTMENT_CONTAINER_LAUNCH_TIME_THRESOLD,
-        YarnConfiguration.DEFAULT_NM_DYNAMIC_ADJUSTMENT_CONTAINER_LAUNCH_TIME_THRESOLD);
+    this.launchTimeThreshold = conf.getLong(
+        YarnConfiguration.NM_DYNAMIC_ADJUSTMENT_CONTAINER_LAUNCH_TIME_THRESHOLD,
+        YarnConfiguration.DEFAULT_NM_DYNAMIC_ADJUSTMENT_CONTAINER_LAUNCH_TIME_THRESHOLD);
   }
 }

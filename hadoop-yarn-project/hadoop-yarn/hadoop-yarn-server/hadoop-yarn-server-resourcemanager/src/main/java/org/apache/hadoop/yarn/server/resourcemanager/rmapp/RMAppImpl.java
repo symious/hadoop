@@ -22,6 +22,7 @@ import java.net.InetAddress;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,14 +33,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.apache.hadoop.classification.InterfaceAudience.Private;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.ipc.CallerContext;
-import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.security.token.Token;
-import org.apache.hadoop.util.StringInterner;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -59,7 +52,16 @@ import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.ReservationId;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.apache.hadoop.classification.InterfaceAudience.Private;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.ipc.CallerContext;
+import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.util.StringInterner;
 import org.apache.hadoop.yarn.client.api.AppAdminClient;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.Dispatcher;
@@ -158,6 +160,7 @@ public class RMAppImpl implements RMApp, Recoverable {
 
   private boolean isNumAttemptsBeyondThreshold = false;
 
+  private Set<UpdateContainerRequest> updateContainerRequests = new HashSet();
 
 
   // Mutable fields
@@ -687,6 +690,18 @@ public class RMAppImpl implements RMApp, Recoverable {
       this.writeLock.unlock();
     }
   }
+
+  @Override
+  public int pullUpdateContainerRequests(List<UpdateContainerRequest> requests) {
+    this.writeLock.lock();
+    try {
+      requests.addAll(updateContainerRequests);
+      this.updateContainerRequests.clear();
+      return requests.size();
+    } finally {
+      this.writeLock.unlock();
+    }
+  }
   
   @Override
   public ApplicationReport createAndGetApplicationReport(String clientUserName,
@@ -1001,6 +1016,15 @@ public class RMAppImpl implements RMApp, Recoverable {
     updatedNodes.put(node, RMAppNodeUpdateType.convertToNodeUpdateType(type));
     LOG.debug("Received node update event:{} for node:{} with state:",
         type, node, nodeState);
+  }
+
+  public void processUpdateContainerRequest(List<UpdateContainerRequest> requests) {
+    writeLock.lock();
+    try {
+      updateContainerRequests.addAll(requests);
+    } finally {
+      writeLock.unlock();
+    }
   }
 
   private static class RMAppTransition implements

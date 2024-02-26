@@ -40,6 +40,7 @@ import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.ReservationId;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationSubmissionContextPBImpl;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
@@ -251,6 +252,12 @@ public class MockRMApp implements RMApp {
 
   @Override
   public int pullRMNodeUpdates(Map<RMNode, NodeUpdateType> updatedNodes) {
+    throw new UnsupportedOperationException("Not supported yet.");
+  }
+
+  @Override
+  public int pullUpdateContainerRequests(
+      List<UpdateContainerRequest> updateRequests) {
     throw new UnsupportedOperationException("Not supported yet.");
   }
 

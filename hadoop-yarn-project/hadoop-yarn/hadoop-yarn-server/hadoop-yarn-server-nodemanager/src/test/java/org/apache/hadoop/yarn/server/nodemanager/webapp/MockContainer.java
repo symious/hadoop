@@ -288,6 +288,11 @@ public class MockContainer implements Container {
   }
 
   @Override
+  public long getLastChangeResourceTime() {
+    return 0;
+  }
+
+  @Override
   public ResourceMappings getResourceMappings() {
     return null;
   }

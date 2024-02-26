@@ -9,7 +9,6 @@ import org.apache.hadoop.yarn.api.protocolrecords.RegisterApplicationMasterReque
 import org.apache.hadoop.yarn.api.protocolrecords.RegisterApplicationMasterResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ContainerUpdateType;
-import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.api.records.UpdatedContainer;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.server.nodemanager.amrmproxy.AMRMProxyApplicationContext;
@@ -19,7 +18,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 public class DynamicResourceRequestInterceptor extends
@@ -28,8 +26,6 @@ public class DynamicResourceRequestInterceptor extends
       LoggerFactory.getLogger(DynamicResourceRequestInterceptor.class);
 
   private ApplicationAttemptId attemptId;
-  private String userName;
-  private List<UpdateContainerRequest> pendingUpdateRequest;
 
   @Override
   public void init(AMRMProxyApplicationContext appContext) {
@@ -37,14 +33,10 @@ public class DynamicResourceRequestInterceptor extends
     LOG.info("Initializing Dynamic Resource Request Interceptor");
 
     Configuration conf = appContext.getConf();
-    if (conf == null) {
-      conf = getConf();
-    } else {
+    if (conf != null) {
       setConf(conf);
     }
     this.attemptId = appContext.getApplicationAttemptId();
-    this.userName = appContext.getUser();
-    this.pendingUpdateRequest = Collections.synchronizedList(new ArrayList<>());
   }
 
   @Override
@@ -66,14 +58,6 @@ public class DynamicResourceRequestInterceptor extends
   @Override
   public AllocateResponse allocate(AllocateRequest request)
       throws YarnException, IOException {
-    if (request.getUpdateRequests().size() > 0) {
-      pendingUpdateRequest.addAll(request.getUpdateRequests());
-      return AllocateResponse.newBuilder().build();
-    }
-    synchronized (pendingUpdateRequest) {
-      request.getUpdateRequests().addAll(pendingUpdateRequest);
-      pendingUpdateRequest.clear();
-    }
     AllocateResponse response = getNextInterceptor().allocate(request);
     handleIncreaseContainers(response);
     if (response.getUpdateErrors().size() > 0) {
@@ -82,8 +66,7 @@ public class DynamicResourceRequestInterceptor extends
     return response;
   }
 
-  public void handleIncreaseContainers(AllocateResponse response)
-      throws IOException, YarnException {
+  public void handleIncreaseContainers(AllocateResponse response) {
     List<UpdatedContainer> updatedContainers = new ArrayList();
     updatedContainers.addAll(response.getUpdatedContainers());
     response.getUpdatedContainers().clear();

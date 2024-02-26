@@ -64,6 +64,7 @@ import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceOption;
 import org.apache.hadoop.yarn.api.records.ResourceUtilization;
+import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.factories.RecordFactory;
@@ -1505,6 +1506,8 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       rmNode.handleContainerStatus(statusEvent.getContainers());
       rmNode.handleReportedIncreasedContainers(
           statusEvent.getNMReportedIncreasedContainers());
+      rmNode.handleUpdateContainerRequests(
+          statusEvent.getNMUpdateContainerRequests());
 
       List<LogAggregationReport> logAggregationReportsForApps =
           statusEvent.getLogAggregationReportsForApps();
@@ -1801,6 +1804,28 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       }
       
       this.nmReportedIncreasedContainers.put(containerId, container);
+    }
+  }
+
+  private void handleUpdateContainerRequests(
+      List<UpdateContainerRequest> updateRequests) {
+    Map<ApplicationId, List<UpdateContainerRequest>> appToRequestList = new HashMap<>();
+    for (UpdateContainerRequest c : updateRequests) {
+      ApplicationId appId =
+          c.getContainerId().getApplicationAttemptId().getApplicationId();
+      if (!appToRequestList.containsKey(appId)) {
+        appToRequestList.put(appId, new ArrayList<>());
+      }
+      appToRequestList.get(appId).add(c);
+    }
+
+    for (Map.Entry<ApplicationId, List<UpdateContainerRequest>> entry : appToRequestList
+        .entrySet()) {
+      ApplicationId appId = entry.getKey();
+      RMApp app = context.getRMApps().get(appId);
+      if (app != null) {
+        ((RMAppImpl) app).processUpdateContainerRequest(entry.getValue());
+      }
     }
   }
 

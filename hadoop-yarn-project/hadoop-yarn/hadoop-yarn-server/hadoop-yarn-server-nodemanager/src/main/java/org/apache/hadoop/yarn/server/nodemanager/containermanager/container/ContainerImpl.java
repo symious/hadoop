@@ -178,6 +178,7 @@ public class ContainerImpl implements Container {
   private boolean wasPaused;
   private long containerLocalizationStartTime;
   private long containerLaunchStartTime;
+  private long lastChangeResourceTime;
   private ContainerMetrics containerMetrics;
   private static Clock clock = SystemClock.getInstance();
 
@@ -920,6 +921,11 @@ public class ContainerImpl implements Container {
   }
 
   @Override
+  public long getLastChangeResourceTime() {
+    return this.lastChangeResourceTime;
+  }
+
+  @Override
   public Resource getResource() {
     return Resources.clone(
         this.containerTokenIdentifier.getResource());
@@ -1162,6 +1168,7 @@ public class ContainerImpl implements Container {
       ContainerTokenIdentifier originalToken =
           container.containerTokenIdentifier;
       super.transition(container, updateEvent);
+      container.lastChangeResourceTime = clock.getTime();
       container.metrics.changeContainer(originalToken.getResource(),
           updateEvent.getUpdatedToken().getResource());
       container.metrics.updateContainerMemoryChange(

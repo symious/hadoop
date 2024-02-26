@@ -28,6 +28,7 @@ import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.ResourceUtilization;
+import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.util.Records;
 
 /**
@@ -122,6 +123,11 @@ public abstract class NodeStatus {
   @Unstable
   public abstract void setIncreasedContainers(
       List<Container> increasedContainers);
+
+  public abstract List<UpdateContainerRequest> getUpdateContainerRequests();
+
+  public abstract void setUpdateContainerRequests(
+      List<UpdateContainerRequest> updateRequests);
 
   @Private
   @Unstable

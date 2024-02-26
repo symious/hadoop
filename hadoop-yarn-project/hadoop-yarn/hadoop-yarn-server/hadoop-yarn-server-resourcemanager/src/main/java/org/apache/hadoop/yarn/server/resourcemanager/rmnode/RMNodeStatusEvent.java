@@ -26,6 +26,7 @@ import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.ResourceUtilization;
+import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.LogAggregationReport;
 import org.apache.hadoop.yarn.server.api.records.OpportunisticContainersStatus;
 import org.apache.hadoop.yarn.server.api.records.NodeHealthStatus;
@@ -83,6 +84,11 @@ public class RMNodeStatusEvent extends RMNodeEvent {
   public List<Container> getNMReportedIncreasedContainers() {
     return this.nodeStatus.getIncreasedContainers() == null ?
         Collections.emptyList() : this.nodeStatus.getIncreasedContainers();
+  }
+
+  public List<UpdateContainerRequest> getNMUpdateContainerRequests() {
+    return this.nodeStatus.getUpdateContainerRequests() == null ?
+        Collections.emptyList() : this.nodeStatus.getUpdateContainerRequests();
   }
 
   public float getLoad1() {

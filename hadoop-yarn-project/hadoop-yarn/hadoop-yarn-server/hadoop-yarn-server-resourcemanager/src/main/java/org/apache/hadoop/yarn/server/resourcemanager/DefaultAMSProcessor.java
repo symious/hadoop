@@ -58,6 +58,7 @@ import org.apache.hadoop.yarn.api.records.ResourceBlacklistRequest;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.api.records.StrictPreemptionContract;
 import org.apache.hadoop.yarn.api.records.UpdateContainerError;
+import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.InvalidContainerReleaseException;
 import org.apache.hadoop.yarn.exceptions.InvalidResourceBlacklistRequestException;
@@ -313,6 +314,8 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
       }
     }
 
+    handleUpdateContainerRequests(app, request);
+
     ResourceBlacklistRequest blacklistRequest =
         request.getResourceBlacklistRequest();
     List<String> blacklistAdditions =
@@ -514,6 +517,13 @@ final class DefaultAMSProcessor implements ApplicationMasterServiceProcessor {
         updatedNodeReports.add(report);
       }
       allocateResponse.setUpdatedNodes(updatedNodeReports);
+    }
+  }
+
+  private void handleUpdateContainerRequests(RMApp app, AllocateRequest allocateRequest) {
+    List<UpdateContainerRequest> updateRequests = new ArrayList<>();
+    if(app.pullUpdateContainerRequests(updateRequests) > 0) {
+      allocateRequest.setUpdateRequests(updateRequests);
     }
   }
 
