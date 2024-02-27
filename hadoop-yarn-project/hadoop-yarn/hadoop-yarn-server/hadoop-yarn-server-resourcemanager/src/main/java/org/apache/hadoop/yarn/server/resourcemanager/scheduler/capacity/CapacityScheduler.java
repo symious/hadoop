@@ -3774,19 +3774,21 @@ public class CapacityScheduler extends
     final String defaultLabel = "default";
     Map<String, Set<String>> crossLabelsMap = new ConcurrentHashMap<>();
     try {
-      for (String crossLabelSrc : crossLabelSrcs) {
-        if (crossLabelSrc.equals(defaultLabel)) {
-          crossLabelSrc = RMNodeLabelsManager.NO_LABEL;
-        }
-        String[] dstLabels =
-            this.conf.getCrossLabelDstsBySrc(crossLabelSrc);
-        if (dstLabels != null && dstLabels.length > 0) {
-          Set<String> crossLabelDstSet = Arrays.stream(dstLabels)
-              .map(
-                  s -> s.equals(defaultLabel) ? RMNodeLabelsManager.NO_LABEL :
-                      s)
-              .collect(Collectors.toSet());
-          crossLabelsMap.put(crossLabelSrc, crossLabelDstSet);
+      if (crossLabelSrcs != null) {
+        for (String crossLabelSrc : crossLabelSrcs) {
+          if (crossLabelSrc.equals(defaultLabel)) {
+            crossLabelSrc = RMNodeLabelsManager.NO_LABEL;
+          }
+          String[] dstLabels =
+              this.conf.getCrossLabelDstsBySrc(crossLabelSrc);
+          if (dstLabels != null && dstLabels.length > 0) {
+            Set<String> crossLabelDstSet = Arrays.stream(dstLabels)
+                .map(
+                    s -> s.equals(defaultLabel) ? RMNodeLabelsManager.NO_LABEL :
+                        s)
+                .collect(Collectors.toSet());
+            crossLabelsMap.put(crossLabelSrc, crossLabelDstSet);
+          }
         }
       }
     } catch (Exception e) {
