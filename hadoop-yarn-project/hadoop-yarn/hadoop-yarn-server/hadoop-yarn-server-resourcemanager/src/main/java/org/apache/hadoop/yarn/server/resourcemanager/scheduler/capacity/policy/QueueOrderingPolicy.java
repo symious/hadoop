@@ -22,6 +22,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CSQueue;
 
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 /**
  * This will be used by
@@ -39,10 +40,12 @@ public interface QueueOrderingPolicy {
    * Caller need to make sure parent queue's read lock is properly acquired.
    *
    * @param partition nodePartition
+   * @param otherLookupPartitions otherLookupPartitions
    *
    * @return iterator of queues to allocate
    */
-  Iterator<CSQueue> getAssignmentIterator(String partition);
+  Iterator<CSQueue> getAssignmentIterator(String partition,
+      Set<String> otherLookupPartitions);
 
   /**
    * Returns configuration name (which will be used to set ordering policy

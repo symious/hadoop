@@ -782,8 +782,9 @@ public class ParentQueue extends AbstractCSQueue {
   }
 
   private Iterator<CSQueue> sortAndGetChildrenAllocationIterator(
-      String partition) {
-    return queueOrderingPolicy.getAssignmentIterator(partition);
+      String partition, Set<String> otherLookupPartitions) {
+    return queueOrderingPolicy
+        .getAssignmentIterator(partition, otherLookupPartitions);
   }
 
   private CSAssignment assignContainersToChildQueues(Resource cluster,
@@ -795,7 +796,8 @@ public class ParentQueue extends AbstractCSQueue {
 
     // Try to assign to most 'under-served' sub-queue
     for (Iterator<CSQueue> iter = sortAndGetChildrenAllocationIterator(
-        candidates.getPartition()); iter.hasNext(); ) {
+        candidates.getPartition(), candidates.getOtherLookupPartitions());
+         iter.hasNext(); ) {
       CSQueue childQueue = iter.next();
       childQueue.getMetrics().incrQueueChooseCount();
       LOG.debug("Trying to assign to queue: {} stats: {}",

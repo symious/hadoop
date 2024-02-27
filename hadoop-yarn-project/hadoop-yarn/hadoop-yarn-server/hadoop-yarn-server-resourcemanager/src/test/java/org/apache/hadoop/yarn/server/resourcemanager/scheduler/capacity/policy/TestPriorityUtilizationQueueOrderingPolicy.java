@@ -19,7 +19,6 @@
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy;
 
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableSet;
-import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableTable;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueResourceQuotas;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CSQueue;
@@ -64,7 +63,7 @@ public class TestPriorityUtilizationQueueOrderingPolicy {
 
   private void verifyOrder(QueueOrderingPolicy orderingPolicy, String partition,
       String[] expectedOrder) {
-    Iterator<CSQueue> iter = orderingPolicy.getAssignmentIterator(partition);
+    Iterator<CSQueue> iter = orderingPolicy.getAssignmentIterator(partition, null);
     int i = 0;
     while (iter.hasNext()) {
       CSQueue q = iter.next();

@@ -2122,14 +2122,7 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
         QUEUE_PRIORITY_UTILIZATION_ORDERING_POLICY)) {
       qop = new PriorityUtilizationQueueOrderingPolicy(true);
     } else if (policyType.equals(QUEUE_UTILIZATION_RANDOM_ORDERING_POLICY)) {
-      boolean reloadQueuesInBackground = getQueuesCacheBackGroundReload();
-      int reloadQueuesThreadCount = getQueuesCacheBackGroundReloadThreads();
-      long cacheTime = getQueueOrderCacheTime();
-      LOG.info("reloadQueuesInBackground:" + reloadQueuesInBackground +
-          " ,reloadQueuesThreadCount: " + reloadQueuesThreadCount +
-          " ,getQueueOrderCacheTime: " + cacheTime);
-      qop = new Utilization2RandomQueueOrderingPolicy(reloadQueuesInBackground,
-          reloadQueuesThreadCount, cacheTime);
+      qop = new Utilization2RandomQueueOrderingPolicy();
     } else {
       try {
         qop = (QueueOrderingPolicy) Class.forName(policyType).newInstance();
@@ -2141,46 +2134,6 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     }
 
     return qop;
-  }
-
-  /**
-   * Queue order cache time, default 1000ms
-   */
-  private static final String QUEUES_ORDER_CACHE_TIME =
-      PREFIX + "queues.order.cache.time";
-
-  public static final long DEFAULT_QUEUE_ORDER_CACHE_TIME = 1000;
-
-  public long getQueueOrderCacheTime() {
-    return getLong(QUEUES_ORDER_CACHE_TIME, DEFAULT_QUEUE_ORDER_CACHE_TIME);
-  }
-
-  /**
-   * Queue order cache background reload
-   */
-  public static final String QUEUES_CACHE_BACKGROUND_RELOAD =
-      PREFIX + "queues.order.cache.background.reload";
-
-  public static final boolean
-      QUEUES_CACHE_BACKGROUND_RELOAD_DEFAULT = true;
-
-  public boolean getQueuesCacheBackGroundReload() {
-    return getBoolean(QUEUES_CACHE_BACKGROUND_RELOAD,
-        QUEUES_CACHE_BACKGROUND_RELOAD_DEFAULT);
-  }
-
-  /**
-   * Queue order cache background reload thread nums
-   */
-  public static final String QUEUES_CACHE_BACKGROUND_RELOAD_THREADS =
-      PREFIX + "queues.order.cache.background.reload.threads";
-
-  public static final int
-      QUEUES_CACHE_BACKGROUND_RELOAD_THREADS_DEFAULT = 3;
-
-  public int getQueuesCacheBackGroundReloadThreads() {
-    return getInt(QUEUES_CACHE_BACKGROUND_RELOAD_THREADS,
-        QUEUES_CACHE_BACKGROUND_RELOAD_THREADS_DEFAULT);
   }
 
   /*

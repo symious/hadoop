@@ -35,6 +35,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -219,7 +220,8 @@ public class PriorityUtilizationQueueOrderingPolicy
   }
 
   @Override
-  public Iterator<CSQueue> getAssignmentIterator(String partition) {
+  public Iterator<CSQueue> getAssignmentIterator(String partition,
+      Set<String> otherLookupPartitions) {
     // Since partitionToLookAt is a thread local variable, and every time we
     // copy and sort queues, so it's safe for multi-threading environment.
     long start = System.nanoTime();

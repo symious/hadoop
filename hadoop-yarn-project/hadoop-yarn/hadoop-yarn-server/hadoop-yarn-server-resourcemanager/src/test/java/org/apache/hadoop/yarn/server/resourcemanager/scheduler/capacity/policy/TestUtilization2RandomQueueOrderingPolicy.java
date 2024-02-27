@@ -1,24 +1,23 @@
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.policy;
 
-import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableSet;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueMetrics;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueResourceQuotas;
+import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceUsage;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CSQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.QueueCapacities;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class TestUtilization2RandomQueueOrderingPolicy {
-
-  final static int GB = 1024;
 
   private List<CSQueue> mockCSQueues(String[] queueNames, float[] utilizations,
       String partition) {
@@ -35,22 +34,19 @@ public class TestUtilization2RandomQueueOrderingPolicy {
       qc.setUsedCapacity(partition, utilizations[i]);
       when(q.getQueueCapacities()).thenReturn(qc);
 
-      QueueResourceQuotas qr = new QueueResourceQuotas();
-      when(q.getQueueResourceQuotas()).thenReturn(qr);
       list.add(q);
 
-      //add queue pending resources
-      doReturn(mock(QueueMetrics.class)).when(q).getMetrics();
-      when(q.getMetrics().getPendingMB()).thenReturn(1L * GB);
-      when(q.getMetrics().getPendingVirtualCores()).thenReturn(1);
+      ResourceUsage resUsagePerQueue = new ResourceUsage();
+      when(q.getQueueResourceUsage()).thenReturn(resUsagePerQueue);
     }
 
     return list;
   }
 
   private void verifyOrder(QueueOrderingPolicy orderingPolicy, String partition,
-      String[] expectedOrder) {
-    Iterator<CSQueue> iter = orderingPolicy.getAssignmentIterator(partition);
+      Set<String> otherLookupPartitions, String[] expectedOrder) {
+    Iterator<CSQueue> iter =
+        orderingPolicy.getAssignmentIterator(partition, otherLookupPartitions);
     int i = 0;
     while (iter.hasNext()) {
       CSQueue q = iter.next();
@@ -61,8 +57,10 @@ public class TestUtilization2RandomQueueOrderingPolicy {
     assert i == expectedOrder.length;
   }
 
-  private String getFirstOne(QueueOrderingPolicy orderingPolicy, String partition) {
-    Iterator<CSQueue> iter = orderingPolicy.getAssignmentIterator(partition);
+  private String getFirstOne(QueueOrderingPolicy orderingPolicy,
+      String partition, Set<String> otherLookupPartitions) {
+    Iterator<CSQueue> iter =
+        orderingPolicy.getAssignmentIterator(partition, otherLookupPartitions);
     if (iter.hasNext()) {
       CSQueue q = iter.next();
       return q.getQueuePath();
@@ -73,42 +71,63 @@ public class TestUtilization2RandomQueueOrderingPolicy {
   @Test
   public void testUtilization2RandomOrdering() throws InterruptedException {
 
-    long cacheTime = 3000;
-
     Utilization2RandomQueueOrderingPolicy policy =
-        new Utilization2RandomQueueOrderingPolicy(true,
-            1, cacheTime);
+        new Utilization2RandomQueueOrderingPolicy();
 
-    // Case 1, 2 queues, without cache
-    policy.setQueues(
-        mockCSQueues(new String[] {"a", "b"}, new float[] {1.1f, 0.0f}, ""));
-    verifyOrder(policy, "", new String[] {"b", "a"});
-
-    // Case 2, 3 queues, with cache, though a is lowest utilization
-    // will first choose b
-    policy.setQueues(
-        mockCSQueues(new String[] {"a", "b", "c"},
-            new float[] {0.5f, 1.1f, 1.5f}, ""));
-    Assert.assertEquals("b", getFirstOne(policy, ""));
-
-    // Case 3, 3 queues same with case2, without cache, will first choose a
-    Thread.sleep(cacheTime);
-    policy.setQueues(
-        mockCSQueues(new String[] {"a", "b", "c"},
-            new float[] {0.5f, 1.1f, 1.5f}, ""));
-    Assert.assertEquals("a", getFirstOne(policy, ""));
-
-    // Case 4, 3 queues, with different accessibility to partition
-    // only a can access "x"
-    // without cache, will first choose a
+    // Case 1, 2 queues
     List<CSQueue>
-        queues = mockCSQueues(new String[] {"a", "b", "c"},
-        new float[] {0.1f, 0.0f, 0.2f}, "x");
-    when(queues.get(0).getAccessibleNodeLabels()).thenReturn(
-        ImmutableSet.of("x", "y"));
-    Thread.sleep(cacheTime);
-    policy.setQueues(queues);
-    Assert.assertEquals("a", getFirstOne(policy, "x"));
+        queues_1 = mockCSQueues(new String[] {"a", "b"},
+        new float[] {1.1f, 0.0f}, "");
+    queues_1.get(0).getQueueResourceUsage()
+        .setPending("", Resource.newInstance(0, 1));
+    queues_1.get(1).getQueueResourceUsage()
+        .setPending("", Resource.newInstance(0, 1));
+
+    policy.setQueues(queues_1);
+    verifyOrder(policy, "", null, new String[] {"b", "a"});
+
+    // Case 2, 3 queues with different util, will first choose c
+    List<CSQueue>
+        queues_2_1 = mockCSQueues(new String[] {"a", "b"},
+        new float[] {1.5f, 1.1f}, "");
+    List<CSQueue>
+        queues_2_2 = mockCSQueues(new String[] {"c"},
+        new float[] {0.1f}, "");
+    List<CSQueue> queues_2 = new ArrayList<>(queues_2_1);
+    queues_2.addAll(queues_2_2);
+
+    queues_2.get(0).getQueueResourceUsage()
+        .setPending("", Resource.newInstance(0, 1));
+    queues_2.get(1).getQueueResourceUsage()
+        .setPending("", Resource.newInstance(0, 1));
+    queues_2.get(2).getQueueResourceUsage()
+        .setPending("x", Resource.newInstance(0, 1));
+
+    policy.setQueues(queues_2);
+    Assert.assertEquals("c", getFirstOne(policy, "", new HashSet<>(
+        Collections.singleton("x"))));
+
+    // Case 3, 3 queues, though a&c is lowest utilization
+    // will first choose b due to only b has pending resource
+    List<CSQueue>
+        queues_3_1 = mockCSQueues(new String[] {"a", "b"},
+        new float[] {0.5f, 0.8f}, "");
+    List<CSQueue>
+        queues_3_2 = mockCSQueues(new String[] {"c"},
+        new float[] {0.1f}, "");
+    List<CSQueue> queues_3 = new ArrayList<>(queues_3_1);
+    queues_3.addAll(queues_3_2);
+
+    queues_3.get(0).getQueueResourceUsage()
+        .setPending("", Resource.newInstance(0, 0));
+    queues_3.get(1).getQueueResourceUsage()
+        .setPending("", Resource.newInstance(0, 1));
+    queues_3.get(2).getQueueResourceUsage()
+        .setPending("x", Resource.newInstance(0, 0));
+
+    policy.setQueues(queues_3);
+    Assert.assertEquals("b", getFirstOne(policy, "", new HashSet<>(
+        Collections.singleton("x"))));
 
   }
 }
