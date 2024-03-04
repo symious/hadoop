@@ -784,7 +784,7 @@ Read mode requires the absence of the *[local file]* argument.
 
 ### Check if a path is readable
 
-Usage: `hdfs debug verifyRead -path <HDFS path>`
+Usage: `hdfs debug verifyReadable -path <HDFS path>`
 
 | COMMAND\_OPTION | Description         |
 |:----------------|:--------------------|
