@@ -108,7 +108,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/x
     <dependency-check-maven.version>1.4.3</dependency-check-maven.version>
     <spotbugs.version>4.2.2</spotbugs.version>
     <spotbugs-maven-plugin.version>4.2.0</spotbugs-maven-plugin.version>
-    <alluxio.version>2.7.1-sdi-010</alluxio.version>
+    <alluxio.version>2.7.1-sdi-033</alluxio.version>
     <ozone.version>1.2.sdi-054</ozone.version>
     <gpl-compression.version>0.1.0</gpl-compression.version>
     <mc.version>2.2.0</mc.version>
