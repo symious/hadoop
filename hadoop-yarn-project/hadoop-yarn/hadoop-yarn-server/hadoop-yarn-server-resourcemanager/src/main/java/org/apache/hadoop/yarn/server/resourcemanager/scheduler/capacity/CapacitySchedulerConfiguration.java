@@ -93,6 +93,18 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   public static final String DOT = ".";
 
   @Private
+  public static final String LABEL_ACCESS_HOURS =
+      "access-hours";
+
+  private static final String DEFAULT_LABEL_ACCESS_HOURS =
+      "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23";
+
+  private static final String CHECK_LABEL_ACCESS_HOURS =
+      "check-label-access-hours-enabled";
+
+  private static final boolean DEFAULT_CHECK_LABEL_ACCESS_HOURS = false;
+
+  @Private
   public static final String MULTI_LABEL_ACCESS_HOURS =
       "multi-label-access-hours";
 
@@ -597,6 +609,34 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   public String[] getAMBlacklistLabels() {
     return getTrimmedStrings(PREFIX + AM_BLACKLIST_LABELS,
         DEFAULT_AM_BLACKLIST_LABELS);
+  }
+
+  public boolean enableCheckLabelAccessHours() {
+    return getBoolean(PREFIX + CHECK_LABEL_ACCESS_HOURS,
+        DEFAULT_CHECK_LABEL_ACCESS_HOURS);
+  }
+
+  /**
+   * Get the access time window of queue label
+   * @param queue
+   * @param labelName
+   * @return
+   */
+  public Set<String> getLabelAccessHoursPerQueueWithLabel(String queue,
+      String labelName) {
+    String hours =
+        get(getQueuePrefix(queue) + labelName + DOT + LABEL_ACCESS_HOURS,
+            DEFAULT_LABEL_ACCESS_HOURS);
+
+    Set<String> set = new HashSet<String>();
+    if (!StringUtils.isNullOrEmpty(hours)) {
+      for (String str : hours.split(",")) {
+        if (!str.trim().isEmpty()) {
+          set.add(str.trim());
+        }
+      }
+    }
+    return set;
   }
 
   /**

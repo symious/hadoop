@@ -19,6 +19,7 @@
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity;
 
 import java.io.IOException;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -1333,22 +1334,44 @@ public abstract class AbstractCSQueue implements CSQueue {
   }
 
   public boolean accessibleToPartition(String nodePartition) {
-    // if queue's label is *, it can access any node
-    if (accessibleLabels != null
-        && accessibleLabels.contains(RMNodeLabelsManager.ANY)) {
+    return accessiblePermissionsToPartition(nodePartition) &&
+        accessibleHoursToPartition(nodePartition);
+  }
+
+  public boolean accessibleHoursToPartition(String nodePartition) {
+    //disable global configuration for label access hours
+    if (!csContext.getConfiguration().enableCheckLabelAccessHours()) {
       return true;
     }
+
+    Set<String> accessLabelHours = csContext.getConfiguration()
+        .getLabelAccessHoursPerQueueWithLabel(this.getQueuePath(),
+            nodePartition);
+    String currentHour =
+        String.valueOf(Calendar.getInstance().get(Calendar.HOUR_OF_DAY));
+    boolean hoursAccessAble = accessLabelHours.contains(currentHour);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Queue: " + this.getQueuePath() + " ,nodePartition: " +
+          nodePartition + " ,accessLabelHours: " + accessLabelHours +
+          " ,currentHour: " + currentHour + " ,hoursAccessAble: " +
+          hoursAccessAble);
+    }
+    return hoursAccessAble;
+  }
+
+  public boolean accessiblePermissionsToPartition(String nodePartition) {
     // any queue can access to a node without label
     if (nodePartition == null
         || nodePartition.equals(RMNodeLabelsManager.NO_LABEL)) {
       return true;
     }
-    // a queue can access to a node only if it contains any label of the node
-    if (accessibleLabels != null && accessibleLabels.contains(nodePartition)) {
+    // if queue's label is *, it can access any node
+    if (accessibleLabels != null
+        && accessibleLabels.contains(RMNodeLabelsManager.ANY)) {
       return true;
     }
-    // sorry, you cannot access
-    return false;
+    // a queue can access to a node only if it contains any label of the node
+    return accessibleLabels != null && accessibleLabels.contains(nodePartition);
   }
 
   @Override
