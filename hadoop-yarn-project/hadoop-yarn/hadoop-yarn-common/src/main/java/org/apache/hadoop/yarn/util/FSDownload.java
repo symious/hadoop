@@ -296,6 +296,7 @@ public class FSDownload implements Callable<Path> {
    */
   private void downloadAndUnpack(Path source, Path destination)
       throws YarnException {
+    String msg = "Source Path:" + source.toUri() + ", Destination Path:" + destination.toUri();
     try {
       FileSystem sourceFileSystem = source.getFileSystem(conf);
       FileSystem destinationFileSystem = destination.getFileSystem(conf);
@@ -307,8 +308,12 @@ public class FSDownload implements Callable<Path> {
       } else {
         unpack(source, destination, sourceFileSystem, destinationFileSystem);
       }
+
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(msg);
+      }
     } catch (Exception e) {
-      throw new YarnException("Download and unpack failed", e);
+      throw new YarnException("Download and unpack failed, " + msg, e);
     }
   }
 
