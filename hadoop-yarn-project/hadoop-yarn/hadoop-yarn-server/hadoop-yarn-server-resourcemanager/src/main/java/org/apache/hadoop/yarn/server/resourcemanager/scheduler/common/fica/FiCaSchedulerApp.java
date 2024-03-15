@@ -577,6 +577,16 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
           return false;
         }
 
+        if (!Resources.equals(
+            getPendingAsk(schedulerContainer.getSchedulerRequestKey(),
+                ResourceRequest.ANY).getPerAllocationResource(),
+            schedulerContainer.getRmContainer().getContainer().getResource())) {
+          LOG.debug("Allocated container[" + schedulerContainer.getRmContainer()
+              .getContainerId()
+              + "] resource is not consistent with resource request, just reject it");
+          return false;
+        }
+
         RMContainer rmContainer = schedulerContainer.getRmContainer();
         reReservation =
             (!schedulerContainer.isAllocated()) && (rmContainer.getState()
