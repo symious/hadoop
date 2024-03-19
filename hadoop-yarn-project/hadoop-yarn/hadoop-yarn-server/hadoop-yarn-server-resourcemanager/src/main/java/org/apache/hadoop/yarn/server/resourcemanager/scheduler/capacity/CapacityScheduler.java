@@ -633,26 +633,6 @@ public class CapacityScheduler extends
   @VisibleForTesting
   public static boolean shouldSkipNodeSchedule(FiCaSchedulerNode node,
       CapacityScheduler cs, boolean printVerboseLog, boolean withNodeHeartbeat) {
-    // Skip node which missed YarnConfiguration.SCHEDULER_SKIP_NODE_MULTIPLIER
-    // heartbeats since the node might be dead and we should not continue
-    // allocate containers on that.
-    if (!SchedulerUtils.isNodeHeartbeated(node, cs.getSkipNodeInterval())) {
-      if (printVerboseLog && LOG.isDebugEnabled()) {
-        long timeElapsedFromLastHeartbeat =
-            Time.monotonicNow() - node.getLastHeartbeatMonotonicTime();
-        LOG.debug("Skip scheduling on node " + node.getNodeID()
-            + " because it haven't heartbeated for "
-            + timeElapsedFromLastHeartbeat / 1000.0f + " secs");
-      }
-      return true;
-    }
-    if (node.getRMNode().getState() != NodeState.RUNNING) {
-      if (printVerboseLog && LOG.isDebugEnabled()) {
-        LOG.debug("Skip scheduling on node because it is in " +
-            node.getRMNode().getState() + " state");
-      }
-      return true;
-    }
 
     if (cs.multipleSchedulersParallelly) {
       if (withNodeHeartbeat && node.getRMNode().getNodeSchedulerType() !=

@@ -117,4 +117,8 @@ public class ActivityDiagnosticConstant {
   public final static String NODE_IS_SLOW_NODE = "Node is slow node";
   public final static String NODE_HAVE_RESERVED_CONTAINER =
       "Node has a reserved container, skip to allocate new container";
+  public final static String NODE_IS_NOT_RUNNING = "Node is not running";
+  public final static String NODE_HEARTBEAT_TIMEOUT = "Node heartbeat timeout";
+  public final static String NODE_TOTAL_RESOURCE_TO_SMALL =
+      "Node's total resource is to small";
 }

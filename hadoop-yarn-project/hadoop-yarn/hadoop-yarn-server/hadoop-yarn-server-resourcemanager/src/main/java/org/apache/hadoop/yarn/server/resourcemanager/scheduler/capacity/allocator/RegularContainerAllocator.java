@@ -26,8 +26,11 @@ import java.util.List;
 import java.util.Optional;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.util.Time;
+import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.activities.ActivityLevel;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.activities.DiagnosticsCollector;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
@@ -145,6 +148,79 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
     return true;
   }
 
+  private boolean checkNodeIsHealthy(FiCaSchedulerNode node,
+      SchedulerRequestKey schedulerKey) {
+    RMNode rmNode = node.getRMNode();
+    if (null != rmNode) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("CHECKING: NODE INFO: " + node.getNodeID().getHost() +
+            ", Is good target?:" + rmNode.isGoodTarget());
+      }
+      if (!rmNode.isGoodTarget()) {
+        ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
+            activitiesManager, node, application, schedulerKey,
+            ActivityDiagnosticConstant.NODE_IS_SLOW_NODE,
+            ActivityLevel.NODE);
+        return false;
+      }
+
+      if (rmNode.getState() != NodeState.RUNNING) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Skip scheduling on node because it is in " +
+              node.getRMNode().getState() + " state");
+        }
+        ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
+            activitiesManager, node, application, schedulerKey,
+            ActivityDiagnosticConstant.NODE_IS_NOT_RUNNING,
+            ActivityLevel.NODE);
+        return false;
+      }
+
+      if (!SchedulerUtils.isNodeHeartbeated(node,
+          ((CapacityScheduler) rmContext.getScheduler())
+              .getSkipNodeInterval())) {
+        if (LOG.isDebugEnabled()) {
+          long timeElapsedFromLastHeartbeat =
+              Time.monotonicNow() - node.getLastHeartbeatMonotonicTime();
+          LOG.debug("Skip scheduling on node " + node.getNodeID()
+              + " because it haven't heartbeated for "
+              + timeElapsedFromLastHeartbeat / 1000.0f + " secs");
+        }
+        ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
+            activitiesManager, node, application, schedulerKey,
+            ActivityDiagnosticConstant.NODE_HEARTBEAT_TIMEOUT,
+            ActivityLevel.NODE);
+        return false;
+      }
+    } else {
+      ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
+          activitiesManager, node, application, schedulerKey,
+          ActivityDiagnosticConstant.INIT_CHECK_SINGLE_NODE_REMOVED,
+          ActivityLevel.NODE);
+      return false;
+    }
+    return true;
+  }
+
+  private boolean checkNodeTotalResourceTooSmall(FiCaSchedulerNode node,
+      SchedulerRequestKey schedulerKey) {
+    Resource totalResource = node.getTotalResource();
+    if (Resources.fitsIn(rc, totalResource,
+        rmContext.getScheduler().getMinimumResourceCapability())) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Skip scheduling on node: " + node.getNodeID() + " because" +
+            " node total capability : " + node.getTotalResource() +
+            " is to small");
+      }
+      ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
+          activitiesManager, node, application, schedulerKey,
+          ActivityDiagnosticConstant.NODE_TOTAL_RESOURCE_TO_SMALL,
+          ActivityLevel.NODE);
+      return true;
+    }
+    return false;
+  }
+
   /*
    * Pre-check if we can allocate a pending resource request
    * (given schedulerKey) to a given CandidateNodeSet.
@@ -156,6 +232,15 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
       SchedulingMode schedulingMode, ResourceLimits resourceLimits,
       SchedulerRequestKey schedulerKey,
       CandidateNodeSet<FiCaSchedulerNode> candidates) {
+
+    if (!checkNodeIsHealthy(node, schedulerKey)) {
+      return ContainerAllocation.NODE_SKIPPED;
+    }
+
+    if (checkNodeTotalResourceTooSmall(node, schedulerKey)) {
+      return ContainerAllocation.NODE_SKIPPED;
+    }
+
     /*
       Pre-check if current node can fulfill the given schedulerKey.
       SchedulerKey contains containerToUpdate means this is a increase request.
@@ -179,21 +264,6 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
           ActivityDiagnosticConstant.NODE_HAVE_RESERVED_CONTAINER,
           ActivityLevel.NODE);
       return ContainerAllocation.NODE_SKIPPED;
-    }
-
-    RMNode rmNode = node.getRMNode();
-    if (null != rmNode) {
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("CHECKING: NODE INFO: " + node.getNodeID().getHost() +
-            ", Is good target?:" + rmNode.isGoodTarget());
-      }
-      if (!rmNode.isGoodTarget()) {
-        ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
-            activitiesManager, node, application, schedulerKey,
-            ActivityDiagnosticConstant.NODE_IS_SLOW_NODE,
-            ActivityLevel.NODE);
-        return ContainerAllocation.NODE_SKIPPED;
-      }
     }
 
     PendingAsk offswitchPendingAsk = application.getPendingAsk(schedulerKey,
