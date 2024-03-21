@@ -28,16 +28,20 @@ import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterInfo;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterPolicyConfiguration;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class FederationGuavaCache extends FederationCache {
 
+  private static final Logger LOG =
+      LoggerFactory.getLogger(FederationGuavaCache.class);
+
   private Cache<String, CacheRequest<String, ?>> cache;
 
-  private int cacheTimeToLive;
-
-  private String className = this.getClass().getSimpleName();
+  private final String className = this.getClass().getSimpleName();
 
   private boolean isCachingEnabled = false;
 
@@ -50,17 +54,26 @@ public class FederationGuavaCache extends FederationCache {
   public void initCache(Configuration pConf, FederationStateStore pStateStore) {
     // Picking the JCache provider from classpath, need to make sure there's
     // no conflict or pick up a specific one in the future.
-    cacheTimeToLive = pConf.getInt(YarnConfiguration.FEDERATION_CACHE_TIME_TO_LIVE_SECS,
-        YarnConfiguration.DEFAULT_FEDERATION_CACHE_TIME_TO_LIVE_SECS);
+    int cacheTimeToLive =
+        pConf.getInt(YarnConfiguration.FEDERATION_CACHE_TIME_TO_LIVE_SECS,
+            YarnConfiguration.DEFAULT_FEDERATION_CACHE_TIME_TO_LIVE_SECS);
+    int cacheMaxSize = pConf.getInt(YarnConfiguration.FEDERATION_CACHE_MAX_SIZE,
+        YarnConfiguration.DEFAULT_FEDERATION_CACHE_MAX_SIZE);
+    cacheMaxSize = cacheMaxSize <= 0 ?
+        YarnConfiguration.DEFAULT_FEDERATION_CACHE_MAX_SIZE : cacheMaxSize;
+    LOG.info("initCache FederationGuavaCache, cacheMaxSize: " + cacheMaxSize +
+        " ,cacheTimeToLive: " + cacheTimeToLive);
+
     if (cacheTimeToLive <= 0) {
       isCachingEnabled = false;
       return;
     }
+
     this.setStateStore(pStateStore);
 
     // Initialize Cache.
     cache = CacheBuilder.newBuilder().expireAfterWrite(cacheTimeToLive,
-        TimeUnit.MILLISECONDS).build();
+        TimeUnit.SECONDS).maximumSize(cacheMaxSize).build();
     isCachingEnabled = true;
   }
 
@@ -71,40 +84,74 @@ public class FederationGuavaCache extends FederationCache {
   }
 
   @Override
-  public Map<SubClusterId, SubClusterInfo> getSubClusters(boolean filterInactiveSubClusters)
+  public Map<SubClusterId, SubClusterInfo> getSubClusters(
+      boolean filterInactiveSubClusters)
       throws YarnException {
     final String cacheKey = buildCacheKey(className, GET_SUBCLUSTERS_CACHEID,
         Boolean.toString(filterInactiveSubClusters));
     CacheRequest<String, ?> cacheRequest = cache.getIfPresent(cacheKey);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("getSubClusters from cache, cacheKey: " + cacheKey +
+          " ,cacheRequest: " + cacheRequest);
+    }
     if (cacheRequest == null) {
-      cacheRequest = buildGetSubClustersCacheRequest(className, filterInactiveSubClusters);
+      cacheRequest =
+          buildGetSubClustersCacheRequest(className, filterInactiveSubClusters);
       cache.put(cacheKey, cacheRequest);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("getSubClusters not from cache, cacheKey: " + cacheKey +
+            " ,cacheRequest: " + cacheRequest);
+      }
     }
     return buildSubClusterInfoMap(cacheRequest);
   }
 
   @Override
-  public Map<String, SubClusterPolicyConfiguration> getPoliciesConfigurations() throws Exception {
-    final String cacheKey = buildCacheKey(className, GET_POLICIES_CONFIGURATIONS_CACHEID);
+  public Map<String, SubClusterPolicyConfiguration> getPoliciesConfigurations()
+      throws Exception {
+    final String cacheKey =
+        buildCacheKey(className, GET_POLICIES_CONFIGURATIONS_CACHEID);
     CacheRequest<String, ?> cacheRequest = cache.getIfPresent(cacheKey);
-    if(cacheRequest == null){
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("getPoliciesConfigurations from cache, cacheKey: " + cacheKey +
+          " ,cacheRequest: " + cacheRequest);
+    }
+    if (cacheRequest == null) {
       cacheRequest = buildGetPoliciesConfigurationsCacheRequest(className);
       cache.put(cacheKey, cacheRequest);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(
+            "getPoliciesConfigurations not from cache, cacheKey: " + cacheKey +
+                " ,cacheRequest: " + cacheRequest);
+      }
     }
     return buildPolicyConfigMap(cacheRequest);
   }
 
   @Override
-  public SubClusterId getApplicationHomeSubCluster(ApplicationId appId) throws Exception {
-    final String cacheKey = buildCacheKey(className, GET_APPLICATION_HOME_SUBCLUSTER_CACHEID,
-        appId.toString());
+  public SubClusterId getApplicationHomeSubCluster(ApplicationId appId)
+      throws Exception {
+    final String cacheKey =
+        buildCacheKey(className, GET_APPLICATION_HOME_SUBCLUSTER_CACHEID,
+            appId.toString());
     CacheRequest<String, ?> cacheRequest = cache.getIfPresent(cacheKey);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug(
+          "getApplicationHomeSubCluster from cache, cache sumSize: " +
+              cache.size() + " ,cacheKey: " + cacheKey + " ,cacheRequest: " +
+              cacheRequest);
+    }
     if (cacheRequest == null) {
       cacheRequest = buildGetApplicationHomeSubClusterRequest(className, appId);
       cache.put(cacheKey, cacheRequest);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("getApplicationHomeSubCluster not from cache, cacheKey: " +
+            cacheKey + " ,cacheRequest: " + cacheRequest);
+      }
     }
     CacheResponse<SubClusterId> response =
-        ApplicationHomeSubClusterCacheResponse.class.cast(cacheRequest.getValue());
+        ApplicationHomeSubClusterCacheResponse.class
+            .cast(cacheRequest.getValue());
     return response.getItem();
   }
 
@@ -112,6 +159,7 @@ public class FederationGuavaCache extends FederationCache {
   public void removeSubCluster(boolean flushCache) {
     final String cacheKey = buildCacheKey(className, GET_SUBCLUSTERS_CACHEID,
         Boolean.toString(flushCache));
+    LOG.info("removeSubCluster cacheKey: " + cacheKey);
     cache.invalidate(cacheKey);
   }
 }

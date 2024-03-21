@@ -4197,6 +4197,11 @@ public class YarnConfiguration extends Configuration {
   // 5 minutes
   public static final int DEFAULT_FEDERATION_CACHE_TIME_TO_LIVE_SECS = 5 * 60;
 
+  public static final String FEDERATION_CACHE_MAX_SIZE =
+      FEDERATION_PREFIX + "cache-maximumSize";
+  // 50000
+  public static final int DEFAULT_FEDERATION_CACHE_MAX_SIZE = 50000;
+
   public static final String ROUTER_RPC_CACHE_TIME_TO_LIVE_SECS =
       FEDERATION_PREFIX + "rpc.cache-ttl.secs";
   // default no cache
