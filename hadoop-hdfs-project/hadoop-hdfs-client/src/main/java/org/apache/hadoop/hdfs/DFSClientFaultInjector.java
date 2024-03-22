@@ -71,4 +71,7 @@ public class DFSClientFaultInjector {
   public void onCreateBlockReader(LocatedBlock block, int chunkIndex, long offset, long length) {}
 
   public void throttleConnectionBetweenDNs(DatanodeInfo[] nodes) {}
+
+  public void readECFromDatanodeDelay(DatanodeInfo datanode) {}
+
 }

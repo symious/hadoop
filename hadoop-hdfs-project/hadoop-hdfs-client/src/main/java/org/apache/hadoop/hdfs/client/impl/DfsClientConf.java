@@ -52,6 +52,8 @@ import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CHECKSUM_EC
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CHECKSUM_TYPE_DEFAULT;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CHECKSUM_TYPE_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_DEFAULT;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_EC_DEFAULT;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_EC_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_CACHED_CONN_RETRY_DEFAULT;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_CACHED_CONN_RETRY_KEY;
@@ -175,6 +177,8 @@ public class DfsClientConf {
 
   private final boolean avoidSlowDataNodesForReadEnabled;
 
+  private final boolean avoidSlowDataNodesForReadECEnabled;
+
   private final int slowNodeCacheExpiryMillis;
   private final int slowNodeCacheSize;
   private final long slowNodeCacheThresholdMillis;
@@ -193,6 +197,10 @@ public class DfsClientConf {
     avoidSlowDataNodesForReadEnabled =
         conf.getBoolean(DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_KEY,
             DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_DEFAULT);
+
+    avoidSlowDataNodesForReadECEnabled =
+        conf.getBoolean(DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_EC_KEY,
+            DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_EC_DEFAULT);
 
     slowNodeCacheExpiryMillis =
         conf.getInt(DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_KEY,
@@ -762,6 +770,13 @@ public class DfsClientConf {
    */
   public boolean isAvoidSlowDataNodesForReadEnabled() {
     return avoidSlowDataNodesForReadEnabled;
+  }
+
+  /**
+   * @return the avoidSlowDataNodesForReadECEnabled
+   */
+  public boolean isAvoidSlowDataNodesForReadECEnabled() {
+    return avoidSlowDataNodesForReadECEnabled;
   }
 
   /**

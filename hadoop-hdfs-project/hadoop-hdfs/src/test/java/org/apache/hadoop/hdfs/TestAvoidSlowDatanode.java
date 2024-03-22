@@ -24,24 +24,33 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+import org.apache.hadoop.hdfs.protocol.LocatedStripedBlock;
+import org.apache.hadoop.test.GenericTestUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mockito;
+import org.slf4j.event.Level;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_EC_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_CONTEXT;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SLOW_NODE_CACHE_SIZE_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_CLIENT_SLOW_NODE_CACHE_THRESHOLD_MS_KEY;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Tests for dead node detection in DFSClient.
@@ -417,6 +426,158 @@ public class TestAvoidSlowDatanode {
       deleteFile(fs, filePath);
       Mockito.reset(dfsClient1);
       Mockito.reset(dfsClient2);
+      DFSClientFaultInjector.set(oldFaultInjector);
+    }
+  }
+
+  @Test(timeout = 50000)
+  public void testSlowNodeWhenReadEC() throws Exception {
+
+    GenericTestUtils.setLogLevel(DFSClient.LOG, Level.DEBUG);
+    GenericTestUtils.LogCapturer logs =
+        GenericTestUtils.LogCapturer.captureLogs(DFSClient.LOG);
+
+    Configuration conf = new HdfsConfiguration();
+    // Set slow node cache parameter.
+    final long slowNodeThreshold = 100;
+    final int slowNodeCacheExpiryMillis = 2000;
+    conf.set(DFS_CLIENT_CONTEXT, "testSlowNodeWhenReadEC");
+    conf.setLong(DFS_CLIENT_SLOW_NODE_CACHE_THRESHOLD_MS_KEY,
+        slowNodeThreshold);
+    conf.setBoolean(DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_EC_KEY, true);
+    conf.setInt(DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_KEY, slowNodeCacheExpiryMillis);
+    conf.setInt(DFS_CLIENT_SLOW_NODE_CACHE_SIZE_KEY, 10);
+
+    ErasureCodingPolicy ecPolicy = StripedFileTestUtil.getDefaultECPolicy();
+    short dataBlocks = (short) ecPolicy.getNumDataUnits();
+    short parityBlocks = (short) ecPolicy.getNumParityUnits();
+    int cellSize = ecPolicy.getCellSize();
+    int stripesPerBlock = 2;
+    int blockSize = stripesPerBlock * cellSize;
+
+    DFSClientFaultInjector oldFaultInjector = DFSClientFaultInjector.get();
+
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, blockSize);
+    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).
+        numDataNodes(dataBlocks + parityBlocks + 2).format(true).build()) {
+
+      cluster.waitActive();
+      DistributedFileSystem fs = cluster.getFileSystem();
+
+      // Create ec file.
+      fs.enableErasureCodingPolicy(ecPolicy.getName());
+      fs.mkdirs(new Path("/ec"));
+      cluster.getFileSystem().getClient().setErasureCodingPolicy("/ec",
+          ecPolicy.getName());
+      int dataSize = 1024 * 1024 * 10;
+      byte[] expected = StripedFileTestUtil.generateBytes(dataSize);
+      Path src = new Path("/ec/file");
+      DFSTestUtil.writeFile(fs, src, new String(expected));
+      StripedFileTestUtil.waitBlockGroupsReported(fs, src.toString());
+      StripedFileTestUtil.verifyLength(fs, src, dataSize);
+      LocatedBlocks blks = fs.getClient().getLocatedBlocks(src.toString(), 0);
+      LocatedStripedBlock block = (LocatedStripedBlock) blks.getLastLocatedBlock();
+      DatanodeInfo slowDn = block.getLocations()[0];
+      DFSClient dfsClient = fs.getClient();
+      ClientContext clientContext = dfsClient.getClientContext();
+      // Mock the datanode is slow node.
+      DFSClientFaultInjector.set(new DFSClientFaultInjector() {
+        @Override
+        public void readECFromDatanodeDelay(DatanodeInfo datanode) {
+          try {
+            if (datanode.equals(slowDn)) {
+              Thread.sleep(2 * slowNodeThreshold);
+            }
+          } catch (InterruptedException e) {
+            e.printStackTrace();
+          }
+        }
+      });
+
+      assertEquals(0, clientContext.getSlowNodeCache().size());
+
+      // Validate read ec file.
+      // Slow node appears when reading, read next stripe will skip slow node.
+      int done = 0;
+      ByteBuffer readBuffer = ByteBuffer.allocate(dataSize);
+      try (DFSInputStream in = dfsClient.open("/ec/file")) {
+        while (done < dataSize) {
+          int ret = in.read(readBuffer);
+          assertTrue(ret > 0);
+          done += ret;
+        }
+        assertArrayEquals(expected, readBuffer.array());
+        assertEquals(1, clientContext.getSlowNodeCache().size());
+        assertTrue(clientContext.getSlowNodeCache().isSlowNode(slowDn));
+        assertTrue(logs.getOutput().contains("Slow node " + slowDn.getXferAddr() +
+            " will skip read."));
+        // Validate run ec decoding for read data.
+        assertTrue(in.getReadStatistics().getTotalEcDecodingTimeMillis() > 0);
+        logs.clearOutput();
+      }
+
+      // Slow node appears before reading, read data from slow node
+      // will skip create block reader.
+      done = 0;
+      readBuffer = ByteBuffer.allocate(dataSize);
+      try (DFSInputStream in = dfsClient.open("/ec/file")) {
+        while (done < dataSize) {
+          int ret = in.read(readBuffer);
+          assertTrue(ret > 0);
+          done += ret;
+        }
+        assertArrayEquals(expected, readBuffer.array());
+        assertTrue(clientContext.getSlowNodeCache().isSlowNode(slowDn));
+        assertTrue(logs.getOutput().contains("Slow node " + slowDn.getXferAddr() +
+            " will skip create block reader."));
+        // Validate run ec decoding for read data.
+        assertTrue(in.getReadStatistics().getTotalEcDecodingTimeMillis() > 0);
+        logs.clearOutput();
+      }
+
+      // Wait slow node cache expire.
+      GenericTestUtils.waitFor(()
+              -> !clientContext.getSlowNodeCache().isSlowNode(slowDn),
+          10, 2000);
+
+      // Validate pread ec file.
+      try (DFSInputStream in = dfsClient.open("/ec/file")) {
+        byte[] buf = new byte[dataSize];
+        in.read(0, buf, 0, dataSize);
+        assertArrayEquals(buf, expected);
+        assertTrue(clientContext.getSlowNodeCache().isSlowNode(slowDn));
+        assertTrue(logs.getOutput().contains("Slow node " + slowDn.getXferAddr() +
+            " will skip read."));
+        // Validate run ec decoding for read data.
+        assertTrue(in.getReadStatistics().getTotalEcDecodingTimeMillis() > 0);
+        logs.clearOutput();
+      }
+
+      // Wait slow node cache expire.
+      GenericTestUtils.waitFor(()
+              -> !clientContext.getSlowNodeCache().isSlowNode(slowDn),
+          10, 2000);
+
+      // Validate read ec file when turn-off `avoidSlowDataNodesForReadEC`.
+      clientContext.setAvoidSlowDataNodesForReadEC(false);
+      done = 0;
+      readBuffer = ByteBuffer.allocate(dataSize);
+      try (DFSInputStream in = dfsClient.open("/ec/file")) {
+        while (done < dataSize) {
+          int ret = in.read(readBuffer);
+          assertTrue(ret > 0);
+          done += ret;
+        }
+        assertArrayEquals(expected, readBuffer.array());
+        // Slow node logic will not take effect.
+        assertFalse(clientContext.getSlowNodeCache().isSlowNode(slowDn));
+        assertFalse(logs.getOutput().contains("Slow node " + slowDn.getXferAddr() +
+            " will skip read."));
+        // Validate not run ec decoding for read data.
+        assertEquals(0, in.getReadStatistics().getTotalEcDecodingTimeMillis());
+        logs.clearOutput();
+      }
+    } finally {
       DFSClientFaultInjector.set(oldFaultInjector);
     }
   }

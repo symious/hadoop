@@ -150,6 +150,11 @@ public class ClientContext {
   private boolean avoidSlowDataNodesForRead = false;
 
   /**
+   * Whether to avoid slow datanodes when reading ec file or not.
+   */
+  private boolean avoidSlowDataNodesForReadEC = false;
+
+  /**
    * Cache slow datanodes for a specific amount of time.
    */
   private SlowNodeCache slowNodeCache = null;
@@ -215,8 +220,10 @@ public class ClientContext {
         conf.getWriteByteArrayManagerConf());
     this.deadNodeDetectionEnabled = conf.isDeadNodeDetectionEnabled();
     this.avoidSlowDataNodesForRead = conf.isAvoidSlowDataNodesForReadEnabled();
-    if(avoidSlowDataNodesForRead && slowNodeCache == null) {
-      LOG.info("Initialize SowNodeCache:");
+    this.avoidSlowDataNodesForReadEC = conf.isAvoidSlowDataNodesForReadECEnabled();
+    if((avoidSlowDataNodesForRead || avoidSlowDataNodesForReadEC) && slowNodeCache == null) {
+      LOG.info("Initialize SlowNodeCache slowNodeCacheExpiryMillis:{}, slowNodeCacheSize:{}."
+          ,conf.getSlowNodeCacheExpiryMillis(), conf.getSlowNodeCacheSize());
       slowNodeCache = new SlowNodeCacheImpl(conf.getSlowNodeCacheExpiryMillis(),
           conf.getSlowNodeCacheSize());
     }
@@ -391,6 +398,18 @@ public class ClientContext {
    */
   public boolean isAvoidSlowDataNodesForRead() {
     return avoidSlowDataNodesForRead;
+  }
+
+  /**
+   * @return the avoidSlowDataNodesForReadEC
+   */
+  public boolean isAvoidSlowDataNodesForReadEC() {
+    return avoidSlowDataNodesForReadEC;
+  }
+
+  @VisibleForTesting
+  public void setAvoidSlowDataNodesForReadEC(boolean avoidSlowDataNodesForReadEC) {
+    this.avoidSlowDataNodesForReadEC = avoidSlowDataNodesForReadEC;
   }
 
   /**

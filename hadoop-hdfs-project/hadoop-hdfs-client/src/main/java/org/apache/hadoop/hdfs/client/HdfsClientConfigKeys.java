@@ -539,6 +539,10 @@ public interface HdfsClientConfigKeys {
       "dfs.client.avoid.slow.datanodes.for.read";
   boolean DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_DEFAULT = false;
 
+  String DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_EC_KEY =
+      "dfs.client.avoid.slow.datanodes.for.read.ec";
+  boolean DFS_CLIENT_AVOID_SLOW_DATANODES_FOR_READ_EC_DEFAULT = false;
+
   String DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_KEY =
       "dfs.client.slownodecache.expiry.ms";
   int DFS_CLIENT_SLOW_NODE_CACHE_EXPIRY_MS_DEFAULT = 45000;

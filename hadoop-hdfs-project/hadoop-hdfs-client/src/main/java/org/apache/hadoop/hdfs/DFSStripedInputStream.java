@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs;
 
+import org.apache.hadoop.hdfs.client.impl.DfsClientConf;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.fs.ReadOption;
@@ -258,6 +259,14 @@ public class DFSStripedInputStream extends DFSInputStream {
         if (dnInfo == null) {
           break;
         }
+
+        if (isSlowNode(dnInfo.info)) {
+          // If the datanode is slow node will skip create block reader.
+          DFSClient.LOG.debug("Slow node {} will skip create block reader.",
+              dnInfo.info.getXferAddr());
+          return false;
+        }
+
         if (readTo < 0 || readTo > block.getBlockSize()) {
           readTo = block.getBlockSize();
         }
@@ -521,6 +530,28 @@ public class DFSStripedInputStream extends DFSInputStream {
         closeReader(preaderInfo);
       }
     }
+  }
+
+  /**
+   * Checks if the read time for ec data from the DataNode has exceeded the threshold.
+   *
+   * @param readTimeMS The time taken to read data from the DataNode, in milliseconds.
+   * @param datanodeInfo Information about the DataNode.
+   */
+  protected void checkReadECDataNodeExceedThreshold(long readTimeMS, DatanodeInfo datanodeInfo) {
+    final DfsClientConf conf = dfsClient.getConf();
+    if (dfsClient.isAvoidSlowDataNodeForReadECEnabled() &&
+        (readTimeMS > conf.getSlowNodeCacheThresholdMillis())) {
+      dfsClient.addSlowNode(datanodeInfo);
+    }
+  }
+
+  /**
+   * Determines if a DataNode is considered slow node.
+   */
+  protected boolean isSlowNode(DatanodeInfo datanodeInfo) {
+    return dfsClient.isAvoidSlowDataNodeForReadECEnabled() &&
+        dfsClient.isSlowNode(datanodeInfo);
   }
 
   @Override

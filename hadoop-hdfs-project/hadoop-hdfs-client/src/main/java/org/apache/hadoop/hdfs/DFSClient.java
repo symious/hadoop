@@ -3639,6 +3639,10 @@ public class DFSClient implements java.io.Closeable, RemotePeerFactory,
     return this.clientContext.isAvoidSlowDataNodesForRead();
   }
 
+  public boolean isAvoidSlowDataNodeForReadECEnabled() {
+    return this.clientContext.isAvoidSlowDataNodesForReadEC();
+  }
+
   public boolean isSlowNode(DatanodeInfo datanodeInfo) {
     return this.clientContext.getSlowNodeCache().isSlowNode(datanodeInfo);
   }

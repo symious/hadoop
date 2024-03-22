@@ -287,6 +287,7 @@ abstract class StripeReader {
         int bytesReead = readToBuffer(reader, datanode, strategy, currentBlock);
         ret += bytesReead;
       }
+      DFSClientFaultInjector.get().readECFromDatanodeDelay(datanode);
       return new BlockReadStats(ret, reader.isShortCircuit(),
           reader.getNetworkDistance(), reader.getInterDCRead());
     };
@@ -309,6 +310,16 @@ abstract class StripeReader {
       }
     } else if (readerInfos[chunkIndex].shouldSkip) {
       chunk.state = StripingChunk.MISSING;
+      return false;
+    }
+
+    if (dfsStripedInputStream.isSlowNode(readerInfos[chunkIndex].datanode)) {
+      // If the datanode is slow node will skip read.
+      chunk.state = StripingChunk.MISSING;
+      // Close the corresponding reader.
+      dfsStripedInputStream.closeReader(readerInfos[chunkIndex]);
+      DFSClient.LOG.debug("Slow node {} will skip read.",
+          readerInfos[chunkIndex].datanode.getXferAddr());
       return false;
     }
 
@@ -351,8 +362,13 @@ abstract class StripeReader {
     // first read failure
     while (!futures.isEmpty()) {
       try {
+        long beginReadMS = Time.monotonicNow();
         StripingChunkReadResult r = StripedBlockUtil
             .getNextCompletedStripedRead(service, futures, 0);
+        long readTimeMS = Time.monotonicNow() - beginReadMS;
+        dfsStripedInputStream.checkReadECDataNodeExceedThreshold(readTimeMS,
+            readerInfos[r.index].datanode);
+
         dfsStripedInputStream.updateReadStats(r.getReadStats());
         if (DFSClient.LOG.isDebugEnabled()) {
           DFSClient.LOG.debug("Read task returned: " + r + ", for stripe "
