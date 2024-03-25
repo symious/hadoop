@@ -4430,6 +4430,29 @@ public class YarnConfiguration extends Configuration {
       ROUTER_PREFIX + "query.read.timeout-ms";
   public static final int DEFAULT_ROUTER_QUERY_READ_TIMEOUT_MS = 30000;
 
+  public static final String ROUTER_SUBMIT_JOB_CHECKERS =
+      ROUTER_PREFIX + "submit.job.checkers";
+
+  /** livy-job-checker params. */
+  public static final String ROUTER_SUBMIT_LIVY_JOB_CHECKER =
+      "livy-job-checker";
+  public static final String ROUTER_SUBMIT_LIVY_JOB_CHECKER_CLUSTER_IDS =
+      ROUTER_PREFIX + "submit.livy-job-checker.cluster-ids";
+  public static final String
+      DEFAULT_ROUTER_SUBMIT_LIVY_JOB_CHECKER_CLUSTER_IDS = "";
+  public static final String ROUTER_SUBMIT_LIVY_JOB_CHECKER_QUEUE_MATCH_REGEX=
+      ROUTER_PREFIX + "submit.livy-job-checker.queue.match.regex";
+  public static final String
+      DEFAULT_ROUTER_SUBMIT_LIVY_JOB_CHECKER_QUEUE_MATCH_REGEX = ".*";
+  public static final String ROUTER_SUBMIT_LIVY_JOB_CHECKER_QUEUE_CONFIG_LIST =
+      ROUTER_PREFIX + "submit.livy-job-checker.queue.config.list";
+  public static final String
+      DEFAULT_ROUTER_SUBMIT_LIVY_JOB_CHECKER_QUEUE_CONFIG_LIST = "";
+  public static final String ROUTER_SUBMIT_LIVY_JOB_CHECKER_QUEUE_IGNORE_LIST =
+      ROUTER_PREFIX + "submit.livy-job-checker.queue.ignore.list";
+  public static final String
+      DEFAULT_ROUTER_SUBMIT_LIVY_JOB_CHECKER_QUEUE_IGNORE_LIST = "";
+
   /**
    * Specifications on how (many times) to contact Router for apps. We need to
    * do this because Router might return partial application list because some

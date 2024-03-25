@@ -26,6 +26,7 @@ import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFact
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -196,6 +197,8 @@ public class FederationClientInterceptor
 
   protected volatile RecordCostTime recentSlowQueryRecord;
 
+  private List<SubmitAppChecker> submitAppCheckers = new ArrayList<>();
+
   @Override
   public void init(String userName) {
     super.init(userName);
@@ -250,6 +253,23 @@ public class FederationClientInterceptor
     //Init dynamic refresh params
     FederationUtil.initGetApplicationsMaxCostTime(conf);
     FederationUtil.initGetApplicationsRecordExpireTime(conf);
+
+    //Add some checks for app submit
+    createSubmitApplicationCheckers(conf);
+  }
+
+  private void createSubmitApplicationCheckers(Configuration conf) {
+    Collection<String> checkersStr = conf
+        .getStringCollection(YarnConfiguration.ROUTER_SUBMIT_JOB_CHECKERS);
+    for (String checkerStr : checkersStr) {
+      switch (checkerStr) {
+        case YarnConfiguration.ROUTER_SUBMIT_LIVY_JOB_CHECKER:
+          SubmitAppChecker livyJobChecker = new LivyJobChecker();
+          livyJobChecker.initialize(conf);
+          submitAppCheckers.add(livyJobChecker);
+          break;
+      }
+    }
   }
 
   /**
@@ -634,6 +654,12 @@ public class FederationClientInterceptor
             RouterServerUtil.logAndThrowException(errMsg, e);
           }
         }
+      }
+
+      //add submit app check logic
+      for (SubmitAppChecker submitAppChecker : submitAppCheckers) {
+        submitAppChecker.check(subClusterId.getId(),
+            request.getApplicationSubmissionContext());
       }
 
       ApplicationClientProtocol clientRMProxy =
