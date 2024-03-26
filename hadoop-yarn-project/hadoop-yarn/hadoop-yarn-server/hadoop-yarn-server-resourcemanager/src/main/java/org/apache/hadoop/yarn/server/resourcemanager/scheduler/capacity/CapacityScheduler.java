@@ -25,6 +25,7 @@ import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -212,6 +213,9 @@ public class CapacityScheduler extends
   private Map<String, Set<String>> crossLabelsConfigMap;
 
   private CSConfigurationProvider csConfProvider;
+
+  private static Map<String, Integer> dedicatedLabelThreadsMap =
+      new HashMap<>();
 
   @Override
   public void setConf(Configuration conf) {
@@ -406,17 +410,47 @@ public class CapacityScheduler extends
       this.crossLabelSrcs = this.conf.getCrossLabelSrcs();
       this.crossLabelsConfigMap = getNewCrossLabels();
 
-      // number of threads for async scheduling
-      int maxAsyncSchedulingThreads = this.conf.getInt(
-          CapacitySchedulerConfiguration.SCHEDULE_ASYNCHRONOUSLY_MAXIMUM_THREAD,
-          1);
-      maxAsyncSchedulingThreads = Math.max(maxAsyncSchedulingThreads, 1);
-
       if (scheduleAsynchronously) {
+        // number of threads for async scheduling
+        int maxAsyncSchedulingThreads = this.conf.getInt(
+            CapacitySchedulerConfiguration.SCHEDULE_ASYNCHRONOUSLY_MAXIMUM_THREAD,
+            1);
+        maxAsyncSchedulingThreads = Math.max(maxAsyncSchedulingThreads, 1);
+
+        // number of threads we configured for each dedicated label
+        int sumDedicatedLabelThreadNum = 0;
+        Collection<String> dedicatedLabelSet = conf
+            .getStringCollection(
+                CapacitySchedulerConfiguration.SCHEDULE_ASYNCHRONOUSLY_DEDICATED_LABELS);
+        for (String dedicatedLabel : dedicatedLabelSet) {
+          int labelDedicatedThreadNum = conf.getInt(
+              CapacitySchedulerConfiguration.SCHEDULE_ASYNCHRONOUSLY_DEDICATED_LABELS +
+                  "." + dedicatedLabel + ".threads", 0);
+          if (labelDedicatedThreadNum > 0) {
+            dedicatedLabel =
+                dedicatedLabel.equals("default") ?
+                    RMNodeLabelsManager.NO_LABEL :
+                    dedicatedLabel;
+            dedicatedLabelThreadsMap
+                .put(dedicatedLabel, labelDedicatedThreadNum);
+            sumDedicatedLabelThreadNum += labelDedicatedThreadNum;
+          }
+        }
+        LOG.info("dedicatedLabelThreadsMap: " + dedicatedLabelThreadsMap +
+            " ,sumLabelDedicatedThreadNum: " + sumDedicatedLabelThreadNum);
+
         asyncSchedulerThreads = new ArrayList<>();
+        Map<String, Integer> copyDedicatedLabelThreadsMap =
+            new HashMap<>(dedicatedLabelThreadsMap);
         for (int i = 0; i < maxAsyncSchedulingThreads; i++) {
-          AsyncScheduleThread asyncScheduleThread = new AsyncScheduleThread(this);
+          AsyncScheduleThread asyncScheduleThread =
+              new AsyncScheduleThread(this);
           asyncScheduleThread.setName("AsyncSchedule-" + i);
+          asyncScheduleThread.setScheduleId(i);
+          if (i < sumDedicatedLabelThreadNum) {
+            asyncScheduleThread.setScheduleLabel(
+                assignDedicatedLabelToThread(i, copyDedicatedLabelThreadsMap));
+          }
           asyncSchedulerThreads.add(asyncScheduleThread);
         }
         resourceCommitterService = new ResourceCommitterService(this);
@@ -472,6 +506,28 @@ public class CapacityScheduler extends
     } finally {
       writeLock.unlock();
     }
+  }
+
+  private String assignDedicatedLabelToThread(int schedulerThreadId,
+      Map<String, Integer> dedicatedLabelThreadsMap) {
+    String label = null;
+    Iterator<Entry<String, Integer>> iterator =
+        dedicatedLabelThreadsMap.entrySet().iterator();
+    if (iterator.hasNext()) {
+      Map.Entry<String, Integer> entry = iterator.next();
+      String key = entry.getKey();
+      int value = entry.getValue();
+      label = key;
+      value--;
+      if (value > 0) {
+        dedicatedLabelThreadsMap.put(key, value);
+      } else {
+        iterator.remove();
+      }
+    }
+    LOG.info("schedulerThreadId:" + schedulerThreadId + " ,scheduleLabel: " +
+        label);
+    return label;
   }
 
   private void startSchedulerThreads() {
@@ -726,6 +782,10 @@ public class CapacityScheduler extends
         cs.printedVerboseLoggingForAsyncScheduling = true;
       }
     } else {
+      AsyncScheduleThread curScheduleThread =
+          ((AsyncScheduleThread) Thread.currentThread());
+      int scheduleId = curScheduleThread.getScheduleId();
+      String scheduleLabel = curScheduleThread.getScheduleLabel();
       // choose partitions
       List<String> partitions;
       if (cs.multipleSchedulersParallelly &&
@@ -741,10 +801,23 @@ public class CapacityScheduler extends
       // First randomize the start point
       int start = random.nextInt(partitionSize);
       // Allocate containers of partition [start, end)
-      for (String partititon : partitions) {
+      for (String partition : partitions) {
         if (current++ >= start) {
+
+          if ((scheduleLabel != null &&
+              !scheduleLabel.equals(partition)) ||
+              (scheduleLabel == null &&
+                  dedicatedLabelThreadsMap.containsKey(partition))) {
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("currentThreadId: " + scheduleId +
+                  " ,scheduleLabel: " + scheduleLabel +
+                  " ,skip to schedule partition: " + partition);
+            }
+            continue;
+          }
+
           CandidateNodeSet<FiCaSchedulerNode> candidates =
-                  cs.getCandidateNodeSet(partititon);
+                  cs.getCandidateNodeSet(partition);
           if (candidates == null) {
             continue;
           }
@@ -755,12 +828,25 @@ public class CapacityScheduler extends
       current = 0;
 
       // Allocate containers of partition [0, start)
-      for (String partititon : partitions) {
+      for (String partition : partitions) {
         if (current++ > start) {
           break;
         }
+
+        if ((scheduleLabel != null &&
+            !scheduleLabel.equals(partition)) ||
+            (scheduleLabel == null &&
+                dedicatedLabelThreadsMap.containsKey(partition))) {
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("currentThreadId: " + scheduleId +
+                " ,scheduleLabel: " + scheduleLabel +
+                " ,skip to schedule partition: " + partition);
+          }
+          continue;
+        }
+
         CandidateNodeSet<FiCaSchedulerNode> candidates =
-                cs.getCandidateNodeSet(partititon);
+                cs.getCandidateNodeSet(partition);
         if (candidates == null) {
           continue;
         }
@@ -775,6 +861,8 @@ public class CapacityScheduler extends
 
     private final CapacityScheduler cs;
     private AtomicBoolean runSchedules = new AtomicBoolean(false);
+    private volatile int scheduleId;
+    private volatile String scheduleLabel;
 
     public AsyncScheduleThread(CapacityScheduler cs) {
       this.cs = cs;
@@ -827,6 +915,21 @@ public class CapacityScheduler extends
       runSchedules.set(false);
     }
 
+    public int getScheduleId() {
+      return scheduleId;
+    }
+
+    public void setScheduleId(int scheduleId) {
+      this.scheduleId = scheduleId;
+    }
+
+    public String getScheduleLabel() {
+      return scheduleLabel;
+    }
+
+    public void setScheduleLabel(String scheduleLabel) {
+      this.scheduleLabel = scheduleLabel;
+    }
   }
 
   static class ResourceCommitterService extends Thread {

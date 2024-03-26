@@ -372,6 +372,11 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
       SCHEDULE_ASYNCHRONOUSLY_PREFIX + ".maximum-pending-backlogs";
 
   @Private
+  public static final String SCHEDULE_ASYNCHRONOUSLY_DEDICATED_LABELS =
+      SCHEDULE_ASYNCHRONOUSLY_PREFIX + ".dedicated-labels";
+
+
+  @Private
   public static final String APP_FAIL_FAST = PREFIX + "application.fail-fast";
 
   @Private
