@@ -262,8 +262,8 @@ public abstract class LogAggregationContext {
   public abstract void setLogAggregationPolicyParameters(
       String parameters);
 
-  public abstract String getLogAggregationBackend();
+  public abstract String getLogAggregationStorage();
   
-  public abstract void setLogAggregationBackend(String backend);
+  public abstract void setLogAggregationStorage(String storage);
 
 }

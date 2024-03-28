@@ -197,7 +197,7 @@ public class LogAggregationContextPBImpl extends LogAggregationContext{
   }
 
   @Override
-  public String getLogAggregationBackend() {
+  public String getLogAggregationStorage() {
     LogAggregationContextProtoOrBuilder p = viaProto ? proto : builder;
     if (! p.hasLogAggregationStorage()) {
       return null;
@@ -206,12 +206,12 @@ public class LogAggregationContextPBImpl extends LogAggregationContext{
   }
 
   @Override
-  public void setLogAggregationBackend(String backend) {
+  public void setLogAggregationStorage(String storage) {
     maybeInitBuilder();
-    if (backend == null) {
+    if (storage == null) {
       builder.clearLogAggregationStorage();
       return;
     }
-    builder.setLogAggregationStorage(backend);
+    builder.setLogAggregationStorage(storage);
   }
 }
