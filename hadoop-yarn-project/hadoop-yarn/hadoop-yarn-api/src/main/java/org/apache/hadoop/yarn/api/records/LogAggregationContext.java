@@ -261,4 +261,9 @@ public abstract class LogAggregationContext {
   @Unstable
   public abstract void setLogAggregationPolicyParameters(
       String parameters);
+
+  public abstract String getLogAggregationBackend();
+  
+  public abstract void setLogAggregationBackend(String backend);
+
 }
