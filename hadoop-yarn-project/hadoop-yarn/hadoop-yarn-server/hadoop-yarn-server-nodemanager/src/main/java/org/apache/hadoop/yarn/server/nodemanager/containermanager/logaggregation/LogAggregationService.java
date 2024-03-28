@@ -262,8 +262,15 @@ public class LogAggregationService extends AbstractService implements
       userUgi.addCredentials(credentials);
     }
 
-    LogAggregationFileController logAggregationFileController =
-        getLogAggregationFileController(getConfig());
+    LogAggregationFileController logAggregationFileController;
+    if (logAggregationContext.getLogAggregationStorage() != null) {
+      logAggregationFileController =
+          getLogAggregationFileController(getConfig(),
+              logAggregationContext.getLogAggregationStorage());
+    } else {
+      logAggregationFileController =
+          getLogAggregationFileController(getConfig());
+    }
     logAggregationFileController.verifyAndCreateRemoteLogDir();
     // New application
     final AppLogAggregator appLogAggregator =
@@ -499,5 +506,18 @@ public class LogAggregationService extends AbstractService implements
     LogAggregationFileController logAggregationFileController = factory
         .getFileControllerForWrite();
     return logAggregationFileController;
+  }
+
+  public LogAggregationFileController getLogAggregationFileController(
+      Configuration conf, String controllerName) {
+    LogAggregationFileControllerFactory factory =
+        new LogAggregationFileControllerFactory(conf);
+    for (LogAggregationFileController controller : factory
+        .getConfiguredLogAggregationFileControllerList()) {
+      if (controller.getFileControllerName().equals(controllerName)) {
+        return controller;
+      }
+    }
+    return factory.getFileControllerForWrite();
   }
 }

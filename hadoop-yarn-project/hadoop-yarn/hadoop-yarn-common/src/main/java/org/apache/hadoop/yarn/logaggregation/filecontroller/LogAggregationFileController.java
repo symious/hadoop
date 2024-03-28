@@ -158,6 +158,10 @@ public abstract class LogAggregationFileController {
     return this.remoteRootLogDirSuffix;
   }
 
+  public String getFileControllerName() {
+    return this.fileControllerName;
+  }
+
   /**
    * Initialize the writer.
    * @param context the {@link LogAggregationFileControllerContext}

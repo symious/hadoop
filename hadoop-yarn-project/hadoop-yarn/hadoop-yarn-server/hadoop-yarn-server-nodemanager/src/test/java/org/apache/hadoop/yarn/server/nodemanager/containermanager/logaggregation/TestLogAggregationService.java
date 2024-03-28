@@ -2369,6 +2369,48 @@ public class TestLogAggregationService extends BaseContainerManagerTest {
     testLogAggregationService(true);
   }
 
+  @Test(timeout = 50000)
+  public void testLogAggregationServiceWithSpecifiedStorage() throws Exception {
+    LogAggregationService logAggregationService =
+        spy(new LogAggregationService(dispatcher, this.context, this.delSrvc,
+            super.dirsHandler));
+    logAggregationService.init(this.conf);
+    logAggregationService.start();
+
+    conf.set(YarnConfiguration.LOG_AGGREGATION_FILE_FORMATS,
+        "TFile,IndexedFile");
+    conf.set(String
+            .format(YarnConfiguration.LOG_AGGREGATION_FILE_CONTROLLER_FMT,
+                "IndexedFile"),
+        "org.apache.hadoop.yarn.logaggregation.filecontroller.ifile.LogAggregationIndexedFileController");
+
+    LogAggregationContext context1 =
+        Records.newRecord(LogAggregationContext.class);
+    context1.setLogAggregationStorage("hbase");
+    ApplicationId app1 = BuilderUtils
+        .newApplicationId(System.currentTimeMillis(),
+            (int) (Math.random() * 1000));
+    logAggregationService
+        .initAppAggregator(app1, "yarn", null, null, context1, 0l);
+    Assert.assertEquals("TFile",
+        ((AppLogAggregatorImpl) logAggregationService.getAppLogAggregators()
+            .get(app1)).getLogAggregationFileController()
+            .getFileControllerName());
+
+    LogAggregationContext context2 =
+        Records.newRecord(LogAggregationContext.class);
+    context2.setLogAggregationStorage("IndexedFile");
+    ApplicationId app2 = BuilderUtils
+        .newApplicationId(System.currentTimeMillis(),
+            (int) (Math.random() * 1000));
+    logAggregationService
+        .initAppAggregator(app2, "yarn", null, null, context2, 0l);
+    Assert.assertEquals("IndexedFile",
+        ((AppLogAggregatorImpl) logAggregationService.getAppLogAggregators()
+            .get(app2)).getLogAggregationFileController()
+            .getFileControllerName());
+  }
+
   @SuppressWarnings("unchecked")
   private void testLogAggregationService(boolean retentionSizeLimitation)
       throws Exception {
