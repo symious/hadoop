@@ -17,7 +17,17 @@
  */
 package org.apache.hadoop.hdfs.tools;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
@@ -62,8 +72,26 @@ public class TestVerifyReadable {
     }
   }
 
-  private int runDebugCommand(Path path) {
-    return admin.run(new String[] { "verifyReadable", "-path", path.toString() });
+  private int runDebugCommand(Path path, String input, String output, int concurrency) {
+    List<String> args = new ArrayList<>();
+    args.add("verifyReadable");
+    if (path != null) {
+      args.add("-path");
+      args.add(path.toString());
+    }
+    if (input != null) {
+      args.add("-input");
+      args.add(input);
+    }
+    if (output != null) {
+      args.add("-output");
+      args.add(output);
+    }
+    if (concurrency > 1) {
+      args.add("-concurrency");
+      args.add(String.valueOf(concurrency));
+    }
+    return admin.run(args.toArray(new String[0]));
   }
 
   @Test
@@ -76,22 +104,22 @@ public class TestVerifyReadable {
     {
       Path testPath = new Path("/testReadable1Repl.txt");
       DFSTestUtil.createFile(fs, testPath, BLOCK_SIZE, (short) 1, 1234);
-      Assert.assertEquals(0, runDebugCommand(testPath));
+      Assert.assertEquals(0, runDebugCommand(testPath, null, null, 1));
 
       testPath = new Path("/testReadable3Repl.txt");
       DFSTestUtil.createFile(fs, testPath, BLOCK_SIZE, (short) 3, 1234);
-      Assert.assertEquals(0, runDebugCommand(testPath));
+      Assert.assertEquals(0, runDebugCommand(testPath, null, null, 1));
 
       testPath = new Path("/testReadableLong3Repl.txt");
       DFSTestUtil.createFile(fs, testPath, BLOCK_SIZE * 16, (short) 3, 1234);
-      Assert.assertEquals(0, runDebugCommand(testPath));
+      Assert.assertEquals(0, runDebugCommand(testPath, null, null, 1));
     }
 
     // Simple failure cases
     {
       // File not found
       Path testPath = new Path("/test404.txt");
-      Assert.assertEquals(1, runDebugCommand(testPath));
+      Assert.assertEquals(1, runDebugCommand(testPath, null, null, 1));
     }
 
     // Missing replicas
@@ -101,10 +129,10 @@ public class TestVerifyReadable {
       DFSTestUtil.createFile(fs, testPath, BLOCK_SIZE * 3, (short) 2, 1234);
       // Still readable with 1 replica left
       deleteReplica(fs, testPath, 1, 1);
-      Assert.assertEquals(0, runDebugCommand(testPath));
+      Assert.assertEquals(0, runDebugCommand(testPath, null, null, 1));
       // Unreadable when all replicas are gone for a block
       deleteReplica(fs, testPath, 1, 0);
-      Assert.assertEquals(1, runDebugCommand(testPath));
+      Assert.assertEquals(1, runDebugCommand(testPath, null, null, 1));
     }
 
     // Down DNs
@@ -113,11 +141,68 @@ public class TestVerifyReadable {
       DFSTestUtil.createFile(fs, testPath, BLOCK_SIZE * 3, (short) 2, 1234);
       // Still readable with 1 replica left
       shutdownDn(fs, testPath, 1, 1);
-      Assert.assertEquals(0, runDebugCommand(testPath));
+      Assert.assertEquals(0, runDebugCommand(testPath, null, null, 1));
       // Unreadable when all replicas are gone for a block
       shutdownDn(fs, testPath, 1, 0);
-      Assert.assertEquals(1, runDebugCommand(testPath));
+      Assert.assertEquals(1, runDebugCommand(testPath, null, null, 1));
     }
+  }
+
+  @Test
+  public void testReadableWithInputOutput() throws Exception {
+    cluster = new MiniDFSCluster.Builder(conf).numDataNodes(3).build();
+    cluster.waitActive();
+    DistributedFileSystem fs = cluster.getFileSystem();
+
+    // Run the same test in testReadable but with input and output file
+    File inputPath = File.createTempFile("testReadableIn", ".txt");
+    File outputPath = File.createTempFile("testReadableOut", ".txt");
+    BufferedWriter inputWriter =
+        new BufferedWriter(new OutputStreamWriter(Files.newOutputStream(inputPath.toPath())));
+
+    // Successful case with various block lengths and replications
+    Path testPath = new Path("/testReadable1Repl.txt");
+    DFSTestUtil.createFile(fs, testPath, BLOCK_SIZE, (short) 1, 1234);
+    inputWriter.write("/testReadable1Repl.txt\n");
+
+    testPath = new Path("/testReadable3Repl.txt");
+    DFSTestUtil.createFile(fs, testPath, BLOCK_SIZE, (short) 3, 1234);
+    inputWriter.write("/testReadable3Repl.txt\n");
+
+    testPath = new Path("/testReadableLong3Repl.txt");
+    DFSTestUtil.createFile(fs, testPath, BLOCK_SIZE * 16, (short) 3, 1234);
+    inputWriter.write("/testReadableLong3Repl.txt\n");
+
+    // File not found
+    inputWriter.write("/test404.txt\n");
+
+    // Missing replicas
+    // Deleted replica
+    testPath = new Path("/testMissingBlocks.txt");
+    DFSTestUtil.createFile(fs, testPath, BLOCK_SIZE * 3, (short) 2, 1234);
+    deleteReplica(fs, testPath, 1, 1);
+    deleteReplica(fs, testPath, 1, 0);
+    inputWriter.write("/testMissingBlocks.txt\n");
+
+    inputWriter.flush();
+    inputWriter.close();
+    runDebugCommand(null, inputPath.getAbsolutePath(), outputPath.getAbsolutePath(), 2);
+    Map<String, Integer> results = new HashMap<>();
+
+    BufferedReader outputReader =
+        new BufferedReader(new InputStreamReader(Files.newInputStream(outputPath.toPath())));
+    String line;
+    while ((line = outputReader.readLine()) != null) {
+      String[] split = line.split("\\s");
+      results.put(split[0], Integer.parseInt(split[1]));
+    }
+    outputReader.close();
+
+    Assert.assertEquals(0, results.get("/testReadable1Repl.txt").intValue());
+    Assert.assertEquals(0, results.get("/testReadable3Repl.txt").intValue());
+    Assert.assertEquals(0, results.get("/testReadableLong3Repl.txt").intValue());
+    Assert.assertEquals(1, results.get("/test404.txt").intValue());
+    Assert.assertEquals(1, results.get("/testMissingBlocks.txt").intValue());
   }
 
   private void deleteReplica(FileSystem fs, Path path, int blkIdx, int dnIndex) throws IOException {

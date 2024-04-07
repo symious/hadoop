@@ -784,13 +784,22 @@ Read mode requires the absence of the *[local file]* argument.
 
 ### Check if a path is readable
 
-Usage: `hdfs debug verifyReadable -path <HDFS path>`
+Usage: `hdfs debug verifyReadable
+            [-path <HDFS path> | -input <input>]
+            [-output <output>]
+            [-concurrency <concurrency>]
+            [-suppressed]`
 
-| COMMAND\_OPTION | Description         |
-|:----------------|:--------------------|
-| *HDFS path*     | HDFS path to check. |
+| COMMAND\_OPTION | Description                                                                        |
+|:----------------|:-----------------------------------------------------------------------------------|
+| *HDFS path*     | HDFS path to check. Will take priority over `-input`.                              |
+| *input*         | Input file with paths to check, one path per line     .                            |
+| *output*        | Output file with results, with 0 indicating a path being readable and 1 otherwise. |
+| *concurrency*   | Maximum number of paths to process simultaneously at any time.                     |
+| *suppressed*    | Do not print if there is no issue with a path. Still print errors.                 |
 
-Check if the file at path is readable:
+Check if one or multiple paths are readable:
+* File path exists.
 * User has read access to the file.
 * No missing block.
 * All blocks have at least 1 readable replica.
