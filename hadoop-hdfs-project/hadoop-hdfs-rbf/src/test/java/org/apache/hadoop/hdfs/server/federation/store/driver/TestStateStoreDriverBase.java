@@ -119,7 +119,7 @@ public class TestStateStoreDriverBase {
   }
 
   @SuppressWarnings("unchecked")
-  private <T extends BaseRecord> T generateFakeRecord(Class<T> recordClass)
+  public  <T extends BaseRecord> T generateFakeRecord(Class<T> recordClass)
       throws IllegalArgumentException, IllegalAccessException, IOException {
 
     if (recordClass == MembershipState.class) {
@@ -220,6 +220,7 @@ public class TestStateStoreDriverBase {
     List<T> records1 = queryResult1.getRecords();
     assertEquals(1, records1.size());
     T record0 = records1.get(0);
+    record.setDateCommitted(record0.getDateCommitted());
     validateRecord(record, record0, true);
 
     // Insert multiple
@@ -254,6 +255,7 @@ public class TestStateStoreDriverBase {
     QueryResult<T> result1 = driver.get(clazz);
     List<T> records1 = result1.getRecords();
     assertEquals(1, records1.size());
+    record.setDateCommitted(records1.get(0).getDateCommitted());
     validateRecord(record, records1.get(0), true);
 
     // Test fetch single object with a bad query
