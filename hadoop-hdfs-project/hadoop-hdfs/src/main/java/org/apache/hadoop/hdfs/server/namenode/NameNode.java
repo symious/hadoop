@@ -17,7 +17,6 @@
  */
 package org.apache.hadoop.hdfs.server.namenode;
 
-import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdfs.server.blockmanagement.HostConfigManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.HostFileWithMaintenanceManager;
@@ -155,6 +154,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPO
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_EXCLUDE_SLOW_NODES_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_MIN_BLOCKS_FOR_WRITE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCKPLACEMENTPOLICY_MIN_BLOCKS_FOR_WRITE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_MANAGER_ALERT_INSUFFICIENT_TARGETS_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_MANAGER_ALERT_INSUFFICIENT_TARGETS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_ALLOW_USERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_DEFAULT;
@@ -457,7 +458,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY,
           DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT,
           DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED,
-          DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED));
+          DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED,
+          DFS_NAMENODE_BLOCK_MANAGER_ALERT_INSUFFICIENT_TARGETS_ENABLED_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2545,6 +2547,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigureExcessRedundancyTimeoutCheckParameters(property, newVal);
     } else if (property.equals(DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED)) {
       return reconfigureAuditLogAddBlocksEnable(newVal);
+    } else if (property.equals(DFS_NAMENODE_BLOCK_MANAGER_ALERT_INSUFFICIENT_TARGETS_ENABLED_KEY)) {
+      return reconfigureAlertInsufficientTargetsEnabled(newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -3280,6 +3284,15 @@ public class NameNode extends ReconfigurableBase implements
     }
     this.namesystem.getBlockManager().getDatanodeManager().setEnableAuditLogAddBlocks(enable);
     return String.valueOf(enable);
+  }
+
+
+  private String reconfigureAlertInsufficientTargetsEnabled(String newVal) {
+    boolean result =
+        newVal == null ? DFS_NAMENODE_BLOCK_MANAGER_ALERT_INSUFFICIENT_TARGETS_ENABLED_DEFAULT :
+            Boolean.parseBoolean(newVal);
+    this.namesystem.getBlockManager().setAlertInsufficientTargetsEnabled(result);
+    return String.valueOf(result);
   }
 
   @Override //NameNodeStatusMXBean

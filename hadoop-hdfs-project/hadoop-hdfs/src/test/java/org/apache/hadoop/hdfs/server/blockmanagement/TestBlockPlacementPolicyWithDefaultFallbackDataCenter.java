@@ -41,11 +41,14 @@ import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.net.StaticMapping;
+import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.Time;
 import org.junit.Before;
 import org.junit.Test;
+import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -64,11 +67,13 @@ public class TestBlockPlacementPolicyWithDefaultFallbackDataCenter
         "/datacenter0/rack0", "/datacenter1/rack0", "/datacenter1/rack0",
         "/datacenter2/rack0", "/datacenter2/rack0", "/datacenter2/rack0",
         "/datacenter3/rack0", "/datacenter4/rack0", "/datacenter5/rack0",
-        "/datacenter5/rack0" };
+        "/datacenter5/rack0",
+        "/datacenter255/rack0", "/datacenter255/rack1", "/datacenter255/rack2"};
     final String[] hosts = {
         "host0", "host1", "host2", "host3", "host4", "host5", "host6",
         "host7", "host8", "host9", "host10", "host11", "host12", "host13",
-        "host14", "host15" };
+        "host14", "host15",
+        "host255-0", "host255-1", "host255-2"};
 
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE);
     conf.setInt(DFSConfigKeys.DFS_BYTES_PER_CHECKSUM_KEY, DEFAULT_BLOCK_SIZE / 2);
@@ -82,7 +87,7 @@ public class TestBlockPlacementPolicyWithDefaultFallbackDataCenter
         DEFAULT_DC);
     conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY, true);
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_MIN_KEY, REPLICATION_FACTOR);
-    cluster = new MiniDFSCluster.Builder(conf).numDataNodes(16).racks(racks)
+    cluster = new MiniDFSCluster.Builder(conf).numDataNodes(racks.length).racks(racks)
         .hosts(hosts).build();
     cluster.waitActive();
     nameNodeRpc = cluster.getNameNodeRpc();
@@ -112,7 +117,7 @@ public class TestBlockPlacementPolicyWithDefaultFallbackDataCenter
   }
 
   @Test
-  public void testNotEnoughDNsInDefaultDC() {
+  public void testNotEnoughDNsInDefaultDC() throws IOException {
     // Set default fallback DC to datacenter3, which has only 1 DN.
     BlockPlacementPolicyWithDefaultFallbackDataCenter policy =
         (BlockPlacementPolicyWithDefaultFallbackDataCenter) namesystem.getBlockManager()
@@ -125,6 +130,18 @@ public class TestBlockPlacementPolicyWithDefaultFallbackDataCenter
     verifyAddBlock("datacenter4", 1, true);
     // Client from dc5 tries to add block. No fall back because 2 replica found on dc4.
     verifyAddBlock("datacenter5", 2, true);
+
+    namesystem.getBlockManager().setAlertInsufficientTargetsEnabled(true);
+    GenericTestUtils.LogCapturer log = GenericTestUtils.LogCapturer.captureLogs(
+        LoggerFactory.getLogger(BlockManager.class));
+    // dc255 has 3 nodes, adding 4 or more will log a warning
+    log.clearOutput();
+    verifyAddBlockSuccessfully("datacenter255", 4, 3);
+    assertTrue(log.getOutput().contains("Failed to fully assign targets: 3 out of 4"));
+    log.clearOutput();
+    verifyAddBlockSuccessfully("datacenter255", 5, 3);
+    assertTrue(log.getOutput().contains("Failed to fully assign targets: 3 out of 5"));
+    namesystem.getBlockManager().setAlertInsufficientTargetsEnabled(false);
   }
 
   @Test
@@ -195,6 +212,20 @@ public class TestBlockPlacementPolicyWithDefaultFallbackDataCenter
   private void verifyDNinDC(String datacenter, DatanodeInfo datanodeInfo) {
     assertEquals("/" + datacenter,
         NetworkTopologyUtil.getDataCenter(datanodeInfo));
+  }
+
+  private void verifyAddBlockSuccessfully(String clientDC, int expectedReplicas,
+      int expectedFinalReplicas) throws IOException {
+    final String clientMachine = "client.foo.com";
+    String clientRack = "/" + clientDC + "/rack0";
+    StaticMapping.addNodeToRack(clientMachine, clientRack);
+    final String src = "/test" + Time.now();
+
+    HdfsFileStatus fileStatus =
+        namesystem.startFile(src, perm, clientMachine, clientMachine, EnumSet.of(CreateFlag.CREATE),
+            true, (short) expectedReplicas, DEFAULT_BLOCK_SIZE, null, null, null, false);
+    LocatedBlock locatedBlock = nameNodeRpc.addBlock(src, clientMachine, null, null, fileStatus.getFileId(), null, null);
+    assertEquals(expectedFinalReplicas, locatedBlock.getLocations().length);
   }
 
   private void verifyAddBlock(String clientDC, int expectedReplicas, boolean failed) {

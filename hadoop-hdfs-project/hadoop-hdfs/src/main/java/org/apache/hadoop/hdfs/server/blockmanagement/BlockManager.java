@@ -185,6 +185,7 @@ public class BlockManager implements BlockStatsMXBean {
   private final DatanodeManager datanodeManager;
   private final HeartbeatManager heartbeatManager;
   private final BlockTokenSecretManager blockTokenSecretManager;
+  private volatile boolean alertTargetInsufficientTargetEnabled;
 
   // Block pool ID used by this namenode
   private String blockPoolId;
@@ -661,6 +662,10 @@ public class BlockManager implements BlockStatsMXBean {
             DFS_NAMENODE_DELETE_REDUNDANT_DECOMMISSION_REPLICA_DEFAULT));
     setDelRedundantDataCenters(conf.get(DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS));
 
+    setAlertInsufficientTargetsEnabled(
+        conf.getBoolean(DFS_NAMENODE_BLOCK_MANAGER_ALERT_INSUFFICIENT_TARGETS_ENABLED_KEY,
+            DFS_NAMENODE_BLOCK_MANAGER_ALERT_INSUFFICIENT_TARGETS_ENABLED_DEFAULT));
+
     setExcessRedundancyTimeout(conf.getLong(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY,
         DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_DEFAULT));
     setExcessRedundancyTimeoutCheckLimit(conf.getLong(
@@ -681,6 +686,10 @@ public class BlockManager implements BlockStatsMXBean {
 
   public void setDeleteRedundantDCReplica(boolean deleteRedundantDCReplica) {
     this.deletingRedundantDCReplicas = deleteRedundantDCReplica;
+  }
+
+  public void setAlertInsufficientTargetsEnabled(boolean enabled) {
+    this.alertTargetInsufficientTargetEnabled = enabled;
   }
 
   private static BlockTokenSecretManager createBlockTokenSecretManager(
@@ -2476,6 +2485,11 @@ public class BlockManager implements BlockStatsMXBean {
               String.format("required nodes for %s", ecPolicy.getName()),
               getDatanodeManager().getNetworkTopology().getNumOfLeaves(),
               (excludedNodes == null ? "no" : excludedNodes.size())));
+    }
+    if (alertTargetInsufficientTargetEnabled && targets.length < numOfReplicas) {
+      LOG.warn("Failed to fully assign targets: {} out of {}, src={}, client={}, targets={}",
+          targets.length, numOfReplicas, src, client, targets);
+      NameNode.getNameNodeMetrics().incrementInsufficientTargetSelections();
     }
     return targets;
   }

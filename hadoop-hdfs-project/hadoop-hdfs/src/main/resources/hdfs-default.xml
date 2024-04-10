@@ -6568,4 +6568,12 @@
       If true, will add block ids for namenode audit log when cross idc read file.
     </description>
   </property>
+  <property>
+    <name>dfs.namenode.block.manager.alert.insufficient.targets.enabled</name>
+    <value>true</value>
+    <description>
+      If true, will log warnings and keep metrics of block assignments that fail to select
+      the expected number of replicas.
+    </description>
+  </property>
 </configuration>

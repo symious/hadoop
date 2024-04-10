@@ -30,6 +30,7 @@ import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
+import org.apache.hadoop.metrics2.lib.MutableCounterInt;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableGaugeInt;
 import org.apache.hadoop.metrics2.lib.MutableQuantiles;
@@ -166,6 +167,8 @@ public class NameNodeMetrics {
 
   @Metric("Average loadEdits time in nanos")
   MutableRate loadEditsTime;
+  @Metric("Number of blocks that NN could not fully select expected replicas")
+  MutableCounterInt insufficientTargetSelections;
 
   JvmMetrics jvmMetrics = null;
   private final ConcurrentHashMap<String, MutableStat> crossDCTraffic = new ConcurrentHashMap<>();
@@ -526,5 +529,9 @@ public class NameNodeMetrics {
         MutableRate.class).add(1);
     MutableMetricRegister.tryGetMetric(registry, "Total", auditOps, "AuditOps_",
         MutableRate.class).add(1);
+  }
+
+  public void incrementInsufficientTargetSelections() {
+    insufficientTargetSelections.incr();
   }
 }

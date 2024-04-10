@@ -2287,6 +2287,11 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String
       DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_DEFAULT =
       null;
+  public static final String DFS_NAMENODE_BLOCK_MANAGER_ALERT_INSUFFICIENT_TARGETS_ENABLED_KEY =
+      "dfs.namenode.block.manager.alert.insufficient.targets.enabled";
+  public static final boolean
+      DFS_NAMENODE_BLOCK_MANAGER_ALERT_INSUFFICIENT_TARGETS_ENABLED_DEFAULT =
+      true;
 
   // Throttler auto calibration configs, master side
   public static final String DFS_THROTTLER_CALIBRATION_MASTER_POLICY_CLASSNAME_KEY =
