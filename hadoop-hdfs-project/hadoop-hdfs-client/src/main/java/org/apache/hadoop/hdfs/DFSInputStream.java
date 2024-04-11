@@ -559,8 +559,15 @@ public class DFSInputStream extends FSInputStream
         }
         // Update the LastLocatedBlock, if offset is for last block.
         if (offset >= locatedBlocks.getFileLength()) {
-          locatedBlocks = newBlocks;
-          lastBlockBeingWrittenLength = getLastBlockLength();
+          setLocatedBlocksFields(newBlocks);
+          // After updating the locatedBlock, the block to which the offset belongs
+          // should be researched like {@link DFSInputStream#getBlockAt(long)}.
+          if (offset >= locatedBlocks.getFileLength()) {
+            return locatedBlocks.getLastLocatedBlock();
+          } else {
+            targetBlockIdx = locatedBlocks.findBlock(offset);
+            assert targetBlockIdx >= 0 && targetBlockIdx < locatedBlocks.locatedBlockCount();
+          }
         } else {
           locatedBlocks.insertRange(targetBlockIdx,
               newBlocks.getLocatedBlocks());
@@ -568,6 +575,16 @@ public class DFSInputStream extends FSInputStream
       }
       return locatedBlocks.get(targetBlockIdx);
     }
+  }
+
+  /**
+   * Set locatedBlocks and related fields, should be called within infoLock.
+   */
+  private void setLocatedBlocksFields(LocatedBlocks locatedBlocksToSet) throws IOException {
+    locatedBlocks = locatedBlocksToSet;
+    lastBlockBeingWrittenLength = getLastBlockLength();
+    fileEncryptionInfo = locatedBlocks.getFileEncryptionInfo();
+    setLocatedBlocksTimeStamp();
   }
 
   /**
@@ -683,6 +700,7 @@ public class DFSInputStream extends FSInputStream
       targetBlock = retval.block;
 
       try {
+        DFSClientFaultInjector.get().failCreateBlockReader();
         blockReader = getBlockReader(targetBlock, offsetIntoBlock,
             targetBlock.getBlockSize() - offsetIntoBlock, targetAddr,
             storageType, chosenNode);

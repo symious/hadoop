@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.security.token.block.InvalidBlockTokenException;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -74,4 +75,5 @@ public class DFSClientFaultInjector {
 
   public void readECFromDatanodeDelay(DatanodeInfo datanode) {}
 
+  public void failCreateBlockReader() throws InvalidBlockTokenException {}
 }
