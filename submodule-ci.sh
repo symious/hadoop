@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 export COMMIT_BEFORE_SHA="$(git rev-parse HEAD~1)"
+
 export COMMIT_SHA="$(git rev-parse HEAD~0)"
 echo "COMMIT_BEFORE_SHA is $COMMIT_BEFORE_SHA and COMMIT_SHA is $COMMIT_SHA"
 
@@ -27,7 +28,9 @@ TAGS="tags:
 
 COMMON_SCRIPTS="- export _JAVA_OPTIONS=\"-Djava.net.preferIPv4Stack=true\"
     - mvn test
-    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'"
+    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    - cd target/surefire-reports
+    - 'test \$(find . -type f -name \"*.txt\" ! -name \"*-output.txt\" -print0 | xargs -0 grep -L \"Failures: 0\" | wc -l) -eq 0'"
 
 CI_CONFIG_FILE="submodule-ci.yml"
 
@@ -36,7 +39,6 @@ EMPTY=true
 cat <<EOF > "${CI_CONFIG_FILE}"
 stages:
   - test
-  $COMMON_SCRIPTS
 
 EOF
 
@@ -386,6 +388,23 @@ hadoop-hdfs-rbf:
     reports:
       junit:
         - hadoop-hdfs-project/hadoop-hdfs-rbf/target/surefire-reports/TEST-*.xml
+EOF
+      ;;
+      hadoop-common)
+      EMPTY=false
+      cat <<EOF >> "${CI_CONFIG_FILE}"
+hadoop-common:
+  stage: test
+  $TAGS
+  script:
+    - cd hadoop-common-project/hadoop-common
+    $COMMON_SCRIPTS
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - hadoop-common-project/hadoop-common/target/surefire-reports/TEST-*.xml
 EOF
       ;;
      *)

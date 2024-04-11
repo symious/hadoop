@@ -123,6 +123,7 @@ public class TestRPC extends TestRpcBase {
     setupConf();
   }
 
+
   int datasize = 1024*100;
   int numThreads = 50;
 

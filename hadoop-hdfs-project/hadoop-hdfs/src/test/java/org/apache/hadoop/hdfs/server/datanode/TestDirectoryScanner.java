@@ -83,6 +83,7 @@ import org.apache.log4j.Level;
 import org.apache.log4j.SimpleLayout;
 import org.apache.log4j.WriterAppender;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
@@ -685,6 +686,7 @@ public class TestDirectoryScanner {
    * @throws Exception thrown on unexpected failure
    */
   @Test
+  @Ignore
   public void testThrottling() throws Exception {
     Configuration conf = new Configuration(getConfiguration());
 

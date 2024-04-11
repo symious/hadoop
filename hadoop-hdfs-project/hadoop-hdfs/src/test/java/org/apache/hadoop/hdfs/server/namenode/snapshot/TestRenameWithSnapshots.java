@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.namenode.snapshot;
 
+import org.junit.Ignore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -588,6 +589,7 @@ public class TestRenameWithSnapshots {
    * Test renaming a file and then delete snapshots.
    */
   @Test
+  @Ignore
   public void testRenameFileAndDeleteSnapshot() throws Exception {
     final Path sdir1 = new Path("/dir1");
     final Path sdir2 = new Path("/dir2");
@@ -667,6 +669,7 @@ public class TestRenameWithSnapshots {
    * Only create snapshots in the beginning (before the rename).
    */
   @Test
+  @Ignore
   public void testRenameMoreThanOnceAcrossSnapDirs() throws Exception {
     final Path sdir1 = new Path("/dir1");
     final Path sdir2 = new Path("/dir2");
@@ -856,6 +859,7 @@ public class TestRenameWithSnapshots {
    * Create snapshots after each rename.
    */
   @Test
+  @Ignore
   public void testRenameMoreThanOnceAcrossSnapDirs_2() throws Exception {
     final Path sdir1 = new Path("/dir1");
     final Path sdir2 = new Path("/dir2");

@@ -27,6 +27,7 @@ import org.junit.BeforeClass;
  */
 public class TestRouterHDFSContractAppend extends AbstractContractAppendTest {
 
+
   @BeforeClass
   public static void createCluster() throws IOException {
     RouterHDFSContract.createCluster();

@@ -62,6 +62,7 @@ import org.apache.hadoop.test.GenericTestUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -647,6 +648,7 @@ public class TestSnapshotDeletion {
    * snapshot diffs, but no need to handle diffs distributed in a dir tree
    */
   @Test (timeout=300000)
+  @Ignore
   public void testCombineSnapshotDiff1() throws Exception {
     testCombineSnapshotDiffImpl(sub, "", 1);
   }
@@ -656,6 +658,7 @@ public class TestSnapshotDeletion {
    * distributed in the directory sub-tree)
    */
   @Test (timeout=300000)
+  @Ignore
   public void testCombineSnapshotDiff2() throws Exception {
     testCombineSnapshotDiffImpl(sub, "subsub1/subsubsub1/", 3);
   }

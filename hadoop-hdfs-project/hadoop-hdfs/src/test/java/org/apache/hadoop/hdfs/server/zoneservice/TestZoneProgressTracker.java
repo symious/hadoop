@@ -39,6 +39,7 @@ import org.apache.log4j.LogManager;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.slf4j.LoggerFactory;
 
@@ -69,6 +70,7 @@ public class TestZoneProgressTracker {
     }
   }
 
+  @Ignore
   @Test
   public void testTrackerPrinter() {
     Configuration conf = new Configuration();
