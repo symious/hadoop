@@ -35,6 +35,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.LockSupport;
 import java.util.stream.Collectors;
 
 import org.apache.commons.collections.MapUtils;
@@ -1707,7 +1708,9 @@ public class CapacityScheduler extends
   @Override
   protected void nodeUpdate(RMNode rmNode) {
     long begin = System.nanoTime();
-    readLock.lock();
+    while (!readLock.tryLock()) {
+      LockSupport.parkNanos(10000);
+    }
     try {
       setLastNodeUpdateTime(Time.now());
       super.nodeUpdate(rmNode);
