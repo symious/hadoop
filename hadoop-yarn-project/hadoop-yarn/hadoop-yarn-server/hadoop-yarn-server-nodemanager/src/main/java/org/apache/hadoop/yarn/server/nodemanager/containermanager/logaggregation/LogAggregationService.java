@@ -263,7 +263,8 @@ public class LogAggregationService extends AbstractService implements
     }
 
     LogAggregationFileController logAggregationFileController;
-    if (logAggregationContext.getLogAggregationStorage() != null) {
+    if (logAggregationContext != null
+        && logAggregationContext.getLogAggregationStorage() != null) {
       logAggregationFileController =
           getLogAggregationFileController(getConfig(),
               logAggregationContext.getLogAggregationStorage());
