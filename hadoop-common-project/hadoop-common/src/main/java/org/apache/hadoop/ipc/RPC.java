@@ -793,6 +793,7 @@ public class RPC {
     private AlignmentContext alignmentContext = null;
     private boolean rpcPasswordAuthenticate = false;
     private boolean deepHandlersEnabled = false;
+    private boolean userIpBlacklistEnabled = false;
 
     public Builder(Configuration conf) {
       this.conf = conf;
@@ -877,8 +878,14 @@ public class RPC {
       return this;
     }
 
+    /** Default: false */
+    public Builder setUserIpBlacklistEnabled(boolean userIpBlacklistEnabled) {
+      this.userIpBlacklistEnabled = userIpBlacklistEnabled;
+      return this;
+    }
+
     /**
-     * Build the RPC Server. 
+     * Build the RPC Server.
      * @throws IOException on error
      * @throws HadoopIllegalArgumentException when mandatory fields are not set
      */
@@ -898,7 +905,7 @@ public class RPC {
           this.numHandlers, this.numReaders, this.queueSizePerHandler,
           this.verbose, this.conf, this.secretManager, this.portRangeConfig,
           this.alignmentContext, this.rpcPasswordAuthenticate,
-          this.deepHandlersEnabled);
+          this.deepHandlersEnabled, this.userIpBlacklistEnabled);
     }
   }
   
@@ -1102,9 +1109,11 @@ public class RPC {
                      int numReaders, int queueSizePerHandler,
                      Configuration conf, String serverName, 
                      SecretManager<? extends TokenIdentifier> secretManager,
-                     String portRangeConfig, boolean areDeepHandlersEnabled) throws IOException {
+                     String portRangeConfig, boolean areDeepHandlersEnabled,
+                     boolean userIpBlacklistEnabled) throws IOException {
       super(bindAddress, port, paramClass, handlerCount, numReaders, queueSizePerHandler,
-            conf, serverName, secretManager, portRangeConfig, areDeepHandlersEnabled);
+            conf, serverName, secretManager, portRangeConfig, areDeepHandlersEnabled,
+            userIpBlacklistEnabled);
       initProtocolMetaInfo(conf);
     }
     

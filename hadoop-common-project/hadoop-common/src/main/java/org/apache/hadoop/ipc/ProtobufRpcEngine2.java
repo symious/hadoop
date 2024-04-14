@@ -398,11 +398,12 @@ public class ProtobufRpcEngine2 implements RpcEngine {
       int queueSizePerHandler, boolean verbose, Configuration conf,
       SecretManager<? extends TokenIdentifier> secretManager,
       String portRangeConfig, AlignmentContext alignmentContext,
-      boolean rpcPasswordAuthenticate, boolean deepHandlersEnabled)
-      throws IOException {
+      boolean rpcPasswordAuthenticate, boolean deepHandlersEnabled,
+      boolean userIpBlacklistEnabled) throws IOException {
     return new Server(protocol, protocolImpl, conf, bindAddress, port,
         numHandlers, numReaders, queueSizePerHandler, verbose, secretManager,
-        portRangeConfig, alignmentContext, rpcPasswordAuthenticate, deepHandlersEnabled);
+        portRangeConfig, alignmentContext, rpcPasswordAuthenticate, deepHandlersEnabled,
+        userIpBlacklistEnabled);
   }
 
   @VisibleForTesting
@@ -487,18 +488,19 @@ public class ProtobufRpcEngine2 implements RpcEngine {
      * the range of ports used when port is 0 (an ephemeral port)
      * @param alignmentContext provides server state info on client responses
      * @param deepHandlersEnabled true to enable a second layer of RPC handlers
+     * @param userIpBlacklistEnabled true to enable restrict IP and user access by blacklist
      */
     public Server(Class<?> protocolClass, Object protocolImpl,
         Configuration conf, String bindAddress, int port, int numHandlers,
         int numReaders, int queueSizePerHandler, boolean verbose,
         SecretManager<? extends TokenIdentifier> secretManager,
         String portRangeConfig, AlignmentContext alignmentContext,
-        boolean rpcPasswordAuthenticate, boolean deepHandlersEnabled)
-        throws IOException {
+        boolean rpcPasswordAuthenticate, boolean deepHandlersEnabled,
+        boolean userIpBlacklistEnabled) throws IOException {
       super(bindAddress, port, null, numHandlers,
           numReaders, queueSizePerHandler, conf,
           serverNameFromClass(protocolImpl.getClass()), secretManager,
-          portRangeConfig, deepHandlersEnabled);
+          portRangeConfig, deepHandlersEnabled, userIpBlacklistEnabled);
       setAlignmentContext(alignmentContext);
       setRpcPasswordAuthenticate(rpcPasswordAuthenticate);
       this.verbose = verbose;

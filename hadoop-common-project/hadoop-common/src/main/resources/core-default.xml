@@ -330,6 +330,33 @@
 </property>
 
 <property>
+  <name>hadoop.security.rpc.blacklist.enabled</name>
+  <value>false</value>
+  <description>
+    Whether to enable the blacklist. If true, will restrict IP and user access by blacklist.
+  </description>
+</property>
+
+<property>
+  <name>hadoop.security.rpc.blacklist.file</name>
+  <value></value>
+  <description>
+    The path to a file containing the ip and users of the blacklist.
+    One record per line, IP and users are separated by "=", multiple users are separated by ",".
+    For example, 10.101.2.100=user1,user2
+  </description>
+</property>
+
+<property>
+  <name>hadoop.security.rpc.blacklist.refresh.interval</name>
+  <value>300000</value>
+  <description>
+    Interval between each in-memory cache refresh blacklist.
+    Expressed with units (e.g. 100ms, 10s, 1m, etc.), default in milliseconds.
+  </description>
+</property>
+
+<property>
   <name>hadoop.security.credential.clear-text-fallback</name>
   <value>true</value>
   <description>

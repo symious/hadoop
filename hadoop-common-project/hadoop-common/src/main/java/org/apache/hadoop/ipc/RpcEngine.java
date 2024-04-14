@@ -77,6 +77,7 @@ public interface RpcEngine {
    * @param alignmentContext provides server state info on client responses
    * @param rpcPasswordAuthenticate If we use password to authenticate the connection.
    * @param deepHandlersEnabled true to enable a second layer of RPC handlers
+   * @param userIpBlacklistEnabled true to enable restrict IP and user access by blacklist.
    * @return The Server instance
    * @throws IOException on any error
    */
@@ -88,7 +89,8 @@ public interface RpcEngine {
                        String portRangeConfig,
                        AlignmentContext alignmentContext,
                        boolean rpcPasswordAuthenticate,
-                       boolean deepHandlersEnabled) throws IOException;
+                       boolean deepHandlersEnabled,
+                       boolean userIpBlacklistEnabled) throws IOException;
 
 
   /**

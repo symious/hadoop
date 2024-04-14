@@ -82,6 +82,7 @@ import javax.security.sasl.SaslServer;
 
 import org.apache.hadoop.fs.protocolPB.PBHelper;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.ExceptionReconstructProto;
+import org.apache.hadoop.security.IPUsersBlacklist;
 import org.apache.hadoop.thirdparty.com.google.common.cache.Cache;
 import org.apache.hadoop.thirdparty.com.google.common.cache.CacheBuilder;
 import org.apache.hadoop.thirdparty.com.google.common.cache.CacheStats;
@@ -578,6 +579,9 @@ public abstract class Server {
   private boolean monitorCpuUsage = false;
   private int samplesPerMin;
 
+  private boolean userIpBlacklistEnabled;
+  private IPUsersBlacklist ipUsersBlacklist = null;
+
   /**
    * Checks if LogSlowRPC is set true.
    * @return true, if LogSlowRPC is set true, false, otherwise.
@@ -603,6 +607,14 @@ public abstract class Server {
   public void setLogSlowRPCThresholdTime(long logSlowRPCThresholdMs) {
     this.logSlowRPCThresholdTime = RpcMetrics.TIMEUNIT.
         convert(logSlowRPCThresholdMs, TimeUnit.MILLISECONDS);
+  }
+
+  public void setUserIpBlacklistEnabled(boolean userIpBlacklistEnabled) {
+    this.userIpBlacklistEnabled = userIpBlacklistEnabled;
+  }
+
+  public boolean isUserIpBlacklistEnabled() {
+    return userIpBlacklistEnabled;
   }
 
   /**
@@ -2801,6 +2813,11 @@ public abstract class Server {
           }
         }
       }
+
+      if (userIpBlacklistEnabled && ipUsersBlacklist != null) {
+        checkBlacklist();
+      }
+
       if (authProtocol == AuthProtocol.NONE && isRpcPasswordAuthenticate() && !ignoreSDIAuthenticate) {
         authenticateConnection();
       }
@@ -2811,7 +2828,24 @@ public abstract class Server {
         connectionManager.incrUserConnections(user.getShortUserName());
       }
     }
-    
+
+    private void checkBlacklist() throws FatalRpcServerException {
+      try {
+        String userName = (user != null && user.getRealUser() != null) ?
+            user.getRealUser().getUserName() :
+            (user != null) ? user.getUserName() : null;
+        if (userName != null) {
+          ipUsersBlacklist.checkBlacklist(getHostInetAddress(), userName);
+        }
+      } catch (AuthenticationException e) {
+        LOG.warn("Connection from {} for protocol {} is failed for user {} and reason: {}",
+            this, connectionContext.getProtocol(), user, e.getMessage());
+        throw new FatalRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED, e);
+      } catch (Exception e) {
+        LOG.error("CheckBlacklist error for {} from {}", user, getHostAddress(), e);
+      }
+    }
+
     /**
      * Process a wrapped RPC Request - unwrap the SASL packet and process
      * each embedded RPC request 
@@ -3431,7 +3465,7 @@ public abstract class Server {
     throws IOException 
   {
     this(bindAddress, port, paramClass, handlerCount, -1, -1, conf, Integer
-        .toString(port), null, null, false);
+        .toString(port), null, null, false, false);
   }
   
   protected Server(String bindAddress, int port,
@@ -3440,7 +3474,7 @@ public abstract class Server {
       String serverName, SecretManager<? extends TokenIdentifier> secretManager)
     throws IOException {
     this(bindAddress, port, rpcRequestClass, handlerCount, numReaders, 
-        queueSizePerHandler, conf, serverName, secretManager, null, false);
+        queueSizePerHandler, conf, serverName, secretManager, null, false, false);
   }
 
   /**
@@ -3461,7 +3495,7 @@ public abstract class Server {
       Class<? extends Writable> rpcRequestClass, int handlerCount,
       int numReaders, int queueSizePerHandler, Configuration conf,
       String serverName, SecretManager<? extends TokenIdentifier> secretManager,
-      String portRangeConfig, boolean areDeepHandlersEnabled)
+      String portRangeConfig, boolean areDeepHandlersEnabled, boolean userIpBlacklistEnabled)
     throws IOException {
     this.bindAddress = bindAddress;
     this.conf = conf;
@@ -3470,6 +3504,7 @@ public abstract class Server {
     this.rpcRequestClass = rpcRequestClass; 
     this.handlerCount = handlerCount;
     this.areDeepHandlersEnabled = areDeepHandlersEnabled;
+    this.userIpBlacklistEnabled = userIpBlacklistEnabled;
     this.socketSendBufferSize = 0;
     this.serverName = serverName;
     this.auxiliaryListenerMap = null;
@@ -3552,6 +3587,15 @@ public abstract class Server {
         .maximumSize(passwordMatchCacheSize)
         .recordStats()
         .build();
+
+    if (!userIpBlacklistEnabled) {
+      this.userIpBlacklistEnabled = conf.getBoolean(
+          CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_KEY,
+          CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_DEFAULT);
+    }
+    if (userIpBlacklistEnabled) {
+      this.ipUsersBlacklist = IPUsersBlacklist.getIPUsersBlacklistService(conf);
+    }
 
     this.monitorCpuUsage = conf.getBoolean(
         CommonConfigurationKeysPublic.IPC_SERVER_MONITOR_CPU_USAGE,

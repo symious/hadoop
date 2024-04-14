@@ -855,6 +855,17 @@ public class CommonConfigurationKeysPublic {
    */
   public static final boolean HADOOP_SDI_AUTHENTICATION_SILENT_MODE_ENABLED_DEFAULT =
       false;
+
+  public static final String HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_KEY =
+      "hadoop.security.rpc.blacklist.enabled";
+  public static final boolean HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_DEFAULT = false;
+  public static final String HADOOP_SECURITY_RPC_BLACKLIST_FILE =
+      "hadoop.security.rpc.blacklist.file";
+  public static final String HADOOP_SECURITY_RPC_BLACKLIST_REFRESH_INTERVAL_KEY =
+      "hadoop.security.rpc.blacklist.refresh.interval";
+  public static final long
+      HADOOP_SECURITY_RPC_BLACKLIST_REFRESH_INTERVAL_DEFAULT = 300000;
+
   /**
    * @see
    * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">

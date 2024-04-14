@@ -34,10 +34,13 @@ import org.junit.Test;
 import java.io.File;
 import java.io.IOException;
 import java.security.PrivilegedExceptionAction;
+import java.util.Objects;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_CLIENT_RPC_SDI_AUTHENTICATION_ENABLED_KEY;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_BLACKLIST_FILE;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE;
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.NAMENODES;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_SECURITY_RPC_BLACKLIST_ENABLED_KEY;
 import static org.junit.Assert.assertEquals;
 
 public class TestSdiAuthenticationFromRBF {
@@ -124,6 +127,92 @@ public class TestSdiAuthenticationFromRBF {
       assertEquals(2, metrics.passwordMatchedCacheTotalRequest());
       assertEquals(1, metrics.passwordMatchedCacheMissCount());
       assertEquals(1, metrics.passwordMatchedCacheHitCount());
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
+
+  @Test
+  public void testBlacklist() throws Exception {
+    // BypassUser succeed to start and check MiniDFSCluster.
+    System.setProperty("HADOOP_USER_NAME", "hdfs");
+    Configuration conf = new HdfsConfiguration();
+    String TEST_FILE = "testBlacklist";
+    String blackList = Objects.requireNonNull(
+        TestSdiAuthenticationFromRBF.class.getClassLoader().getResource(TEST_FILE)).getPath();
+    conf.set(HADOOP_SECURITY_RPC_BLACKLIST_FILE, blackList);
+    conf.set(HADOOP_CLIENT_RPC_SDI_AUTHENTICATION_ENABLED_KEY, "false");
+     // Set Routers RPC service enable blacklist mechanism.
+    conf.setBoolean(DFS_ROUTER_SECURITY_RPC_BLACKLIST_ENABLED_KEY, true);
+    UserGroupInformation.setConfiguration(conf);
+
+    MiniRouterDFSCluster cluster = null;
+    try {
+      cluster = new MiniRouterDFSCluster(true, 1);
+      cluster.addNamenodeOverrides(conf);
+
+      // Start NNs and DNs and wait until ready,
+      // NameNode and DataNode etc. services default will disable blacklist mechanism.
+      cluster.startCluster(conf);
+
+      // Start routers with only an RPC service.
+      cluster.startRouters();
+
+      // Register and verify all NNs with all routers.
+      cluster.registerNamenodes();
+      cluster.waitNamenodeRegistration();
+
+      // Setup the mount table.
+      cluster.installMockLocations();
+
+      // Making one Namenodes active per nameservice.
+      if (cluster.isHighAvailability()) {
+        for (String ns : cluster.getNameservices()) {
+          cluster.switchToActive(ns, NAMENODES[0]);
+          cluster.switchToStandby(ns, NAMENODES[1]);
+        }
+      }
+      cluster.waitActiveNamespaces();
+
+      MiniRouterDFSCluster finalCluster = cluster;
+      String password = "I AM THE DANGER";
+      try {
+        // UserA is in blacklist and connect router will fail.
+        String username = "UserA";
+        UserGroupInformation ugi = UserGroupInformation.createRemoteUser(username);
+        ugi.doAs((PrivilegedExceptionAction<Void>) () -> {
+          DistributedFileSystem fs =
+              (DistributedFileSystem) finalCluster.getRandomRouter().getFileSystem();
+          final Path root = new Path("/");
+          fs.listStatus(root);
+          fs.close();
+          return null;
+        });
+        Assert.fail("IOException expected.");
+      } catch (IOException ioe) {
+        Assert.assertTrue(((RemoteException) ioe).unwrapRemoteException()
+            instanceof AuthenticationException);
+      }
+
+      try {
+        // UserB is not in blacklist and connect router will success.
+        for (int i = 0; i < 2; i++) {
+          String username = "UserB";
+          UserGroupInformation ugi = UserGroupInformation.createRemoteUser(username, password);
+          ugi.doAs((PrivilegedExceptionAction<Void>) () -> {
+            DistributedFileSystem fs =
+                (DistributedFileSystem) finalCluster.getRandomRouter().getFileSystem();
+            final Path root = new Path("/");
+            fs.listStatus(root);
+            fs.close();
+            return null;
+          });
+        }
+      } catch (IOException ioe) {
+        Assert.fail("Shouldn't reach here.");
+      }
     } finally {
       if (cluster != null) {
         cluster.shutdown();

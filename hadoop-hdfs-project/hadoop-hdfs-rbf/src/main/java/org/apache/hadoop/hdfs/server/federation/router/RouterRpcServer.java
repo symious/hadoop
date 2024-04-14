@@ -28,6 +28,8 @@ import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_READER_COUNT_KEY;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_READER_QUEUE_SIZE_DEFAULT;
 import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_READER_QUEUE_SIZE_KEY;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_SECURITY_RPC_BLACKLIST_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.server.federation.router.RBFConfigKeys.DFS_ROUTER_SECURITY_RPC_BLACKLIST_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.server.namenode.top.metrics.TopMetrics.TOPMETRICS_METRICS_SOURCE_NAME;
 
 import java.io.FileNotFoundException;
@@ -265,6 +267,10 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
         DFS_ROUTER_DEEP_HANDLER_ENABLED_KEY,
         DFS_ROUTER_DEEP_HANDLER_ENABLED_DEFAULT);
 
+    boolean userIpBlacklistEnabled =  this.conf.getBoolean(
+        DFS_ROUTER_SECURITY_RPC_BLACKLIST_ENABLED_KEY,
+        DFS_ROUTER_SECURITY_RPC_BLACKLIST_ENABLED_DEFAULT);
+
     // Override Hadoop Common IPC setting
     int readerQueueSize = this.conf.getInt(DFS_ROUTER_READER_QUEUE_SIZE_KEY,
         DFS_ROUTER_READER_QUEUE_SIZE_DEFAULT);
@@ -319,6 +325,7 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
         .setQueueSizePerHandler(handlerQueueSize)
         .setVerbose(false)
         .setDeepHandlersEnabled(deepHandlersEnabled)
+        .setUserIpBlacklistEnabled(userIpBlacklistEnabled)
         .setSecretManager(this.securityManager.getSecretManager())
         .build();
 

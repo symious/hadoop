@@ -857,4 +857,12 @@
     </description>
   </property>
 
+  <property>
+    <name>dfs.federation.router.security.rpc.blacklist.enabled</name>
+    <value>false</value>
+    <description>
+      Whether to enable the blacklist. If true, will restrict IP and user access by blacklist.
+    </description>
+  </property>
+
 </configuration>
