@@ -139,9 +139,6 @@ public class NodeManagerMetrics {
   @Metric("Aggregated current limit memory of all containers in GB")
   MutableGaugeInt aggregateContainerLimitMemGB;
 
-  @Metric("Aggregated container's log size in bytes")
-  MutableCounterLong aggregateContainerLogSize;
-
   // CHECKSTYLE:ON:VisibilityModifier
 
   private JvmMetrics jvmMetrics = null;
@@ -586,9 +583,5 @@ public class NodeManagerMetrics {
 
   public void setAggregateContainerLimitMemGB(long aggregateLimitMem) {
     aggregateContainerLimitMemGB.set((int)Math.ceil(aggregateLimitMem / 1024d / 1024d / 1024d));
-  }
-
-  public void recordLogSize(long logSize) {
-    aggregateContainerLogSize.incr(logSize);
   }
 }
