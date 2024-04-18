@@ -159,8 +159,12 @@ public class LogAggregationFileControllerFactory {
       ApplicationId appId, String appOwner) throws IOException {
     StringBuilder diagnosticsMsg = new StringBuilder();
 
+    LogAggregationFileController candidate = null;
     if (LogAggregationUtils.isOlderPathEnabled(conf)) {
       for (LogAggregationFileController fileController : controllers) {
+        if (fileController.isHBaseBackend()) {
+          candidate = fileController;
+        }
         try {
           Path remoteAppLogDir = fileController.getOlderRemoteAppLogDir(appId,
               appOwner);
@@ -176,6 +180,9 @@ public class LogAggregationFileControllerFactory {
     }
 
     for (LogAggregationFileController fileController : controllers) {
+      if (fileController.isHBaseBackend()) {
+        candidate = fileController;
+      }
       try {
         Path remoteAppLogDir = fileController.getRemoteAppLogDir(
             appId, appOwner);
@@ -189,6 +196,9 @@ public class LogAggregationFileControllerFactory {
       }
     }
 
+    if (candidate != null) {
+      return candidate;
+    }
     throw new IOException(diagnosticsMsg.toString());
   }
 

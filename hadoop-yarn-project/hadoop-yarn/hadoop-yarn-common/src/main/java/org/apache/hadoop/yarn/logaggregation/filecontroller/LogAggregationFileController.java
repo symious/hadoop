@@ -194,6 +194,10 @@ public abstract class LogAggregationFileController {
   public abstract void postWrite(LogAggregationFileControllerContext record)
       throws Exception;
 
+  public boolean isHBaseBackend() {
+    return false;
+  }
+
   protected void closePrintStream(OutputStream out) {
     if (out != System.out) {
       IOUtils.cleanupWithLogger(LOG, out);

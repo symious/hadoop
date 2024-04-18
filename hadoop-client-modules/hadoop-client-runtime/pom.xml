@@ -52,6 +52,10 @@
           <groupId>xml-apis</groupId>
           <artifactId>xml-apis</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-client</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <!-- At runtime anyone using us must have the api present -->
