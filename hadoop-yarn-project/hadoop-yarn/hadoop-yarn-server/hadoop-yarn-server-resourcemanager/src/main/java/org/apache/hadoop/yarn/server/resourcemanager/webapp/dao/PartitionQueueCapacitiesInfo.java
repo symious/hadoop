@@ -20,8 +20,10 @@ package org.apache.hadoop.yarn.server.resourcemanager.webapp.dao;
 import javax.xml.bind.annotation.XmlAccessType;
 import javax.xml.bind.annotation.XmlAccessorType;
 import javax.xml.bind.annotation.XmlRootElement;
+import javax.xml.bind.annotation.adapters.XmlJavaTypeAdapter;
 
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.SpecialValueAdapter;
 import org.apache.hadoop.yarn.util.resource.Resources;
 
 /**
@@ -32,11 +34,15 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 public class PartitionQueueCapacitiesInfo {
   private String partitionName;
 
+  @XmlJavaTypeAdapter(value = SpecialValueAdapter.class, type = float.class)
   private float capacity;
   private float usedCapacity;
+  @XmlJavaTypeAdapter(value = SpecialValueAdapter.class, type = float.class)
   private float maxCapacity = 100;
+  @XmlJavaTypeAdapter(value = SpecialValueAdapter.class, type = float.class)
   private float absoluteCapacity;
   private float absoluteUsedCapacity;
+  @XmlJavaTypeAdapter(value = SpecialValueAdapter.class, type = float.class)
   private float absoluteMaxCapacity  = 100;
   private float maxAMLimitPercentage;
   private ResourceInfo configuredMinResource;
