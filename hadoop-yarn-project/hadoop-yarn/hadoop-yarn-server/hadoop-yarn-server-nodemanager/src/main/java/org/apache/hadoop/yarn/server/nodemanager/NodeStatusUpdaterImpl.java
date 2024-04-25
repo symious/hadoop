@@ -668,10 +668,15 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
   int getFreeDiskSpace(){
     String[] localDirs =
         context.getConf().get(YarnConfiguration.NM_LOCAL_DIRS).split(",");
-    long freeSpace = Long.MAX_VALUE;
-    for (String dataDiskPath: localDirs) {
+    long freeSpace = 0;
+    List goodLocalDirs = this.context.getLocalDirsHandler().getLocalDirs();
+    for (String dataDiskPath : localDirs) {
+      // Skip if node bad
+      if (!goodLocalDirs.contains(dataDiskPath)) {
+        continue;
+      }
       long freeDiskSize = new File(dataDiskPath).getUsableSpace();
-      if(freeDiskSize<freeSpace){
+      if (freeDiskSize > freeSpace) {
         freeSpace = freeDiskSize;
       }
     }
