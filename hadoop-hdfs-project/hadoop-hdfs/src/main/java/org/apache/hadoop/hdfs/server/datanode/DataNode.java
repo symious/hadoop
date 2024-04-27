@@ -4664,4 +4664,11 @@ public class DataNode extends ReconfigurableBase
     }
     return false;
   }
+
+  @VisibleForTesting
+  public void closeDataXceiverServer() {
+    if (xserver != null) {
+      xserver.closeAllPeers();
+    }
+  }
 }

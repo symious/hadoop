@@ -18,6 +18,10 @@
 package org.apache.hadoop.hdfs;
 
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.mockito.Mockito;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -35,7 +39,6 @@ import org.apache.hadoop.io.erasurecode.ErasureCodeNative;
 import org.apache.hadoop.io.erasurecode.rawcoder.NativeRSRawErasureCoderFactory;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -43,6 +46,12 @@ import org.junit.rules.Timeout;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class TestDFSStripedInputStreamWithTimeout {
 
@@ -139,16 +148,16 @@ public class TestDFSStripedInputStreamWithTimeout {
     }
     try {
       testReadFileWithAttempt(1);
-      Assert.fail("It Should fail to read striped time out with 1 attempt . ");
+      fail("It Should fail to read striped time out with 1 attempt.");
     } catch (Exception e) {
-      Assert.assertTrue(
-          "Throw IOException error message with 4 missing blocks. ",
+      assertTrue(
+          "Throw IOException error message with 4 missing blocks.",
           e.getMessage().contains("4 missing blocks"));
     }
     try {
       testReadFileWithAttempt(3);
     } catch (Exception e) {
-      Assert.fail("It Should successfully read striped file with 3 attempts. ");
+      fail("It Should successfully read striped file with 3 attempts.");
     }
   }
 
@@ -161,20 +170,88 @@ public class TestDFSStripedInputStreamWithTimeout {
         .setInt(HdfsClientConfigKeys.DFS_CLIENT_SOCKET_TIMEOUT_KEY, 1000);
     DistributedFileSystem newFs =
         (DistributedFileSystem) cluster.getNewFileSystemInstance(0);
-    try(DFSStripedInputStream in = new DFSStripedInputStream(newFs.getClient(),
-        filePath.toString(), false, ecPolicy, null)){
+    try (DFSStripedInputStream in = new DFSStripedInputStream(newFs.getClient(),
+        filePath.toString(), false, ecPolicy, null)) {
       int bufLen = 1024 * 100;
       byte[] buf = new byte[bufLen];
       int readTotal = 0;
       in.seek(readTotal);
       int nread = in.read(buf, 0, bufLen);
       // Simulated time-consuming processing operations, such as UDF.
-      Thread.sleep(10000);
+      // And datanodes close connect because of socket timeout.
+      cluster.dataNodes.forEach(dn -> dn.getDatanode().closeDataXceiverServer());
       in.seek(nread);
-      // StripeRange 6MB
+      // StripeRange 6MB.
       bufLen = 1024 * 1024 * 6;
       buf = new byte[bufLen];
-      in.read(buf, 0, bufLen);
+      int read = in.read(buf, 0, bufLen);
+      assertEquals(bufLen, read);
+    }
+  }
+
+  @Test
+  public void testPreadAllBlockTimeout() throws Exception {
+    GenericTestUtils.LogCapturer logs =
+        GenericTestUtils.LogCapturer.captureLogs(DFSClient.LOG);
+    Configuration conf = new HdfsConfiguration();
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, blockSize);
+    DFSClientFaultInjector oldFaultInjector = DFSClientFaultInjector.get();
+
+    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).
+        numDataNodes(dataBlocks + parityBlocks + 2).format(true).build()) {
+
+      cluster.waitActive();
+      cluster.getConfiguration(0)
+          .setInt(HdfsClientConfigKeys.StripedRead.DATANODE_MAX_ATTEMPTS, 2);
+      DistributedFileSystem fs = cluster.getFileSystem();
+
+      // Create ec file.
+      fs.enableErasureCodingPolicy(ecPolicy.getName());
+      fs.mkdirs(new Path("/ec"));
+      cluster.getFileSystem().getClient().setErasureCodingPolicy("/ec",
+          ecPolicy.getName());
+      int dataSize = 1024 * 1024 * 20;
+      byte[] expected = StripedFileTestUtil.generateBytes(dataSize);
+      Path src = new Path("/ec/file");
+      DFSTestUtil.writeFile(fs, src, new String(expected));
+      StripedFileTestUtil.waitBlockGroupsReported(fs, src.toString());
+      StripedFileTestUtil.verifyLength(fs, src, dataSize);
+      LocatedBlocks blks = fs.getClient().getLocatedBlocks(src.toString(), 0);
+      assertEquals(2, blks.locatedBlockCount());
+      LocatedStripedBlock block = (LocatedStripedBlock) blks.getLocatedBlocks().get(0);
+      DatanodeInfo firstDn = block.getLocations()[0];
+
+      DFSClientFaultInjector.set(Mockito.mock(DFSClientFaultInjector.class));
+      DFSClientFaultInjector injector = DFSClientFaultInjector.get();
+      final AtomicInteger count = new AtomicInteger(0);
+      Mockito.doAnswer(new Answer<Void>() {
+        @Override
+        public Void answer(InvocationOnMock invocation) throws Throwable {
+          // Mock connect exception when read second ec cell data from first datanode,
+          // that datanode will close the connection of EC client and
+          // client will retry create blockReader to read data.
+          if (count.getAndIncrement() == 1) {
+           throw new IOException("Mock Exception");
+          }
+          return null;
+        }
+      }).when(injector).readECFromDatanodeException(firstDn);
+
+      DFSClient dfsClient = fs.getClient();
+      try (DFSInputStream in = dfsClient.open(src.toString())) {
+        // Read all blocks data.
+        byte[] buf = new byte[dataSize];
+        in.read(0, buf, 0, dataSize);
+        // Verify data is expected.
+        assertArrayEquals(buf, expected);
+
+        // Verify log messages.
+        assertTrue(logs.getOutput().contains("Reconnect to " + firstDn.getInfoAddr() +
+            " for block " + block.getBlock()));
+        logs.clearOutput();
+      }
+    } finally {
+      DFSClientFaultInjector.set(oldFaultInjector);
     }
   }
 }

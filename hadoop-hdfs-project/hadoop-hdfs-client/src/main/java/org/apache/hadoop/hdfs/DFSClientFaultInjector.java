@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs;
 
+import java.io.IOException;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
@@ -76,4 +77,6 @@ public class DFSClientFaultInjector {
   public void readECFromDatanodeDelay(DatanodeInfo datanode) {}
 
   public void failCreateBlockReader() throws InvalidBlockTokenException {}
+
+  public void readECFromDatanodeException(DatanodeInfo datanode) throws IOException {}
 }

@@ -243,6 +243,7 @@ abstract class StripeReader {
       curAttempts++;
       int length = 0;
       try {
+        DFSClientFaultInjector.get().readECFromDatanodeException(currentNode);
         while (length < targetLength) {
           int ret = strategy.readFromBlock(blockReader);
           if (ret < 0) {
@@ -301,10 +302,9 @@ abstract class StripeReader {
 
       int ret = 0;
       for (ByteBufferStrategy strategy : strategies) {
-        long offsetInBlock = ret == 0 ? alignedStripe.getOffsetInBlock() : ret;
-        int bytesReead = readToBuffer(reader, datanode, strategy, currentBlock, chunkIndex,
-            offsetInBlock);
-        ret += bytesReead;
+        int bytesRead = readToBuffer(reader, datanode, strategy, currentBlock, chunkIndex,
+            alignedStripe.getOffsetInBlock() + ret);
+        ret += bytesRead;
       }
       DFSClientFaultInjector.get().readECFromDatanodeDelay(datanode);
       return new BlockReadStats(ret, reader.isShortCircuit(),
