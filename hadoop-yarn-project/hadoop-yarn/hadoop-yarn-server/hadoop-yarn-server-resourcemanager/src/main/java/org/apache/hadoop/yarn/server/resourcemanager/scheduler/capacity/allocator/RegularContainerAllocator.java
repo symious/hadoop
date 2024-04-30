@@ -164,18 +164,6 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
         return false;
       }
 
-      if (rmNode.getState() != NodeState.RUNNING) {
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("Skip scheduling on node because it is in " +
-              node.getRMNode().getState() + " state");
-        }
-        ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
-            activitiesManager, node, application, schedulerKey,
-            ActivityDiagnosticConstant.NODE_IS_NOT_RUNNING,
-            ActivityLevel.NODE);
-        return false;
-      }
-
       if (!SchedulerUtils.isNodeHeartbeated(node,
           ((CapacityScheduler) rmContext.getScheduler())
               .getSkipNodeInterval())) {
@@ -209,7 +197,7 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
         rmContext.getScheduler().getMinimumResourceCapability())) {
       if (LOG.isDebugEnabled()) {
         LOG.debug("Skip scheduling on node: " + node.getNodeID() + " because" +
-            " node total capability : " + node.getTotalResource() +
+            " node total capability : " + totalResource +
             " is to small");
       }
       ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(

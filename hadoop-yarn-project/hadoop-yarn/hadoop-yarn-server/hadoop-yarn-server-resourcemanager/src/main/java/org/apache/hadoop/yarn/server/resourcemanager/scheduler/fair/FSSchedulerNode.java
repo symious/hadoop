@@ -85,66 +85,83 @@ public class FSSchedulerNode extends SchedulerNode {
   }
 
   @Override
-  public synchronized void reserveResource(
+  public void reserveResource(
       SchedulerApplicationAttempt application, SchedulerRequestKey schedulerKey,
       RMContainer container) {
-    // Check if it's already reserved
-    RMContainer reservedContainer = getReservedContainer();
-    if (reservedContainer != null) {
-      // Sanity check
-      if (!container.getContainer().getNodeId().equals(getNodeID())) {
-        throw new IllegalStateException("Trying to reserve" +
-            " container " + container +
-            " on node " + container.getReservedNode() + 
-            " when currently" + " reserved resource " + reservedContainer +
-            " on node " + reservedContainer.getReservedNode());
-      }
-      
-      // Cannot reserve more than one application on a given node!
-      if (!reservedContainer.getContainer().getId().getApplicationAttemptId()
-          .equals(container.getContainer().getId().getApplicationAttemptId())) {
-        throw new IllegalStateException("Trying to reserve" +
-            " container " + container + 
-            " for application " + application.getApplicationId() + 
-            " when currently" +
-            " reserved container " + reservedContainer +
-            " on node " + this);
-      }
+    writeLock.lock();
+    try {
+      // Check if it's already reserved
+      RMContainer reservedContainer = getReservedContainer();
+      if (reservedContainer != null) {
+        // Sanity check
+        if (!container.getContainer().getNodeId().equals(getNodeID())) {
+          throw new IllegalStateException("Trying to reserve" +
+              " container " + container +
+              " on node " + container.getReservedNode() +
+              " when currently" + " reserved resource " + reservedContainer +
+              " on node " + reservedContainer.getReservedNode());
+        }
 
-      LOG.info("Updated reserved container " + container.getContainer().getId()
-          + " on node " + this + " for application "
-          + application.getApplicationId());
-    } else {
-      LOG.info("Reserved container " + container.getContainer().getId()
-          + " on node " + this + " for application "
-          + application.getApplicationId());
+        // Cannot reserve more than one application on a given node!
+        if (!reservedContainer.getContainer().getId().getApplicationAttemptId()
+            .equals(
+                container.getContainer().getId().getApplicationAttemptId())) {
+          throw new IllegalStateException("Trying to reserve" +
+              " container " + container +
+              " for application " + application.getApplicationId() +
+              " when currently" +
+              " reserved container " + reservedContainer +
+              " on node " + this);
+        }
+
+        LOG.info(
+            "Updated reserved container " + container.getContainer().getId()
+                + " on node " + this + " for application "
+                + application.getApplicationId());
+      } else {
+        LOG.info("Reserved container " + container.getContainer().getId()
+            + " on node " + this + " for application "
+            + application.getApplicationId());
+      }
+      setReservedContainer(container);
+      this.reservedAppSchedulable = (FSAppAttempt) application;
+    } finally {
+      writeLock.unlock();
     }
-    setReservedContainer(container);
-    this.reservedAppSchedulable = (FSAppAttempt) application;
   }
 
   @Override
-  public synchronized void unreserveResource(
+  public void unreserveResource(
       SchedulerApplicationAttempt application) {
-    // Cannot unreserve for wrong application...
-    ApplicationAttemptId reservedApplication = 
-        getReservedContainer().getContainer().getId()
-            .getApplicationAttemptId();
-    if (!reservedApplication.equals(
-        application.getApplicationAttemptId())) {
-      throw new IllegalStateException("Trying to unreserve " +  
-          " for application " + application.getApplicationId() + 
-          " when currently reserved " + 
-          " for application " + reservedApplication.getApplicationId() + 
-          " on node " + this);
+    writeLock.lock();
+    try {
+      // Cannot unreserve for wrong application...
+      ApplicationAttemptId reservedApplication =
+          getReservedContainer().getContainer().getId()
+              .getApplicationAttemptId();
+      if (!reservedApplication.equals(
+          application.getApplicationAttemptId())) {
+        throw new IllegalStateException("Trying to unreserve " +
+            " for application " + application.getApplicationId() +
+            " when currently reserved " +
+            " for application " + reservedApplication.getApplicationId() +
+            " on node " + this);
+      }
+
+      setReservedContainer(null);
+      this.reservedAppSchedulable = null;
+    } finally {
+      writeLock.unlock();
     }
-    
-    setReservedContainer(null);
-    this.reservedAppSchedulable = null;
   }
 
-  synchronized FSAppAttempt getReservedAppSchedulable() {
-    return reservedAppSchedulable;
+  FSAppAttempt getReservedAppSchedulable() {
+    readLock.lock();
+    try {
+      return reservedAppSchedulable;
+    } finally {
+      readLock.unlock();
+    }
   }
 
   /**
@@ -153,17 +170,27 @@ public class FSSchedulerNode extends SchedulerNode {
    * @return if any resources were allocated
    */
   @VisibleForTesting
-  synchronized LinkedHashMap<FSAppAttempt, Resource> getPreemptionList() {
-    cleanupPreemptionList();
-    return new LinkedHashMap<>(resourcesPreemptedForApp);
+  LinkedHashMap<FSAppAttempt, Resource> getPreemptionList() {
+    readLock.lock();
+    try {
+      cleanupPreemptionList();
+      return new LinkedHashMap<>(resourcesPreemptedForApp);
+    } finally {
+      readLock.unlock();
+    }
   }
 
   /**
    * Returns whether a preemption is tracked on the node for the specified app.
    * @return if preempted containers are reserved for the app
    */
-  synchronized boolean isPreemptedForApp(FSAppAttempt app){
-    return resourcesPreemptedForApp.containsKey(app);
+  boolean isPreemptedForApp(FSAppAttempt app) {
+    readLock.lock();
+    try {
+      return resourcesPreemptedForApp.containsKey(app);
+    } finally {
+      readLock.unlock();
+    }
   }
 
   /**
@@ -173,21 +200,27 @@ public class FSSchedulerNode extends SchedulerNode {
     // Synchronize separately to avoid potential deadlocks
     // This may cause delayed deletion of reservations
     LinkedList<FSAppAttempt> candidates;
-    synchronized (this) {
+    writeLock.lock();
+    try {
       candidates = Lists.newLinkedList(resourcesPreemptedForApp.keySet());
+    } finally {
+      writeLock.unlock();
     }
     for (FSAppAttempt app : candidates) {
       if (app.isStopped() || !app.isStarved() ||
           (Resources.isNone(app.getFairshareStarvation()) &&
-           Resources.isNone(app.getMinshareStarvation()))) {
+              Resources.isNone(app.getMinshareStarvation()))) {
         // App does not need more resources
-        synchronized (this) {
+        writeLock.lock();
+        try {
           Resource removed = resourcesPreemptedForApp.remove(app);
           if (removed != null) {
             Resources.subtractFrom(totalResourcesPreempted,
                 removed);
             appIdToAppMap.remove(app.getApplicationAttemptId());
           }
+        } finally {
+          writeLock.unlock();
         }
       }
     }
@@ -202,17 +235,17 @@ public class FSSchedulerNode extends SchedulerNode {
    * @param containers container to mark
    */
   void addContainersForPreemption(Collection<RMContainer> containers,
-                                  FSAppAttempt app) {
+      FSAppAttempt app) {
 
     Resource appReserved = Resources.createResource(0);
 
-    for(RMContainer container : containers) {
-      if(containersForPreemption.add(container)) {
+    for (RMContainer container : containers) {
+      if (containersForPreemption.add(container)) {
         Resources.addTo(appReserved, container.getAllocatedResource());
       }
     }
-
-    synchronized (this) {
+    writeLock.lock();
+    try {
       if (!Resources.isNone(appReserved)) {
         Resources.addTo(totalResourcesPreempted,
             appReserved);
@@ -221,6 +254,8 @@ public class FSSchedulerNode extends SchedulerNode {
             putIfAbsent(app, Resource.newInstance(0, 0));
         Resources.addTo(resourcesPreemptedForApp.get(app), appReserved);
       }
+    } finally {
+      writeLock.unlock();
     }
   }
 
@@ -238,36 +273,42 @@ public class FSSchedulerNode extends SchedulerNode {
    * @param launchedOnNode True if the container has been launched
    */
   @Override
-  protected synchronized void allocateContainer(RMContainer rmContainer,
-                                                boolean launchedOnNode) {
-    super.allocateContainer(rmContainer, launchedOnNode);
-    if (LOG.isDebugEnabled()) {
-      final Container container = rmContainer.getContainer();
-      LOG.debug("Assigned container " + container.getId() + " of capacity "
-          + container.getResource() + " on host " + getRMNode().getNodeAddress()
-          + ", which has " + getNumContainers() + " containers, "
-          + getAllocatedResource() + " used and " + getUnallocatedResource()
-          + " available after allocation");
-    }
-
-    Resource allocated = rmContainer.getAllocatedResource();
-    if (!Resources.isNone(allocated)) {
-      // check for satisfied preemption request and update bookkeeping
-      FSAppAttempt app =
-          appIdToAppMap.get(rmContainer.getApplicationAttemptId());
-      if (app != null) {
-        Resource reserved = resourcesPreemptedForApp.get(app);
-        Resource fulfilled = Resources.componentwiseMin(reserved, allocated);
-        Resources.subtractFrom(reserved, fulfilled);
-        Resources.subtractFrom(totalResourcesPreempted, fulfilled);
-        if (Resources.isNone(reserved)) {
-          // No more preempted containers
-          resourcesPreemptedForApp.remove(app);
-          appIdToAppMap.remove(rmContainer.getApplicationAttemptId());
-        }
+  protected void allocateContainer(RMContainer rmContainer,
+      boolean launchedOnNode) {
+    writeLock.lock();
+    try {
+      super.allocateContainer(rmContainer, launchedOnNode);
+      if (LOG.isDebugEnabled()) {
+        final Container container = rmContainer.getContainer();
+        LOG.debug("Assigned container " + container.getId() + " of capacity "
+            + container.getResource() + " on host " +
+            getRMNode().getNodeAddress()
+            + ", which has " + getNumContainers() + " containers, "
+            + getAllocatedResource() + " used and " + getUnallocatedResource()
+            + " available after allocation");
       }
-    } else {
-      LOG.error("Allocated empty container" + rmContainer.getContainerId());
+
+      Resource allocated = rmContainer.getAllocatedResource();
+      if (!Resources.isNone(allocated)) {
+        // check for satisfied preemption request and update bookkeeping
+        FSAppAttempt app =
+            appIdToAppMap.get(rmContainer.getApplicationAttemptId());
+        if (app != null) {
+          Resource reserved = resourcesPreemptedForApp.get(app);
+          Resource fulfilled = Resources.componentwiseMin(reserved, allocated);
+          Resources.subtractFrom(reserved, fulfilled);
+          Resources.subtractFrom(totalResourcesPreempted, fulfilled);
+          if (Resources.isNone(reserved)) {
+            // No more preempted containers
+            resourcesPreemptedForApp.remove(app);
+            appIdToAppMap.remove(rmContainer.getApplicationAttemptId());
+          }
+        }
+      } else {
+        LOG.error("Allocated empty container" + rmContainer.getContainerId());
+      }
+    } finally {
+      writeLock.unlock();
     }
   }
 
@@ -279,12 +320,17 @@ public class FSSchedulerNode extends SchedulerNode {
    * @param releasedByNode whether the release originates from a node update.
    */
   @Override
-  public synchronized void releaseContainer(ContainerId containerId,
-                                            boolean releasedByNode) {
-    RMContainer container = getContainer(containerId);
-    super.releaseContainer(containerId, releasedByNode);
-    if (container != null) {
-      containersForPreemption.remove(container);
+  public void releaseContainer(ContainerId containerId,
+      boolean releasedByNode) {
+    writeLock.lock();
+    try {
+      RMContainer container = getContainer(containerId);
+      super.releaseContainer(containerId, releasedByNode);
+      if (container != null) {
+        containersForPreemption.remove(container);
+      }
+    } finally {
+      writeLock.unlock();
     }
   }
 }

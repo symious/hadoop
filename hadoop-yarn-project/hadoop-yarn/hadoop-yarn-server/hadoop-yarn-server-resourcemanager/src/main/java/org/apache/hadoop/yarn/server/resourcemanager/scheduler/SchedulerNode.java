@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.lang3.builder.CompareToBuilder;
@@ -91,6 +92,10 @@ public abstract class SchedulerNode {
   // Last updated time
   private volatile long lastHeartbeatMonotonicTime;
 
+  protected final ReentrantReadWriteLock.ReadLock readLock;
+
+  protected final ReentrantReadWriteLock.WriteLock writeLock;
+
   public SchedulerNode(RMNode node, boolean usePortForNodeName,
       Set<String> labels) {
     this.rmNode = node;
@@ -104,6 +109,10 @@ public abstract class SchedulerNode {
     }
     this.labels = ImmutableSet.copyOf(labels);
     this.lastHeartbeatMonotonicTime = Time.monotonicNow();
+
+    ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    readLock = lock.readLock();
+    writeLock = lock.writeLock();
   }
 
   public SchedulerNode(RMNode node, boolean usePortForNodeName) {
@@ -118,10 +127,15 @@ public abstract class SchedulerNode {
    * Set total resources on the node.
    * @param resource Total resources on the node.
    */
-  public synchronized void updateTotalResource(Resource resource){
-    this.totalResource = resource;
-    this.unallocatedResource = Resources.subtract(totalResource,
-        this.allocatedResource);
+  public void updateTotalResource(Resource resource) {
+    writeLock.lock();
+    try {
+      this.totalResource = resource;
+      this.unallocatedResource = Resources.subtract(totalResource,
+          this.allocatedResource);
+    } finally {
+      writeLock.unlock();
+    }
   }
 
   /**
@@ -130,13 +144,18 @@ public abstract class SchedulerNode {
    * are not overcommitted anymore. This may reset a previous timeout.
    * @param timeOut Time out in milliseconds.
    */
-  public synchronized void setOvercommitTimeOut(long timeOut) {
-    if (timeOut >= 0) {
-      if (this.overcommitTimeout != -1) {
-        LOG.debug("The overcommit timeout for {} was already set to {}",
-            getNodeID(), this.overcommitTimeout);
+  public void setOvercommitTimeOut(long timeOut) {
+    writeLock.lock();
+    try {
+      if (timeOut >= 0) {
+        if (this.overcommitTimeout != -1) {
+          LOG.debug("The overcommit timeout for {} was already set to {}",
+              getNodeID(), this.overcommitTimeout);
+        }
+        this.overcommitTimeout = Time.now() + timeOut;
       }
-      this.overcommitTimeout = Time.now() + timeOut;
+    } finally {
+      writeLock.unlock();
     }
   }
 
@@ -144,16 +163,27 @@ public abstract class SchedulerNode {
    * Check if the time out has passed.
    * @return If the node is overcommitted.
    */
-  public synchronized boolean isOvercommitTimedOut() {
-    return this.overcommitTimeout >= 0 && Time.now() >= this.overcommitTimeout;
+  public boolean isOvercommitTimedOut() {
+    readLock.lock();
+    try {
+      return this.overcommitTimeout >= 0 &&
+          Time.now() >= this.overcommitTimeout;
+    } finally {
+      readLock.unlock();
+    }
   }
 
   /**
    * Check if the node has a time out for overcommit resources.
    * @return If the node has a time out for overcommit resources.
    */
-  public synchronized boolean isOvercommitTimeOutSet() {
-    return this.overcommitTimeout >= 0;
+  public boolean isOvercommitTimeOutSet() {
+    readLock.lock();
+    try {
+      return this.overcommitTimeout >= 0;
+    } finally {
+      readLock.unlock();
+    }
   }
 
   /**
@@ -209,62 +239,89 @@ public abstract class SchedulerNode {
    * @param rmContainer Allocated container
    * @param launchedOnNode True if the container has been launched
    */
-  protected synchronized void allocateContainer(RMContainer rmContainer,
+  protected void allocateContainer(RMContainer rmContainer,
       boolean launchedOnNode) {
-    Container container = rmContainer.getContainer();
-    if (rmContainer.getExecutionType() == ExecutionType.GUARANTEED) {
-      deductUnallocatedResource(container.getResource());
-      ++numContainers;
-    }
+    writeLock.lock();
+    try {
+      Container container = rmContainer.getContainer();
+      if (rmContainer.getExecutionType() == ExecutionType.GUARANTEED) {
+        deductUnallocatedResource(container.getResource());
+        ++numContainers;
+      }
 
-    launchedContainers.put(container.getId(),
-        new ContainerInfo(rmContainer, launchedOnNode));
+      launchedContainers.put(container.getId(),
+          new ContainerInfo(rmContainer, launchedOnNode));
+    } finally {
+      writeLock.unlock();
+    }
   }
 
   /**
    * Get unallocated resources on the node.
    * @return Unallocated resources on the node
    */
-  public synchronized Resource getUnallocatedResource() {
-    return this.unallocatedResource;
+  public Resource getUnallocatedResource() {
+    readLock.lock();
+    try {
+      return this.unallocatedResource;
+    } finally {
+      readLock.unlock();
+    }
   }
 
   /**
    * Get allocated resources on the node.
    * @return Allocated resources on the node
    */
-  public synchronized Resource getAllocatedResource() {
-    return this.allocatedResource;
+  public Resource getAllocatedResource() {
+    readLock.lock();
+    try {
+      return this.allocatedResource;
+    } finally {
+      readLock.unlock();
+    }
   }
 
   /**
    * Get total resources on the node.
    * @return Total resources on the node.
    */
-  public synchronized Resource getTotalResource() {
-    return this.totalResource;
+  public Resource getTotalResource() {
+    readLock.lock();
+    try {
+      return this.totalResource;
+    } finally {
+      readLock.unlock();
+    }
   }
 
   /**
    * Check if a container is launched by this node.
    * @return If the container is launched by the node.
    */
-  public synchronized boolean isValidContainer(ContainerId containerId) {
-    if (launchedContainers.containsKey(containerId)) {
-      return true;
+  public boolean isValidContainer(ContainerId containerId) {
+    readLock.lock();
+    try {
+      return launchedContainers.containsKey(containerId);
+    } finally {
+      readLock.unlock();
     }
-    return false;
   }
 
   /**
    * Update the resources of the node when releasing a container.
    * @param container Container to release.
    */
-  protected synchronized void updateResourceForReleasedContainer(
+  protected void updateResourceForReleasedContainer(
       Container container) {
-    if (container.getExecutionType() == ExecutionType.GUARANTEED) {
-      addUnallocatedResource(container.getResource());
-      --numContainers;
+    writeLock.lock();
+    try {
+      if (container.getExecutionType() == ExecutionType.GUARANTEED) {
+        addUnallocatedResource(container.getResource());
+        --numContainers;
+      }
+    } finally {
+      writeLock.unlock();
     }
   }
 
@@ -273,39 +330,44 @@ public abstract class SchedulerNode {
    * @param containerId ID of container to be released.
    * @param releasedByNode whether the release originates from a node update.
    */
-  public synchronized void releaseContainer(ContainerId containerId,
+  public void releaseContainer(ContainerId containerId,
       boolean releasedByNode) {
-    ContainerInfo info = launchedContainers.get(containerId);
-    if (info == null) {
-      return;
-    }
-    if (!releasedByNode && info.launchedOnNode) {
-      // wait until node reports container has completed
-      return;
-    }
+    writeLock.lock();
+    try {
+      ContainerInfo info = launchedContainers.get(containerId);
+      if (info == null) {
+        return;
+      }
+      if (!releasedByNode && info.launchedOnNode) {
+        // wait until node reports container has completed
+        return;
+      }
 
-    launchedContainers.remove(containerId);
-    Container container = info.container.getContainer();
+      launchedContainers.remove(containerId);
+      Container container = info.container.getContainer();
 
-    // We remove allocation tags when a container is actually
-    // released on NM. This is to avoid running into situation
-    // when AM releases a container and NM has some delay to
-    // actually release it, then the tag can still be visible
-    // at RM so that RM can respect it during scheduling new containers.
-    if (rmContext != null && rmContext.getAllocationTagsManager() != null) {
-      rmContext.getAllocationTagsManager()
-          .removeContainer(container.getNodeId(),
-              container.getId(), container.getAllocationTags());
-    }
+      // We remove allocation tags when a container is actually
+      // released on NM. This is to avoid running into situation
+      // when AM releases a container and NM has some delay to
+      // actually release it, then the tag can still be visible
+      // at RM so that RM can respect it during scheduling new containers.
+      if (rmContext != null && rmContext.getAllocationTagsManager() != null) {
+        rmContext.getAllocationTagsManager()
+            .removeContainer(container.getNodeId(),
+                container.getId(), container.getAllocationTags());
+      }
 
-    updateResourceForReleasedContainer(container);
+      updateResourceForReleasedContainer(container);
 
-    if (LOG.isDebugEnabled()) {
-      LOG.debug("Released container " + container.getId() + " of capacity "
-              + container.getResource() + " on host " + rmNode.getNodeAddress()
-              + ", which currently has " + numContainers + " containers, "
-              + getAllocatedResource() + " used and " + getUnallocatedResource()
-              + " available" + ", release resources=" + true);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Released container " + container.getId() + " of capacity "
+            + container.getResource() + " on host " + rmNode.getNodeAddress()
+            + ", which currently has " + numContainers + " containers, "
+            + getAllocatedResource() + " used and " + getUnallocatedResource()
+            + " available" + ", release resources=" + true);
+      }
+    } finally {
+      writeLock.unlock();
     }
   }
 
@@ -313,10 +375,15 @@ public abstract class SchedulerNode {
    * Inform the node that a container has launched.
    * @param containerId ID of the launched container
    */
-  public synchronized void containerStarted(ContainerId containerId) {
-    ContainerInfo info = launchedContainers.get(containerId);
-    if (info != null) {
-      info.launchedOnNode = true;
+  public void containerStarted(ContainerId containerId) {
+    writeLock.lock();
+    try {
+      ContainerInfo info = launchedContainers.get(containerId);
+      if (info != null) {
+        info.launchedOnNode = true;
+      }
+    } finally {
+      writeLock.unlock();
     }
   }
 
@@ -325,14 +392,19 @@ public abstract class SchedulerNode {
    * container.
    * @param resource Resources to add.
    */
-  private synchronized void addUnallocatedResource(Resource resource) {
-    if (resource == null) {
-      LOG.error("Invalid resource addition of null resource for "
-          + rmNode.getNodeAddress());
-      return;
+  private void addUnallocatedResource(Resource resource) {
+    writeLock.lock();
+    try {
+      if (resource == null) {
+        LOG.error("Invalid resource addition of null resource for "
+            + rmNode.getNodeAddress());
+        return;
+      }
+      Resources.addTo(unallocatedResource, resource);
+      Resources.subtractFrom(allocatedResource, resource);
+    } finally {
+      writeLock.unlock();
     }
-    Resources.addTo(unallocatedResource, resource);
-    Resources.subtractFrom(allocatedResource, resource);
   }
 
   /**
@@ -341,14 +413,19 @@ public abstract class SchedulerNode {
    * @param resource Resources to deduct.
    */
   @VisibleForTesting
-  public synchronized void deductUnallocatedResource(Resource resource) {
-    if (resource == null) {
-      LOG.error("Invalid deduction of null resource for "
-          + rmNode.getNodeAddress());
-      return;
+  public void deductUnallocatedResource(Resource resource) {
+    writeLock.lock();
+    try {
+      if (resource == null) {
+        LOG.error("Invalid deduction of null resource for "
+            + rmNode.getNodeAddress());
+        return;
+      }
+      Resources.subtractFrom(unallocatedResource, resource);
+      Resources.addTo(allocatedResource, resource);
+    } finally {
+      writeLock.unlock();
     }
-    Resources.subtractFrom(unallocatedResource, resource);
-    Resources.addTo(allocatedResource, resource);
   }
 
   /**
@@ -385,28 +462,38 @@ public abstract class SchedulerNode {
    * Get the containers running on the node.
    * @return A copy of containers running on the node.
    */
-  public synchronized List<RMContainer> getCopiedListOfRunningContainers() {
-    List<RMContainer> result = new ArrayList<>(launchedContainers.size());
-    for (ContainerInfo info : launchedContainers.values()) {
-      result.add(info.container);
+  public List<RMContainer> getCopiedListOfRunningContainers() {
+    readLock.lock();
+    try {
+      List<RMContainer> result = new ArrayList<>(launchedContainers.size());
+      for (ContainerInfo info : launchedContainers.values()) {
+        result.add(info.container);
+      }
+      return result;
+    } finally {
+      readLock.unlock();
     }
-    return result;
   }
 
   /**
    * Get the containers running on the node with AM containers at the end.
    * @return A copy of running containers with AM containers at the end.
    */
-  public synchronized List<RMContainer> getRunningContainersWithAMsAtTheEnd() {
-    LinkedList<RMContainer> result = new LinkedList<>();
-    for (ContainerInfo info : launchedContainers.values()) {
-      if(info.container.isAMContainer()) {
-        result.addLast(info.container);
-      } else {
-        result.addFirst(info.container);
+  public List<RMContainer> getRunningContainersWithAMsAtTheEnd() {
+    readLock.lock();
+    try {
+      LinkedList<RMContainer> result = new LinkedList<>();
+      for (ContainerInfo info : launchedContainers.values()) {
+        if (info.container.isAMContainer()) {
+          result.addLast(info.container);
+        } else {
+          result.addFirst(info.container);
+        }
       }
+      return result;
+    } finally {
+      readLock.unlock();
     }
-    return result;
   }
 
   /**
@@ -431,12 +518,17 @@ public abstract class SchedulerNode {
    * Get the launched containers in the node.
    * @return List of launched containers.
    */
-  protected synchronized List<RMContainer> getLaunchedContainers() {
-    List<RMContainer> result = new ArrayList<>();
-    for (ContainerInfo info : launchedContainers.values()) {
-      result.add(info.container);
+  protected List<RMContainer> getLaunchedContainers() {
+    readLock.lock();
+    try {
+      List<RMContainer> result = new ArrayList<>();
+      for (ContainerInfo info : launchedContainers.values()) {
+        result.add(info.container);
+      }
+      return result;
+    } finally {
+      readLock.unlock();
     }
-    return result;
   }
 
   /**
@@ -444,51 +536,75 @@ public abstract class SchedulerNode {
    * @param containerId The container ID
    * @return The container for the specified container ID
    */
-  protected synchronized RMContainer getContainer(ContainerId containerId) {
-    RMContainer container = null;
-    ContainerInfo info = launchedContainers.get(containerId);
-    if (info != null) {
-      container = info.container;
+  protected RMContainer getContainer(ContainerId containerId) {
+    readLock.lock();
+    try {
+      RMContainer container = null;
+      ContainerInfo info = launchedContainers.get(containerId);
+      if (info != null) {
+        container = info.container;
+      }
+      return container;
+    } finally {
+      readLock.unlock();
     }
-    return container;
   }
 
-  public synchronized int getNumContainers(ApplicationAttemptId attemptId) {
-    int count = 0;
-    for (ContainerId id : launchedContainers.keySet()) {
-      if (id.getApplicationAttemptId().equals(attemptId)) {
-        count++;
+  public int getNumContainers(ApplicationAttemptId attemptId) {
+    readLock.lock();
+    try {
+      int count = 0;
+      for (ContainerId id : launchedContainers.keySet()) {
+        if (id.getApplicationAttemptId().equals(attemptId)) {
+          count++;
+        }
       }
+      return count;
+    } finally {
+      readLock.unlock();
     }
-    return count;
   }
 
   /**
    * Get the reserved container in the node.
    * @return Reserved container in the node.
    */
-  public synchronized RMContainer getReservedContainer() {
-    return reservedContainer;
+  public RMContainer getReservedContainer() {
+    readLock.lock();
+    try {
+      return reservedContainer;
+    } finally {
+      readLock.unlock();
+    }
   }
 
   /**
    * Set the reserved container in the node.
    * @param reservedContainer Reserved container in the node.
    */
-  public synchronized void
-  setReservedContainer(RMContainer reservedContainer) {
-    this.reservedContainer = reservedContainer;
+  public void setReservedContainer(RMContainer reservedContainer) {
+    writeLock.lock();
+    try {
+      this.reservedContainer = reservedContainer;
+    } finally {
+      writeLock.unlock();
+    }
   }
 
   /**
    * Recover a container.
    * @param rmContainer Container to recover.
    */
-  public synchronized void recoverContainer(RMContainer rmContainer) {
-    if (rmContainer.getState().equals(RMContainerState.COMPLETED)) {
-      return;
+  public void recoverContainer(RMContainer rmContainer) {
+    writeLock.lock();
+    try {
+      if (rmContainer.getState().equals(RMContainerState.COMPLETED)) {
+        return;
+      }
+      allocateContainer(rmContainer, true);
+    } finally {
+      writeLock.unlock();
     }
-    allocateContainer(rmContainer, true);
   }
 
   /**

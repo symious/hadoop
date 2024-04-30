@@ -55,123 +55,165 @@ public class FiCaSchedulerNode extends SchedulerNode {
   }
 
   @Override
-  public synchronized void reserveResource(
+  public void reserveResource(
       SchedulerApplicationAttempt application, SchedulerRequestKey priority,
       RMContainer container) {
-    // Check if it's already reserved
-    RMContainer reservedContainer = getReservedContainer();
-    if (reservedContainer != null) {
-      // Sanity check
-      if (!container.getContainer().getNodeId().equals(getNodeID())) {
-        throw new IllegalStateException("Trying to reserve" +
-            " container " + container +
-            " on node " + container.getReservedNode() + 
-            " when currently" + " reserved resource " + reservedContainer +
-            " on node " + reservedContainer.getReservedNode());
-      }
-      
-      // Cannot reserve more than one application attempt on a given node!
-      // Reservation is still against attempt.
-      if (!reservedContainer.getContainer().getId().getApplicationAttemptId()
-          .equals(container.getContainer().getId().getApplicationAttemptId())) {
-        throw new IllegalStateException("Trying to reserve" +
-            " container " + container + 
-            " for application " + application.getApplicationAttemptId() + 
-            " when currently" +
-            " reserved container " + reservedContainer +
-            " on node " + this);
-      }
+    writeLock.lock();
+    try {
+      // Check if it's already reserved
+      RMContainer reservedContainer = getReservedContainer();
+      if (reservedContainer != null) {
+        // Sanity check
+        if (!container.getContainer().getNodeId().equals(getNodeID())) {
+          throw new IllegalStateException("Trying to reserve" +
+              " container " + container +
+              " on node " + container.getReservedNode() +
+              " when currently" + " reserved resource " + reservedContainer +
+              " on node " + reservedContainer.getReservedNode());
+        }
 
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Updated reserved container "
-            + container.getContainer().getId() + " on node " + this
-            + " for application attempt "
-            + application.getApplicationAttemptId());
+        // Cannot reserve more than one application attempt on a given node!
+        // Reservation is still against attempt.
+        if (!reservedContainer.getContainer().getId().getApplicationAttemptId()
+            .equals(
+                container.getContainer().getId().getApplicationAttemptId())) {
+          throw new IllegalStateException("Trying to reserve" +
+              " container " + container +
+              " for application " + application.getApplicationAttemptId() +
+              " when currently" +
+              " reserved container " + reservedContainer +
+              " on node " + this);
+        }
+
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Updated reserved container "
+              + container.getContainer().getId() + " on node " + this
+              + " for application attempt "
+              + application.getApplicationAttemptId());
+        }
+      } else {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Reserved container "
+              + container.getContainer().getId() + " on node " + this
+              + " for application attempt "
+              + application.getApplicationAttemptId());
+        }
       }
-    } else {
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Reserved container "
-            + container.getContainer().getId() + " on node " + this
-            + " for application attempt "
-            + application.getApplicationAttemptId());
-      }
+      setReservedContainer(container);
+    } finally {
+      writeLock.unlock();
     }
-    setReservedContainer(container);
   }
 
   @Override
-  public synchronized void unreserveResource(
+  public void unreserveResource(
       SchedulerApplicationAttempt application) {
-    // adding NP checks as this can now be called for preemption
-    if (getReservedContainer() != null
-        && getReservedContainer().getContainer() != null
-        && getReservedContainer().getContainer().getId() != null
-        && getReservedContainer().getContainer().getId()
+    writeLock.lock();
+    try {
+      // adding NP checks as this can now be called for preemption
+      if (getReservedContainer() != null
+          && getReservedContainer().getContainer() != null
+          && getReservedContainer().getContainer().getId() != null
+          && getReservedContainer().getContainer().getId()
           .getApplicationAttemptId() != null) {
 
-      // Cannot unreserve for wrong application...
-      ApplicationAttemptId reservedApplication =
-          getReservedContainer().getContainer().getId()
-            .getApplicationAttemptId();
-      if (!reservedApplication.equals(
-          application.getApplicationAttemptId())) {
-        throw new IllegalStateException("Trying to unreserve " +
-            " for application " + application.getApplicationAttemptId() +
-            " when currently reserved " +
-            " for application " + reservedApplication.getApplicationId() +
-            " on node " + this);
+        // Cannot unreserve for wrong application...
+        ApplicationAttemptId reservedApplication =
+            getReservedContainer().getContainer().getId()
+                .getApplicationAttemptId();
+        if (!reservedApplication.equals(
+            application.getApplicationAttemptId())) {
+          throw new IllegalStateException("Trying to unreserve " +
+              " for application " + application.getApplicationAttemptId() +
+              " when currently reserved " +
+              " for application " + reservedApplication.getApplicationId() +
+              " on node " + this);
+        }
       }
+      setReservedContainer(null);
+    } finally {
+      writeLock.unlock();
     }
-    setReservedContainer(null);
   }
 
   // According to decisions from preemption policy, mark the container to killable
-  public synchronized void markContainerToKillable(ContainerId containerId) {
-    RMContainer c = getContainer(containerId);
-    if (c != null && !killableContainers.containsKey(containerId)) {
-      killableContainers.put(containerId, c);
-      Resources.addTo(totalKillableResources, c.getAllocatedResource());
+  public void markContainerToKillable(ContainerId containerId) {
+    writeLock.lock();
+    try {
+      RMContainer c = getContainer(containerId);
+      if (c != null && !killableContainers.containsKey(containerId)) {
+        killableContainers.put(containerId, c);
+        Resources.addTo(totalKillableResources, c.getAllocatedResource());
+      }
+    } finally {
+      writeLock.unlock();
     }
   }
 
   // According to decisions from preemption policy, mark the container to
   // non-killable
-  public synchronized void markContainerToNonKillable(ContainerId containerId) {
-    RMContainer c = getContainer(containerId);
-    if (c != null && killableContainers.containsKey(containerId)) {
-      killableContainers.remove(containerId);
-      Resources.subtractFrom(totalKillableResources, c.getAllocatedResource());
+  public void markContainerToNonKillable(ContainerId containerId) {
+    writeLock.lock();
+    try {
+      RMContainer c = getContainer(containerId);
+      if (c != null && killableContainers.containsKey(containerId)) {
+        killableContainers.remove(containerId);
+        Resources
+            .subtractFrom(totalKillableResources, c.getAllocatedResource());
+      }
+    } finally {
+      writeLock.unlock();
     }
   }
 
   @Override
-  protected synchronized void updateResourceForReleasedContainer(
+  protected void updateResourceForReleasedContainer(
       Container container) {
-    super.updateResourceForReleasedContainer(container);
-    if (killableContainers.containsKey(container.getId())) {
-      Resources.subtractFrom(totalKillableResources, container.getResource());
-      killableContainers.remove(container.getId());
+    writeLock.lock();
+    try {
+      super.updateResourceForReleasedContainer(container);
+      if (killableContainers.containsKey(container.getId())) {
+        Resources.subtractFrom(totalKillableResources, container.getResource());
+        killableContainers.remove(container.getId());
+      }
+    } finally {
+      writeLock.unlock();
     }
   }
 
-  public synchronized Resource getTotalKillableResources() {
-    return totalKillableResources;
+  public Resource getTotalKillableResources() {
+    readLock.lock();
+    try {
+      return totalKillableResources;
+    } finally {
+      readLock.unlock();
+    }
   }
 
-  public synchronized Map<ContainerId, RMContainer> getKillableContainers() {
-    return Collections.unmodifiableMap(killableContainers);
+  public Map<ContainerId, RMContainer> getKillableContainers() {
+    readLock.lock();
+    try {
+      return Collections.unmodifiableMap(killableContainers);
+    } finally {
+      readLock.unlock();
+    }
   }
 
-  protected synchronized void allocateContainer(RMContainer rmContainer,
+  protected void allocateContainer(RMContainer rmContainer,
       boolean launchedOnNode) {
-    super.allocateContainer(rmContainer, launchedOnNode);
+    writeLock.lock();
+    try {
+      super.allocateContainer(rmContainer, launchedOnNode);
 
-    final Container container = rmContainer.getContainer();
-    LOG.info("Assigned container " + container.getId() + " of capacity "
+      final Container container = rmContainer.getContainer();
+      LOG.info("Assigned container " + container.getId() + " of capacity "
           + container.getResource() + " on host " + getRMNode().getNodeAddress()
           + ", which has " + getNumContainers() + " containers, "
           + getAllocatedResource() + " used and " + getUnallocatedResource()
           + " available after allocation");
+    } finally {
+      writeLock.unlock();
+    }
   }
 
 }
