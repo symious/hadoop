@@ -261,6 +261,19 @@ public abstract class TimelineCollector extends CompositeService {
     }
   }
 
+  public static TimelineEntity aggregateEntities(TimelineEntities entities,
+      ConcurrentMap<String, AggregationStatusTable> aggregationGroups,
+      String resultEntityId, String resultEntityType,
+      boolean needsGroupIdInResult) {
+    updateAggregateStatus(entities, aggregationGroups, null);
+    if (needsGroupIdInResult) {
+      return aggregate(aggregationGroups, resultEntityId, resultEntityType);
+    } else {
+      return aggregateWithoutGroupId(aggregationGroups, resultEntityId,
+          resultEntityType);
+    }
+  }
+
   /**
    * Update the aggregation status table for a timeline collector.
    *
@@ -344,8 +357,11 @@ public abstract class TimelineCollector extends CompositeService {
     private ConcurrentMap<TimelineMetric, Map<String, TimelineMetric>>
         aggregateTable;
 
+    private Map<TimelineMetric, TimelineMetric> state;
+
     public AggregationStatusTable() {
       aggregateTable = new ConcurrentHashMap<>();
+      state = new HashMap<>();
     }
 
     public void update(TimelineEntity incoming) {
@@ -384,8 +400,10 @@ public abstract class TimelineCollector extends CompositeService {
           aggrMetric.setId(metric.getId());
         }
         aggrMetric.setRealtimeAggregationOp(TimelineMetricOperation.NOP);
+        aggrMetric.setPostAggregationOp(metric.getPostAggregationOp());
         Map<Object, Object> status = new HashMap<>();
         synchronized (aggrRow) {
+          boolean hasAggrData = aggrRow.size() > 0;
           for (TimelineMetric m : aggrRow.values()) {
             TimelineMetric.aggregateTo(m, aggrMetric, status);
             // getRealtimeAggregationOp returns an enum so we can directly
@@ -396,6 +414,12 @@ public abstract class TimelineCollector extends CompositeService {
             }
           }
           aggrRow.clear();
+          if (aggrMetric.getPostAggregationOp() != TimelineMetricOperation.NOP
+              && hasAggrData) {
+            aggrMetric = aggrMetric.getPostAggregationOp()
+                .aggregate(aggrMetric, state.get(aggrMetric), null);
+            state.put(aggrMetric, aggrMetric);
+          }
         }
         Set<TimelineMetric> metrics = e.getMetrics();
         metrics.remove(aggrMetric);

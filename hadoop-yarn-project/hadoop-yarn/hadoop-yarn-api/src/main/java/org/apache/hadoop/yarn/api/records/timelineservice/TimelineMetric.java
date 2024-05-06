@@ -55,6 +55,9 @@ public class TimelineMetric {
   private TimelineMetricOperation realtimeAggregationOp
       = TimelineMetricOperation.NOP;
 
+  private TimelineMetricOperation postAggregationOp
+      = TimelineMetricOperation.NOP;
+
   private TreeMap<Long, Number> values
       = new TreeMap<>(Collections.reverseOrder());
 
@@ -105,6 +108,15 @@ public class TimelineMetric {
   public void setRealtimeAggregationOp(
       final TimelineMetricOperation op) {
     this.realtimeAggregationOp = op;
+  }
+
+  @XmlElement(name = "postAggregationOp")
+  public TimelineMetricOperation getPostAggregationOp() {
+    return postAggregationOp;
+  }
+
+  public void setPostAggregationOp(final TimelineMetricOperation op) {
+    this.postAggregationOp = op;
   }
 
   // required by JAXB
@@ -190,10 +202,9 @@ public class TimelineMetric {
 
   @Override
   public String toString() {
-    return "{id: " + id + ", type: " + type +
-        ", realtimeAggregationOp: " +
-        realtimeAggregationOp + "; " + values.toString() +
-        "}";
+    return "{id: " + id + ", type: " + type + ", realtimeAggregationOp: "
+        + realtimeAggregationOp + ", postAggregationOp: " + postAggregationOp
+        + "; " + values.toString() + "}";
   }
 
   /**

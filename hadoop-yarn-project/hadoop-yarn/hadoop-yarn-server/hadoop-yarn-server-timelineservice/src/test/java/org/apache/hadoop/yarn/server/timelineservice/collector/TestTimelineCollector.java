@@ -41,6 +41,8 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertEquals;
@@ -54,6 +56,33 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class TestTimelineCollector {
+
+  private TimelineEntities generateTestEntitiesForPostAggregation(int entities,
+      long value) {
+    TimelineEntities te = new TimelineEntities();
+    for (int i = 0; i < entities; i++) {
+      TimelineEntity entity = new TimelineEntity();
+      String containerId = "container_1000178881110_2002_" + i;
+      entity.setId(containerId);
+      String entityType = "TEST_1";
+      entity.setType(entityType);
+      long cTime = 1425016501000L;
+      entity.setCreatedTime(cTime);
+
+      Set<TimelineMetric> metrics = new HashSet<>();
+      TimelineMetric m1 = new TimelineMetric();
+      m1.setId("MEMORY");
+      m1.setRealtimeAggregationOp(TimelineMetricOperation.SUM);
+      m1.setPostAggregationOp(TimelineMetricOperation.MAX);
+      long ts = System.currentTimeMillis();
+      m1.addValue(ts - 20000, value);
+      metrics.add(m1);
+
+      entity.addMetrics(metrics);
+      te.addEntity(entity);
+    }
+    return te;
+  }
 
   private TimelineEntities generateTestEntities(int groups, int entities) {
     TimelineEntities te = new TimelineEntities();
@@ -100,6 +129,39 @@ public class TestTimelineCollector {
     }
 
     return te;
+  }
+
+  @Test
+  public void testPostAggregation() throws Exception {
+    ConcurrentMap<String, AggregationStatusTable> aggregationGroups =
+        new ConcurrentHashMap<>();
+    int entities = 3;
+    TimelineEntities testEntities1 =
+        generateTestEntitiesForPostAggregation(entities, 1);
+    TimelineEntity resultEntity = TimelineCollector
+        .aggregateEntities(testEntities1, aggregationGroups, "test_result",
+            "TEST_AGGR", false);
+    assertEquals(1 * entities,
+        resultEntity.getMetrics().toArray(new TimelineMetric[0])[0]
+            .getSingleDataValue().intValue());
+
+    TimelineEntities testEntities2 =
+        generateTestEntitiesForPostAggregation(entities, 3);
+    resultEntity = TimelineCollector
+        .aggregateEntities(testEntities2, aggregationGroups, "test_result",
+            "TEST_AGGR", false);
+    assertEquals(3 * entities,
+        resultEntity.getMetrics().toArray(new TimelineMetric[0])[0]
+            .getSingleDataValue().intValue());
+
+    TimelineEntities testEntities3 =
+        generateTestEntitiesForPostAggregation(entities, 2);
+    resultEntity = TimelineCollector
+        .aggregateEntities(testEntities3, aggregationGroups, "test_result",
+            "TEST_AGGR", false);
+    assertEquals(3 * entities,
+        resultEntity.getMetrics().toArray(new TimelineMetric[0])[0]
+            .getSingleDataValue().intValue());
   }
 
   @Test

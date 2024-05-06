@@ -178,6 +178,7 @@ public class NMTimelinePublisher extends CompositeService {
           TimelineMetric memoryMetric = new TimelineMetric();
           memoryMetric.setId(ContainerMetric.MEMORY.toString());
           memoryMetric.setRealtimeAggregationOp(TimelineMetricOperation.SUM);
+          memoryMetric.setPostAggregationOp(TimelineMetricOperation.MAX);
           memoryMetric.addValue(currentTimeMillis, pmemUsage);
           entity.addMetric(memoryMetric);
         }
