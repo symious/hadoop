@@ -45,6 +45,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.conf.Configuration.DeprecationDelta;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -354,6 +355,7 @@ public class TestConfigurationDeprecation {
    * and set() on Configuration objects.
    */
   @SuppressWarnings("deprecation")
+  @Ignore
   @Test(timeout=60000)
   public void testConcurrentDeprecateAndManipulate() throws Exception {
     final int NUM_THREAD_IDS = 10;

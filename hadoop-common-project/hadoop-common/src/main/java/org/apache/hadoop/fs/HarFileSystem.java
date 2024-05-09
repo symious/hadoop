@@ -479,6 +479,11 @@ public class HarFileSystem extends FileSystem {
 
     return fixBlockLocations(locations, start, len, hstatus.getStartIndex());
   }
+
+  @Override
+  public BlockLocation[] getFileBlockLocationsByFileId(Path p, long fileId) throws IOException {
+    return fs.getFileBlockLocationsByFileId(p, fileId);
+  }
   
   /**
    * the hash of the path p inside  the filesystem
@@ -801,6 +806,11 @@ public class HarFileSystem extends FileSystem {
     }
     
     return statuses.toArray(new FileStatus[statuses.size()]);
+  }
+
+  @Override
+  public FileStatus[] listStatusById(Path f, long fileId) throws IOException {
+    return fs.listStatusById(f, fileId);
   }
   
   /**
@@ -1310,5 +1320,22 @@ public class HarFileSystem extends FileSystem {
   @Override
   public FSDataOutputStreamBuilder appendFile(Path path) {
     return fs.appendFile(path);
+  }
+
+  @Override
+  public void setXAttr(Path path, String name, byte[] value, long fileId)
+      throws IOException {
+    fs.setXAttr(path, name, value, fileId);
+  }
+
+  @Override
+  public void setXAttr(Path path, String name, byte[] value, long fileId,
+      EnumSet<XAttrSetFlag> flag) throws IOException {
+    fs.setXAttr(path, name, value, fileId, flag);
+  }
+
+  @Override
+  public byte[] getXAttr(Path path, long fileId, String name) throws IOException {
+    return fs.getXAttr(path, fileId, name);
   }
 }

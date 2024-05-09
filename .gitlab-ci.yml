@@ -4,9 +4,9 @@ variables:
 
 workflow:
   rules:
-    - if: '$CI_MERGE_REQUEST_ID != null'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
       when: never
-    - if: '$CI_COMMIT_REF_NAME == "SPDI-1234" || $CI_COMMIT_REF_NAME =~ /shopee-.*/ || $CI_COMMIT_REF_NAME =~ /ci-.*/'
+    - if: '$CI_COMMIT_REF_NAME =~ /shopee-.*/ || $CI_COMMIT_REF_NAME =~ /ci-.*/'
       variables:
         RUNNER: "release"
       when: always
@@ -25,7 +25,7 @@ compile-release:
     - k8s
     - release
   script:
-    - mvn install -DskipTests
+    - mvn install -T 1C -DskipTests
   rules:
     - if: $RUNNER == "release"
 
@@ -60,7 +60,7 @@ compile-default:
     - k8s
     - default
   script:
-    - mvn install -DskipTests
+    - mvn install -T 1C -DskipTests
   rules:
     - if: $RUNNER == "default"
 

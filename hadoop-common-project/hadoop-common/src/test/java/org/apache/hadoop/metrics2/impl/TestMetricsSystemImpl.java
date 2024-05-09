@@ -433,6 +433,8 @@ public class TestMetricsSystemImpl {
       .addGauge(info("G1", "G1 desc"), 2L)
       .addCounter(info("S1NumOps", "Number of ops for s1"), 1L)
       .addGauge(info("S1AvgTime", "Average time for s1"), 0.0)
+      .addGauge(info("S1IMaxTime", "Interval max time for s1"), (double) Float.MIN_VALUE)
+      .addGauge(info("S1INumOps", "Interval number of ops for s1"), 1L)
       .metrics(), r.metrics());
 
     r = recs.get(1);

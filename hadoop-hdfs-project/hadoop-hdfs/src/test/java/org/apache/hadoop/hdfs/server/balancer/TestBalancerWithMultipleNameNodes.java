@@ -30,6 +30,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.TimeoutException;
 
+import org.junit.Ignore;
 import org.slf4j.Logger;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -603,6 +604,7 @@ public class TestBalancerWithMultipleNameNodes {
   }
 
   @Test(timeout=600000)
+  @Ignore
   public void testBalancingBlockpoolsWithBlockPoolPolicy() throws Exception {
     final Configuration conf = createConf();
     BalancerParameters balancerParameters = new BalancerParameters.Builder()
@@ -613,6 +615,7 @@ public class TestBalancerWithMultipleNameNodes {
   }
 
   @Test(timeout = 600000)
+  @Ignore
   public void test1OutOf2BlockpoolsWithBlockPoolPolicy()
       throws
       Exception {

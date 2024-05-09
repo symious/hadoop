@@ -476,6 +476,8 @@ public class AdminStatesBaseTest {
     if (cluster != null) {
       cluster.shutdown(true);
     }
+    cluster = null;
+    System.gc();
   }
 
   protected void refreshNodes(final int nnIndex) throws IOException {

@@ -221,6 +221,7 @@ public class TestDFSStripedOutputStreamWithFailureBase {
     if (cluster != null) {
       cluster.shutdown();
       cluster = null;
+      System.gc();
     }
   }
 

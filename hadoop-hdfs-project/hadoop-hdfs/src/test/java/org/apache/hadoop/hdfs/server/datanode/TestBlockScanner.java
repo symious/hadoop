@@ -144,6 +144,7 @@ public class TestBlockScanner {
         }
         cluster.shutdown();
       }
+      System.gc();
     }
 
     public void createFiles(int nsIdx, int numFiles, int length)

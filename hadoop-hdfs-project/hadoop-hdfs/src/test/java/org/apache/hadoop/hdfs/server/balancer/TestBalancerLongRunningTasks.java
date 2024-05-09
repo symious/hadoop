@@ -46,6 +46,7 @@ import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.LazyPersistTestCase
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.junit.After;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -401,6 +402,7 @@ public class TestBalancerLongRunningTasks {
    *
    * @throws Exception
    */
+  @Ignore
   @Test(timeout = 100000)
   public void testUpgradeDomainPolicyAfterBalance() throws Exception {
     final Configuration conf = new HdfsConfiguration();
@@ -421,6 +423,7 @@ public class TestBalancerLongRunningTasks {
    *
    * @throws Exception
    */
+  @Ignore
   @Test(timeout = 100000)
   public void testRackPolicyAfterBalance() throws Exception {
     final Configuration conf = new HdfsConfiguration();

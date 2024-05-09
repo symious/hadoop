@@ -61,7 +61,9 @@ public class TestGangliaMetrics {
       testNamePrefix + ".s1rec.Xxx",
       testNamePrefix + ".s1rec.Yyy",
       testNamePrefix + ".s1rec.S1NumOps",
-      testNamePrefix + ".s1rec.S1AvgTime"
+      testNamePrefix + ".s1rec.S1AvgTime",
+      testNamePrefix + ".s1rec.S1IMaxTime",
+      testNamePrefix + ".s1rec.S1INumOps"
   };
 
   @Test

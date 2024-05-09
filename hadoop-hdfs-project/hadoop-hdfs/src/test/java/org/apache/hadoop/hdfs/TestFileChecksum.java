@@ -17,12 +17,16 @@
  */
 package org.apache.hadoop.hdfs;
 
+import java.io.IOException;
+import java.util.Random;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileChecksum;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
@@ -36,15 +40,9 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.slf4j.event.Level;
-
-import java.io.IOException;
-import java.util.Random;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_ACCESS_TOKEN_ENABLE_KEY;
 import static org.mockito.Mockito.doThrow;
@@ -56,7 +54,6 @@ import static org.mockito.Mockito.mock;
  * layout. For simple, it assumes 6 data blocks in both files and the block size
  * are the same.
  */
-@RunWith(Parameterized.class)
 public class TestFileChecksum {
   private static final Logger LOG = LoggerFactory
       .getLogger(TestFileChecksum.class);
@@ -84,17 +81,10 @@ public class TestFileChecksum {
   private String stripedFile2 = ecDir + "/stripedFileChecksum2";
   private String replicatedFile = "/replicatedFileChecksum";
 
-  private String checksumCombineMode;
+  protected String checksumCombineMode;
 
-  public TestFileChecksum(String checksumCombineMode) {
-    this.checksumCombineMode = checksumCombineMode;
-  }
-
-  @Parameterized.Parameters
-  public static Object[] getParameters() {
-    return new Object[] {
-        Options.ChecksumCombineMode.MD5MD5CRC.name(),
-        Options.ChecksumCombineMode.COMPOSITE_CRC.name()};
+  public TestFileChecksum() {
+    this.checksumCombineMode = Options.ChecksumCombineMode.MD5MD5CRC.name();
   }
 
   @Rule

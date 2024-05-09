@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.TestTrash;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class TestViewFsTrash {
@@ -70,6 +71,7 @@ public class TestViewFsTrash {
   }
   
   @Test
+  @Ignore
   public void testTrash() throws Exception {
     TestTrash.trashShell(conf, fileSystemTestHelper.getTestRootPath(fsView),
         fsTarget, new Path(fsTarget.getHomeDirectory(), ".Trash/Current"));

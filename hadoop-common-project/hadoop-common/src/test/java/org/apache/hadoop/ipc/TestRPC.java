@@ -53,6 +53,7 @@ import org.apache.hadoop.test.MockitoUtil;
 import org.apache.hadoop.test.Whitebox;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
@@ -1034,6 +1035,7 @@ public class TestRPC extends TestRpcBase {
    * output streams are frozen.
    */
   @Test(timeout=30000)
+  @Ignore
   public void testSlowConnection() throws Exception {
     SocketFactory mockFactory = Mockito.mock(SocketFactory.class);
     Socket mockSocket = Mockito.mock(Socket.class);

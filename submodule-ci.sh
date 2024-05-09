@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-export COMMIT_BEFORE_SHA="$(git rev-parse HEAD~1)"
+if [ -z "$CI_MERGE_REQUEST_DIFF_BASE_SHA" ]; then
+  export COMMIT_BEFORE_SHA="$(git rev-parse HEAD~1)"
+else
+  export COMMIT_BEFORE_SHA=$CI_MERGE_REQUEST_DIFF_BASE_SHA
+fi
 
 export COMMIT_SHA="$(git rev-parse HEAD~0)"
 echo "COMMIT_BEFORE_SHA is $COMMIT_BEFORE_SHA and COMMIT_SHA is $COMMIT_SHA"
@@ -26,11 +30,19 @@ TAGS="tags:
     - k8s
     - $RUNNER"
 
-COMMON_SCRIPTS="- export _JAVA_OPTIONS=\"-Djava.net.preferIPv4Stack=true\"
+COMMON_SCRIPTS="- export _JAVA_OPTIONS=\"\$_JAVA_OPTIONS -Djava.net.preferIPv4Stack=true\"
     - mvn test
     - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
-    - cd target/surefire-reports
-    - 'test \$(find . -type f -name \"*.txt\" ! -name \"*-output.txt\" -print0 | xargs -0 grep -L \"Failures: 0\" | wc -l) -eq 0'"
+    - cd target/surefire-reports"
+
+COMMON_SCRIPTS_PARALLEL_TESTS="- export _JAVA_OPTIONS=\"\$_JAVA_OPTIONS -Djava.net.preferIPv4Stack=true\"
+    - mvn test -P parallel-tests
+    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    - cd target/surefire-reports"
+
+# To make stuff run in MR pipelines
+SUFFIX="rules:
+    - when: always"
 
 CI_CONFIG_FILE="submodule-ci.yml"
 
@@ -60,6 +72,7 @@ hadoop-yarn-api:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-api/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-yarn-client)
@@ -77,6 +90,7 @@ hadoop-yarn-client:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-client/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-yarn-common)
@@ -94,6 +108,7 @@ hadoop-yarn-common:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-common/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-yarn-csi)
@@ -111,6 +126,7 @@ hadoop-yarn-csi:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-csi/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-yarn-registry)
@@ -128,6 +144,7 @@ hadoop-yarn-registry:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-registry/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-yarn-server-applicationhistoryservice)
@@ -145,6 +162,7 @@ hadoop-yarn-server-applicationhistoryservice:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-applicationhistoryservice/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-yarn-server-common)
@@ -162,6 +180,7 @@ hadoop-yarn-server-common:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-common/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-yarn-server-globalpolicygenerator)
@@ -179,6 +198,7 @@ hadoop-yarn-server-globalpolicygenerator:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-globalpolicygenerator/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-yarn-server-nodemanager)
@@ -196,6 +216,7 @@ hadoop-yarn-server-nodemanager:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-nodemanager/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-yarn-server-resourcemanager)
@@ -215,6 +236,7 @@ hadoop-yarn-server-resourcemanager:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-yarn-server-router)
@@ -232,6 +254,7 @@ hadoop-yarn-server-router:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-router/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-yarn-server-sharedcachemanager)
@@ -249,6 +272,7 @@ hadoop-yarn-server-sharecachemanager:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-sharedcachemanager/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-yarn-server-timeline-pluginstorage)
@@ -266,6 +290,7 @@ hadoop-yarn-server-timeline-pluginstorage:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-timeline-pluginstorage/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-yarn-server-timelineservice)
@@ -283,6 +308,7 @@ hadoop-yarn-server-timelineservice:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-timelineservice/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-yarn-server-timelineservice-documentstore)
@@ -300,6 +326,7 @@ hadoop-yarn-server-timelineservice-documentstore:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-timelineservice-documentstore/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-yarn-server-web-proxy)
@@ -317,6 +344,7 @@ hadoop-yarn-server-web-proxy:
     reports:
       junit:
         - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-web-proxy/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
      ;;
      hadoop-hdfs)
@@ -327,7 +355,7 @@ hadoop-hdfs:
   $TAGS
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs
-    $COMMON_SCRIPTS
+    $COMMON_SCRIPTS_PARALLEL_TESTS
   after_script:
       - |
         [ -e ./hadoop-hdfs-project/hadoop-hdfs/target/surefire-reports/ ] && for FILE in ./hadoop-hdfs-project/hadoop-hdfs/target/surefire-reports/TEST-*.xml; do sed -i -e '/<system-out>.*<\/system-out>/d' \$FILE; sed -i -e '/<system-out>/,/<\/system-out>/d' \$FILE; done
@@ -337,6 +365,7 @@ hadoop-hdfs:
     reports:
       junit:
         - hadoop-hdfs-project/hadoop-hdfs/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
       ;;
       hadoop-hdfs-client)
@@ -354,6 +383,7 @@ hadoop-hdfs-client:
     reports:
       junit:
         - hadoop-hdfs-project/hadoop-hdfs-client/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
       ;;
       hadoop-hdfs-httpfs)
@@ -371,6 +401,7 @@ hadoop-hdfs-httpfs:
     reports:
       junit:
         - hadoop-hdfs-project/hadoop-hdfs-httpfs/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
       ;;
       hadoop-hdfs-rbf)
@@ -388,6 +419,7 @@ hadoop-hdfs-rbf:
     reports:
       junit:
         - hadoop-hdfs-project/hadoop-hdfs-rbf/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
       ;;
       hadoop-common)
@@ -398,13 +430,14 @@ hadoop-common:
   $TAGS
   script:
     - cd hadoop-common-project/hadoop-common
-    $COMMON_SCRIPTS
+    $COMMON_SCRIPTS_PARALLEL_TESTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always
     reports:
       junit:
         - hadoop-common-project/hadoop-common/target/surefire-reports/TEST-*.xml
+  $SUFFIX
 EOF
       ;;
      *)
@@ -420,5 +453,6 @@ empty:
   $TAGS
   script:
     - echo empty
+  $SUFFIX
 EOF
 fi

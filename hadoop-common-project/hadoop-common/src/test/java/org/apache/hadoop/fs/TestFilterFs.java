@@ -40,6 +40,9 @@ public class TestFilterFs {
     public Iterator<LocatedFileStatus> listLocatedStatus(final Path f) {
       return null;
     }
+    public String getPathNameByTarget(Path p) {
+      return null;
+    }
   }
 
   @Test

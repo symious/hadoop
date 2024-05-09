@@ -415,7 +415,7 @@
       <comparators>
         <comparator>
           <type>RegexpComparator</type>
-          <expected-output>^-rm \[-f\] \[-r\|-R\] \[-skipTrash\] \[-safely\] &lt;src&gt; \.\.\. :\s*</expected-output>
+          <expected-output>^-rm \[-f\] \[-r\|-R\] \[-skipTrash\] \[-safely\] \[-constraint &lt;value&gt;\] &lt;src&gt; \.\.\. :\s*</expected-output>
         </comparator>
         <comparator>
           <type>RegexpComparator</type>

@@ -173,6 +173,5 @@ public class TestAfsCheckPath {
     public void setVerifyChecksum(boolean verifyChecksum) throws IOException {
       // deliberately empty
     }
-    
   }
 }

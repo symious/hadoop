@@ -35,14 +35,14 @@
 
     <failIfNoTests>false</failIfNoTests>
     <!--Whether to proceed to next module if any test failures exist-->
-    <ignoreTestFailure>true</ignoreTestFailure>
+    <ignoreTestFailure>false</ignoreTestFailure>
     <maven.test.redirectTestOutputToFile>true</maven.test.redirectTestOutputToFile>
     <jetty.version>9.4.44.v20210927</jetty.version>
     <test.exclude>_</test.exclude>
     <test.exclude.pattern>_</test.exclude.pattern>
 
     <!-- number of threads/forks to use when running tests in parallel, see parallel-tests profile -->
-    <testsThreadCount>2</testsThreadCount>
+    <testsThreadCount>4</testsThreadCount>
 
     <!-- These 2 versions are defined here because they are used -->
     <!-- JDIFF generation from embedded ant in the antrun plugin -->

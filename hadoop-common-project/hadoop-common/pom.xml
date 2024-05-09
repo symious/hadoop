@@ -515,6 +515,7 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
           <systemPropertyVariables>
+            <argLine>${argLine} -XX:+HeapDumpOnOutOfMemoryError</argLine>
             <runningWithNative>${runningWithNative}</runningWithNative>
           </systemPropertyVariables>
           <properties>
@@ -524,6 +525,26 @@
             </property>
           </properties>
         </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.7</version>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>test</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
       <plugin>
         <groupId>org.apache.avro</groupId>
@@ -919,7 +940,9 @@
               <testFailureIgnore>${ignoreTestFailure}</testFailureIgnore>
               <forkCount>${testsThreadCount}</forkCount>
               <reuseForks>false</reuseForks>
-              <argLine>${maven-surefire-plugin.argLine} -DminiClusterDedicatedDirs=true</argLine>
+              <rerunFailingTestsCount>6</rerunFailingTestsCount>
+              <argLine>${argLine} -XX:+HeapDumpOnOutOfMemoryError -DminiClusterDedicatedDirs=true
+              </argLine>
               <systemPropertyVariables>
                 <testsThreadCount>${testsThreadCount}</testsThreadCount>
                 <test.build.data>${test.build.data}/${surefire.forkNumber}</test.build.data>
@@ -933,6 +956,26 @@
                 <test.unique.fork.id>fork-${surefire.forkNumber}</test.unique.fork.id>
               </systemPropertyVariables>
             </configuration>
+          </plugin>
+          <plugin>
+            <groupId>org.jacoco</groupId>
+            <artifactId>jacoco-maven-plugin</artifactId>
+            <version>0.8.7</version>
+            <executions>
+              <execution>
+                <id>prepare-agent</id>
+                <goals>
+                  <goal>prepare-agent</goal>
+                </goals>
+              </execution>
+              <execution>
+                <id>report</id>
+                <phase>test</phase>
+                <goals>
+                  <goal>report</goal>
+                </goals>
+              </execution>
+            </executions>
           </plugin>
         </plugins>
       </build>

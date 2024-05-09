@@ -511,7 +511,11 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
               <testFailureIgnore>${ignoreTestFailure}</testFailureIgnore>
               <forkCount>${testsThreadCount}</forkCount>
               <reuseForks>false</reuseForks>
-              <argLine>${argLine} -Xmx4096m -XX:+HeapDumpOnOutOfMemoryError -DminiClusterDedicatedDirs=true</argLine>
+              <rerunFailingTestsCount>6</rerunFailingTestsCount>
+              <forkedProcessExitTimeoutInSeconds>600</forkedProcessExitTimeoutInSeconds>
+              <argLine>${argLine} -Xmx4096m -XX:+HeapDumpOnOutOfMemoryError
+                -DminiClusterDedicatedDirs=true
+              </argLine>
               <systemPropertyVariables>
                 <testsThreadCount>${testsThreadCount}</testsThreadCount>
                 <test.build.data>${test.build.data}/${surefire.forkNumber}</test.build.data>

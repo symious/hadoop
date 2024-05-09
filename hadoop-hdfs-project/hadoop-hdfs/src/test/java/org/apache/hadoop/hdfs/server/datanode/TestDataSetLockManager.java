@@ -102,6 +102,7 @@ public class TestDataSetLockManager {
 
   @Test(timeout = 10000)
   public void testMetrics() throws InterruptedException {
+    DataSetLockManager.resetMetrics();
     Thread t1, t2;
     int longHolds = 0;
 

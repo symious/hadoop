@@ -155,6 +155,11 @@ public class FilterFileSystem extends FileSystem {
   }
 
   @Override
+  public BlockLocation[] getFileBlockLocationsByFileId(Path p, long fileId) throws IOException {
+    return fs.getFileBlockLocationsByFileId(p, fileId);
+  }
+
+  @Override
   public Path resolvePath(final Path p) throws IOException {
     return fs.resolvePath(p);
   }
@@ -272,6 +277,11 @@ public class FilterFileSystem extends FileSystem {
   @Override
   public FileStatus[] listStatus(Path f) throws IOException {
     return fs.listStatus(f);
+  }
+
+  @Override
+  public FileStatus[] listStatusById(Path f, long fileId) throws IOException {
+    return fs.listStatusById(f, fileId);
   }
 
   @Override
@@ -633,8 +643,25 @@ public class FilterFileSystem extends FileSystem {
   }
 
   @Override
+  public void setXAttr(Path path, String name, byte[] value, long fileId)
+      throws IOException {
+    fs.setXAttr(path, name, value, fileId);
+  }
+
+  @Override
+  public void setXAttr(Path path, String name, byte[] value, long fileId,
+      EnumSet<XAttrSetFlag> flag) throws IOException {
+    fs.setXAttr(path, name, value, fileId, flag);
+  }
+
+  @Override
   public byte[] getXAttr(Path path, String name) throws IOException {
     return fs.getXAttr(path, name);
+  }
+
+  @Override
+  public byte[] getXAttr(Path path, long fileId, String name) throws IOException {
+    return fs.getXAttr(path, fileId, name);
   }
 
   @Override
