@@ -49,6 +49,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 
 import org.apache.hadoop.hdfs.protocol.UnresolvedPathException;
+import org.apache.hadoop.hdfs.server.federation.resolver.order.DestinationOrder;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.crypto.CryptoProtocolVersion;
@@ -1817,6 +1818,21 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
         MountTable entry = mountTable.getMountPoint(path);
         if (entry != null) {
           return entry.isAll();
+        }
+      } catch (IOException e) {
+        LOG.error("Cannot get mount point", e);
+      }
+    }
+    return false;
+  }
+
+  boolean isFixedOrder(final String path) {
+    if (subclusterResolver instanceof MountTableResolver) {
+      try {
+        MountTableResolver mountTable = (MountTableResolver) subclusterResolver;
+        MountTable entry = mountTable.getMountPoint(path);
+        if (entry != null) {
+          return entry.getDestOrder().equals(DestinationOrder.FIXED);
         }
       } catch (IOException e) {
         LOG.error("Cannot get mount point", e);

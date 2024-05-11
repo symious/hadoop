@@ -15,28 +15,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.hadoop.hdfs.server.federation.resolver.order;
 
-import java.util.EnumSet;
+import org.apache.hadoop.hdfs.server.federation.resolver.PathLocation;
+import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-/**
- * Order of the destinations when we have multiple of them. When the resolver
- * of files to subclusters (FileSubclusterResolver) has multiple destinations,
- * this determines which location should be checked first.
- */
-public enum DestinationOrder {
-  HASH, // Follow consistent hashing in the first folder level
-  LOCAL, // Local first
-  RANDOM, // Random order
-  HASH_ALL, // Follow consistent hashing
-  SPACE, // Available space based order
-  SUFFIX, // The suffix path based order
-  FIXED; // Always return in the order provided
+public class FixedOrderResolver implements OrderedResolver {
 
-  /** Approaches that write folders in all subclusters. */
-  public static final EnumSet<DestinationOrder> FOLDER_ALL = EnumSet.of(
-      HASH_ALL,
-      RANDOM,
-      SPACE,
-      SUFFIX);
+  private static final Logger LOG = LoggerFactory.getLogger(FixedOrderResolver.class);
+
+  @Override
+  public String getFirstNamespace(String path, PathLocation loc) {
+    if (loc == null || loc.getDestinations().isEmpty()) {
+      LOG.error("Cannot get namespaces for {}", loc);
+      return null;
+    }
+    String result = null;
+    RemoteLocation remoteLocation = loc.getDestinations().get(0);
+    if (remoteLocation != null) {
+      result = remoteLocation.getNameserviceId();
+      LOG.debug("First ns resolution: path={}, ns={}", path, result);
+    }
+    return result;
+  }
 }

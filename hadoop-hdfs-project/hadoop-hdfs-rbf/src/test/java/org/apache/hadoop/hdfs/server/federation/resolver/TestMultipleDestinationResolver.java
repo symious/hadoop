@@ -25,6 +25,7 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -148,6 +149,14 @@ public class TestMultipleDestinationResolver {
     tmpMap = new HashMap<>();
     tmpMap.put("subcluster7", "/dir7_sub");
     resolver.addEntry(MountTable.newInstance("/dir7", tmpMap));
+
+    Map<String, String> mapFixed = new LinkedHashMap<>();
+    mapFixed.put("subcluster2", "/fixed");
+    mapFixed.put("subcluster1", "/fixed");
+    mapFixed.put("subcluster0", "/fixed");
+    MountTable fixedEntry = MountTable.newInstance("/fixed", mapFixed);
+    fixedEntry.setDestOrder(DestinationOrder.FIXED);
+    resolver.addEntry(fixedEntry);
   }
 
   @Test
@@ -402,6 +411,13 @@ public class TestMultipleDestinationResolver {
       destinations.add(nsId);
     }
     assertEquals(3, destinations.size());
+  }
+
+  @Test
+  public void testFixedResolver() throws IOException {
+    PathLocation dest0 = resolver.getDestinationForPath("/fixed/folder0/file0.txt");
+    // 2->1->0
+    assertDest("subcluster2", dest0);
   }
 
   /**

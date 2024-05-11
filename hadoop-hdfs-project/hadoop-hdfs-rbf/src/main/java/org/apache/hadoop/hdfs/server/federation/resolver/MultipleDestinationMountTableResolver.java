@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.server.federation.resolver.order.AvailableSpaceResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.order.DestinationOrder;
+import org.apache.hadoop.hdfs.server.federation.resolver.order.FixedOrderResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.order.HashFirstResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.order.HashResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.order.LocalResolver;
@@ -85,9 +86,9 @@ public class MultipleDestinationMountTableResolver extends MountTableResolver {
     addResolver(DestinationOrder.LOCAL, new LocalResolver(conf, router));
     addResolver(DestinationOrder.RANDOM, new RandomResolver());
     addResolver(DestinationOrder.HASH_ALL, new HashResolver());
-    addResolver(DestinationOrder.SPACE,
-        new AvailableSpaceResolver(conf, router));
+    addResolver(DestinationOrder.SPACE, new AvailableSpaceResolver(conf, router));
     addResolver(DestinationOrder.SUFFIX, new SuffixResolver());
+    addResolver(DestinationOrder.FIXED, new FixedOrderResolver());
   }
 
   @Override

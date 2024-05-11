@@ -139,6 +139,7 @@ message MountTableRecordProto {
     HASH_ALL = 3;
     SPACE = 4;
     SUFFIX = 100;
+    FIXED = 101;
   }
   optional DestOrder destOrder = 6 [default = HASH];
 
