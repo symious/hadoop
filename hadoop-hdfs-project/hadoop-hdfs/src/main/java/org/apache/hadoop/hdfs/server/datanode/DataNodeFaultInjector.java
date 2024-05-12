@@ -161,4 +161,10 @@ public class DataNodeFaultInjector {
    * Used as a hook to delay sending the response of the last packet.
    */
   public void delayAckLastPacket() throws IOException {}
+
+  /**
+   * Used in {@link DirectoryScanner#reconcile()} to wait until a storage is removed,
+   * leaving a stale copy of {@link DirectoryScanner#diffs}.
+   */
+  public void waitUntilStorageRemoved() {}
 }

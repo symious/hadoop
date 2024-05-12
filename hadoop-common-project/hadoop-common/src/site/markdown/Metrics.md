@@ -456,6 +456,7 @@ Each metrics record contains tags such as SessionId and Hostname as additional i
 | `EcReconstructionBytesRead` | Total number of bytes read by erasure coding worker |
 | `EcReconstructionBytesWritten` | Total number of bytes written by erasure coding worker |
 | `EcReconstructionRemoteBytesRead` | Total number of bytes remote read by erasure coding worker |
+| `NullStorageBlockReports` | Number of blocks in IBRs that failed due to null storage |
 
 FsVolume
 --------
