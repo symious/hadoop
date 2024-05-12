@@ -412,7 +412,7 @@ hadoop-hdfs-rbf:
   $TAGS
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs-rbf
-    $COMMON_SCRIPTS
+    $COMMON_SCRIPTS_PARALLEL_TESTS
   coverage: '/Total.*?([0-9]{1,3})%/'
   artifacts:
     when: always

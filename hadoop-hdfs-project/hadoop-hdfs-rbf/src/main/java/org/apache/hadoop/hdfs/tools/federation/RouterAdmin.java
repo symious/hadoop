@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.regex.Pattern;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -99,6 +100,9 @@ public class RouterAdmin extends Configured implements Tool {
   private static final Logger LOG = LoggerFactory.getLogger(RouterAdmin.class);
 
   private RouterClient client;
+  final public static String DESTINATIONS_NOTE = "\n\t <destination(s)> is one destination "
+      + "or as many as there are nameservices, "
+      + "delimited by commas, or fully escaped and delimited by spaces.\n";
 
   /** Pre-compiled regular expressions to detect duplicated slashes. */
   private static final Pattern SLASHES = Pattern.compile("/+");
@@ -129,6 +133,10 @@ public class RouterAdmin extends Configured implements Tool {
   }
 
   private String getUsage(String cmd) {
+    return getUsage(cmd, true);
+  }
+
+  private String getUsage(String cmd, boolean printDestinationsNote) {
     if (cmd == null) {
       String[] commands =
           {"-add", "-update", "-rm", "-ls", "-getDestination", "-setQuota",
@@ -139,26 +147,35 @@ public class RouterAdmin extends Configured implements Tool {
       StringBuilder usage = new StringBuilder();
       usage.append("Usage: hdfs dfsrouteradmin :\n");
       for (int i = 0; i < commands.length; i++) {
-        usage.append(getUsage(commands[i]));
+        usage.append(getUsage(commands[i], false));
         if (i + 1 < commands.length) {
           usage.append("\n");
         }
       }
+      if (printDestinationsNote) {
+        usage.append(DESTINATIONS_NOTE);
+      }
       return usage.toString();
     }
     if (cmd.equals("-add")) {
-      return "\t[-add <source> <nameservice1, nameservice2, ...> "
-          + "<one destination or the same number of destinations as nameservices> "
+      String usage = "\t[-add <source> <nameservice1, nameservice2, ...> <destination(s)> "
           + "[-readonly] [-faulttolerant] "
-          + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX] "
+          + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX|FIXED] "
           + "-owner <owner> -group <group> -mode <mode>]";
+      if (printDestinationsNote) {
+        usage += DESTINATIONS_NOTE;
+      }
+      return usage;
     } else if (cmd.equals("-update")) {
-      return "\t[-update <source>"
-          + " [<nameservice1, nameservice2, ...> "
-          + "<one destination or the same number of destinations as nameservices>] "
+      String usage = "\t[-update <source>"
+          + " [<nameservice1, nameservice2, ...> <destination(s)>] "
           + "[-readonly true|false] [-faulttolerant true|false] "
-          + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX] "
+          + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX|FIXED] "
           + "-owner <owner> -group <group> -mode <mode>]";
+      if (printDestinationsNote) {
+        usage += DESTINATIONS_NOTE;
+      }
+      return usage;
     } else if (cmd.equals("-rm")) {
       return "\t[-rm <source>]";
     } else if (cmd.equals("-ls")) {
@@ -487,7 +504,9 @@ public class RouterAdmin extends Configured implements Tool {
     // Mandatory parameters
     String mount = parameters[i++];
     String[] nss = parameters[i++].split(",");
-    String[] destinations = parameters[i++].split(",");
+    Pair<Integer, String[]> result = extractDestinations(nss.length, parameters, i);
+    i = result.getLeft();
+    String[] destinations = result.getRight();
 
     // Optional parameters
     boolean readOnly = false;
@@ -528,6 +547,36 @@ public class RouterAdmin extends Configured implements Tool {
 
     return addMount(mount, nss, destinations, readOnly, faultTolerant, order,
         new ACLEntity(owner, group, mode));
+  }
+
+  /**
+   * Extracts destinations from parameters.
+   * @param expectedDests expected number of destinations
+   * @param parameters parameters to extract from
+   * @param i starting index of first destination in parameters
+   * @return starting index of first optional parameter after all destinations
+   */
+  private Pair<Integer, String[]> extractDestinations(int expectedDests, String[] parameters, int i) {
+    String[] destinations;
+    if (expectedDests == 1) {
+      destinations = new String[] { parameters[i++] };
+    } else {
+      if (i + 1 < parameters.length && !parameters[i + 1].startsWith("-")) {
+        // Multiple destinations expected
+        // And at least 2 destination params found
+        // No need to check beyond 2nd destination. A validation check later will fail the command
+        // if a 3rd or later destination is actually an optional param.
+
+        // Get the next n params as destinations, no splitting
+        destinations = Arrays.copyOfRange(parameters, i, i + expectedDests);
+        i += expectedDests;
+      } else {
+        // Backward compatibility with normal "," splitting
+        destinations = parameters[i].split(",");
+        i++;
+      }
+    }
+    return Pair.of(i, destinations);
   }
 
   /**
@@ -643,7 +692,9 @@ public class RouterAdmin extends Configured implements Tool {
 
     if (!parameters[i].startsWith("-")) {
       String[] nss = parameters[i++].split(",");
-      String[] destinations = parameters[i++].split(",");
+      Pair<Integer, String[]> result = extractDestinations(nss.length, parameters, i);
+      i = result.getLeft();
+      String[] destinations = result.getRight();
       Map<String, String> destMap = getDestMap(nss, destinations);
       final List<RemoteLocation> locations = new LinkedList<>();
       for (Entry<String, String> entry : destMap.entrySet()) {

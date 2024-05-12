@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.federation.router;
 
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.createNamenodeReport;
+import static org.apache.hadoop.hdfs.tools.federation.RouterAdmin.DESTINATIONS_NOTE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -588,20 +589,20 @@ public class TestRouterAdminCLI {
     assertEquals(-1, ToolRunner.run(admin, argv));
     assertTrue("Wrong message: " + out, out.toString().contains(
         "\t[-add <source> <nameservice1, nameservice2, ...> "
-            + "<one destination or the same number of destinations as nameservices> "
+            + "<destination(s)> "
             + "[-readonly] [-faulttolerant] "
-            + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX] "
-            + "-owner <owner> -group <group> -mode <mode>]"));
+            + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX|FIXED] "
+            + "-owner <owner> -group <group> -mode <mode>]" + DESTINATIONS_NOTE));
     out.reset();
 
     argv = new String[] {"-update", src, nsId};
     assertEquals(-1, ToolRunner.run(admin, argv));
     assertTrue("Wrong message: " + out, out.toString().contains(
         "\t[-update <source> [<nameservice1, nameservice2, ...> "
-            + "<one destination or the same number of destinations as nameservices>] "
+            + "<destination(s)>] "
             + "[-readonly true|false] [-faulttolerant true|false] "
-            + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX] "
-            + "-owner <owner> -group <group> -mode <mode>]"));
+            + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX|FIXED] "
+            + "-owner <owner> -group <group> -mode <mode>]" + DESTINATIONS_NOTE));
     out.reset();
 
     argv = new String[] {"-rm"};
@@ -647,15 +648,15 @@ public class TestRouterAdminCLI {
     assertEquals(-1, ToolRunner.run(admin, argv));
     String expected = "Usage: hdfs dfsrouteradmin :\n"
         + "\t[-add <source> <nameservice1, nameservice2, ...> "
-        + "<one destination or the same number of destinations as nameservices> "
+        + "<destination(s)> "
         + "[-readonly] [-faulttolerant] "
-        + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX] "
+        + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX|FIXED] "
         + "-owner <owner> -group <group> -mode <mode>]\n"
         + "\t[-update <source> [<nameservice1, nameservice2, ...> "
-        + "<one destination or the same number of destinations as nameservices>]"
+        + "<destination(s)>]"
         + " [-readonly true|false]"
         + " [-faulttolerant true|false] "
-        + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX] "
+        + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX|FIXED] "
         + "-owner <owner> -group <group> -mode <mode>]\n" + "\t[-rm <source>]\n"
         + "\t[-ls [-d] <path>]\n"
         + "\t[-getDestination <path>]\n"
@@ -669,7 +670,8 @@ public class TestRouterAdminCLI {
         + "\t[-nameservice enable | disable <nameservice>]\n"
         + "\t[-getDisabledNameservices]\n"
         + "\t[-refresh]\n"
-        + "\t[-refreshRouterArgs <host:ipc_port> <key> [arg1..argn]]";
+        + "\t[-refreshRouterArgs <host:ipc_port> <key> [arg1..argn]]\n"
+        + "\t[-refreshSuperUserGroupsConfiguration]" + DESTINATIONS_NOTE;
     assertTrue("Wrong message: " + out, out.toString().contains(expected));
     out.reset();
   }
@@ -1572,34 +1574,125 @@ public class TestRouterAdminCLI {
     System.setErr(new PrintStream(err));
 
     stateStore.loadCache(MountTableStoreImpl.class, true);
-    String[] argv = new String[] {"-add", "/multipleDestination0", "ns01,ns02", "/tmp0"};
+    String[] argv = new String[] { "-add", "/multipleDestination0", "ns01,ns02", "/tmp0" };
     assertEquals(0, ToolRunner.run(admin, argv));
     err.reset();
 
-    stateStore.loadCache(MountTableStoreImpl.class, true);
-    argv = new String[] {"-add", "/multipleDestination1", "ns01,ns02", "/tmp1_1,/tmp2_1"};
+    argv = new String[] { "-add", "/multipleDestination1", "ns01,ns02", "/tmp1_1,/tmp2_1" };
     assertEquals(0, ToolRunner.run(admin, argv));
     err.reset();
 
-    argv = new String[] {"-add", "/multipleDestination2", "ns01", "/tmp1_2,/tmp2_2"};
+    argv = new String[] { "-add", "/multipleDestination1.5", "ns01,ns02", "/tmp1_1", "/tmp2_1" };
+    assertEquals(0, ToolRunner.run(admin, argv));
+    err.reset();
+
+    argv = new String[] { "-add", "/multipleDestination1.6", "ns01,ns02", "/tmp1_1,/tmp2_1",
+        "/tmp1_1,/tmp2_1" };
+    assertEquals(0, ToolRunner.run(admin, argv));
+    err.reset();
+
+    argv = new String[] { "-add", "/multipleDestination2", "ns01", "/tmp1_2,/tmp2_2" };
+    assertEquals(0, ToolRunner.run(admin, argv));
+    err.reset();
+    out.reset();
+
+    argv = new String[] { "-add", "/multipleDestination2.5", "ns01", "/tmp1_2", "/tmp2_2" };
+    assertEquals(-1, ToolRunner.run(admin, argv));
+    assertTrue("Wrong message: " + out, out.toString().contains(
+        "\t[-add <source> <nameservice1, nameservice2, ...> "
+            + "<destination(s)> "
+            + "[-readonly] [-faulttolerant] "
+            + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX|FIXED] "
+            + "-owner <owner> -group <group> -mode <mode>]" + DESTINATIONS_NOTE));
+    err.reset();
+
+    argv = new String[] { "-add", "/multipleDestination3", "ns01,ns02", "/tmp1_2,/tmp2_2,/tmp3_2" };
     assertEquals(-1, ToolRunner.run(admin, argv));
     assertTrue(err.toString(), err.toString().contains("Invalid namespaces and destinations."));
     err.reset();
 
-    argv = new String[] {"-add", "/multipleDestination2", "ns01,ns02", "/tmp1_2,/tmp2_2,/tmp3_2"};
+    argv = new String[] { "-add", "/multipleDestination4", "ns01,ns02", "/tmp1_2,/tmp2_2,/tmp3_2",
+        "/tmp1_2,/tmp2_2,/tmp3_2" };
+    assertEquals(0, ToolRunner.run(admin, argv));
+    err.reset();
+
+    argv = new String[] { "-add", "/multipleDestination5", "ns01,ns02",
+        // No colon, no slash
+        "/tmp1_1/,\"\\ `1234567890-=[];',.~!@#$%^&*()_+{}|<>?/weirdchars",
+        "/tmp2_1/,\"\\ `1234567890-=[];',.~!@#$%^&*()_+{}|<>?/weirdchars" };
+    assertEquals(0, ToolRunner.run(admin, argv));
+    err.reset();
+
+    argv = new String[] { "-add", "/multipleDestination6", "ns01,ns02,ns03", "/tmp1,/tmp2,/tmp3" };
+    assertEquals(0, ToolRunner.run(admin, argv));
+    err.reset();
+    out.reset();
+
+    argv = new String[] { "-add", "/multipleDestination6.5", "ns01,ns02,ns03", "/tmp1,/tmp2", "/tmp3" };
     assertEquals(-1, ToolRunner.run(admin, argv));
-    assertTrue(err.toString(), err.toString().contains("Invalid namespaces and destinations."));
+    assertTrue("Wrong message: " + out, out.toString().contains(
+        "\t[-add <source> <nameservice1, nameservice2, ...> "
+            + "<destination(s)> "
+            + "[-readonly] [-faulttolerant] "
+            + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX|FIXED] "
+            + "-owner <owner> -group <group> -mode <mode>]" + DESTINATIONS_NOTE));
     err.reset();
 
     System.setErr(new PrintStream(err));
     stateStore.loadCache(MountTableStoreImpl.class, true);
-    argv = new String[] {"-update", "/multipleDestination0", "ns0,ns1", "/tmp0_0,/tmp1_0"};
+    argv = new String[] { "-update", "/multipleDestination0", "ns0,ns1", "/tmp0_0,/tmp1_0" };
     assertEquals(0, ToolRunner.run(admin, argv));
     err.reset();
 
     stateStore.loadCache(MountTableStoreImpl.class, true);
-    argv = new String[] {"-update", "/multipleDestination1", "ns01,ns02", "/tmp1"};
+    argv = new String[] { "-update", "/multipleDestination1", "ns01,ns02", "/tmp1" };
     assertEquals(0, ToolRunner.run(admin, argv));
+    err.reset();
+
+    // With extra options
+    argv = new String[] { "-add", "/multipleDestination0a", "ns01,ns02", "/tmp0", "-readonly",
+        "-order", "RANDOM" };
+    assertEquals(0, ToolRunner.run(admin, argv));
+    err.reset();
+
+    argv = new String[] { "-add", "/multipleDestination1a", "ns01,ns02", "/tmp1_1,/tmp2_1",
+        "-readonly", "-order", "RANDOM" };
+    assertEquals(0, ToolRunner.run(admin, argv));
+    err.reset();
+
+    argv = new String[] { "-add", "/multipleDestination1.5a", "ns01,ns02", "/tmp1_1", "/tmp2_1",
+        "-readonly", "-order", "RANDOM" };
+    assertEquals(0, ToolRunner.run(admin, argv));
+    err.reset();
+
+    argv = new String[] { "-add", "/multipleDestination2a", "ns01", "/tmp1_2,/tmp2_2", "-readonly",
+        "-order", "RANDOM" };
+    assertEquals(0, ToolRunner.run(admin, argv));
+    err.reset();
+    out.reset();
+
+    argv = new String[] { "-add", "/multipleDestination2.5a", "ns01", "/tmp1_2", "/tmp2_2",
+        "-readonly", "-order", "RANDOM" };
+    assertEquals(-1, ToolRunner.run(admin, argv));
+    assertTrue("Wrong message: " + out, out.toString().contains(
+        "\t[-add <source> <nameservice1, nameservice2, ...> "
+            + "<destination(s)> "
+            + "[-readonly] [-faulttolerant] "
+            + "[-order HASH|LOCAL|RANDOM|HASH_ALL|SPACE|SUFFIX|FIXED] "
+            + "-owner <owner> -group <group> -mode <mode>]" + DESTINATIONS_NOTE));
+    err.reset();
+
+    argv = new String[] { "-add", "/multipleDestination3a", "ns01,ns02", "/tmp1_2,/tmp2_2,/tmp3_2",
+        "-readonly", "-order", "RANDOM" };
+    assertEquals(-1, ToolRunner.run(admin, argv));
+    assertTrue(err.toString(), err.toString().contains("Invalid namespaces and destinations."));
+    err.reset();
+
+    argv = new String[] { "-add", "/multipleDestination6.5a", "ns01,ns02,ns03", "/tmp1,/tmp2",
+        "/tmp3", "-readonly", "-order", "RANDOM" };
+    assertEquals(-1, ToolRunner.run(admin, argv));
+    assertTrue(err.toString(),
+        err.toString().contains("Invalid entry, all destination must start with /"));
     err.reset();
   }
 

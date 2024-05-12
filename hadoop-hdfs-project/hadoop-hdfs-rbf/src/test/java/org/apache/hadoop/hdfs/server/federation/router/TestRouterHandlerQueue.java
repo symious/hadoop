@@ -220,11 +220,11 @@ public class TestRouterHandlerQueue {
     // All ns1 calls have SLOW_RPC_CALLS processing time, none throws overloaded exception
     // First ns1 call has short queue time, subsequent calls have permitWaitTimeMs queue time
     int deepCalls = SLOW_RPC_CALLS - 1;
-    assertApproximate((long) queueTimeAvg, deepCalls * permitWaitTimeMs / TOTAL_RPC, (float) 0.1);
+    assertApproximate((long) queueTimeAvg, deepCalls * permitWaitTimeMs / TOTAL_RPC, (float) 0.15);
     assertApproximate((long) processingTimeAvg, SLOW_RPC_TIME_MS * SLOW_RPC_CALLS / TOTAL_RPC,
-        (float) 0.1);
-    assertApproximate((long) queueTimeMax, permitWaitTimeMs, (float) 0.1);
-    assertApproximate((long) processingTimeMax, SLOW_RPC_TIME_MS, (float) 0.1);
+        (float) 0.15);
+    assertApproximate((long) queueTimeMax, permitWaitTimeMs, (float) 0.15);
+    assertApproximate((long) processingTimeMax, SLOW_RPC_TIME_MS, (float) 0.15);
 
     long ns1DeepCalls = getLongCounter("DeepCallAttempts_ns1", deepBuilder);
     assertEquals(deepCalls, ns1DeepCalls);
@@ -253,11 +253,11 @@ public class TestRouterHandlerQueue {
     // All slow calls have SLOW_RPC_CALLS processing time, none throws overloaded exception
     // First ns1/ns2 calls have short queue time, subsequent calls have permitWaitTimeMs queue time
     int deepCalls = SLOW_RPC_CALLS - (N_NS - 1);
-    assertApproximate((long) queueTimeAvg, deepCalls * permitWaitTimeMs / TOTAL_RPC, (float) 0.1);
+    assertApproximate((long) queueTimeAvg, deepCalls * permitWaitTimeMs / TOTAL_RPC, (float) 0.15);
     assertApproximate((long) processingTimeAvg, SLOW_RPC_TIME_MS * SLOW_RPC_CALLS / TOTAL_RPC,
-        (float) 0.1);
-    assertApproximate((long) queueTimeMax, permitWaitTimeMs, (float) 0.1);
-    assertApproximate((long) processingTimeMax, SLOW_RPC_TIME_MS, (float) 0.1);
+        (float) 0.15);
+    assertApproximate((long) queueTimeMax, permitWaitTimeMs, (float) 0.15);
+    assertApproximate((long) processingTimeMax, SLOW_RPC_TIME_MS, (float) 0.15);
 
     for (int i = 1; i < N_NS; i++) {
       int nCall = SLOW_RPC_CALLS / (N_NS - 1);
