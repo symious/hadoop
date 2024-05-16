@@ -33,6 +33,7 @@ import java.util.Map;
 
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableMap;
 import org.apache.hadoop.test.GenericTestUtils;
+import org.junit.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.event.Level;
@@ -1582,5 +1583,48 @@ public class TestReservations {
     assertEquals(5 * GB, node_0.getAllocatedResource().getMemorySize());
     assertEquals(3 * GB, node_1.getAllocatedResource().getMemorySize());
     assertEquals(5 * GB, node_2.getAllocatedResource().getMemorySize());
+  }
+
+  @Test
+  public void testCompleteOustandingUpdatesWhichAreReserved() throws Exception {
+    CapacitySchedulerConfiguration csConf = new CapacitySchedulerConfiguration();
+    setup(csConf);
+
+    final String user_0 = "user_0";
+    final ApplicationAttemptId appAttemptId_0 = TestUtils
+        .getMockApplicationAttemptId(0, 0);
+
+    LeafQueue a = stubLeafQueue((LeafQueue) queues.get(A));
+    FiCaSchedulerApp app_0 = new FiCaSchedulerApp(appAttemptId_0, user_0, a,
+        mock(ActiveUsersManager.class), spyRMContext);
+
+    ApplicationAttemptId appAttemptId = BuilderUtils.newApplicationAttemptId(
+        app_0.getApplicationId(), 1);
+
+    ContainerId containerId = BuilderUtils.newContainerId(appAttemptId, 1);
+
+    String host_1 = "host_1";
+    FiCaSchedulerNode node_1 = TestUtils.getMockNode(host_1, DEFAULT_RACK, 0,
+        8 * GB);
+
+    Priority p = TestUtils.createMockPriority(5);
+    SchedulerRequestKey priorityMap = toSchedulerKey(p);
+
+    Container container = TestUtils.getMockContainer(containerId,
+        node_1.getNodeID(), Resources.createResource(2 * GB),
+        priorityMap.getPriority());
+
+    RMContainer rmContainer = new RMContainerImpl(container,
+        SchedulerRequestKey.extractFrom(container), appAttemptId,
+        node_1.getNodeID(), "user", rmContext);
+
+    node_1.setReservedContainer(rmContainer);
+
+    RMContainer rmContainer2 = node_1.getReservedContainer();
+    node_1.setReservedContainer(null);
+
+    Assert.assertNotNull(rmContainer2);
+    Assert.assertEquals(rmContainer2.getContainerId(),
+        rmContainer.getContainerId());
   }
 }
