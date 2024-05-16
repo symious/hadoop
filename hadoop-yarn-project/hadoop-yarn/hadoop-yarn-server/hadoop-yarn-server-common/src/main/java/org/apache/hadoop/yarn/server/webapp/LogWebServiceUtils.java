@@ -95,7 +95,7 @@ public final class LogWebServiceUtils {
           ex.getMessage());
     }
     Response.ResponseBuilder response = Response.ok(stream);
-    response.header("Content-Type", contentType);
+    response.header("Content-Type", contentType + ";charset=utf-8");
     // Sending the X-Content-Type-Options response header with the value
     // nosniff will prevent Internet Explorer from MIME-sniffing a response
     // away from the declared content-type.
