@@ -79,6 +79,8 @@ import java.util.function.Supplier;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableMap;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.DEFAULT_LOAD_RM_APPS_STATE_THREAD_COUNT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.DEFAULT_MULTI_THREAD_LOAD_RM_APP_STATE;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -1606,4 +1608,50 @@ public class TestZKRMStateStore extends RMStateStoreTestBase {
         "RemoveApplicationStateCallAvgTime", expectAvgTime);
   }
 
+  @Test
+  public void testLoadRMAppStateByMultiThreads() throws Exception {
+
+    TestZKRMStateStoreTester zkTester = new TestZKRMStateStoreTester();
+    long submitTime = System.currentTimeMillis();
+    long startTime = submitTime + 1234;
+
+    //Test load app state by multi threads
+    Configuration conf = new YarnConfiguration();
+    conf.setBoolean(YarnConfiguration.MULTI_THREAD_LOAD_RM_APP_STATE_ENABLED, true);
+    conf.setInt(YarnConfiguration.LOAD_RM_APPS_STATE_THREAD_COUNT, 5);
+    RMStateStore store = zkTester.getRMStateStore(conf);
+
+    TestDispatcher dispatcher = new TestDispatcher();
+    store.setRMDispatcher(dispatcher);
+
+    // Create RM Context and app token manager.
+    RMContext rmContext = mock(RMContext.class);
+    when(rmContext.getStateStore()).thenReturn(store);
+    AMRMTokenSecretManager appTokenMgr =
+        spy(new AMRMTokenSecretManager(conf, rmContext));
+    MasterKeyData masterKeyData = appTokenMgr.createNewMasterKey();
+    when(appTokenMgr.getMasterKey()).thenReturn(masterKeyData);
+    ClientToAMTokenSecretManagerInRM clientToAMTokenMgr =
+        new ClientToAMTokenSecretManagerInRM();
+
+    // Store 1000 apps with app id application_1352994193343_(i++).
+    for (int i = 0; i < 1000; i++) {
+      ApplicationId appId1 = ApplicationId.newInstance(1352994193343L, i);
+      ApplicationAttemptId attemptId1 =
+          ApplicationAttemptId.newInstance(appId1, 1);
+      ApplicationAttemptId attemptId2 =
+          ApplicationAttemptId.newInstance(appId1, 2);
+      storeAppWithAttempts(store, dispatcher, submitTime, startTime,
+          appTokenMgr, clientToAMTokenMgr, attemptId1, attemptId2);
+    }
+
+    // Load state store
+    RMState rmState = store.loadState();
+
+    int size = rmState.getApplicationState().size();
+    assertEquals(1000, size);
+
+    // Close the store
+    store.close();
+  }
 }

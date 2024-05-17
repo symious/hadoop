@@ -77,6 +77,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.DEFAULT_LOAD_RM_APPS_STATE_THREAD_COUNT;
+import static org.apache.hadoop.yarn.conf.YarnConfiguration.DEFAULT_MULTI_THREAD_LOAD_RM_APP_STATE;
 
 /**
  * {@link RMStateStore} implementation backed by ZooKeeper.
@@ -240,6 +247,14 @@ public class ZKRMStateStore extends RMStateStore {
   @VisibleForTesting
   protected ZKRMStateStoreOpDurations opDurations;
 
+  private final ReentrantReadWriteLock concurrentFetchAppsLock =
+      new ReentrantReadWriteLock();
+  protected final ReentrantReadWriteLock.WriteLock
+      concurrentFetchAppsWriteLock = concurrentFetchAppsLock.writeLock();
+
+  private boolean enableMultiThreadLoadRMAppState;
+  private int multiThreadLoadRMAppStateThreadCount;
+
   /*
    * Indicates different app attempt state store operations.
    */
@@ -391,6 +406,12 @@ public class ZKRMStateStore extends RMStateStore {
       delegationTokenNodeSplitIndex =
           YarnConfiguration.DEFAULT_ZK_DELEGATION_TOKEN_NODE_SPLIT_INDEX;
     }
+    enableMultiThreadLoadRMAppState = conf.getBoolean(
+        YarnConfiguration.MULTI_THREAD_LOAD_RM_APP_STATE_ENABLED,
+        DEFAULT_MULTI_THREAD_LOAD_RM_APP_STATE);
+    multiThreadLoadRMAppStateThreadCount =
+        conf.getInt(YarnConfiguration.LOAD_RM_APPS_STATE_THREAD_COUNT,
+            DEFAULT_LOAD_RM_APPS_STATE_THREAD_COUNT);
   }
 
   @Override
@@ -699,20 +720,42 @@ public class ZKRMStateStore extends RMStateStore {
   private void loadRMAppStateFromAppNode(RMState rmState, String appNodePath,
       String appIdStr) throws Exception {
     byte[] appData = getData(appNodePath);
-    LOG.debug("Loading application from znode: {}", appNodePath);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("current threadId: " + Thread.currentThread().getId() +
+          " ,loading application from znode: {}", appNodePath);
+    }
     ApplicationId appId = ApplicationId.fromString(appIdStr);
     ApplicationStateDataPBImpl appState = new ApplicationStateDataPBImpl(
         ApplicationStateDataProto.parseFrom(appData));
     if (!appId.equals(
         appState.getApplicationSubmissionContext().getApplicationId())) {
       throw new YarnRuntimeException("The node name is different from the " +
-             "application id");
+          "application id");
     }
-    rmState.appState.put(appId, appState);
+    concurrentFetchAppsWriteLock.lock();
+    try {
+      rmState.appState.put(appId, appState);
+    } finally {
+      concurrentFetchAppsWriteLock.unlock();
+    }
     loadApplicationAttemptState(appState, appNodePath);
   }
 
   private synchronized void loadRMAppState(RMState rmState) throws Exception {
+
+    ExecutorService executor = null;
+
+    long start = System.currentTimeMillis();
+    LOG.info(
+        "enableMultiThreadLoadRMAppState: " + enableMultiThreadLoadRMAppState +
+            " ,multiThreadLoadRMAppStateThreadCount: " +
+            multiThreadLoadRMAppStateThreadCount);
+
+    if (enableMultiThreadLoadRMAppState) {
+      executor =
+          Executors.newFixedThreadPool(multiThreadLoadRMAppStateThreadCount);
+    }
+
     for (int splitIndex = 0; splitIndex <= 4; splitIndex++) {
       String appRoot = rmAppRootHierarchies.get(splitIndex);
       if (appRoot == null) {
@@ -720,23 +763,46 @@ public class ZKRMStateStore extends RMStateStore {
       }
       List<String> childNodes = getChildren(appRoot);
       boolean appNodeFound = false;
+
       for (String childNodeName : childNodes) {
         if (childNodeName.startsWith(ApplicationId.appIdStrPrefix)) {
           appNodeFound = true;
           if (splitIndex == 0) {
-            loadRMAppStateFromAppNode(rmState,
-                getNodePath(appRoot, childNodeName), childNodeName);
+            if (enableMultiThreadLoadRMAppState && executor != null) {
+              executor.submit(() -> {
+                try {
+                  loadRMAppStateFromAppNode(rmState,
+                      getNodePath(appRoot, childNodeName), childNodeName);
+                } catch (Exception e) {
+                  LOG.error("loadRMAppStateFromAppNode error: ", e);
+                }
+              });
+            }else{
+              loadRMAppStateFromAppNode(rmState,
+                  getNodePath(appRoot, childNodeName), childNodeName);
+            }
           } else {
             // If AppId Node is partitioned.
             String parentNodePath = getNodePath(appRoot, childNodeName);
             List<String> leafNodes = getChildren(parentNodePath);
             for (String leafNodeName : leafNodes) {
               String appIdStr = childNodeName + leafNodeName;
-              loadRMAppStateFromAppNode(rmState,
-                  getNodePath(parentNodePath, leafNodeName), appIdStr);
+              if (enableMultiThreadLoadRMAppState && executor != null) {
+                executor.submit(() -> {
+                  try {
+                    loadRMAppStateFromAppNode(rmState,
+                        getNodePath(parentNodePath, leafNodeName), appIdStr);
+                  } catch (Exception e) {
+                    LOG.error("loadRMAppStateFromAppNode error: ", e);
+                  }
+                });
+              } else {
+                loadRMAppStateFromAppNode(rmState,
+                    getNodePath(parentNodePath, leafNodeName), appIdStr);
+              }
             }
           }
-        } else if (!childNodeName.equals(RM_APP_ROOT_HIERARCHIES)){
+        } else if (!childNodeName.equals(RM_APP_ROOT_HIERARCHIES)) {
           LOG.debug("Unknown child node with name {} under {}", childNodeName,
               appRoot);
         }
@@ -749,6 +815,22 @@ public class ZKRMStateStore extends RMStateStore {
         rmAppRootHierarchies.remove(splitIndex);
       }
     }
+
+    if (enableMultiThreadLoadRMAppState && executor != null) {
+      executor.shutdown();
+      try {
+        executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+      } catch (InterruptedException e) {
+        LOG.error("loadRMAppState tasks interrupted.", e);
+      }
+    }
+
+    long end = System.currentTimeMillis();
+
+    LOG.info(
+        "All loadRMAppState tasks have completed, cost time: " + (end - start) +
+            " ms!");
+
   }
 
   private void loadApplicationAttemptState(ApplicationStateData appState,
@@ -767,7 +849,8 @@ public class ZKRMStateStore extends RMStateStore {
         appState.attempts.put(attemptState.getAttemptId(), attemptState);
       }
     }
-    LOG.debug("Done loading applications from ZK state store");
+    LOG.info("current threadId: " + Thread.currentThread().getId() +
+        " done loading applications from ZK state store for app: " + appPath);
   }
 
   /**

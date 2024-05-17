@@ -975,6 +975,14 @@ public class YarnConfiguration extends Configuration {
       RM_PREFIX + "fast-recovery.containers.thread-count";
   public static final int DEFAULT_FAST_RECOVERY_CONTAINERS_THREAD_COUNT = 1;
 
+  public static final String MULTI_THREAD_LOAD_RM_APP_STATE_ENABLED =
+      RM_PREFIX + "multi-thread.load-rm.app.state.enabled";
+  public static final boolean DEFAULT_MULTI_THREAD_LOAD_RM_APP_STATE = false;
+
+  public static final String LOAD_RM_APPS_STATE_THREAD_COUNT =
+      RM_PREFIX + "load-rm.apps.state.thread-count";
+  public static final int DEFAULT_LOAD_RM_APPS_STATE_THREAD_COUNT = 1;
+
   public static final String YARN_FAIL_FAST = YARN_PREFIX + "fail-fast";
   public static final boolean DEFAULT_YARN_FAIL_FAST = false;
 
