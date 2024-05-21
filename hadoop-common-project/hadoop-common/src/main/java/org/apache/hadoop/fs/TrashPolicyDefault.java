@@ -189,12 +189,13 @@ public class TrashPolicyDefault extends TrashPolicy {
         }
       }
       try {
-        // if the target path in Trash already exists, then append with 
-        // a current time in millisecs.
-        String orig = trashPath.toString();
-        
-        while(fs.exists(trashPath)) {
-          trashPath = new Path(orig + Time.now());
+        if (createTrashRootEnable) {
+          // if the target path in Trash already exists, then append with
+          // a current time in millisecs.
+          String orig = trashPath.toString();
+          while(fs.exists(trashPath)) {
+            trashPath = new Path(orig + Time.now());
+          }
         }
         
         // move to current trash
