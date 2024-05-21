@@ -35,6 +35,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.ha.HAServiceProtocol;
 import org.apache.hadoop.hdfs.client.HdfsDataInputStream;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
@@ -52,11 +53,14 @@ import org.apache.hadoop.hdfs.server.blockmanagement.TestBlockManager;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations;
 import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations.BlockWithLocations;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocol;
+import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.test.LambdaTestUtils;
 
+import org.junit.Assert;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -185,6 +189,41 @@ public class TestGetBlocks {
       }
       client.close();
       cluster.shutdown();
+    }
+  }
+
+  /**
+   * Test getBlocks from standby that disable stale read.
+   */
+  @Test
+  public void testGetBlocksFromStandby() throws Exception {
+    Configuration conf = new HdfsConfiguration();
+    conf.setBoolean(DFSConfigKeys.DFS_HA_ALLOW_STALE_READ_KEY, false);
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, 1024);
+
+    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
+        .nnTopology(MiniDFSNNTopology.simpleHATopology())
+        .numDataNodes(1)
+        .build()) {
+
+      cluster.transitionToActive(0);
+      cluster.waitActive();
+
+      // Create 5 blocks.
+      DFSTestUtil.createFile(cluster.getFileSystem(0),
+          new Path("/testGetBlocksFromStandby"),
+          5 * 1024, (short) 1, 1L);
+
+      cluster.transitionToStandby(0);
+
+      NamenodeProtocols nn0 = cluster.getNameNodeRpc(0);
+      DatanodeInfo[] dns = nn0.getDatanodeReport(DatanodeReportType.LIVE);
+      Assert.assertEquals(1, dns.length);
+
+      Assert.assertEquals(HAServiceProtocol.HAServiceState.STANDBY, nn0.getHAServiceState());
+
+      BlocksWithLocations blocks = nn0.getBlocks(dns[0], 1024 * 5, 1);
+      Assert.assertEquals(5, blocks.getBlocks().length);
     }
   }
 

@@ -2025,10 +2025,10 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    */
   public BlocksWithLocations getBlocks(DatanodeID datanode, long size, long
       minimumBlockSize) throws IOException {
-    checkOperation(OperationCategory.READ);
+    checkOperation(OperationCategory.UNCHECKED);
     readLock(OperationName.GET_BLOCKS);
     try {
-      checkOperation(OperationCategory.READ);
+      checkOperation(OperationCategory.UNCHECKED);
       return getBlockManager().getBlocksWithLocations(datanode, size,
           minimumBlockSize);
     } finally {
