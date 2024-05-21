@@ -25,6 +25,7 @@ import java.util.SortedSet;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology;
 import org.apache.hadoop.hdfs.protocol.BlockType;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.test.LambdaTestUtils;
 import org.junit.Test;
 import org.junit.Before;
@@ -48,6 +49,11 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_AL
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_DATACENTERS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT_DEFAULT;
@@ -58,9 +64,6 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREA
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FAULTY_DC_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
-import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_KEY;
 import static org.junit.Assert.*;
@@ -952,6 +955,108 @@ public class TestNameNodeReconfigure {
 
     nameNode.reconfigurePropertyImpl(DFS_NAMENODE_ACCESSTIME_PRECISION_KEY, "2000");
     assertEquals(fsDirectory.getAccessTimePrecision(), 2000);
+  }
+
+  @Test
+  public void testReconfigureDRParameters()
+      throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode(0);
+    final BlockManager bm = nameNode.getNamesystem().getBlockManager();
+    // verify default value.
+    assertFalse(bm.isDrReplicationRuleEnabled());
+
+    // try correct value.
+    nameNode.reconfigurePropertyImpl(DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY,
+        "True");
+    assertTrue(bm.isDrReplicationRuleEnabled());
+
+    // revert to defaults.
+    nameNode.reconfigurePropertyImpl(DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY,
+        null);
+    assertFalse(bm.isDrReplicationRuleEnabled());
+
+    // try invalid drColdDataThresholdMS.
+    try {
+      nameNode.reconfigureProperty(DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY,
+          "non-numeric");
+      fail("Should not reach here");
+    } catch (ReconfigurationException e) {
+      assertEquals("Could not change property " +
+          "dfs.namenode.dr.cold-data.threshold.ms from '"
+          + DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_DEFAULT
+          + "' to 'non-numeric'", e.getMessage());
+    }
+
+    // try correct drColdDataThresholdMS.
+    nameNode.reconfigureProperty(DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY,
+        "20000");
+    assertEquals(bm.getDrColdDataThresholdMS(), 20000);
+
+    nameNode.reconfigurePropertyImpl(DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY,
+        "True");
+    assertTrue(bm.isDrReplicationRuleEnabled());
+
+    // try correct drDataCenters.
+    nameNode.reconfigureProperty(DFS_NAMENODE_DR_DATACENTERS_KEY,
+        "/DC1,/DC2");
+    assertEquals(2, bm.getDrDataCenters().size());
+    assertTrue(bm.getDrDataCenters().contains("/DC1"));
+    assertTrue(bm.getDrDataCenters().contains("/DC2"));
+
+    // try invalid drDataCenters.
+    try {
+      nameNode.reconfigureProperty(DFS_NAMENODE_DR_DATACENTERS_KEY,
+          "");
+      fail("Should not reach here");
+    } catch (ReconfigurationException e) {
+      assertEquals("Could not change property " +
+          "dfs.namenode.dr.datacenters from '/DC1,/DC2' to ''", e.getMessage());
+    }
+
+    // try correct drReplicationRuleForColdData.
+    nameNode.reconfigureProperty(DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY,
+        "3=/DC1:1,/DC2:2");
+    assertEquals(1, bm.getDrReplicationRuleForColdData().size());
+    assertTrue(bm.getDrReplicationRuleForColdData().containsKey((short) 3));
+    assertEquals(ReplicationRule.parseFromString("/DC1:1,/DC2:2"),
+        bm.getDrReplicationRuleForColdData().get((short) 3));
+
+    // try invalid drReplicationRuleForColdData.
+    try {
+      nameNode.reconfigureProperty(DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY,
+          "");
+      fail("Should not reach here");
+    } catch (ReconfigurationException e) {
+      assertEquals("Could not change property " +
+          "dfs.namenode.dr.replication-rule.cold-data from '3=/DC1:1,/DC2:2' " +
+          "to ''", e.getMessage());
+    }
+
+    try {
+      nameNode.reconfigureProperty(DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY,
+          "3=/DC1:1,/DC3:2");
+      fail("Should not reach here");
+    } catch (ReconfigurationException e) {
+      assertEquals("Could not change property " +
+          "dfs.namenode.dr.replication-rule.cold-data from '3=/DC1:1,/DC2:2' " +
+          "to '3=/DC1:1,/DC3:2'", e.getMessage());
+    }
+
+    // Update drDataCenters and will reset drReplicationRuleForColdData.
+    nameNode.reconfigureProperty(DFS_NAMENODE_DR_DATACENTERS_KEY,
+        "/DC1,/DC3");
+    assertEquals(2, bm.getDrDataCenters().size());
+    assertTrue(bm.getDrDataCenters().contains("/DC1"));
+    assertTrue(bm.getDrDataCenters().contains("/DC3"));
+    assertEquals(0, bm.getDrReplicationRuleForColdData().size());
+
+    // Update drReplicationRuleForColdData.
+    nameNode.reconfigureProperty(DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY,
+        "3=/DC1:1,/DC3:2");
+    assertEquals(1, bm.getDrReplicationRuleForColdData().size());
+    assertTrue(bm.getDrReplicationRuleForColdData().containsKey((short) 3));
+    assertEquals(ReplicationRule.parseFromString("/DC1:1,/DC3:2"),
+        bm.getDrReplicationRuleForColdData().get((short) 3));
   }
 
   @Test

@@ -31,6 +31,7 @@ import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
 
+import java.util.HashSet;
 import java.util.Set;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -183,6 +184,12 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DELETE_REDUNDANT
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_DATACENTERS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT;
@@ -483,7 +490,11 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_BLOCK_MANAGER_ALERT_INSUFFICIENT_TARGETS_ENABLED_KEY,
           DFS_NAMENODE_ACCESSTIME_PRECISION_KEY,
           DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY,
-          DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_KEY));
+          DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_KEY,
+          DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY,
+          DFS_NAMENODE_DR_DATACENTERS_KEY,
+          DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY,
+          DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2582,6 +2593,11 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigureAlertInsufficientTargetsEnabled(newVal);
     } else if (property.equals(DFS_NAMENODE_ACCESSTIME_PRECISION_KEY)) {
       return reconfigurationAccessTimePrecision(newVal);
+    } else if (property.equals(DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY) ||
+        property.equals(DFS_NAMENODE_DR_DATACENTERS_KEY) ||
+        property.equals(DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY) ||
+        property.equals(DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY)) {
+      return reconfigureDRParameters(property, newVal);
     } else if (property.equals(DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY)) {
       return reconfigureEnableFaultyDCMonitor(newVal);
     } else if (property.equals(DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_KEY)) {
@@ -3357,6 +3373,46 @@ public class NameNode extends ReconfigurableBase implements
         Integer.parseInt(newVal));
     this.namesystem.getBlockManager().setFaultyDCNumberThreshold(faultyDCNumberThreshold);
     return String.valueOf(faultyDCNumberThreshold);
+  }
+
+  String reconfigureDRParameters(final String property, final String newVal)
+      throws ReconfigurationException {
+    BlockManager bm = namesystem.getBlockManager();
+    String result = null;
+    try {
+      switch (property) {
+        case DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY: {
+          boolean enable = (newVal == null ?
+              DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_DEFAULT :
+              Boolean.parseBoolean(newVal));
+          result = Boolean.toString(enable);
+          bm.setDrReplicationRuleEnabled(enable);
+          break;
+        }
+        case DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY: {
+          long value = (newVal == null ? DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_DEFAULT :
+              Long.parseLong(newVal));
+          bm.setDrColdDataThresholdMS(value);
+          result = Long.toString(value);
+          break;
+        }
+        case DFS_NAMENODE_DR_DATACENTERS_KEY: {
+          bm.setDrDataCenters(new HashSet<>(StringUtils.getTrimmedStringCollection(newVal)));
+          result = newVal;
+          break;
+        }
+        case DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY: {
+          bm.setDrReplicationRuleForColdData(
+              StringUtils.getTrimmedStringCollection(newVal, ";"));
+          result = newVal;
+          break;
+        }
+      }
+      LOG.info("RECONFIGURE* changed {} to {}", property, newVal);
+      return result;
+    } catch (Exception e) {
+      throw new ReconfigurationException(property, newVal, getConf().get(property), e);
+    }
   }
 
   @Override //NameNodeStatusMXBean

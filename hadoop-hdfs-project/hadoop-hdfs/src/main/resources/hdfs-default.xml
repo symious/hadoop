@@ -5651,6 +5651,41 @@
 </property>
 
 <property>
+  <name>dfs.namenode.dr.replication-rule.enable</name>
+  <value>false</value>
+  <description>
+    If true, will enable replication rule for DR.
+  </description>
+</property>
+
+<property>
+  <name>dfs.namenode.dr.datacenters</name>
+  <value></value>
+  <description>
+    Valid data centers about replication rule for DR.
+    Datacenter values separated by comma, such as `/datacenter0,/datacenter1`.
+  </description>
+</property>
+
+<property>
+  <name>dfs.namenode.dr.cold-data.threshold.ms</name>
+  <value>604800000</value>
+  <description>
+    Threshold in milliseconds for considering data as cold in DR.
+  </description>
+</property>
+
+<property>
+  <name>dfs.namenode.dr.replication-rule.cold-data</name>
+  <value></value>
+  <description>
+    Replication rule for configuring cold data in DR.
+    The value should follow the format: `replicationFactor=datacenter0:count,datacenter1:count;...`,
+    such as: `3=/datacenter0:1,/datacenter1:2;2=/datacenter0:1,/datacenter1:1`.
+  </description>
+</property>
+
+<property>
   <name>dfs.storage.policy.satisfier.enabled</name>
   <value>false</value>
   <name>dfs.storage.policy.satisfier.mode</name>

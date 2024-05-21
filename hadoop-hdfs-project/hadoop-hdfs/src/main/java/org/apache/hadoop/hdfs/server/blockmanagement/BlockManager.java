@@ -97,6 +97,7 @@ import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.ReplicaState;
 import org.apache.hadoop.hdfs.server.namenode.CachedBlock;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.INode.BlocksMapUpdateInfo;
+import org.apache.hadoop.hdfs.server.namenode.INodeFile;
 import org.apache.hadoop.hdfs.server.namenode.INodesInPath;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
@@ -507,6 +508,19 @@ public class BlockManager implements BlockStatsMXBean {
   private volatile String faultyDC = null;
 
   /**
+   * Whether to enable replication rules for DR.
+   */
+  private volatile boolean drReplicationRuleEnabled;
+
+  private volatile Set<String> drDataCenters;
+
+  private volatile Map<Short, ReplicationRule> drReplicationRuleForColdData;
+
+  private volatile long drColdDataThresholdMS;
+
+  private volatile boolean generateDrRuleForTest = false;
+
+  /**
    * Excess storage prioritizes specified data centers for to delete,
    * and it will only take effect if the dfs.block.replicator.classname parameter set to
    * the BlockPlacementPolicyWithDataCenter implementation class.
@@ -577,6 +591,16 @@ public class BlockManager implements BlockStatsMXBean {
         DFSConfigKeys.DFS_NAMENODE_REPLICATION_RULE_ENABLE_DEFAULT);
     setFaultyDC(conf.get(DFSConfigKeys.DFS_NAMENODE_FAULTY_DC_KEY,
         DFS_NAMENODE_FAULTY_DC_DEFAULT));
+    drReplicationRuleEnabled = conf.getBoolean(
+        DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY,
+        DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_DEFAULT);
+    setDrDataCenters(new HashSet<>(StringUtils.getTrimmedStringCollection(
+        conf.get(DFSConfigKeys.DFS_NAMENODE_DR_DATACENTERS_KEY))));
+    drColdDataThresholdMS = conf.getLong(
+        DFSConfigKeys.DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY,
+        DFSConfigKeys.DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_DEFAULT);
+    setDrReplicationRuleForColdData(StringUtils.getTrimmedStringCollection(
+        conf.get(DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY), ";"));
     storagePolicySuite = BlockStoragePolicySuite.createDefaultSuite();
     pendingReconstruction = new PendingReconstructionBlocks(conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY,
@@ -773,6 +797,75 @@ public class BlockManager implements BlockStatsMXBean {
 
   public void setAlertInsufficientTargetsEnabled(boolean enabled) {
     this.alertTargetInsufficientTargetEnabled = enabled;
+  }
+
+  public void setDrDataCenters(Set<String> drDataCenters) {
+    if (drReplicationRuleEnabled) {
+      Preconditions.checkArgument(drDataCenters.size() == 2,
+          "%s should be set with 2 IDCs for DR",
+          DFSConfigKeys.DFS_NAMENODE_DR_DATACENTERS_KEY);
+      // drDataCenters has updated, here should reset drReplicationRuleForColdData.
+      this.drReplicationRuleForColdData = new HashMap<>();
+    }
+    this.drDataCenters = drDataCenters;
+  }
+
+  public void setDrColdDataThresholdMS(long drColdDataThresholdMS) {
+    this.drColdDataThresholdMS = drColdDataThresholdMS;
+  }
+
+  public void setDrReplicationRuleEnabled(boolean drReplicationRuleEnabled) {
+    this.drReplicationRuleEnabled = drReplicationRuleEnabled;
+  }
+
+  public void setDrReplicationRuleForColdData(Collection<String> replicaRuleCollections)
+      throws IOException {
+    Map<Short, ReplicationRule> replicationRules = new HashMap<>();
+    if (drReplicationRuleEnabled) {
+      for (String strRule : replicaRuleCollections) {
+        String[] keyValue = strRule.split("=");
+        if (keyValue.length == 2) {
+          Short replica = Short.valueOf(keyValue[0].trim());
+          String rule = keyValue[1].trim();
+          ReplicationRule replicationRule = ReplicationRule.parseFromString(rule);
+          // Verify the validity of IDC.
+          if (drDataCenters.containsAll(replicationRule.getDatacenters())) {
+            replicationRules.put(replica, replicationRule);
+          } else {
+            String msg = String.format("Invalid cold data replication rule: %s for DR.",
+                strRule);
+            LOG.error(msg);
+            throw new IOException(msg);
+          }
+        }
+      }
+
+      Preconditions.checkArgument(replicationRules.containsKey((short) 3),
+          "%s least should contain 3 replica corresponding " +
+              "replication rule for DR",
+          DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY);
+    }
+    drReplicationRuleForColdData = replicationRules;
+  }
+
+  @VisibleForTesting
+  public boolean isDrReplicationRuleEnabled() {
+    return drReplicationRuleEnabled;
+  }
+
+  @VisibleForTesting
+  public long getDrColdDataThresholdMS() {
+    return drColdDataThresholdMS;
+  }
+
+  @VisibleForTesting
+  public Map<Short, ReplicationRule> getDrReplicationRuleForColdData() {
+    return drReplicationRuleForColdData;
+  }
+
+  @VisibleForTesting
+  public Set<String> getDrDataCenters() {
+    return drDataCenters;
   }
 
   private static BlockTokenSecretManager createBlockTokenSecretManager(
@@ -2277,12 +2370,16 @@ public class BlockManager implements BlockStatsMXBean {
       }
 
       ReplicationRule rule = null;
-      if (isDataCenterAwareness && isReplicationRuleEnabled) {
-       rule = rw.getBlockCollection()
-           .getReplicationRule(namesystem.getFSDirectory());
-       if (rule != null && rule.getReplica() != rw.getBlock().getReplication()) {
-         rule = null;
-       }
+      if (isDataCenterAwareness) {
+        if (isReplicationRuleEnabled) {
+          rule = rw.getBlockCollection().getReplicationRule(namesystem.getFSDirectory());
+          if (rule != null && rule.getReplica() != rw.getBlock().getReplication()) {
+            rule = null;
+          }
+        } else if (drReplicationRuleEnabled) {
+          rule = generateRuleForDR(rw.getLiveReplicaStorages(), rw.getBlock(),
+              rw.getBlockCollection());
+        }
       }
 
       // choose replication targets: NOT HOLDING THE GLOBAL LOCK
@@ -2345,6 +2442,87 @@ public class BlockManager implements BlockStatsMXBean {
     int numEffectiveReplicas = numReplicas.liveReplicas() + pendingReplicaNum;
     return (numEffectiveReplicas >= required) &&
         (pendingReplicaNum > 0 || isPlacementPolicySatisfied(block));
+  }
+
+  // Generate replica rules for DR.
+  ReplicationRule generateRuleForDR(Collection<DatanodeStorageInfo> chosenNodes,
+      BlockInfo blockInfo, BlockCollection bc) {
+    ReplicationRule rule = null;
+    // Must be the specified valid IDC for DR.
+    Set<String> copiedDRDataCenters = drDataCenters;
+    if (copiedDRDataCenters == null || copiedDRDataCenters.size() <= 1) {
+      return null;
+    }
+    HashMap<String, Integer> dcMap = new HashMap<>();
+    copiedDRDataCenters.forEach(dc -> dcMap.put(dc, 0));
+
+    if (!validateDataCenterAndCountNodes(chosenNodes, dcMap)) {
+      LOG.debug("Block = {} cannot generate valid replica rule for DR.", blockInfo);
+      return null;
+    }
+    if (blockInfo.getBlockType().equals(CONTIGUOUS)) {
+      short repl = blockInfo.getReplication();
+      if (repl == 1) {
+        return null;
+      }
+      INodeFile inode = (INodeFile) bc;
+      boolean isColdData = isGenerateDrRuleForTest() ||
+          now() > inode.getModificationTime() + drColdDataThresholdMS;
+      if (isColdData) {
+        Map<Short, ReplicationRule> copiedDRReplicationRuleForColdData =
+            drReplicationRuleForColdData;
+        // The strategy for configuring cold data, such as:
+        // 3 replicas (/YTL:2,/AT:1).
+        // The replicaRulesForDR should be contained 3 replica rule.
+        rule = copiedDRReplicationRuleForColdData.get(repl);
+      }
+      if (rule == null) {
+        // Noted if the 3 replica rule is not configured also will evenly distribute across 2 IDCs.
+        int replicasPerIDC = repl >> 1;
+        int remainingReplicas = repl & 1;
+
+        // Determine the main IDC based on the node count for IDC.
+        List<Map.Entry<String, Integer>> entries = new ArrayList<>(dcMap.entrySet());
+        String mainIDC = entries.get(0).getKey();
+        String otherIDC = entries.get(1).getKey();
+        if (entries.get(0).getValue() < entries.get(1).getValue()) {
+          mainIDC = entries.get(1).getKey();
+          otherIDC = entries.get(0).getKey();
+        }
+
+        Map<String, Short> distribution = new HashMap<>();
+        distribution.put(mainIDC, (short) (replicasPerIDC + remainingReplicas));
+        distribution.put(otherIDC, (short) replicasPerIDC);
+        rule = ReplicationRule.parseFromMap(distribution);
+      }
+    }
+    blockLog.debug("BLOCK = {} generate replica rule = {} for DR.", blockInfo, rule);
+    return rule;
+  }
+
+  // Used only for testing.
+  @VisibleForTesting
+  public void setGenerateDrRuleForTest(boolean generateDrRuleForTest) {
+    this.generateDrRuleForTest = generateDrRuleForTest;
+  }
+
+  @VisibleForTesting
+  public boolean isGenerateDrRuleForTest() {
+    return generateDrRuleForTest;
+  }
+
+  boolean validateDataCenterAndCountNodes(Collection<DatanodeStorageInfo> chosenNodes,
+      Map<String, Integer> dcMap) {
+    return chosenNodes.stream().allMatch(node -> {
+      String dcName = NetworkTopologyUtil.getDataCenter(node.getDatanodeDescriptor());
+      int defaultValue = dcMap.getOrDefault(dcName, -1);
+      if (defaultValue > -1) {
+        dcMap.put(dcName, defaultValue + 1);
+        return true;
+      }
+      return false;
+    });
+
   }
 
   @VisibleForTesting
@@ -4578,8 +4756,12 @@ public class BlockManager implements BlockStatsMXBean {
     // first form a rack to datanodes map and
     BlockCollection bc = getBlockCollection(storedBlock);
     ReplicationRule rule = null;
-    if (isDataCenterAwareness && isReplicationRuleEnabled) {
-      rule = bc.getReplicationRule(namesystem.getFSDirectory());
+    if (isDataCenterAwareness) {
+      if (isReplicationRuleEnabled) {
+        rule = bc.getReplicationRule(namesystem.getFSDirectory());
+      } else if (drReplicationRuleEnabled) {
+        rule = generateRuleForDR(nonExcess, storedBlock, bc);
+      }
     }
     if (storedBlock.isStriped()) {
       chooseExcessRedundancyStriped(bc, nonExcess, storedBlock, delNodeHint);

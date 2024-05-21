@@ -501,10 +501,13 @@ public class BlockPlacementPolicyWithDataCenter extends
           base = new NodeBase(VIRTUAL_HOST, dc + VIRTUAL_RACK);
           dcBaseNodes.put(dc, base);
         }
-        int n = Math.min(numOfReplicas, section.getReplica());
         // do not put datanodes in multiple datacenters to one pipeline,
-        // so return immediately
-        return super.chooseTarget(srcPath, n, base, EMPTY_NODES,
+        // so return immediately.
+        // here will be performed copy replica by cross IDC, so only choose one replica.
+        // such as rule is "/YTL:2,/AT:1", current "/YTL" without any replicas need 2 replicas and
+        // numOfReplicas  also need 2 replicas, so first choose one replica to copy replica by
+        // cross IDC and other replica will copy by same IDC.
+        return super.chooseTarget(srcPath, 1, base, EMPTY_NODES,
             returnChosenNodes, excludedNodes, blocksize,
             storagePolicy, flags);
       }

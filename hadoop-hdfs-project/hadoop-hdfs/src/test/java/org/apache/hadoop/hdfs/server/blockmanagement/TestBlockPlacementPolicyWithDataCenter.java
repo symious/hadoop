@@ -355,7 +355,7 @@ public class TestBlockPlacementPolicyWithDataCenter {
     existNodes.add(dcMap.get("/datacenter0/rack0").get(0));
     DatanodeStorageInfo[] results = policy.chooseTarget(null, 3, rule, null,
         existNodes, false, null, DEFAULT_BLOCK_SIZE, storagePolicy, null);
-    assertEquals(2, results.length);
+    assertEquals(1, results.length);
     for (DatanodeStorageInfo info: results) {
       assertEquals("/datacenter1", NetworkTopologyUtil
           .getDataCenter(info.getDatanodeDescriptor()));

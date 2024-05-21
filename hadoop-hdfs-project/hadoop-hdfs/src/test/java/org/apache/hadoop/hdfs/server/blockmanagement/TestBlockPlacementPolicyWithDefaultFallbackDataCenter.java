@@ -20,16 +20,21 @@ package org.apache.hadoop.hdfs.server.blockmanagement;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeoutException;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CreateFlag;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.PermissionStatus;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSTestUtil;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
@@ -48,7 +53,6 @@ import org.junit.Test;
 import org.slf4j.LoggerFactory;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -167,7 +171,7 @@ public class TestBlockPlacementPolicyWithDefaultFallbackDataCenter
     DatanodeStorageInfo[] results =
         policy.chooseTarget(null, 3, rule, null, existNodes, false, null,
             DEFAULT_BLOCK_SIZE, storagePolicy, null);
-    assertEquals(2, results.length);
+    assertEquals(1, results.length);
     for (DatanodeStorageInfo info : results) {
       assertEquals("/datacenter1",
           NetworkTopologyUtil.getDataCenter(info.getDatanodeDescriptor()));
@@ -259,5 +263,205 @@ public class TestBlockPlacementPolicyWithDefaultFallbackDataCenter
         fail("Adding block should not fail.");
       }
     }
+  }
+
+  @Test
+  public void testChooseTargetForDR() throws IOException, InterruptedException, TimeoutException {
+    Configuration conf = new HdfsConfiguration();
+    final String[] racks = {"/datacenter0/rack0", "/datacenter0/rack0", "/datacenter0/rack1"};
+    final String[] hosts = {"host0", "host1", "host2"};
+    long drColdDataThresholdMS = 30000;
+    initConfForDr(conf, drColdDataThresholdMS, "datacenter0");
+    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(3).
+        racks(racks).hosts(hosts).build()) {
+      cluster.waitActive();
+      DistributedFileSystem fs = cluster.getFileSystem();
+      BlockManager blockManager = cluster.getNamesystem().getBlockManager();
+      // Create test file.
+      Path file1 = new Path("/test1");
+      DFSTestUtil.createFile(fs, file1, 1024L, (short) 2, 0L);
+      DFSTestUtil.waitReplication(fs, file1, (short) 2);
+      LocatedBlock lb = DFSTestUtil.getAllBlocks(fs, file1).get(0);
+      DatanodeInfo[] loc = lb.getLocations();
+      assertEquals(2, loc.length);
+      Map<String, Integer> idcMap = countDataNodeDC(loc);
+      // The replication rule is /datacenter0:2.
+      assertEquals(2, idcMap.get("/datacenter0").intValue());
+
+      Path file2 = new Path("/test2");
+      DFSTestUtil.createFile(fs, file2, 1024L, (short)3, 0L);
+      DFSTestUtil.waitReplication(fs, file2, (short) 3);
+      lb = DFSTestUtil.getAllBlocks(fs, file2).get(0);
+      loc = lb.getLocations();
+      assertEquals(3, loc.length);
+      idcMap = countDataNodeDC(loc);
+      // The replication rule is /datacenter0:3.
+      assertEquals(3, idcMap.get("/datacenter0").intValue());
+
+      // Adding 3 new hosts about '/datacenter1'.
+      cluster.startDataNodes(conf, 3, true, null,
+          new String[]{"/datacenter1/rack0", "/datacenter1/rack0", "/datacenter1/rack1"},
+          new String[]{"host3", "host4", "host5"},
+          null);
+      cluster.triggerHeartbeats();
+
+      // Set file1 increase 3 replication.
+      fs.setReplication(file1, (short) 3);
+      DFSTestUtil.waitReplication(fs, file1, (short) 3);
+      lb = DFSTestUtil.getAllBlocks(fs, file1).get(0);
+      loc = lb.getLocations();
+      assertEquals(3, loc.length);
+      idcMap = countDataNodeDC(loc);
+      // The replication rule is /datacenter0:2,/datacenter1:1
+      assertEquals(2, idcMap.get("/datacenter0").intValue());
+      assertEquals(1, idcMap.get("/datacenter1").intValue());
+
+      // Set file1 increase 4 replication.
+      fs.setReplication(file1, (short) 4);
+      DFSTestUtil.waitReplication(fs, file1, (short) 4);
+      lb = DFSTestUtil.getAllBlocks(fs, file1).get(0);
+      loc = lb.getLocations();
+      assertEquals(4, loc.length);
+      idcMap = countDataNodeDC(loc);
+      // The replication rule is /datacenter0:2,/datacenter1:2
+      assertEquals(2, idcMap.get("/datacenter0").intValue());
+      assertEquals(2, idcMap.get("/datacenter1").intValue());
+
+      // Mock the file to become cold data.
+      blockManager.setGenerateDrRuleForTest(true);
+
+      // Set file1 decrease 3 replication.
+      fs.setReplication(file1, (short) 3);
+      DFSTestUtil.waitReplication(fs, file1, (short) 3);
+      lb = DFSTestUtil.getAllBlocks(fs, file1).get(0);
+      loc = lb.getLocations();
+      assertEquals(3, loc.length);
+      // The current setting configuration dfs.namenode.replication-rule.cold-data.for.dr is
+      // "3=/datacenter0:1,/datacenter1:2",
+      // so the replication rule is /datacenter0:1,/datacenter1:2.
+      idcMap = countDataNodeDC(loc);
+      assertEquals(1, idcMap.get("/datacenter0").intValue());
+      assertEquals(2, idcMap.get("/datacenter1").intValue());
+
+      // Set file1 decrease 2 replication.
+      fs.setReplication(file1, (short) 2);
+      DFSTestUtil.waitReplication(fs, file1, (short) 2);
+      lb = DFSTestUtil.getAllBlocks(fs, file1).get(0);
+      loc = lb.getLocations();
+      assertEquals(2, loc.length);
+      // The replication rule is /datacenter0:1,/datacenter1:1.
+      idcMap = countDataNodeDC(loc);
+      assertEquals(1, idcMap.get("/datacenter0").intValue());
+      assertEquals(1, idcMap.get("/datacenter1").intValue());
+
+      // Set file2 increase 6 replication.
+      fs.setReplication(file2, (short) 6);
+      DFSTestUtil.waitReplication(fs, file2, (short) 6);
+      lb = DFSTestUtil.getAllBlocks(fs, file2).get(0);
+      loc = lb.getLocations();
+      assertEquals(6, loc.length);
+      idcMap = countDataNodeDC(loc);
+      // The replication rule is /datacenter0:3,/datacenter1:3
+      assertEquals(3, idcMap.get("/datacenter0").intValue());
+      assertEquals(3, idcMap.get("/datacenter1").intValue());
+
+      // Set file2 decrease 2 replication.
+      fs.setReplication(file2, (short) 2);
+      DFSTestUtil.waitReplication(fs, file2, (short) 2);
+      lb = DFSTestUtil.getAllBlocks(fs, file2).get(0);
+      loc = lb.getLocations();
+      assertEquals(2, loc.length);
+      idcMap = countDataNodeDC(loc);
+      // The replication rule is /datacenter0:1,/datacenter1:1
+      assertEquals(1, idcMap.get("/datacenter0").intValue());
+      assertEquals(1, idcMap.get("/datacenter1").intValue());
+
+      blockManager.setGenerateDrRuleForTest(false);
+    }
+  }
+
+  @Test
+  public void testChooseTargetInvalidDataCenterForDR() throws IOException,
+      InterruptedException, TimeoutException {
+    Configuration conf = new HdfsConfiguration();
+    final String[] racks = {"/datacenter2/rack0", "/datacenter2/rack0", "/datacenter2/rack1"};
+    final String[] hosts = {"host0", "host1", "host2"};
+    long drColdDataThresholdMS = 30000;
+
+    // Current config `dfs.namenode.valid.datacenters.for.dr` is ”/datacenter0,/datacenter1",
+    // "/datacenter2" is invalid datacenter for DR, so will not run choose target logic about DR.
+    initConfForDr(conf, drColdDataThresholdMS, "datacenter2");
+
+    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(3).
+        racks(racks).hosts(hosts).build()) {
+      cluster.waitActive();
+      DistributedFileSystem fs = cluster.getFileSystem();
+      BlockManager blockManager = cluster.getNamesystem().getBlockManager();
+      // Create test file.
+      Path file = new Path("/test");
+      DFSTestUtil.createFile(fs, file, 1024L, (short) 2, 0L);
+      DFSTestUtil.waitReplication(fs, file, (short) 2);
+      LocatedBlock lb = DFSTestUtil.getAllBlocks(fs, file).get(0);
+      DatanodeInfo[] loc = lb.getLocations();
+      assertEquals(2, loc.length);
+      String expectedDC = "datacenter2";
+      verifyDNinDC(expectedDC, loc[0]);
+      verifyDNinDC(expectedDC, loc[1]);
+
+      // Set increase 3 replication and will not run choose target logic about DR.
+      fs.setReplication(file, (short) 3);
+      DFSTestUtil.waitReplication(fs, file, (short) 3);
+      lb = DFSTestUtil.getAllBlocks(fs, file).get(0);
+      loc = lb.getLocations();
+      assertEquals(3, loc.length);
+      verifyDNinDC(expectedDC, loc[0]);
+      verifyDNinDC(expectedDC, loc[1]);
+      verifyDNinDC(expectedDC, loc[2]);
+
+      // Mock the file to become cold data.
+      blockManager.setGenerateDrRuleForTest(true);
+
+      // Set decrease 2 replication and will not run choose target logic about DR.
+      fs.setReplication(file, (short) 2);
+      DFSTestUtil.waitReplication(fs, file, (short) 2);
+      lb = DFSTestUtil.getAllBlocks(fs, file).get(0);
+      loc = lb.getLocations();
+      assertEquals(2, loc.length);
+      verifyDNinDC(expectedDC, loc[0]);
+      verifyDNinDC(expectedDC, loc[1]);
+
+      blockManager.setGenerateDrRuleForTest(false);
+    }
+  }
+
+  private void initConfForDr(Configuration conf, long drColdDataThresholdMS,
+      String defaultDataCenter) {
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE);
+    conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+        BlockPlacementPolicyWithDefaultFallbackDataCenter.class,
+        BlockPlacementPolicy.class);
+    conf.setBoolean(DFSConfigKeys.DFS_USE_DFS_NETWORK_TOPOLOGY_KEY, true);
+    conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY,
+        DFSNetworkTopologyWithDataCenter.class, DFSNetworkTopology.class);
+    conf.set(DFSConfigKeys.DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY,
+        defaultDataCenter);
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, 500);
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY, 10);
+    conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, 1L);
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY, true);
+    conf.set(DFSConfigKeys.DFS_NAMENODE_DR_DATACENTERS_KEY, "/datacenter0,/datacenter1");
+    conf.setLong(DFSConfigKeys.DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY,
+        drColdDataThresholdMS);
+    conf.set(DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY,
+        "3=/datacenter0:1,/datacenter1:2");
+  }
+
+  private Map<String, Integer> countDataNodeDC(DatanodeInfo[] loc) {
+    Map<String, Integer> dcMap = new HashMap<>();
+    for (DatanodeInfo dn : loc) {
+      String dcName = NetworkTopologyUtil.getDataCenter(dn);
+      dcMap.put(dcName, dcMap.getOrDefault(dcName, 0) + 1);
+    }
+    return dcMap;
   }
 }

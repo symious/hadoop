@@ -1329,6 +1329,23 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_NAMENODE_FAULTY_DC_DEFAULT = null;
   public static final String  DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS =
       "dfs.namenode.delete.redundant.datacenters";
+
+  // property for DR.
+  public static final String  DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY =
+      "dfs.namenode.dr.replication-rule.enable";
+  public static final boolean DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_DEFAULT = false;
+
+  public static final String  DFS_NAMENODE_DR_DATACENTERS_KEY = "dfs.namenode.dr.datacenters";
+
+  public static final String  DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY =
+      "dfs.namenode.dr.cold-data.threshold.ms";
+  // default is 1 week.
+  public static final long    DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_DEFAULT = 604800000;
+
+  // value such as `3=/datacenter0:1,/datacenter1:2;2=/datacenter0:1,/datacenter1:1`
+  public static final String DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY =
+      "dfs.namenode.dr.replication-rule.cold-data";
+
   public static final String DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY = "dfs.block.placement.ec.classname";
   public static final Class<BlockPlacementPolicyRackFaultTolerant> DFS_BLOCK_PLACEMENT_EC_CLASSNAME_DEFAULT = BlockPlacementPolicyRackFaultTolerant.class;
 
