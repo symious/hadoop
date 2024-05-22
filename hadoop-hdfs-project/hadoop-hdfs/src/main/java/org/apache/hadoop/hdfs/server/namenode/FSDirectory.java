@@ -95,6 +95,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_QUOTA_BY_STORAGETYPE_ENAB
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_QUOTA_BY_STORAGETYPE_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PROTECTED_SUBDIRECTORIES_ENABLE;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PROTECTED_SUBDIRECTORIES_ENABLE_DEFAULT;
+import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_DOMAIN_SOCKET_DISABLE_INTERVAL_SECOND_KEY;
 import static org.apache.hadoop.hdfs.server.common.HdfsServerConstants.CRYPTO_XATTR_ENCRYPTION_ZONE;
 import static org.apache.hadoop.hdfs.server.common.HdfsServerConstants.SECURITY_XATTR_UNREADABLE_BY_SUPERUSER;
 import static org.apache.hadoop.hdfs.server.common.HdfsServerConstants.XATTR_SATISFY_STORAGE_POLICY;
@@ -198,7 +199,7 @@ public class FSDirectory implements Closeable {
   private final int xattrMaxSize;
 
   // precision of access times.
-  private final long accessTimePrecision;
+  private volatile long accessTimePrecision;
   // whether quota by storage type is allowed
   private final boolean quotaByStorageTypeEnabled;
 
@@ -461,6 +462,14 @@ public class FSDirectory implements Closeable {
     } else {
       return fileReplica;
     }
+  }
+
+  public long setAccessTimePrecision(long newValue) {
+    if (accessTimePrecision != newValue) {
+      LOG.info("Will set the accessTimePrecision from {} to {}.", accessTimePrecision, newValue);
+      accessTimePrecision = newValue;
+    }
+    return accessTimePrecision;
   }
 
   public static boolean reConfRecomputeQuotaUsageEnable(boolean newValue) {

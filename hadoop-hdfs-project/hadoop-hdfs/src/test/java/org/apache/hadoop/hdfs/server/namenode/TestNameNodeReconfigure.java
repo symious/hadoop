@@ -37,6 +37,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_PEER_STATS_ENABL
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_ALLOW_USERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED;
@@ -841,5 +843,21 @@ public class TestNameNodeReconfigure {
     nameNode.reconfigurePropertyImpl(DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED,
         null);
     assertFalse(dm.isEnableAuditLogAddBlocks());
+  }
+
+  @Test
+  public void testReconfigureAccessTimePrecision()
+      throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode(0);
+    final FSDirectory fsDirectory = nameNode.namesystem.getFSDirectory();
+    // verify default value.
+    assertEquals(fsDirectory.getAccessTimePrecision(), DFS_NAMENODE_ACCESSTIME_PRECISION_DEFAULT);
+
+    // try correct value.
+    nameNode.reconfigurePropertyImpl(DFS_NAMENODE_ACCESSTIME_PRECISION_KEY, "0");
+    assertEquals(fsDirectory.getAccessTimePrecision(), 0);
+
+    nameNode.reconfigurePropertyImpl(DFS_NAMENODE_ACCESSTIME_PRECISION_KEY, "2000");
+    assertEquals(fsDirectory.getAccessTimePrecision(), 2000);
   }
 }

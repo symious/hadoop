@@ -145,6 +145,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_ALLOW_USERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_CONSTRAINTS_ENABLED_KEY;
@@ -459,7 +461,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT,
           DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED,
           DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED,
-          DFS_NAMENODE_BLOCK_MANAGER_ALERT_INSUFFICIENT_TARGETS_ENABLED_KEY));
+          DFS_NAMENODE_BLOCK_MANAGER_ALERT_INSUFFICIENT_TARGETS_ENABLED_KEY,
+          DFS_NAMENODE_ACCESSTIME_PRECISION_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2549,6 +2552,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigureAuditLogAddBlocksEnable(newVal);
     } else if (property.equals(DFS_NAMENODE_BLOCK_MANAGER_ALERT_INSUFFICIENT_TARGETS_ENABLED_KEY)) {
       return reconfigureAlertInsufficientTargetsEnabled(newVal);
+    } else if (property.equals(DFS_NAMENODE_ACCESSTIME_PRECISION_KEY)) {
+      return reconfigurationAccessTimePrecision(newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -3293,6 +3298,13 @@ public class NameNode extends ReconfigurableBase implements
             Boolean.parseBoolean(newVal);
     this.namesystem.getBlockManager().setAlertInsufficientTargetsEnabled(result);
     return String.valueOf(result);
+  }
+
+  private String reconfigurationAccessTimePrecision(String newValue) {
+    long value = (newValue == null ? DFS_NAMENODE_ACCESSTIME_PRECISION_DEFAULT :
+        Long.parseLong(newValue));
+    getNamesystem().getFSDirectory().setAccessTimePrecision(value);
+    return Long.toString(value);
   }
 
   @Override //NameNodeStatusMXBean
