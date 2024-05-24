@@ -309,6 +309,13 @@ public class Router extends CompositeService implements
     }
   }
 
+  public String refreshSafeMode(Configuration conf) {
+    if (safemodeService != null) {
+      return safemodeService.refreshEnableSafeMode(conf);
+    }
+    return null;
+  }
+
   public static UserGroupInformation getRemoteUser() throws IOException {
     UserGroupInformation ugi = Server.getRemoteUser();
     return (ugi != null) ? ugi : UserGroupInformation.getCurrentUser();

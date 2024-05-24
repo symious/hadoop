@@ -496,6 +496,14 @@
       assumed.
     </description>
   </property>
+  <property>
+    <name>dfs.federation.router.enable.safemode</name>
+    <value>true</value>
+    <description>
+      If true, RouterSafeModeService can enter safe mode when the cache is stale.
+      Else, RouterSafeModeService will not enter safe mode even if the cache is stale.
+    </description>
+  </property>
 
   <property>
     <name>dfs.federation.router.safemode.expiration</name>

@@ -251,6 +251,9 @@ public class RBFConfigKeys extends CommonConfigurationKeysPublic {
       FEDERATION_ROUTER_PREFIX + "safemode.extension";
   public static final long DFS_ROUTER_SAFEMODE_EXTENSION_DEFAULT =
       TimeUnit.SECONDS.toMillis(30);
+  public static final String DFS_ROUTER_ENABLE_SAFEMODE =
+      FEDERATION_ROUTER_PREFIX + "enable.safemode";
+  public static final boolean DFS_ROUTER_ENABLE_SAFEMODE_DEFAULT = true;
   public static final String DFS_ROUTER_SAFEMODE_EXPIRATION =
       FEDERATION_ROUTER_PREFIX + "safemode.expiration";
   public static final long DFS_ROUTER_SAFEMODE_EXPIRATION_DEFAULT =

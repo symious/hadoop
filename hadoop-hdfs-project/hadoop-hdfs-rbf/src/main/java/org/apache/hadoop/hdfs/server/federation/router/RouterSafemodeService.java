@@ -62,6 +62,9 @@ public class RouterSafemodeService extends PeriodicService {
   /** Whether Router is in safe mode */
   private volatile boolean safeMode;
 
+  /** Whether the safe-mode can be entered automatically */
+  private volatile boolean enableSafeMode = true;
+
   /** Whether the Router safe mode is set manually (i.e., via Router admin) */
   private volatile boolean isSafeModeSetManually;
 
@@ -94,28 +97,20 @@ public class RouterSafemodeService extends PeriodicService {
   }
 
   /**
-   * Set the flag to indicate that the safe mode for this Router is set manually
-   * via the Router admin command.
-   */
-  void setManualSafeMode(boolean mode) {
-    this.safeMode = mode;
-    this.isSafeModeSetManually = mode;
-  }
-
-  /**
    * Enter safe mode.
    */
-  private void enter() {
+  public synchronized void enter(boolean isSafeModeSetManually) {
     LOG.info("Entering safe mode");
     enterSafeModeTime = now();
     safeMode = true;
     router.updateRouterState(RouterServiceState.SAFEMODE);
+    this.isSafeModeSetManually = isSafeModeSetManually;
   }
 
   /**
    * Leave safe mode.
    */
-  private void leave() {
+  public synchronized void leave() {
     // Cache recently updated, leave safemode
     long timeInSafemode = now() - enterSafeModeTime;
     LOG.info("Leaving safe mode after {} milliseconds", timeInSafemode);
@@ -127,6 +122,18 @@ public class RouterSafemodeService extends PeriodicService {
     }
     safeMode = false;
     router.updateRouterState(RouterServiceState.RUNNING);
+    // The manually set safe-mode can only be leaved manually. So here is always false.
+    this.isSafeModeSetManually = false;
+  }
+
+  public String refreshEnableSafeMode(Configuration conf) {
+    boolean enableSafeMode = conf.getBoolean(RBFConfigKeys.DFS_ROUTER_ENABLE_SAFEMODE,
+        RBFConfigKeys.DFS_ROUTER_ENABLE_SAFEMODE_DEFAULT);
+    if (this.enableSafeMode != enableSafeMode) {
+      LOG.debug("Changing the enableSafeMode from {} to {}.", this.enableSafeMode, enableSafeMode);
+      this.enableSafeMode = enableSafeMode;
+    }
+    return String.valueOf(this.enableSafeMode);
   }
 
   @Override
@@ -153,14 +160,16 @@ public class RouterSafemodeService extends PeriodicService {
 
     this.startupTime = Time.now();
 
+    refreshEnableSafeMode(conf);
+
     // Initializing the RPC server in safe mode, it will disable it later
-    enter();
+    enter(false);
 
     super.serviceInit(conf);
   }
 
   @Override
-  public void periodicInvoke() {
+  public synchronized void periodicInvoke() {
     long now = Time.now();
     long delta = now - startupTime;
     if (delta < startupInterval) {
@@ -175,7 +184,16 @@ public class RouterSafemodeService extends PeriodicService {
     // Always update to indicate our cache was updated
     if (isCacheStale) {
       if (!safeMode) {
-        enter();
+        if (enableSafeMode) {
+          enter(false);
+        } else {
+          LOG.warn("Will not enter the safe mode automatically " +
+              "since enableSafeMode is set to false");
+          RouterMetrics routerMetrics = router.getRouterMetrics();
+          if (routerMetrics != null) {
+            routerMetrics.incStaleCache();
+          }
+        }
       }
     } else if (safeMode && !isSafeModeSetManually) {
       // Cache recently updated, leave safe mode

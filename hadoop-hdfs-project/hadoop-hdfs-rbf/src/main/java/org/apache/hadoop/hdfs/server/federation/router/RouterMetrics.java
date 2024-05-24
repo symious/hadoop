@@ -27,6 +27,7 @@ import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
+import org.apache.hadoop.metrics2.lib.MutableCounterLong;
 import org.apache.hadoop.metrics2.lib.MutableGaugeInt;
 import org.apache.hadoop.metrics2.source.JvmMetrics;
 
@@ -41,6 +42,9 @@ public class RouterMetrics {
 
   @Metric("Duration in SafeMode at startup in msec")
   private MutableGaugeInt safeModeTime;
+
+  @Metric("The number of StaleCache")
+  private MutableCounterLong staleCache;
 
   private JvmMetrics jvmMetrics = null;
 
@@ -69,5 +73,9 @@ public class RouterMetrics {
 
   public void setSafeModeTime(long elapsed) {
     safeModeTime.set((int) elapsed);
+  }
+
+  public void incStaleCache() {
+    staleCache.incr();
   }
 }

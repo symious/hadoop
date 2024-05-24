@@ -37,6 +37,7 @@ import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.hdfs.server.federation.fairness.RefreshFairnessPolicyControllerHandler;
 import org.apache.hadoop.hdfs.server.federation.router.handler.RefreshConfiguredNamenodesHandler;
+import org.apache.hadoop.hdfs.server.federation.router.handler.RefreshConfiguredSafeModeHandler;
 import org.apache.hadoop.ipc.proto.RefreshCallQueueProtocolProtos;
 import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolPB;
 import org.apache.hadoop.ipc.protocolPB.RefreshCallQueueProtocolServerSideTranslatorPB;
@@ -210,6 +211,8 @@ public class RouterAdminServer extends AbstractService
         refreshCallQueueService, adminServer);
 
     registerRefreshConfiguredNamenodes();
+
+    registerRefreshConfiguredSafeMode();
   }
 
   /**
@@ -445,8 +448,7 @@ public class RouterAdminServer extends AbstractService
     boolean success = false;
     RouterSafemodeService safeModeService = this.router.getSafemodeService();
     if (safeModeService != null) {
-      this.router.updateRouterState(RouterServiceState.SAFEMODE);
-      safeModeService.setManualSafeMode(true);
+      safeModeService.enter(true);
       success = verifySafeMode(true);
       if (success) {
         LOG.info("STATE* Safe mode is ON.\n" + "It was turned on manually. "
@@ -466,8 +468,7 @@ public class RouterAdminServer extends AbstractService
     boolean success = false;
     RouterSafemodeService safeModeService = this.router.getSafemodeService();
     if (safeModeService != null) {
-      this.router.updateRouterState(RouterServiceState.RUNNING);
-      safeModeService.setManualSafeMode(false);
+      safeModeService.leave();
       success = verifySafeMode(false);
       if (success) {
         LOG.info("STATE* Safe mode is OFF.\n" + "It was turned off manually.");
@@ -628,6 +629,12 @@ public class RouterAdminServer extends AbstractService
     RefreshRegistry.defaultRegistry().register(
         REFRESH_CONFIGURED_NAMENODES_HANDLER_IDENTIFIER,
         new RefreshConfiguredNamenodesHandler(this));
+  }
+
+  private void registerRefreshConfiguredSafeMode() {
+    RefreshRegistry.defaultRegistry().register(
+        RefreshConfiguredSafeModeHandler.REFRESH_CONFIGURED_SAFEMODE_HANDLER_IDENTIFIER,
+        new RefreshConfiguredSafeModeHandler(this.router));
   }
 
   @Override
