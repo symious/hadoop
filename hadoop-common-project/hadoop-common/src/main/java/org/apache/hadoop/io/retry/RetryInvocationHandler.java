@@ -37,6 +37,7 @@ import java.lang.reflect.Proxy;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FAILOVER_SKIP_INFO_LOGGING_THRESHOLD;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FAILOVER_SKIP_INFO_LOGGING_THRESHOLD_DEFAULT;
@@ -62,6 +63,8 @@ public class RetryInvocationHandler<T> implements RpcInvocationHandler {
 
     private final RetryPolicy retryPolicy;
     private final RetryInvocationHandler<?> retryInvocationHandler;
+
+    private AtomicReference<String> logMessage = new AtomicReference<>();
 
     private RetryInfo retryInfo;
 
@@ -100,7 +103,9 @@ public class RetryInvocationHandler<T> implements RpcInvocationHandler {
         // failed method invocations from triggering multiple failover attempts.
         final long failoverCount = retryInvocationHandler.getFailoverCount();
         try {
-          return invoke();
+          CallReturn callReturn = invoke();
+          printMessage();
+          return callReturn;
         } catch (Exception e) {
           if (LOG.isTraceEnabled()) {
             LOG.trace(toString(), e);
@@ -111,11 +116,18 @@ public class RetryInvocationHandler<T> implements RpcInvocationHandler {
           }
 
           retryInfo = retryInvocationHandler.handleException(
-              method, callId, retryPolicy, counters, failoverCount, e);
+              method, callId, retryPolicy, counters, failoverCount, e, logMessage);
           return processWaitTimeAndRetryInfo();
         }
       } catch(Throwable t) {
+        printMessage();
         return new CallReturn(t);
+      }
+    }
+
+    private void printMessage() {
+      if (logMessage != null && logMessage.get() != null && !logMessage.get().isEmpty()) {
+        LOG.info(logMessage.get());
       }
     }
 
@@ -382,7 +394,8 @@ public class RetryInvocationHandler<T> implements RpcInvocationHandler {
 
   private RetryInfo handleException(final Method method, final int callId,
       final RetryPolicy policy, final Counters counters,
-      final long expectFailoverCount, final Exception e) throws Exception {
+      final long expectFailoverCount, final Exception e,
+      final AtomicReference<String> logMessage) throws Exception {
     final RetryInfo retryInfo = RetryInfo.newRetryInfo(policy, e,
         counters, proxyDescriptor.idempotentOrAtMostOnce(method),
         expectFailoverCount);
@@ -398,20 +411,19 @@ public class RetryInvocationHandler<T> implements RpcInvocationHandler {
       throw retryInfo.getFailException();
     }
 
-    log(method, retryInfo.isFailover(), counters.failovers, retryInfo.delay, e);
+    String message = log(method, retryInfo.isFailover(), counters.failovers, retryInfo.delay, e);
+    if (message != null) {
+      logMessage.set(message);
+    }
     return retryInfo;
   }
 
-  private void log(final Method method, final boolean isFailover,
+  private String log(final Method method, final boolean isFailover,
       final int failovers, final long delay, final Exception ex) {
     // log info if this has made some successful calls or
     // this is not the first failover
     final boolean info = (hasSuccessfulCall || failovers != 0
         || asyncCallHandler.hasSuccessfulCall()) && !skipFailoverInfoLog(ex, isFailover, failovers);
-    if (!info && !LOG.isDebugEnabled()) {
-      return;
-    }
-
     final StringBuilder b = new StringBuilder()
         .append(ex + ", while invoking ")
         .append(proxyDescriptor.getProxyInfo().getString(method.getName()));
@@ -421,11 +433,17 @@ public class RetryInvocationHandler<T> implements RpcInvocationHandler {
     b.append(isFailover? ". Trying to failover ": ". Retrying ");
     b.append(delay > 0? "after sleeping for " + delay + "ms.": "immediately.");
 
+    String message = b.toString();
     if (info) {
-      LOG.info(b.toString());
+      LOG.info(message);
     } else {
-      LOG.debug(b.toString(), ex);
+      if (LOG.isDebugEnabled()) {
+        LOG.debug(message, ex);
+      } else {
+        return message;
+      }
     }
+    return null;
   }
 
   @VisibleForTesting

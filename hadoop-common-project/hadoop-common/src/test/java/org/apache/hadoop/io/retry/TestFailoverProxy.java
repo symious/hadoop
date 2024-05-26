@@ -406,7 +406,7 @@ public class TestFailoverProxy {
             e instanceof RemoteException);
         // If threshold == 0, log all to info. 10 loops = 9 logs
         // If threshold > 0, first failover doesn't log => n loops = n-1 logs
-        assertEquals(threshold == 0 ? ITERATIONS - 1 : threshold - 1,
+        assertEquals((threshold == 0 ? ITERATIONS - 1 : threshold - 1) + 1,
             StringUtils.countMatches(logs.getOutput(), "Trying to failover immediately"));
       }
     }
