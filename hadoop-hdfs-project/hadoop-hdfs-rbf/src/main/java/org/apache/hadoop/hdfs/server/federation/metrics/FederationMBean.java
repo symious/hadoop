@@ -302,4 +302,12 @@ public interface FederationMBean {
    */
   @Deprecated
   boolean isSecurityEnabled();
+
+  /**
+   * Get the safe-mode status of the router.
+   * @return safe-mode status
+   * @deprecated Use {@link RouterMBean#isSafeMode()} instead.
+   */
+  @Deprecated
+  boolean isSafeMode();
 }

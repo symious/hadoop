@@ -101,4 +101,10 @@ public interface RouterMBean {
    * @return true, if security is enabled.
    */
   boolean isSecurityEnabled();
+
+  /**
+   * Get the safe-mode status of the router.
+   * @return true, if router is in safe-mode.
+   */
+  boolean isSafeMode();
 }

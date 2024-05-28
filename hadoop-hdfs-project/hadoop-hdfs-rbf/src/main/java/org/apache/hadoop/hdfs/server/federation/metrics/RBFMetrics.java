@@ -688,6 +688,11 @@ public class RBFMetrics implements RouterMBean, FederationMBean {
   }
 
   @Override
+  public boolean isSafeMode() {
+    return this.router.isRouterState(RouterServiceState.SAFEMODE);
+  }
+
+  @Override
   public String getSafemode() {
     if (this.router.isRouterState(RouterServiceState.SAFEMODE)) {
       return "Safe mode is ON. " + this.getSafeModeTip();

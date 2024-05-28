@@ -937,6 +937,7 @@ public class TestRouterAdminCLI {
 
     RBFMetrics metrics = router.getMetrics();
     String jsonString = metrics.getRouterStatus();
+    assertTrue(metrics.isSafeMode());
     String result = router.getNamenodeMetrics().getSafemode();
     assertTrue("Wrong safe mode message: " + result,
         result.startsWith("Safe mode is ON."));
@@ -950,6 +951,7 @@ public class TestRouterAdminCLI {
     assertEquals(0,
         ToolRunner.run(admin, new String[] {"-safemode", "leave" }));
     jsonString = metrics.getRouterStatus();
+    assertFalse(metrics.isSafeMode());
     result = router.getNamenodeMetrics().getSafemode();
     assertEquals("Wrong safe mode message: " + result, "", result);
 
