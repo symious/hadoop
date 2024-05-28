@@ -127,6 +127,7 @@ public class StateStoreFileSystemImpl extends StateStoreFileBaseImpl {
 
   @Override
   public void close() throws Exception {
+    super.close();
     if (fs != null) {
       fs.close();
     }

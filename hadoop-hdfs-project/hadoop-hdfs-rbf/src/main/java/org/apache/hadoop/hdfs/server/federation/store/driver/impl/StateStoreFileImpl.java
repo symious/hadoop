@@ -142,6 +142,7 @@ public class StateStoreFileImpl extends StateStoreFileBaseImpl {
 
   @Override
   public void close() throws Exception {
+    super.close();
     setInitialized(false);
   }
 

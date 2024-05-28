@@ -138,6 +138,7 @@ public class StateStoreZooKeeperImpl extends StateStoreSerializableImpl {
 
   @Override
   public void close() throws Exception {
+    super.close();
     if (executorService != null) {
       executorService.shutdown();
     }
