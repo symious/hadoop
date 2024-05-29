@@ -29,6 +29,7 @@ import java.security.PrivilegedAction;
 import java.security.PrivilegedExceptionAction;
 import java.util.*;
 
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -1094,11 +1095,11 @@ public class SecondaryNameNode implements Runnable,
             sig.mostRecentCheckpointTxId + " even though it should have " +
             "just been downloaded");
       }
-      dstNamesystem.writeLock();
+      dstNamesystem.writeLock(FSNamesystemLockMode.GLOBAL, "reloadFromImageFile");
       try {
         dstImage.reloadFromImageFile(file, dstNamesystem);
       } finally {
-        dstNamesystem.writeUnlock();
+        dstNamesystem.writeUnlock(FSNamesystemLockMode.GLOBAL, "reloadFromImageFile");
       }
       dstNamesystem.imageLoadComplete();
     }

@@ -1559,7 +1559,7 @@ public class DatanodeManager {
             break;
           }
           if (!oldNetWorkLocation.equals(newNetWorkLocation)) {
-            namesystem.writeLock();
+            namesystem.writeLock(FSNamesystemLockMode.BM, "refreshTopology");
             try {
               // This datanode's network location changes.
               // 1. Remove the old network location in NetworkTopology.
@@ -1569,7 +1569,7 @@ public class DatanodeManager {
               datanode.setNetworkLocation(newNetWorkLocation);
               networktopology.add(datanode);
             } finally {
-              namesystem.writeUnlock();
+              namesystem.writeUnlock(FSNamesystemLockMode.BM, "refreshTopology");
             }
           }
           break;

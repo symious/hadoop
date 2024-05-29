@@ -40,6 +40,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.hdfs.OperationName;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockUnderConstructionFeature;
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -288,7 +289,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
       return;
     }
 
-    namenode.getNamesystem().readLock(OperationName.FSCK);
+    namenode.getNamesystem().readLock(FSNamesystemLockMode.GLOBAL, OperationName.FSCK);
     try {
       //get blockInfo
       Block block = new Block(Block.getBlockId(blockId));
@@ -352,7 +353,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
       out.print("\n\n" + errMsg);
       LOG.warn("Error in looking up block", e);
     } finally {
-      namenode.getNamesystem().readUnlock(OperationName.FSCK);
+      namenode.getNamesystem().readUnlock(FSNamesystemLockMode.GLOBAL, OperationName.FSCK);
     }
   }
 
@@ -578,7 +579,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
     final FSNamesystem fsn = namenode.getNamesystem();
     FSPermissionChecker.setOperationType(OperationName.FSCK_GET_BLOCK_LOCATIONS);
     FSPermissionChecker pc = fsn.getPermissionChecker();
-    fsn.readLock(OperationName.FSCK_GET_BLOCK_LOCATIONS);
+    fsn.readLock(FSNamesystemLockMode.GLOBAL, OperationName.FSCK_GET_BLOCK_LOCATIONS);
     try {
       blocks = FSDirStatAndListingOp.getBlockLocations(
           fsn.getFSDirectory(), pc, path, HdfsConstants.INVALIDATE_INODE_ID,
@@ -587,7 +588,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
     } catch (FileNotFoundException fnfe) {
       blocks = null;
     } finally {
-      fsn.readUnlock(OperationName.FSCK_GET_BLOCK_LOCATIONS);
+      fsn.readUnlock(FSNamesystemLockMode.GLOBAL, OperationName.FSCK_GET_BLOCK_LOCATIONS);
     }
     return blocks;
   }

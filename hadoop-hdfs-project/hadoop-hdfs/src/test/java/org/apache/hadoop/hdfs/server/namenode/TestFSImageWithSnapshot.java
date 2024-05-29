@@ -31,6 +31,7 @@ import org.apache.hadoop.hdfs.client.HdfsDataOutputStream.SyncFlag;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
 import org.apache.hadoop.hdfs.protocol.SnapshottableDirectoryStatus;
 import org.apache.hadoop.hdfs.server.namenode.NNStorage.NameNodeFile;
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.DiffList;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.DirectoryWithSnapshotFeature.DirectoryDiff;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
@@ -158,14 +159,14 @@ public class TestFSImageWithSnapshot {
   /** Load the fsimage from a temp file */
   private void loadFSImageFromTempFile(File imageFile) throws IOException {
     FSImageFormat.LoaderDelegator loader = FSImageFormat.newLoader(conf, fsn);
-    fsn.writeLock();
+    fsn.writeLock(FSNamesystemLockMode.GLOBAL, "loadImage");
     fsn.getFSDirectory().writeLock();
     try {
       loader.load(imageFile, false);
       fsn.getFSDirectory().updateCountForQuota();
     } finally {
       fsn.getFSDirectory().writeUnlock();
-      fsn.writeUnlock();
+      fsn.writeUnlock(FSNamesystemLockMode.GLOBAL, "loadImage");
     }
   }
   

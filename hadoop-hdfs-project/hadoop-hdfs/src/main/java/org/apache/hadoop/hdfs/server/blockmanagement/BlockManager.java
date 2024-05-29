@@ -1825,14 +1825,14 @@ public class BlockManager implements BlockStatsMXBean {
 
   /** Remove the blocks to the given DatanodeDescriptor from InvalidateBlocks. */
   void removeBlocksFromInvalidateBlocks(final DatanodeDescriptor node) {
-    assert namesystem.hasWriteLock();
+    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
     invalidateBlocks.remove(node);
   }
 
   /** Remove the blocks to the given DatanodeDescriptor from excessRedundancyMap. */
   LightWeightHashSet<Block> removeBlocksFromExcessRedundancyMap(
       final DatanodeDescriptor node) {
-    assert namesystem.hasWriteLock();
+    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
     return excessRedundancyMap.remove(node);
   }
 
@@ -2755,7 +2755,7 @@ public class BlockManager implements BlockStatsMXBean {
 
   public void registerDatanode(DatanodeRegistration nodeReg)
       throws IOException {
-    assert namesystem.hasWriteLock();
+    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
     datanodeManager.registerDatanode(nodeReg);
     bmSafeMode.checkSafeMode();
   }
@@ -2805,7 +2805,7 @@ public class BlockManager implements BlockStatsMXBean {
    *               list of blocks that need to be removed from blocksMap
    */
   public void removeBlocksAndUpdateSafemodeTotal(BlocksMapUpdateInfo blocks) {
-    assert namesystem.hasWriteLock();
+    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
     // In the case that we are a Standby tailing edits from the
     // active while in safe-mode, we need to track the total number
     // of blocks and safe blocks in the system.
@@ -4267,7 +4267,7 @@ public class BlockManager implements BlockStatsMXBean {
               && !Thread.currentThread().isInterrupted()
               && iter.hasNext()) {
         int limit = processed + numBlocksPerIteration;
-        namesystem.writeLockInterruptibly();
+        namesystem.writeLockInterruptibly(FSNamesystemLockMode.GLOBAL);
         try {
           while (iter.hasNext() && processed < limit) {
             BlockInfo blk = iter.next();
@@ -4277,7 +4277,7 @@ public class BlockManager implements BlockStatsMXBean {
                     "Re-scanned block {}, result is {}", blk, r);
           }
         } finally {
-          namesystem.writeUnlock();
+          namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL, "processMisReplicatedBlocks");
         }
       }
     } catch (InterruptedException ex) {
@@ -5763,7 +5763,7 @@ public class BlockManager implements BlockStatsMXBean {
           // batch as many operations in the write lock until the queue
           // runs dry, or the max lock hold is reached.
           int processed = 0;
-          namesystem.writeLock();
+          namesystem.writeLock(FSNamesystemLockMode.GLOBAL, "processQueue");
           metrics.setBlockOpsQueued(queue.size() + 1);
           try {
             long start = Time.monotonicNow();
@@ -5776,7 +5776,7 @@ public class BlockManager implements BlockStatsMXBean {
               action = queue.poll();
             } while (action != null);
           } finally {
-            namesystem.writeUnlock();
+            namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL, "processQueue");
             metrics.addBlockOpsBatched(processed - 1);
           }
         } catch (InterruptedException e) {

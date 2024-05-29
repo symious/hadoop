@@ -27,6 +27,7 @@ public interface RwLock {
   }
 
   /** Acquire read lock. */
+  @Deprecated
   default void readLock(String opName) {
     readLock(FSNamesystemLockMode.GLOBAL, opName);
   }
@@ -51,6 +52,7 @@ public interface RwLock {
    * Release read lock with operation name.
    * @param opName Option name.
    */
+  @Deprecated
   default void readUnlock(String opName) {
     readUnlock(FSNamesystemLockMode.GLOBAL, opName);
   }
@@ -86,6 +88,7 @@ public interface RwLock {
   void writeLock(FSNamesystemLockMode lockMode, String opName);
 
   /** Acquire write lock, unless interrupted while waiting.  */
+  @Deprecated
   default void writeLockInterruptibly() throws InterruptedException {
     writeLockInterruptibly(FSNamesystemLockMode.GLOBAL);
   }
@@ -102,6 +105,7 @@ public interface RwLock {
    * Release write lock with operation name.
    * @param opName Option name.
    */
+  @Deprecated
   default void writeUnlock(String opName) {
     writeUnlock(FSNamesystemLockMode.GLOBAL, opName);
   }
