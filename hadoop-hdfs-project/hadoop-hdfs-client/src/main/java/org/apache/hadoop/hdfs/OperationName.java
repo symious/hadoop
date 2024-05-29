@@ -104,6 +104,7 @@ public class OperationName {
   public static String PROCESS_INCREMENTAL_BLOCK_REPORT = "processIncrementalBlockReport";
   public static String PROCESS_MISREPLICATES_ASYNC = "processMisReplicatesAsync";
   public static String PROCESS_REPORT = "processReport";
+  public static String PROCESS_CACHE_REPORT = "processCacheReport";
   public static String PROCESS_PENDING_RECONSTRUCTIONS = "processPendingReconstructions";
   public static String QUOTA_USAGE = "quotaUsage";
   public static String QUERY_ROLLING_UPGRADE = "queryRollingUpgrade";
@@ -120,6 +121,7 @@ public class OperationName {
   public static String REMOVE_BR_LEASE_IF_NEEDED = "removeBRLeaseIfNeeded";
   public static String REMOVE_CACHE_DIRECTIVE = "removeCacheDirective";
   public static String REMOVE_CACHE_POOL = "removeCachePool";
+  public static String CACHE_REPLICATION_MONITOR_RESCAN = "cacheReplicationMonitorRescan";
   public static String REMOVE_DEFAULT_ACL = "removeDefaultAcl";
   public static String REMOVE_DATANODE = "removeDatanode";
   public static String REMOVE_ERASURE_CODING_POLICY = "removeErasureCodingPolicy";

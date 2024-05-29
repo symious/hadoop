@@ -7714,14 +7714,14 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     checkOperation(OperationCategory.WRITE);
     FSPermissionChecker.setOperationType(OperationName.ADD_CACHE_DIRECTIVE);
     try {
-      writeLock(OperationName.ADD_CACHE_DIRECTIVE);
+      writeLock(FSNamesystemLockMode.FS,OperationName.ADD_CACHE_DIRECTIVE);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot add cache directive");
         effectiveDirective = FSNDNCacheOp.addCacheDirective(this, cacheManager,
             directive, flags, logRetryCache);
       } finally {
-        writeUnlock(OperationName.ADD_CACHE_DIRECTIVE);
+        writeUnlock(FSNamesystemLockMode.FS, OperationName.ADD_CACHE_DIRECTIVE);
       }
     } catch (AccessControlException ace) {
       logAuditEvent(false, OperationName.ADD_CACHE_DIRECTIVE, null);
@@ -7742,14 +7742,14 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     FSPermissionChecker.setOperationType(OperationName.MODIFY_CACHE_DIRECTIVE);
     checkOperation(OperationCategory.WRITE);
     try {
-      writeLock(OperationName.MODIFY_CACHE_DIRECTIVE);
+      writeLock(FSNamesystemLockMode.FS, OperationName.MODIFY_CACHE_DIRECTIVE);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot add cache directive");
         FSNDNCacheOp.modifyCacheDirective(this, cacheManager, directive, flags,
             logRetryCache);
       } finally {
-        writeUnlock(OperationName.MODIFY_CACHE_DIRECTIVE);
+        writeUnlock(FSNamesystemLockMode.FS, OperationName.MODIFY_CACHE_DIRECTIVE);
       }
     } catch (AccessControlException ace) {
       logAuditEvent(false, OperationName.MODIFY_CACHE_DIRECTIVE, idStr,
@@ -7766,14 +7766,14 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     checkOperation(OperationCategory.WRITE);
     FSPermissionChecker.setOperationType(OperationName.REMOVE_CACHE_DIRECTIVE);
     try {
-      writeLock(OperationName.REMOVE_CACHE_DIRECTIVE);
+      writeLock(FSNamesystemLockMode.FS, OperationName.REMOVE_CACHE_DIRECTIVE);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot remove cache directives");
         FSNDNCacheOp.removeCacheDirective(this, cacheManager, id,
             logRetryCache);
       } finally {
-        writeUnlock(OperationName.REMOVE_CACHE_DIRECTIVE);
+        writeUnlock(FSNamesystemLockMode.FS, OperationName.REMOVE_CACHE_DIRECTIVE);
       }
     } catch (AccessControlException ace) {
       logAuditEvent(false, OperationName.REMOVE_CACHE_DIRECTIVE, idStr, null, null);
@@ -7790,13 +7790,13 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     BatchedListEntries<CacheDirectiveEntry> results;
     cacheManager.waitForRescanIfNeeded();
     try {
-      readLock(OperationName.LIST_CACHE_DIRECTIVES);
+      readLock(FSNamesystemLockMode.FS, OperationName.LIST_CACHE_DIRECTIVES);
       try {
         checkOperation(OperationCategory.READ);
         results = FSNDNCacheOp.listCacheDirectives(this, cacheManager, startId,
             filter);
       } finally {
-        readUnlock(OperationName.LIST_CACHE_DIRECTIVES);
+        readUnlock(FSNamesystemLockMode.FS, OperationName.LIST_CACHE_DIRECTIVES);
       }
     } catch (AccessControlException ace) {
       logAuditEvent(false, OperationName.LIST_CACHE_DIRECTIVES, filter.toString());
@@ -7812,7 +7812,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     String poolInfoStr = null;
     try {
       checkSuperuserPrivilege();
-      writeLock(OperationName.ADD_CACHE_POOL);
+      writeLock(FSNamesystemLockMode.FS, OperationName.ADD_CACHE_POOL);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot add cache pool"
@@ -7821,7 +7821,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
             logRetryCache);
         poolInfoStr = info.toString();
       } finally {
-        writeUnlock(OperationName.ADD_CACHE_POOL);
+        writeUnlock(FSNamesystemLockMode.FS, OperationName.ADD_CACHE_POOL);
       }
     } catch (AccessControlException ace) {
       logAuditEvent(false, OperationName.ADD_CACHE_POOL, poolInfoStr);
@@ -7838,14 +7838,14 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         (req == null ? null : req.getPoolName()) + "}";
     try {
       checkSuperuserPrivilege();
-      writeLock(OperationName.MODIFY_CACHE_POOL);
+      writeLock(FSNamesystemLockMode.FS, OperationName.MODIFY_CACHE_POOL);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot modify cache pool"
             + (req == null ? null : req.getPoolName()));
         FSNDNCacheOp.modifyCachePool(this, cacheManager, req, logRetryCache);
       } finally {
-        writeUnlock(OperationName.MODIFY_CACHE_POOL);
+        writeUnlock(FSNamesystemLockMode.FS, OperationName.MODIFY_CACHE_POOL);
       }
     } catch (AccessControlException ace) {
       logAuditEvent(false, OperationName.MODIFY_CACHE_POOL, poolNameStr,
@@ -7863,14 +7863,14 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     String poolNameStr = "{poolName: " + cachePoolName + "}";
     try {
       checkSuperuserPrivilege();
-      writeLock(OperationName.REMOVE_CACHE_POOL);
+      writeLock(FSNamesystemLockMode.FS, OperationName.REMOVE_CACHE_POOL);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot modify cache pool" + cachePoolName);
         FSNDNCacheOp.removeCachePool(this, cacheManager, cachePoolName,
             logRetryCache);
       } finally {
-        writeUnlock(OperationName.REMOVE_CACHE_POOL);
+        writeUnlock(FSNamesystemLockMode.FS, OperationName.REMOVE_CACHE_POOL);
       }
     } catch (AccessControlException ace) {
       logAuditEvent(false, OperationName.REMOVE_CACHE_POOL, poolNameStr);
@@ -7887,12 +7887,12 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     FSPermissionChecker.setOperationType(OperationName.LIST_CACHE_POOLS);
     cacheManager.waitForRescanIfNeeded();
     try {
-      readLock(OperationName.LIST_CACHE_POOLS);
+      readLock(FSNamesystemLockMode.FS, OperationName.LIST_CACHE_POOLS);
       try {
         checkOperation(OperationCategory.READ);
         results = FSNDNCacheOp.listCachePools(this, cacheManager, prevKey);
       } finally {
-        readUnlock(OperationName.LIST_CACHE_POOLS);
+        readUnlock(FSNamesystemLockMode.FS, OperationName.LIST_CACHE_POOLS);
       }
     } catch (AccessControlException ace) {
       logAuditEvent(false, OperationName.LIST_CACHE_POOLS, null);

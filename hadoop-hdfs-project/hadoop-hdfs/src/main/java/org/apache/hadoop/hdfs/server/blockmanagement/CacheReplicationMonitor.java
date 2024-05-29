@@ -35,6 +35,7 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.hdfs.OperationName;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.CacheDirective;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeDescriptor.CachedBlocksList.Type;
@@ -48,6 +49,7 @@ import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.INode;
 import org.apache.hadoop.hdfs.server.namenode.INodeDirectory;
 import org.apache.hadoop.hdfs.server.namenode.INodeFile;
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
 import org.apache.hadoop.hdfs.util.ReadOnlyList;
 import org.apache.hadoop.util.GSet;
@@ -218,7 +220,7 @@ public class CacheReplicationMonitor extends Thread implements Closeable {
    * after are not atomic.
    */
   public void waitForRescanIfNeeded() {
-    Preconditions.checkArgument(!namesystem.hasWriteLock(),
+    Preconditions.checkArgument(!namesystem.hasWriteLock(FSNamesystemLockMode.FS),
         "Must not hold the FSN write lock when waiting for a rescan.");
     Preconditions.checkArgument(lock.isHeldByCurrentThread(),
         "Must hold the CRM lock when waiting for a rescan.");
@@ -263,7 +265,7 @@ public class CacheReplicationMonitor extends Thread implements Closeable {
    */
   @Override
   public void close() throws IOException {
-    Preconditions.checkArgument(namesystem.hasWriteLock());
+    Preconditions.checkArgument(namesystem.hasWriteLock(FSNamesystemLockMode.GLOBAL));
     lock.lock();
     try {
       if (shutdown) return;
@@ -285,7 +287,8 @@ public class CacheReplicationMonitor extends Thread implements Closeable {
     scannedDirectives = 0;
     scannedBlocks = 0;
     try {
-      namesystem.writeLock();
+      namesystem.writeLock(FSNamesystemLockMode.GLOBAL,
+          OperationName.CACHE_REPLICATION_MONITOR_RESCAN);
       try {
         lock.lock();
         if (shutdown) {
@@ -302,7 +305,8 @@ public class CacheReplicationMonitor extends Thread implements Closeable {
       rescanCachedBlockMap();
       blockManager.getDatanodeManager().resetLastCachingDirectiveSentTime();
     } finally {
-      namesystem.writeUnlock();
+      namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL,
+          OperationName.CACHE_REPLICATION_MONITOR_RESCAN);
     }
   }
 
