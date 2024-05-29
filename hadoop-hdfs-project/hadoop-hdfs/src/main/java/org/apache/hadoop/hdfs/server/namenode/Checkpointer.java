@@ -28,6 +28,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.List;
 
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.math.LongMath;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -243,13 +244,13 @@ class Checkpointer extends Daemon {
 
       if(needReloadImage) {
         LOG.info("Loading image with txid " + sig.mostRecentCheckpointTxId);
-        backupNode.namesystem.writeLock();
+        backupNode.namesystem.writeLock(FSNamesystemLockMode.GLOBAL, "doCheckpointByBackupNode");
         try {
           File file = bnStorage.findImageFile(NameNodeFile.IMAGE,
               sig.mostRecentCheckpointTxId);
           bnImage.reloadFromImageFile(file, backupNode.getNamesystem());
         } finally {
-          backupNode.namesystem.writeUnlock();
+          backupNode.namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL, "doCheckpointByBackupNode");
         }
       }
       rollForwardByApplyingLogs(manifest, bnImage, backupNode.getNamesystem());
@@ -257,7 +258,7 @@ class Checkpointer extends Daemon {
     
     long txid = bnImage.getLastAppliedTxId();
     
-    backupNode.namesystem.writeLock();
+    backupNode.namesystem.writeLock(FSNamesystemLockMode.GLOBAL, "doCheckpoint");
     try {
       backupNode.namesystem.setImageLoaded();
       if(backupNode.namesystem.getBlocksTotal() > 0) {
@@ -271,7 +272,7 @@ class Checkpointer extends Daemon {
         bnImage.updateStorageVersion();
       }
     } finally {
-      backupNode.namesystem.writeUnlock("doCheckpoint");
+      backupNode.namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL, "doCheckpoint");
     }
 
     if(cpCmd.needToReturnImage()) {
