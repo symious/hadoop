@@ -2472,14 +2472,14 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     checkCreateSymlinkOperation(pc);
     FSPermissionChecker.setOperationType(OperationName.CREATE_SYMLINK);
     try {
-      writeLock(OperationName.CREATE_SYMLINK);
+      writeLock(FSNamesystemLockMode.FS, OperationName.CREATE_SYMLINK);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot create symlink " + link);
         auditStat = FSDirSymlinkOp.createSymlinkInt(this, target, link,
             dirPerms, createParent, logRetryCache);
       } finally {
-        writeUnlock(OperationName.CREATE_SYMLINK);
+        writeUnlock(FSNamesystemLockMode.FS, OperationName.CREATE_SYMLINK);
       }
     } catch (AccessControlException e) {
       logAuditEvent(false, OperationName.CREATE_SYMLINK, link, target, null);
@@ -2826,7 +2826,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(null);
-    writeLock(OperationName.CREATE);
+    writeLock(FSNamesystemLockMode.FS, OperationName.CREATE);
     try {
       checkOperation(OperationCategory.WRITE);
       checkNameNodeSafeMode("Cannot create file" + src);
@@ -2890,7 +2890,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         dir.writeUnlock();
       }
     } finally {
-      writeUnlock(OperationName.CREATE);
+      writeUnlock(FSNamesystemLockMode.FS, OperationName.CREATE);
       // There might be transactions logged while trying to recover the lease.
       // They need to be sync'ed even when an exception was thrown.
       if (!skipSync) {
@@ -2923,7 +2923,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(null);
-    writeLock(OperationName.RECOVER_LEASE);
+    writeLock(FSNamesystemLockMode.GLOBAL, OperationName.RECOVER_LEASE);
     try {
       checkOperation(OperationCategory.WRITE);
       checkNameNodeSafeMode("Cannot recover the lease of " + src);
@@ -2943,7 +2943,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       skipSync = true;
       throw se;
     } finally {
-      writeUnlock(OperationName.RECOVER_LEASE);
+      writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.RECOVER_LEASE);
       // There might be transactions logged while trying to recover the lease.
       // They need to be sync'ed even when an exception was thrown.
       if (!skipSync) {
@@ -3063,7 +3063,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       checkOperation(OperationCategory.WRITE);
       final FSPermissionChecker pc = getPermissionChecker();
       FSPermissionChecker.setOperationType(OperationName.APPEND);
-      writeLock(OperationName.APPEND);
+      writeLock(FSNamesystemLockMode.GLOBAL, OperationName.APPEND);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot append to file" + srcArg);
@@ -3073,7 +3073,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         skipSync = true;
         throw se;
       } finally {
-        writeUnlock(OperationName.APPEND);
+        writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.APPEND);
         // There might be transactions logged while trying to recover the lease
         // They need to be sync'ed even when an exception was thrown.
         if (!skipSync) {
@@ -3119,13 +3119,13 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(OperationName.GET_ADDITIONAL_BLOCK);
-    readLock(OperationName.GET_ADDITIONAL_BLOCK);
+    readLock(FSNamesystemLockMode.GLOBAL, OperationName.GET_ADDITIONAL_BLOCK);
     try {
       checkOperation(OperationCategory.WRITE);
       r = FSDirWriteFileOp.validateAddBlock(this, pc, src, fileId, clientName,
                                             previous, onRetryBlock);
     } finally {
-      readUnlock(OperationName.GET_ADDITIONAL_BLOCK);
+      readUnlock(FSNamesystemLockMode.GLOBAL, OperationName.GET_ADDITIONAL_BLOCK);
     }
 
     if (r == null) {
@@ -3138,14 +3138,14 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         blockManager, src, excludedNodes, favoredNodes, flags, r);
 
     checkOperation(OperationCategory.WRITE);
-    writeLock(OperationName.GET_ADDITIONAL_BLOCK);
+    writeLock(FSNamesystemLockMode.GLOBAL, OperationName.GET_ADDITIONAL_BLOCK);
     LocatedBlock lb;
     try {
       checkOperation(OperationCategory.WRITE);
       lb = FSDirWriteFileOp.storeAllocatedBlock(
           this, src, fileId, clientName, previous, targets);
     } finally {
-      writeUnlock(OperationName.GET_ADDITIONAL_BLOCK);
+      writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.GET_ADDITIONAL_BLOCK);
     }
     getEditLog().logSync();
     return lb;
@@ -3170,7 +3170,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(null);
-    readLock(OperationName.GET_ADDITIONAL_DATANODE);
+    readLock(FSNamesystemLockMode.FS, OperationName.GET_ADDITIONAL_DATANODE);
     try {
       checkOperation(OperationCategory.WRITE);
       //check safe mode
@@ -3192,7 +3192,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
           "src=%s, fileId=%d, blk=%s, clientName=%s, clientMachine=%s",
           src, fileId, blk, clientName, clientMachine));
     } finally {
-      readUnlock(OperationName.GET_ADDITIONAL_DATANODE);
+      readUnlock(FSNamesystemLockMode.FS, OperationName.GET_ADDITIONAL_DATANODE);
     }
 
     if (clientnode == null) {
@@ -3219,7 +3219,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(null);
-    writeLock(OperationName.ABANDON_BLOCK);
+    writeLock(FSNamesystemLockMode.GLOBAL, OperationName.ABANDON_BLOCK);
     try {
       checkOperation(OperationCategory.WRITE);
       checkNameNodeSafeMode("Cannot abandon block " + b + " for file" + src);
@@ -3227,7 +3227,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       NameNode.stateChangeLog.debug("BLOCK* NameSystem.abandonBlock: {} is " +
           "removed from pendingCreates", b);
     } finally {
-      writeUnlock(OperationName.ABANDON_BLOCK);
+      writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.ABANDON_BLOCK);
     }
     getEditLog().logSync();
   }
@@ -3242,7 +3242,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       throws LeaseExpiredException, FileNotFoundException {
     String src = iip.getPath();
     INode inode = iip.getLastINode();
-    assert hasReadLock();
+    assert hasReadLock(FSNamesystemLockMode.FS);
     if (inode == null) {
       throw new FileNotFoundException("File does not exist: "
           + leaseExceptionString(src, fileId, holder));
@@ -3285,14 +3285,14 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(null);
-    writeLock(OperationName.COMPLETE_FILE);
+    writeLock(FSNamesystemLockMode.GLOBAL, OperationName.COMPLETE_FILE);
     try {
       checkOperation(OperationCategory.WRITE);
       checkNameNodeSafeMode("Cannot complete file " + src);
       success = FSDirWriteFileOp.completeFile(this, pc, src, holder, last,
                                               fileId);
     } finally {
-      writeUnlock(OperationName.COMPLETE_FILE);
+      writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.COMPLETE_FILE);
     }
     getEditLog().logSync();
     if (success) {
@@ -3308,6 +3308,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * @param blockType is the file under striping or contiguous layout?
    */
   Block createNewBlock(BlockType blockType) throws IOException {
+    // nextBlockId and nextGenerationStamp need to write edit log, so it needs FSLock.
     assert hasWriteLock(FSNamesystemLockMode.GLOBAL);
     Block b = new Block(nextBlockId(blockType), 0, 0);
     // Increment the generation stamp for every new block.
@@ -3321,7 +3322,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * all blocks, otherwise check only penultimate block.
    */
   boolean checkFileProgress(String src, INodeFile v, boolean checkall) {
-    assert hasReadLock();
+    assert hasReadLock(FSNamesystemLockMode.GLOBAL);
     if (checkall) {
       return checkBlocksComplete(src, true, v.getBlocks());
     } else {
@@ -3366,13 +3367,13 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(OperationName.RENAME);
     try {
-      writeLock(OperationName.RENAME);
+      writeLock(FSNamesystemLockMode.FS, OperationName.RENAME);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot rename " + src);
         ret = FSDirRenameOp.renameToInt(dir, pc, src, dst, logRetryCache);
       } finally {
-        writeUnlock(OperationName.RENAME);
+        writeUnlock(FSNamesystemLockMode.FS, OperationName.RENAME);
       }
     } catch (AccessControlException e)  {
       logAuditEvent(false, OperationName.RENAME, src, dst, null);
@@ -3394,14 +3395,14 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(OperationName.RENAME2);
     try {
-      writeLock(OperationName.RENAME2);
+      writeLock(FSNamesystemLockMode.GLOBAL, OperationName.RENAME2);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot rename " + src);
         res = FSDirRenameOp.renameToInt(dir, pc, src, dst, logRetryCache,
             options);
       } finally {
-        writeUnlock(OperationName.RENAME2);
+        writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.RENAME2);
       }
     } catch (AccessControlException e) {
       logAuditEvent(false, OperationName.RENAME2, src, dst, null);
@@ -3432,7 +3433,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     FSPermissionChecker.setOperationType(OperationName.DELETE);
     boolean ret = false;
     try {
-      writeLock(OperationName.DELETE);
+      writeLock(FSNamesystemLockMode.GLOBAL, OperationName.DELETE);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot delete " + src);
@@ -3440,7 +3441,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
             this, pc, src, recursive, logRetryCache);
         ret = toRemovedBlocks != null;
       } finally {
-        writeUnlock(OperationName.DELETE);
+        writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.DELETE);
       }
     } catch (AccessControlException e) {
       logAuditEvent(false, OperationName.DELETE, src);
@@ -3493,7 +3494,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   void removeLeasesAndINodes(List<Long> removedUCFiles,
       List<INode> removedINodes,
       final boolean acquireINodeMapLock) {
-    assert hasWriteLock();
+    assert hasWriteLock(FSNamesystemLockMode.FS);
     for(long i : removedUCFiles) {
       leaseManager.removeLease(i);
     }
@@ -3603,14 +3604,14 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(OperationName.MKDIRS);
     try {
-      writeLock(OperationName.MKDIRS);
+      writeLock(FSNamesystemLockMode.FS, OperationName.MKDIRS);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot create directory " + src);
         auditStat = FSDirMkdirOp.mkdirs(this, pc, src, permissions,
             createParent);
       } finally {
-        writeUnlock(OperationName.MKDIRS);
+        writeUnlock(FSNamesystemLockMode.FS, OperationName.MKDIRS);
       }
     } catch (AccessControlException e) {
       logAuditEvent(false, OperationName.MKDIRS, src);
@@ -3744,7 +3745,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     checkOperation(OperationCategory.WRITE);
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(null);
-    writeLock(OperationName.FSYNC);
+    writeLock(FSNamesystemLockMode.GLOBAL, OperationName.FSYNC);
     try {
       checkOperation(OperationCategory.WRITE);
       checkNameNodeSafeMode("Cannot fsync file " + src);
@@ -3757,7 +3758,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       }
       FSDirWriteFileOp.persistBlocks(dir, src, pendingFile, false);
     } finally {
-      writeUnlock(OperationName.FSYNC);
+      writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.FSYNC);
     }
     getEditLog().logSync();
   }
@@ -3780,7 +3781,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       String recoveryLeaseHolder) throws IOException {
     LOG.info("Recovering " + lease + ", src=" + src);
     assert !isInSafeMode();
-    assert hasWriteLock();
+    // finalizeINodeFileUnderConstruction needs global write lock.
+    assert hasWriteLock(FSNamesystemLockMode.GLOBAL);
 
     final INodeFile pendingFile = iip.getLastINode().asFile();
     int nrBlocks = pendingFile.numBlocks();
@@ -3943,7 +3945,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
   private Lease reassignLease(Lease lease, String src, String newHolder,
       INodeFile pendingFile) {
-    assert hasWriteLock();
+    assert hasWriteLock(FSNamesystemLockMode.FS);
     if(newHolder == null)
       return lease;
     // The following transaction is not synced. Make sure it's sync'ed later.
@@ -3952,7 +3954,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   }
   
   Lease reassignLeaseInternal(Lease lease, String newHolder, INodeFile pendingFile) {
-    assert hasWriteLock();
+    assert hasWriteLock(FSNamesystemLockMode.FS);
     pendingFile.getFileUnderConstructionFeature().setClientName(newHolder);
     return leaseManager.reassignLease(lease, pendingFile, newHolder);
   }
@@ -5899,6 +5901,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    */
   long nextGenerationStamp(boolean legacyBlock)
       throws IOException {
+    // TODO: Use FSLock to make nextGenerationStamp thread safe.
     assert hasWriteLock(FSNamesystemLockMode.GLOBAL);
     checkNameNodeSafeMode("Cannot get next generation stamp");
 
@@ -5918,7 +5921,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * @param blockType is the file under striping or contiguous layout?
    */
   private long nextBlockId(BlockType blockType) throws IOException {
-    assert hasWriteLock();
+    assert hasWriteLock(FSNamesystemLockMode.GLOBAL);
     checkNameNodeSafeMode("Cannot get next block ID");
     final long blockId = blockManager.nextBlockId(blockType);
     getEditLog().logAllocateBlockId(blockId);
@@ -5967,7 +5970,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
   private INodeFile checkUCBlock(ExtendedBlock block,
       String clientName) throws IOException {
-    assert hasWriteLock();
+    assert hasWriteLock(FSNamesystemLockMode.GLOBAL);
     checkNameNodeSafeMode("Cannot get a new generation stamp and an "
         + "access token for block " + block);
     
@@ -6041,7 +6044,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       String clientName) throws IOException {
     final LocatedBlock locatedBlock;
     checkOperation(OperationCategory.WRITE);
-    writeLock(OperationName.BUMP_BLOCK_GENERATION_STAMP);
+    writeLock(FSNamesystemLockMode.GLOBAL, OperationName.BUMP_BLOCK_GENERATION_STAMP);
     try {
       checkOperation(OperationCategory.WRITE);
 
@@ -6074,7 +6077,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       blockManager.setBlockToken(locatedBlock,
           BlockTokenIdentifier.AccessMode.WRITE);
     } finally {
-      writeUnlock(OperationName.BUMP_BLOCK_GENERATION_STAMP);
+      writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.BUMP_BLOCK_GENERATION_STAMP);
     }
     // Ensure we record the new generation stamp
     getEditLog().logSync();
@@ -6101,7 +6104,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
              + ", newNodes=" + Arrays.asList(newNodes)
              + ", client=" + clientName
              + ")");
-    writeLock(OperationName.UPDATE_PIPELINE);
+    writeLock(FSNamesystemLockMode.GLOBAL, OperationName.UPDATE_PIPELINE);
     try {
       checkOperation(OperationCategory.WRITE);
       checkNameNodeSafeMode("Pipeline not updated");
@@ -6110,7 +6113,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       updatePipelineInternal(clientName, oldBlock, newBlock, newNodes,
           newStorageIDs, logRetryCache);
     } finally {
-      writeUnlock(OperationName.UPDATE_PIPELINE);
+      writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.UPDATE_PIPELINE);
     }
     getEditLog().logSync();
     LOG.info("updatePipeline(" + oldBlock.getLocalBlock() + " => "
@@ -6121,7 +6124,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       ExtendedBlock newBlock, DatanodeID[] newNodes, String[] newStorageIDs,
       boolean logRetryCache)
       throws IOException {
-    assert hasWriteLock();
+    assert hasWriteLock(FSNamesystemLockMode.GLOBAL);
     // check the vadility of the block and lease holder name
     final INodeFile pendingFile = checkUCBlock(oldBlock, clientName);
     final String src = pendingFile.getFullPathName();
@@ -6397,7 +6400,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     long expiryTime;
     checkOperation(OperationCategory.WRITE);
     try {
-      writeLock(OperationName.RENEW_DELEGATION_TOKEN);
+      writeLock(FSNamesystemLockMode.FS, OperationName.RENEW_DELEGATION_TOKEN);
       try {
         checkOperation(OperationCategory.WRITE);
 
@@ -6414,7 +6417,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         getEditLog().logRenewDelegationToken(id, expiryTime);
         tokenId = id.toStringStable();
       } finally {
-        writeUnlock(OperationName.RENEW_DELEGATION_TOKEN);
+        writeUnlock(FSNamesystemLockMode.FS, OperationName.RENEW_DELEGATION_TOKEN);
       }
     } catch (AccessControlException ace) {
       final DelegationTokenIdentifier id = DFSUtil.decodeDelegationToken(token);
@@ -6437,7 +6440,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     String tokenId;
     checkOperation(OperationCategory.WRITE);
     try {
-      writeLock(OperationName.CANCEL_DELEGATION_TOKEN);
+      writeLock(FSNamesystemLockMode.FS, OperationName.CANCEL_DELEGATION_TOKEN);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot cancel delegation token");
@@ -6447,7 +6450,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         getEditLog().logCancelDelegationToken(id);
         tokenId = id.toStringStable();
       } finally {
-        writeUnlock(OperationName.CANCEL_DELEGATION_TOKEN);
+        writeUnlock(FSNamesystemLockMode.FS, OperationName.CANCEL_DELEGATION_TOKEN);
       }
     } catch (AccessControlException ace) {
       final DelegationTokenIdentifier id = DFSUtil.decodeDelegationToken(token);
@@ -6522,7 +6525,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   
   private void logReassignLease(String leaseHolder, String src,
       String newHolder) {
-    assert hasWriteLock();
+    assert hasWriteLock(FSNamesystemLockMode.FS);
     getEditLog().logReassignLease(leaseHolder, src, newHolder);
   }
   
