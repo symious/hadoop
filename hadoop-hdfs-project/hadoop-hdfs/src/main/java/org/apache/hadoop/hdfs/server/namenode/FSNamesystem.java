@@ -6352,7 +6352,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     final String tokenId;
     Token<DelegationTokenIdentifier> token;
     checkOperation(OperationCategory.WRITE);
-    writeLock(OperationName.GET_DELEGATION_TOKEN);
+    writeLock(FSNamesystemLockMode.FS, OperationName.GET_DELEGATION_TOKEN);
     try {
       checkOperation(OperationCategory.WRITE);
       checkNameNodeSafeMode("Cannot issue delegation token");
@@ -6380,7 +6380,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       getEditLog().logGetDelegationToken(dtId, expiryTime);
       tokenId = dtId.toStringStable();
     } finally {
-      writeUnlock(OperationName.GET_DELEGATION_TOKEN);
+      writeUnlock(FSNamesystemLockMode.FS, OperationName.GET_DELEGATION_TOKEN);
     }
     getEditLog().logSync();
     logAuditEvent(true, OperationName.GET_DELEGATION_TOKEN, tokenId);
