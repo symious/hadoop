@@ -1891,7 +1891,7 @@ public class BlockManager implements BlockStatsMXBean {
    */
   public void findAndMarkBlockAsCorrupt(final ExtendedBlock blk,
       final DatanodeInfo dn, String storageID, String reason) throws IOException {
-    assert namesystem.hasWriteLock();
+    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
     final Block reportedBlock = blk.getLocalBlock();
     final BlockInfo storedBlock = getStoredBlock(reportedBlock);
     if (storedBlock == null) {
@@ -2733,7 +2733,7 @@ public class BlockManager implements BlockStatsMXBean {
   }
 
   public long requestBlockReportLeaseId(DatanodeRegistration nodeReg) {
-    assert namesystem.hasReadLock();
+    assert namesystem.hasReadLock(FSNamesystemLockMode.BM);
     DatanodeDescriptor node = null;
     try {
       node = datanodeManager.getDatanode(nodeReg);
@@ -3022,7 +3022,7 @@ public class BlockManager implements BlockStatsMXBean {
 
   public void removeBRLeaseIfNeeded(final DatanodeID nodeID,
       final BlockReportContext context) throws IOException {
-    namesystem.writeLock();
+    namesystem.writeLock(FSNamesystemLockMode.BM, OperationName.REMOVE_BR_LEASE_IF_NEEDED);
     DatanodeDescriptor node;
     try {
       node = datanodeManager.getDatanode(nodeID);
@@ -3039,7 +3039,7 @@ public class BlockManager implements BlockStatsMXBean {
             context.getTotalRpcs(), Long.toHexString(context.getReportId()));
       }
     } finally {
-      namesystem.writeUnlock();
+      namesystem.writeUnlock(FSNamesystemLockMode.BM, OperationName.REMOVE_BR_LEASE_IF_NEEDED);
     }
   }
 
@@ -3203,7 +3203,7 @@ public class BlockManager implements BlockStatsMXBean {
       BlockInfo block,
       long oldGenerationStamp, long oldNumBytes, 
       DatanodeStorageInfo[] newStorages) throws IOException {
-    assert namesystem.hasWriteLock();
+    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
     BlockToMarkCorrupt b = null;
     if (block.getGenerationStamp() != oldGenerationStamp) {
       b = new BlockToMarkCorrupt(oldBlock, block, oldGenerationStamp,
@@ -4602,41 +4602,39 @@ public class BlockManager implements BlockStatsMXBean {
    */
   public void removeStoredBlock(BlockInfo storedBlock, DatanodeDescriptor node) {
     blockLog.debug("BLOCK* removeStoredBlock: {} from {}", storedBlock, node);
-    assert (namesystem.hasWriteLock());
-    {
-      if (storedBlock == null || !blocksMap.removeNode(storedBlock, node)) {
-        blockLog.debug("BLOCK* removeStoredBlock: {} has already been" +
-            " removed from node {}", storedBlock, node);
-        return;
-      }
-
-      CachedBlock cblock = namesystem.getCacheManager().getCachedBlocks()
-          .get(new CachedBlock(storedBlock.getBlockId(), (short) 0, false));
-      if (cblock != null) {
-        boolean removed = false;
-        removed |= node.getPendingCached().remove(cblock);
-        removed |= node.getCached().remove(cblock);
-        removed |= node.getPendingUncached().remove(cblock);
-        if (removed) {
-          blockLog.debug("BLOCK* removeStoredBlock: {} removed from caching "
-              + "related lists on node {}", storedBlock, node);
-        }
-      }
-
-      //
-      // It's possible that the block was removed because of a datanode
-      // failure. If the block is still valid, check if replication is
-      // necessary. In that case, put block on a possibly-will-
-      // be-replicated list.
-      //
-      if (!storedBlock.isDeleted()) {
-        bmSafeMode.decrementSafeBlockCount(storedBlock);
-        updateNeededReconstructions(storedBlock, -1, 0);
-      }
-
-      excessRedundancyMap.remove(node, storedBlock);
-      corruptReplicas.removeFromCorruptReplicasMap(storedBlock, node);
+    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
+    if (storedBlock == null || !blocksMap.removeNode(storedBlock, node)) {
+      blockLog.debug("BLOCK* removeStoredBlock: {} has already been" +
+          " removed from node {}", storedBlock, node);
+      return;
     }
+
+    CachedBlock cblock = namesystem.getCacheManager().getCachedBlocks()
+        .get(new CachedBlock(storedBlock.getBlockId(), (short) 0, false));
+    if (cblock != null) {
+      boolean removed = false;
+      removed |= node.getPendingCached().remove(cblock);
+      removed |= node.getCached().remove(cblock);
+      removed |= node.getPendingUncached().remove(cblock);
+      if (removed) {
+        blockLog.debug("BLOCK* removeStoredBlock: {} removed from caching "
+            + "related lists on node {}", storedBlock, node);
+      }
+    }
+
+    //
+    // It's possible that the block was removed because of a datanode
+    // failure. If the block is still valid, check if replication is
+    // necessary. In that case, put block on a possibly-will-
+    // be-replicated list.
+    //
+    if (!storedBlock.isDeleted()) {
+      bmSafeMode.decrementSafeBlockCount(storedBlock);
+      updateNeededReconstructions(storedBlock, -1, 0);
+    }
+
+    excessRedundancyMap.remove(node, storedBlock);
+    corruptReplicas.removeFromCorruptReplicasMap(storedBlock, node);
   }
 
   private void removeStaleReplicas(List<ReplicaUnderConstruction> staleReplicas,
@@ -5129,7 +5127,7 @@ public class BlockManager implements BlockStatsMXBean {
   }
 
   public void removeBlock(BlockInfo block) {
-    assert namesystem.hasWriteLock();
+    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
     // No need to ACK blocks that are being removed entirely
     // from the namespace, since the removal of the associated
     // file already removes them from the block map below.

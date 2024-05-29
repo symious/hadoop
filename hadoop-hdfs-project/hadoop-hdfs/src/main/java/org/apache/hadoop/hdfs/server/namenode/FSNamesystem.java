@@ -1948,11 +1948,11 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     
 
   NamespaceInfo getNamespaceInfo() {
-    readLock(OperationName.GET_NAMESPACE_INFO);
+    readLock(FSNamesystemLockMode.FS, OperationName.GET_NAMESPACE_INFO);
     try {
       return unprotectedGetNamespaceInfo();
     } finally {
-      readUnlock(OperationName.GET_NAMESPACE_INFO);
+      readUnlock(FSNamesystemLockMode.FS, OperationName.GET_NAMESPACE_INFO);
     }
   }
 
@@ -3957,7 +3957,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   void commitOrCompleteLastBlock(
       final INodeFile fileINode, final INodesInPath iip,
       final Block commitBlock) throws IOException {
-    assert hasWriteLock();
+    assert hasWriteLock(FSNamesystemLockMode.GLOBAL);
     Preconditions.checkArgument(fileINode.isUnderConstruction());
     blockManager.commitOrCompleteLastBlock(fileINode, commitBlock, iip);
   }
@@ -3979,7 +3979,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
   void finalizeINodeFileUnderConstruction(String src, INodeFile pendingFile,
       int latestSnapshot, boolean allowCommittedBlock) throws IOException {
-    assert hasWriteLock();
+    assert hasWriteLock(FSNamesystemLockMode.GLOBAL);
 
     FileUnderConstructionFeature uc = pendingFile.getFileUnderConstructionFeature();
     if (uc == null) {
@@ -4048,7 +4048,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
   @Override
   public INodeFile getBlockCollection(long id) {
-    assert hasReadLock() : "Accessing INode id = " + id + " without read lock";
+    assert hasReadLock(FSNamesystemLockMode.FS) : "Accessing INode id = " + id + " without read lock";
     INode inode = getFSDirectory().getInode(id);
     return inode == null ? null : inode.asFile();
   }
@@ -4066,7 +4066,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
              + ")");
     checkOperation(OperationCategory.WRITE);
     final String src;
-    writeLock(OperationName.COMMIT_BLOCK_SYNCHRONIZATION);
+    writeLock(FSNamesystemLockMode.GLOBAL, OperationName.COMMIT_BLOCK_SYNCHRONIZATION);
     boolean copyTruncate = false;
     BlockInfo truncatedBlock = null;
     try {
@@ -4200,7 +4200,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       }
       blockManager.successfulBlockRecovery(storedBlock);
     } finally {
-      writeUnlock(OperationName.COMMIT_BLOCK_SYNCHRONIZATION);
+      writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.COMMIT_BLOCK_SYNCHRONIZATION);
     }
     getEditLog().logSync();
     if (closeFile) {
@@ -4459,11 +4459,11 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * @see org.apache.hadoop.hdfs.server.datanode.DataNode
    */
   void registerDatanode(DatanodeRegistration nodeReg) throws IOException {
-    writeLock(OperationName.REGISTER_DATANODE);
+    writeLock(FSNamesystemLockMode.BM, OperationName.REGISTER_DATANODE);
     try {
       blockManager.registerDatanode(nodeReg);
     } finally {
-      writeUnlock(OperationName.REGISTER_DATANODE);
+      writeUnlock(FSNamesystemLockMode.BM, OperationName.REGISTER_DATANODE);
     }
   }
   
@@ -4499,7 +4499,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       long writeBytesThrottled,
       long transferBytesThrottled,
       boolean isActiveNamenode) throws IOException {
-    readLock(OperationName.HANDLE_HEARTBEAT);
+    readLock(FSNamesystemLockMode.BM, OperationName.HANDLE_HEARTBEAT);
     try {
       //get datanode commands
       DatanodeCommand[] cmds = blockManager.getDatanodeManager().handleHeartbeat(
@@ -4527,7 +4527,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       return new HeartbeatResponse(cmds, haState, rollingUpgradeInfo,
           blockReportLeaseId, isSlownode, newBandwidths[0], newBandwidths[1], newBandwidths[2]);
     } finally {
-      readUnlock(OperationName.HANDLE_HEARTBEAT);
+      readUnlock(FSNamesystemLockMode.BM, OperationName.HANDLE_HEARTBEAT);
     }
   }
 
@@ -4590,7 +4590,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * @param file
    */
   private void closeFile(String path, INodeFile file) {
-    assert hasWriteLock();
+    assert hasWriteLock(FSNamesystemLockMode.FS);
     // file is closed
     getEditLog().logCloseFile(path, file);
     NameNode.stateChangeLog.debug("closeFile: {} with {} blocks is persisted" +
@@ -5922,7 +5922,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   }
 
   boolean isFileDeleted(INodeFile file) {
-    assert hasReadLock();
+    assert hasReadLock(FSNamesystemLockMode.FS);
     // Not in the inodeMap or in the snapshot but marked deleted.
     if (dir.getInode(file.getId()) == null) {
       return true;
@@ -6000,7 +6000,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    */
   void reportBadBlocks(LocatedBlock[] blocks) throws IOException {
     checkOperation(OperationCategory.WRITE);
-    writeLock(OperationName.REPORT_BAD_BLOCKS);
+    writeLock(FSNamesystemLockMode.BM, OperationName.REPORT_BAD_BLOCKS);
     try {
       checkOperation(OperationCategory.WRITE);
       for (int i = 0; i < blocks.length; i++) {
@@ -6016,7 +6016,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         }
       }
     } finally {
-      writeUnlock(OperationName.REPORT_BAD_BLOCKS);
+      writeUnlock(FSNamesystemLockMode.BM, OperationName.REPORT_BAD_BLOCKS);
     }
   }
 

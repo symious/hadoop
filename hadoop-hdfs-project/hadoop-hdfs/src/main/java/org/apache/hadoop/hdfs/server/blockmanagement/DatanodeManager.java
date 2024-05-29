@@ -26,7 +26,9 @@ import static org.apache.hadoop.hdfs.protocol.HdfsConstants.TRAFFIC_DC_STR;
 import static org.apache.hadoop.hdfs.server.protocol.DatanodeProtocol.DNA_ERASURE_CODING_RECONSTRUCTION;
 import static org.apache.hadoop.util.Time.monotonicNow;
 
+import org.apache.hadoop.hdfs.OperationName;
 import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.namenode.handler.DatanodeManagerRefreshHandler;
 import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.ipc.RefreshRegistry;
@@ -1049,7 +1051,7 @@ public class DatanodeManager {
    */
   private void removeDatanode(DatanodeDescriptor nodeInfo,
       boolean removeBlocksFromBlocksMap) {
-    assert namesystem.hasWriteLock();
+    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
     heartbeatManager.removeDatanode(nodeInfo);
     if (removeBlocksFromBlocksMap) {
       blockManager.removeBlocksAssociatedTo(nodeInfo);
@@ -1070,7 +1072,7 @@ public class DatanodeManager {
    */
   public void removeDatanode(final DatanodeID node)
       throws UnregisteredNodeException {
-    namesystem.writeLock();
+    namesystem.writeLock(FSNamesystemLockMode.BM, OperationName.REMOVE_DATANODE);
     try {
       final DatanodeDescriptor descriptor = getDatanode(node);
       if (descriptor != null) {
@@ -1080,7 +1082,7 @@ public class DatanodeManager {
                                      + node + " does not exist");
       }
     } finally {
-      namesystem.writeUnlock();
+      namesystem.writeUnlock(FSNamesystemLockMode.BM, OperationName.REMOVE_DATANODE);
     }
   }
 

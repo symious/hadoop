@@ -117,9 +117,11 @@ public class OperationName {
   public static String REMOVE_ACL = "removeAcl";
   public static String REMOVE_ACL_ENTRIES = "removeAclEntries";
   public static String REMOVE_BLOCKS = "removeBlocks";
+  public static String REMOVE_BR_LEASE_IF_NEEDED = "removeBRLeaseIfNeeded";
   public static String REMOVE_CACHE_DIRECTIVE = "removeCacheDirective";
   public static String REMOVE_CACHE_POOL = "removeCachePool";
   public static String REMOVE_DEFAULT_ACL = "removeDefaultAcl";
+  public static String REMOVE_DATANODE = "removeDatanode";
   public static String REMOVE_ERASURE_CODING_POLICY = "removeErasureCodingPolicy";
   public static String REMOVE_XATTRS = "removeXAttr";
   public static String RENAME = "rename";

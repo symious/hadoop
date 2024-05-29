@@ -41,6 +41,7 @@ import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.metrics2.lib.MutableStat;
 import org.apache.hadoop.metrics2.util.SampleStat;
 import org.apache.hadoop.net.StaticMapping;
@@ -126,6 +127,7 @@ public class TestDatanodeManager {
     //Create the DatanodeManager which will be tested
     FSNamesystem fsn = Mockito.mock(FSNamesystem.class);
     Mockito.when(fsn.hasWriteLock()).thenReturn(true);
+    Mockito.when(fsn.hasWriteLock(FSNamesystemLockMode.BM)).thenReturn(true);
     Configuration conf = new Configuration();
     conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, 0);
     conf.setLong(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, 10);
@@ -162,6 +164,7 @@ public class TestDatanodeManager {
     //Create the DatanodeManager which will be tested
     FSNamesystem fsn = Mockito.mock(FSNamesystem.class);
     Mockito.when(fsn.hasWriteLock()).thenReturn(true);
+    Mockito.when(fsn.hasWriteLock(FSNamesystemLockMode.BM)).thenReturn(true);
     DatanodeManager dm = mockDatanodeManager(fsn, new Configuration());
 
     //Seed the RNG with a known value so test failures are easier to reproduce
@@ -261,6 +264,7 @@ public class TestDatanodeManager {
     //Create the DatanodeManager which will be tested
     FSNamesystem fsn = Mockito.mock(FSNamesystem.class);
     Mockito.when(fsn.hasWriteLock()).thenReturn(true);
+    Mockito.when(fsn.hasWriteLock(FSNamesystemLockMode.BM)).thenReturn(true);
     
     Configuration conf = new Configuration();
     
@@ -342,6 +346,7 @@ public class TestDatanodeManager {
     // create DatanodeManager instance
     FSNamesystem fsn = Mockito.mock(FSNamesystem.class);
     Mockito.when(fsn.hasWriteLock()).thenReturn(true);
+    Mockito.when(fsn.hasWriteLock(FSNamesystemLockMode.BM)).thenReturn(true);
     DatanodeManager dm = mockDatanodeManager(fsn, conf);
 
     // client in /dc0
@@ -429,6 +434,7 @@ public class TestDatanodeManager {
     Configuration conf = new Configuration();
     FSNamesystem fsn = Mockito.mock(FSNamesystem.class);
     Mockito.when(fsn.hasWriteLock()).thenReturn(true);
+    Mockito.when(fsn.hasWriteLock(FSNamesystemLockMode.BM)).thenReturn(true);
     if (scriptFileName != null && !scriptFileName.isEmpty()) {
       URL shellScript = getClass().getResource(scriptFileName);
       Path resourcePath = Paths.get(shellScript.toURI());
@@ -674,6 +680,7 @@ public class TestDatanodeManager {
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_READ_KEY, true);
     FSNamesystem fsn = Mockito.mock(FSNamesystem.class);
     Mockito.when(fsn.hasWriteLock()).thenReturn(true);
+    Mockito.when(fsn.hasWriteLock(FSNamesystemLockMode.BM)).thenReturn(true);
     URL shellScript = getClass()
         .getResource("/" + Shell.appendScriptExtension("topology-script"));
     Path resourcePath = Paths.get(shellScript.toURI());
@@ -741,6 +748,7 @@ public class TestDatanodeManager {
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_READ_KEY, true);
     FSNamesystem fsn = Mockito.mock(FSNamesystem.class);
     Mockito.when(fsn.hasWriteLock()).thenReturn(true);
+    Mockito.when(fsn.hasWriteLock(FSNamesystemLockMode.BM)).thenReturn(true);
     URL shellScript = getClass()
         .getResource("/" + Shell.appendScriptExtension("topology-script"));
     Path resourcePath = Paths.get(shellScript.toURI());
@@ -826,6 +834,7 @@ public class TestDatanodeManager {
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_READ_KEY, true);
     FSNamesystem fsn = Mockito.mock(FSNamesystem.class);
     Mockito.when(fsn.hasWriteLock()).thenReturn(true);
+    Mockito.when(fsn.hasWriteLock(FSNamesystemLockMode.BM)).thenReturn(true);
     URL shellScript = getClass()
         .getResource("/" + Shell.appendScriptExtension("topology-script"));
     Path resourcePath = Paths.get(shellScript.toURI());
@@ -1022,6 +1031,7 @@ public class TestDatanodeManager {
       throws IOException {
     FSNamesystem fsn = Mockito.mock(FSNamesystem.class);
     Mockito.when(fsn.hasWriteLock()).thenReturn(true);
+    Mockito.when(fsn.hasWriteLock(FSNamesystemLockMode.BM)).thenReturn(true);
     Configuration conf = new Configuration();
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_MAX_STREAMS_KEY, maxTransfers);
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_STREAMS_HARD_LIMIT_KEY,
