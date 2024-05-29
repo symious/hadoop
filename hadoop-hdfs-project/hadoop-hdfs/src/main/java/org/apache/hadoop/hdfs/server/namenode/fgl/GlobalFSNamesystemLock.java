@@ -30,7 +30,8 @@ public class GlobalFSNamesystemLock implements FSNLockManager {
   public GlobalFSNamesystemLock(Configuration conf,
       MutableRatesWithAggregation detailedHoldTimeMetrics,
       MutableRatesWithAggregation detailedWaitTimeMetrics) {
-    this.lock = new FSNamesystemLock(conf, detailedHoldTimeMetrics, detailedWaitTimeMetrics);
+    this.lock = new FSNamesystemLock(conf, "FSN",
+        detailedHoldTimeMetrics, detailedWaitTimeMetrics);
   }
 
   @Override

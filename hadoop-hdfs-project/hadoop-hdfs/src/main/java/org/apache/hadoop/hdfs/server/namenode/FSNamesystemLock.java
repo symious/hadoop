@@ -49,7 +49,7 @@ import static org.apache.hadoop.ipc.ProcessingDetails.Timing;
  * to be true, metrics will be emitted into the FSNamesystem metrics registry
  * for each operation which acquires this lock indicating how long the operation
  * held the lock for. These metrics have names of the form
- * FSN(Read|Write)LockNanosOperationName, where OperationName denotes the name
+ * ${LockName}(Read|Write)LockNanosOperationName, where OperationName denotes the name
  * of the operation that initiated the lock hold (this will be OTHER for certain
  * uncategorized operations) and they export the hold time values in
  * nanoseconds. Note that if a thread dies, metrics produced after the
@@ -60,6 +60,7 @@ import static org.apache.hadoop.ipc.ProcessingDetails.Timing;
 public class FSNamesystemLock {
   @VisibleForTesting
   protected ReentrantReadWriteLock coarseLock;
+  private final String lockName;
 
   private volatile boolean metricsEnabled;
   private final MutableRatesWithAggregation detailedHoldTimeMetrics;
@@ -103,24 +104,29 @@ public class FSNamesystemLock {
   @VisibleForTesting
   static final String OP_NAME_OTHER = "OTHER";
   static final String OP_NAME_INTERRUPTIBLY = "INTERRUPTIBLY";
-  private static final String READ_LOCK_METRIC_PREFIX = "FSNReadLock";
-  private static final String WRITE_LOCK_METRIC_PREFIX = "FSNWriteLock";
+  private final String readLockMetricPrefix;
+  private final String writeLockMetricPrefix;
   private static final String LOCK_METRIC_SUFFIX = "Nanos";
   private static final String WAIT_LOCK_METRIC_SUFFIX = "WaitNanos";
 
   private static final String OVERALL_METRIC_NAME = "Overall";
 
-  public FSNamesystemLock(Configuration conf, MutableRatesWithAggregation detailedHoldTimeMetrics,
+  public FSNamesystemLock(Configuration conf, String lockName,
+      MutableRatesWithAggregation detailedHoldTimeMetrics,
       MutableRatesWithAggregation detailedWaitTimeMetrics) {
-    this(conf, detailedHoldTimeMetrics, detailedWaitTimeMetrics, new Timer());
+    this(conf, lockName, detailedHoldTimeMetrics, detailedWaitTimeMetrics, new Timer());
   }
 
   @VisibleForTesting
-  FSNamesystemLock(Configuration conf, MutableRatesWithAggregation detailedHoldTimeMetrics,
+  FSNamesystemLock(Configuration conf, String lockName,
+      MutableRatesWithAggregation detailedHoldTimeMetrics,
       MutableRatesWithAggregation detailedWaitTimeMetrics, Timer timer) {
+    this.lockName = lockName;
+    this.readLockMetricPrefix = this.lockName + "ReadLock";
+    this.writeLockMetricPrefix = this.lockName + "WriteLock";
     boolean fair = conf.getBoolean(DFS_NAMENODE_FSLOCK_FAIR_KEY,
         DFS_NAMENODE_FSLOCK_FAIR_DEFAULT);
-    FSNamesystem.LOG.info("fsLock is fair: " + fair);
+    FSNamesystem.LOG.info("{}Lock is fair: {}.", this.lockName, fair);
     this.coarseLock = new ReentrantReadWriteLock(fair);
     this.timer = timer;
 
@@ -136,35 +142,10 @@ public class FSNamesystemLock {
     this.metricsEnabled = conf.getBoolean(
         DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY,
         DFS_NAMENODE_LOCK_DETAILED_METRICS_DEFAULT);
-    FSNamesystem.LOG.info("Detailed lock time metrics enabled: " +
-        this.metricsEnabled);
+    FSNamesystem.LOG.info("Detailed lock hold time metrics of {}Lock is {}.",
+        this.lockName, this.metricsEnabled ? "enabled" : "disabled");
     this.detailedHoldTimeMetrics = detailedHoldTimeMetrics;
     this.detailedWaitTimeMetrics = detailedWaitTimeMetrics;
-  }
-
-  @VisibleForTesting
-  void refreshLockMetricsConfigs(Configuration conf) {
-    setWriteLockReportingThresholdMs(conf.getLong(
-        DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_KEY,
-        DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_DEFAULT));
-    setReadLockReportingThresholdMs(conf.getLong(
-        DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY,
-        DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_DEFAULT));
-    setLockWaitThresholdNs(conf.getLong(
-        DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_KEY,
-        DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_DEFAULT) * 1000);
-    setMetricsEnabled(conf.getBoolean(
-        DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY,
-        DFS_NAMENODE_LOCK_DETAILED_METRICS_DEFAULT));
-
-    FSNamesystem.LOG.info("Detailed lock time metrics enabled: " +
-        this.metricsEnabled);
-    FSNamesystem.LOG.info("Refreshed lock wait threshold: " +
-        this.lockWaitThresholdNs / 1000 + " ms");
-    FSNamesystem.LOG.info("Refreshed read lock reporting threshold: " +
-        this.readLockReportingThresholdMs + " ms");
-    FSNamesystem.LOG.info("Refreshed write lock reporting threshold: " +
-        this.writeLockReportingThresholdMs + " ms");
   }
 
   public void readLock() {
@@ -198,8 +179,8 @@ public class FSNamesystemLock {
         TimeUnit.NANOSECONDS.toMillis(readLockIntervalNanos);
     if (needReport && readLockIntervalMs >= this.readLockReportingThresholdMs) {
       numReadLockLongHold.increment();
-      FSNamesystem.LOG.info("\tLongest read-lock held at {} for {}ms via {}",
-          Time.formatTime(currentTimeMs), readLockIntervalMs,
+      FSNamesystem.LOG.info("\tLongest read-lock of {}Lock held at {} for {}ms via {}",
+          this.lockName, Time.formatTime(currentTimeMs), readLockIntervalMs,
           StringUtils.getStackTrace(Thread.currentThread()));
     }
   }
@@ -260,8 +241,8 @@ public class FSNamesystemLock {
 
     if (needLogSlowWrite) {
       numWriteLockLongHold.increment();
-      FSNamesystem.LOG.info("\tLongest write-lock held at {} for {}ms via {}.",
-          Time.formatTime(currentTimeMs), writeLockIntervalMs,
+      FSNamesystem.LOG.info("\tLongest write-lock held of {}Lock at {} for {}ms via {}.",
+          this.lockName, Time.formatTime(currentTimeMs), writeLockIntervalMs,
           StringUtils.getStackTrace(Thread.currentThread()));
     }
   }
@@ -389,8 +370,8 @@ public class FSNamesystemLock {
     }
   }
 
-  private static String getMetricName(String operationName, boolean isWrite, boolean isWait) {
-    return (isWrite ? WRITE_LOCK_METRIC_PREFIX : READ_LOCK_METRIC_PREFIX) +
+  private String getMetricName(String operationName, boolean isWrite, boolean isWait) {
+    return (isWrite ? this.writeLockMetricPrefix : this.readLockMetricPrefix) +
         org.apache.commons.lang3.StringUtils.capitalize(operationName) +
         (isWait ? WAIT_LOCK_METRIC_SUFFIX : LOCK_METRIC_SUFFIX);
   }

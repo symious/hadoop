@@ -36,8 +36,10 @@ public class FineGrainedFSNamesystemLock implements FSNLockManager {
   public FineGrainedFSNamesystemLock(Configuration conf,
       MutableRatesWithAggregation detailedHoldTimeMetrics,
       MutableRatesWithAggregation detailedWaitTimeMetrics) {
-    this.fsLock = new FSNamesystemLock(conf, detailedHoldTimeMetrics, detailedWaitTimeMetrics);
-    this.bmLock = new FSNamesystemLock(conf, detailedHoldTimeMetrics, detailedWaitTimeMetrics);
+    this.fsLock = new FSNamesystemLock(conf, "FS",
+        detailedHoldTimeMetrics, detailedWaitTimeMetrics);
+    this.bmLock = new FSNamesystemLock(conf, "BM",
+        detailedHoldTimeMetrics, detailedWaitTimeMetrics);
   }
 
   @Override
