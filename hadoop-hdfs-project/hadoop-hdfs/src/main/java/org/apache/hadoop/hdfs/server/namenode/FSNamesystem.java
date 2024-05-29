@@ -4011,7 +4011,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
   @Override
   public boolean isInSnapshot(long blockCollectionID) {
-    assert hasReadLock();
+    assert hasReadLock(FSNamesystemLockMode.FS);
     final INodeFile bc = getBlockCollection(blockCollectionID);
     if (bc == null || !bc.isUnderConstruction()) {
       return false;
@@ -5370,11 +5370,11 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   public void processIncrementalBlockReport(final DatanodeID nodeID,
       final StorageReceivedDeletedBlocks srdb)
       throws IOException {
-    writeLock(OperationName.PROCESS_INCREMENTAL_BLOCK_REPORT);
+    writeLock(FSNamesystemLockMode.GLOBAL, OperationName.PROCESS_INCREMENTAL_BLOCK_REPORT);
     try {
       blockManager.processIncrementalBlockReport(nodeID, srdb);
     } finally {
-      writeUnlock(OperationName.PROCESS_INCREMENTAL_BLOCK_REPORT);
+      writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.PROCESS_INCREMENTAL_BLOCK_REPORT);
     }
   }
   

@@ -102,6 +102,9 @@ public class OperationName {
   public static String OPEN = "open";
   public static String PAUSE_FOR_TESTING_AFTER_NTH_CHECKPOINT = "pauseForTestingAfterNthCheckpoint";
   public static String PROCESS_INCREMENTAL_BLOCK_REPORT = "processIncrementalBlockReport";
+  public static String PROCESS_MISREPLICATES_ASYNC = "processMisReplicatesAsync";
+  public static String PROCESS_REPORT = "processReport";
+  public static String PROCESS_PENDING_RECONSTRUCTIONS = "processPendingReconstructions";
   public static String QUOTA_USAGE = "quotaUsage";
   public static String QUERY_ROLLING_UPGRADE = "queryRollingUpgrade";
   public static String RECOVER_LEASE = "recoverLease";
@@ -130,6 +133,7 @@ public class OperationName {
   public static String SATISFY_STORAGE_POLICY = "satisfyStoragePolicy";
   public static String SAVE_NAMESPACE = "saveNamespace";
   public static String SCAN_AND_COMPACT_STORAGES = "scanAndCompactStorages";
+  public static String SCANNER_MISREPLICATES_ASYNC = "scannerMisReplicatesAsync";
   public static String SET_ACL = "setAcl";
   public static String SET_BALANCER_BANDWIDTH = "setBalancerBandwidth";
   public static String SET_ERASURE_CODING_POLICY = "setErasureCodingPolicy";
@@ -150,7 +154,13 @@ public class OperationName {
   public static String STOP_COMMON_SERVICE = "stopCommonServices";
   public static String TRUNCATE = "truncate";
   public static String UPDATE_PIPELINE = "updatePipeline";
+  public static String UPDATE_NEEDED_RECONSTRUCTIONS = "updateNeededReconstructions";
   public static String UNSET_ERASURE_CODING_POLICY = "unsetErasureCodingPolicy";
   public static String UNSET_STORAGE_POLICY = "unsetStoragePolicy";
   public static String PROCESS_TIME_OUT_EXCESS_BLOCKS = "processTimeOutExcessBlocks";
+  public static String COMPUTE_BLOCK_RECONSTRUCTION_WORK = "computeBlockReconstructionWork";
+  public static String COMPUTE_BLOCK_RECONSTRUCTION_WORK_FOR_BLOCKS = "computeReconstructionWorkForBlocks";
+  public static String COMPUTE_DATANODE_WORK = "computeDatanodeWork";
+  public static String RESCAN_POSTPONED_MISREPLICATED_BLOCKS = "rescanPostponedMisreplicatedBlocks";
+  public static String INVALIDATE_WORK_FOR_ONE_NODE = "invalidateWorkForOneNode";
 }
