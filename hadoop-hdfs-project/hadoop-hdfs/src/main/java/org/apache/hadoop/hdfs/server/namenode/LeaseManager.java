@@ -35,6 +35,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 
 import org.apache.commons.lang3.StringUtils;
@@ -292,7 +293,7 @@ public class LeaseManager {
    */
   public BatchedListEntries<OpenFileEntry> getUnderConstructionFiles(
       final long prevId, final String path) throws IOException {
-    assert fsnamesystem.hasReadLock();
+    assert fsnamesystem.hasReadLock(FSNamesystemLockMode.FS);
     SortedMap<Long, Lease> remainingLeases;
     synchronized (this) {
       remainingLeases = leasesById.tailMap(prevId, false);
