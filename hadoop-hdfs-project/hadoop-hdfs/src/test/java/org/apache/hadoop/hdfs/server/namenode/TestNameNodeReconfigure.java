@@ -53,9 +53,12 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANC
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_KEY;
 import static org.junit.Assert.*;
 
 import org.slf4j.Logger;
@@ -533,6 +536,78 @@ public class TestNameNodeReconfigure {
 
     // Assert DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY is 10.
     assertEquals(10, datanodeManager.getMaxSlowpeerCollectNodes());
+  }
+
+  @Test
+  public void testReconfigureFSNamesystemLockMetricsParameters()
+      throws ReconfigurationException, IOException {
+    Configuration conf = new HdfsConfiguration();
+    conf.setBoolean(DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY, false);
+    long defaultReadLockMS = 1000L;
+    conf.setLong(DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY, defaultReadLockMS);
+    long defaultWriteLockMS = 1000L;
+    conf.setLong(DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_KEY, defaultWriteLockMS);
+
+    try (MiniDFSCluster newCluster = new MiniDFSCluster.Builder(conf).build()) {
+      newCluster.waitActive();
+      final NameNode nameNode = newCluster.getNameNode();
+      final FSNamesystem fsNamesystem = nameNode.getNamesystem();
+      // verify default value.
+      assertFalse(fsNamesystem.isMetricsEnabled());
+      assertEquals(defaultReadLockMS, fsNamesystem.getReadLockReportingThresholdMs());
+      assertEquals(defaultWriteLockMS, fsNamesystem.getWriteLockReportingThresholdMs());
+
+      // try invalid metricsEnabled.
+      try {
+        nameNode.reconfigurePropertyImpl(DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY,
+            "non-boolean");
+        fail("should not reach here");
+      } catch (ReconfigurationException e) {
+        assertEquals(
+            "Could not change property dfs.namenode.lock.detailed-metrics.enabled from " +
+                "'false' to 'non-boolean'", e.getMessage());
+      }
+
+      // try correct metricsEnabled.
+      nameNode.reconfigurePropertyImpl(DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY, "true");
+      assertTrue(fsNamesystem.isMetricsEnabled());
+
+      nameNode.reconfigurePropertyImpl(DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY, null);
+      assertFalse(fsNamesystem.isMetricsEnabled());
+
+      // try invalid readLockMS.
+      try {
+        nameNode.reconfigureProperty(DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY,
+            "non-numeric");
+        fail("Should not reach here");
+      } catch (ReconfigurationException e) {
+        assertEquals("Could not change property " +
+            "dfs.namenode.read-lock-reporting-threshold-ms from '" +
+            defaultReadLockMS + "' to 'non-numeric'", e.getMessage());
+      }
+
+      // try correct readLockMS.
+      nameNode.reconfigureProperty(DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY,
+          "20000");
+      assertEquals(fsNamesystem.getReadLockReportingThresholdMs(), 20000);
+
+
+      // try invalid writeLockMS.
+      try {
+        nameNode.reconfigureProperty(
+            DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_KEY, "non-numeric");
+        fail("Should not reach here");
+      } catch (ReconfigurationException e) {
+        assertEquals("Could not change property " +
+            "dfs.namenode.write-lock-reporting-threshold-ms from '" +
+            defaultWriteLockMS + "' to 'non-numeric'", e.getMessage());
+      }
+
+      // try correct writeLockMS.
+      nameNode.reconfigureProperty(
+          DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_KEY, "100000");
+      assertEquals(fsNamesystem.getWriteLockReportingThresholdMs(), 100000);
+    }
   }
 
   @After

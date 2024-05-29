@@ -145,6 +145,14 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOCK_DETAILED_METRICS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACL_ALLOW_USERS;
@@ -457,6 +465,10 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY,
           IPC_SERVER_LOG_SLOW_RPC,
           IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY,
+          DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY,
+          DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_KEY,
+          DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY,
+          DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_KEY,
           DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY,
           DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT,
           DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED,
@@ -2544,6 +2556,11 @@ public class NameNode extends ReconfigurableBase implements
     } else if (property.equals(IPC_SERVER_LOG_SLOW_RPC) ||
         (property.equals(IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY))) {
       return reconfigureLogSlowRPC(property, newVal);
+    } else if (property.equals(DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY)
+        || property.equals(DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY)
+        || property.equals(DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_KEY)
+        || property.equals(DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_KEY)) {
+      return reconfigureFSNamesystemLockMetricsParameters(property, newVal);
     } else if (property.equals(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED) ||
         property.equals(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT) ||
         property.equals(DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY)) {
@@ -3311,6 +3328,55 @@ public class NameNode extends ReconfigurableBase implements
   public String[] getDuplicateDNReports() {
     return namesystem.getBlockManager().getDatanodeManager()
         .getDuplicateDNReports();
+  }
+
+  private String reconfigureFSNamesystemLockMetricsParameters(final String property,
+      final String newVal) throws ReconfigurationException {
+    String result;
+    try {
+      switch (property) {
+      case DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY: {
+        if (newVal != null && !newVal.equalsIgnoreCase("true") &&
+            !newVal.equalsIgnoreCase("false")) {
+          throw new IllegalArgumentException(newVal + " is not boolean value");
+        }
+        boolean enable = (newVal == null ?
+            DFS_NAMENODE_LOCK_DETAILED_METRICS_DEFAULT : Boolean.parseBoolean(newVal));
+        result = Boolean.toString(enable);
+        namesystem.setMetricsEnabled(enable);
+        break;
+      }
+      case DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY: {
+        long readLockReportingThresholdMs = (newVal == null ?
+            DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_DEFAULT : Long.parseLong(newVal));
+        result = Long.toString(readLockReportingThresholdMs);
+        namesystem.setReadLockReportingThresholdMs(readLockReportingThresholdMs);
+        break;
+      }
+      case DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_KEY: {
+        long lockWaitThresholdMs = (newVal == null ? DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_DEFAULT
+            : Long.parseLong(newVal));
+        result = Long.toString(lockWaitThresholdMs);
+        namesystem.setLockWaitThresholdMs(lockWaitThresholdMs * 1000);
+        break;
+      }
+      case DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_KEY: {
+        long writeLockReportingThresholdMs = (newVal == null ?
+            DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_DEFAULT : Long.parseLong(newVal));
+        result = Long.toString(writeLockReportingThresholdMs);
+        namesystem.setWriteLockReportingThresholdMs(writeLockReportingThresholdMs);
+        break;
+      }
+      default: {
+        throw new IllegalArgumentException("Unexpected property " + property + " in " +
+            "reconfigureFSNamesystemLockMetricsParameters");
+      }
+      }
+      LOG.info("RECONFIGURE* changed FSNamesystemLockMetricsParameters {} to {}", property, result);
+      return result;
+    } catch (IllegalArgumentException e){
+      throw new ReconfigurationException(property, newVal, getConf().get(property), e);
+    }
   }
 
   @Override  // ReconfigurableBase
