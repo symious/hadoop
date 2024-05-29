@@ -103,6 +103,7 @@ public class OperationName {
   public static String PAUSE_FOR_TESTING_AFTER_NTH_CHECKPOINT = "pauseForTestingAfterNthCheckpoint";
   public static String PROCESS_INCREMENTAL_BLOCK_REPORT = "processIncrementalBlockReport";
   public static String PROCESS_MISREPLICATES_ASYNC = "processMisReplicatesAsync";
+  public static String PROCESS_MAINTENANCE_NODES = "processMaintenanceNodes";
   public static String PROCESS_REPORT = "processReport";
   public static String PROCESS_CACHE_REPORT = "processCacheReport";
   public static String PROCESS_PENDING_RECONSTRUCTIONS = "processPendingReconstructions";

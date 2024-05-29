@@ -1596,7 +1596,8 @@ public class DatanodeManager {
     }
     dnsToSwitchMapping.resolve(refreshIpList);
     dnsToSwitchMappingForMetric.resolve(refreshIpList);
-    namesystem.writeLock();
+    // processExtraRedundancyBlocksOnInService involves FS in stopMaintenance and stopDecommission.
+    namesystem.writeLock(FSNamesystemLockMode.GLOBAL, OperationName.REFRESH_NODES);
     try {
       // Refresh DN topology info
       LOG.info("Refresh datanode admin monitor as well!");
@@ -1604,7 +1605,7 @@ public class DatanodeManager {
       refreshDatanodes();
       countSoftwareVersions();
     } finally {
-      namesystem.writeUnlock();
+      namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.REFRESH_NODES);
     }
   }
 
