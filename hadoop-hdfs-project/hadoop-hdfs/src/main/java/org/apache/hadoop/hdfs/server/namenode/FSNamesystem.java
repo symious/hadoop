@@ -1396,7 +1396,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   
   @Override
   public void startSecretManagerIfNecessary() {
-    assert hasWriteLock() : "Starting secret manager needs write lock";
+    assert hasWriteLock(FSNamesystemLockMode.BM) : "Starting secret manager needs write lock";
     boolean shouldRun = shouldUseDelegationTokens() &&
       !isInSafeMode() && getEditLog().isOpenForWrite();
     boolean running = dtSecretManager.isRunning();
@@ -1416,7 +1416,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    */
   void startCommonServices(Configuration conf, HAContext haContext) throws IOException {
     this.registerMBean(); // register the MBean for the FSNamesystemState
-    writeLock(OperationName.START_COMMON_SERVICE);
+    writeLock(FSNamesystemLockMode.GLOBAL, OperationName.START_COMMON_SERVICE);
     this.haContext = haContext;
     try {
       nnResourceChecker = new NameNodeResourceChecker(conf);
@@ -1429,7 +1429,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
           completeBlocksTotal);
       blockManager.activate(conf, completeBlocksTotal);
     } finally {
-      writeUnlock(OperationName.START_COMMON_SERVICE);
+      writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.START_COMMON_SERVICE);
     }
     
     registerMXBean();
@@ -1469,7 +1469,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     startingActiveService = true;
     long beginTime = Time.monotonicNow();
     LOG.info("Starting services required for active state");
-    writeLock(OperationName.START_ACTIVE_SERVICE);
+    writeLock(FSNamesystemLockMode.GLOBAL, OperationName.START_ACTIVE_SERVICE);
     try {
       FSEditLog editLog = getFSImage().getEditLog();
       long beginEditTime = Time.monotonicNow();
@@ -1560,7 +1560,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     } finally {
       startingActiveService = false;
       blockManager.checkSafeMode();
-      writeUnlock(OperationName.START_ACTIVE_SERVICE);
+      writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.START_ACTIVE_SERVICE);
       LOG.info("StartActiveServices costs "
           + (Time.monotonicNow() - beginTime) + "ms.");
     }
@@ -5258,7 +5258,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * @throws IOException
    */
   void enterSafeMode(boolean resourcesLow) throws IOException {
-    writeLock(OperationName.ENTER_SAFE_MODE);
+    writeLock(FSNamesystemLockMode.GLOBAL, OperationName.ENTER_SAFE_MODE);
     try {
       // Stop the secret manager, since rolling the master key would
       // try to write to the edit log
@@ -5277,7 +5277,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       NameNode.stateChangeLog.info("STATE* Safe mode is ON.\n" +
           getSafeModeTip());
     } finally {
-      writeUnlock(OperationName.ENTER_SAFE_MODE);
+      writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.ENTER_SAFE_MODE);
     }
   }
 
@@ -5286,7 +5286,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
    * @param force true if to leave safe mode forcefully with -forceExit option
    */
   void leaveSafeMode(boolean force) {
-    writeLock(OperationName.LEAVE_SAFE_MODE);
+    writeLock(FSNamesystemLockMode.GLOBAL, OperationName.LEAVE_SAFE_MODE);
     try {
       if (!isInSafeMode()) {
         NameNode.stateChangeLog.info("STATE* Safe mode is already OFF"); 
@@ -5297,7 +5297,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         startSecretManagerIfNecessary();
       }
     } finally {
-      writeUnlock(OperationName.LEAVE_SAFE_MODE);
+      writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.LEAVE_SAFE_MODE);
     }
   }
 

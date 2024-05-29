@@ -1460,6 +1460,7 @@ public class TestReplicationPolicy extends BaseReplicationPolicyTest {
           throws IOException {
     FSNamesystem mockNS = mock(FSNamesystem.class);
     when(mockNS.hasWriteLock()).thenReturn(true);
+    when(mockNS.hasWriteLock(FSNamesystemLockMode.BM)).thenReturn(true);
 
     BlockManager bm = new BlockManager(mockNS, false, new HdfsConfiguration());
     LowRedundancyBlocks lowRedundancyBlocks = bm.neededReconstruction;
@@ -1532,6 +1533,7 @@ public class TestReplicationPolicy extends BaseReplicationPolicyTest {
       throws IOException {
     FSNamesystem mockNS = mock(FSNamesystem.class);
     when(mockNS.hasReadLock()).thenReturn(true);
+    when(mockNS.hasReadLock(FSNamesystemLockMode.BM)).thenReturn(true);
 
     BlockManager bm = new BlockManager(mockNS, false, new HdfsConfiguration());
     LowRedundancyBlocks lowRedundancyBlocks = bm.neededReconstruction;
