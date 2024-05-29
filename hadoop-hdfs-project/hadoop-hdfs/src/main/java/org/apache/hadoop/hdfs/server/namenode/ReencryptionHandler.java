@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.namenode;
 
 import org.apache.hadoop.hdfs.OperationName;
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -339,7 +340,7 @@ public class ReencryptionHandler implements Runnable {
       }
 
       final Long zoneId;
-      dir.getFSNamesystem().readLock(OperationName.REENCRYPTION_HANDLER);
+      dir.getFSNamesystem().readLock(FSNamesystemLockMode.FS, OperationName.REENCRYPTION_HANDLER);
       try {
         zoneId = getReencryptionStatus().getNextUnprocessedZone();
         if (zoneId == null) {
@@ -351,7 +352,8 @@ public class ReencryptionHandler implements Runnable {
         getReencryptionStatus().markZoneStarted(zoneId);
         resetSubmissionTracker(zoneId);
       } finally {
-        dir.getFSNamesystem().readUnlock(OperationName.REENCRYPTION_HANDLER);
+        dir.getFSNamesystem().readUnlock(FSNamesystemLockMode.FS,
+            OperationName.REENCRYPTION_HANDLER);
       }
 
       try {
@@ -443,7 +445,7 @@ public class ReencryptionHandler implements Runnable {
 
   List<XAttr> completeReencryption(final INode zoneNode) throws IOException {
     assert dir.hasWriteLock();
-    assert dir.getFSNamesystem().hasWriteLock();
+    assert dir.getFSNamesystem().hasWriteLock(FSNamesystemLockMode.FS);
     final Long zoneId = zoneNode.getId();
     ZoneReencryptionStatus zs = getReencryptionStatus().getZoneStatus(zoneId);
     assert zs != null;
@@ -614,7 +616,7 @@ public class ReencryptionHandler implements Runnable {
     protected void checkPauseForTesting()
         throws InterruptedException {
       assert !dir.hasReadLock();
-      assert !dir.getFSNamesystem().hasReadLock();
+      assert !dir.getFSNamesystem().hasReadLock(FSNamesystemLockMode.FS);
       while (shouldPauseForTesting) {
         LOG.info("Sleeping in the re-encrypt handler for unit test.");
         synchronized (reencryptionHandler) {
@@ -748,7 +750,7 @@ public class ReencryptionHandler implements Runnable {
     @Override
     protected void throttle() throws InterruptedException {
       assert !dir.hasReadLock();
-      assert !dir.getFSNamesystem().hasReadLock();
+      assert !dir.getFSNamesystem().hasReadLock(FSNamesystemLockMode.FS);
       final int numCores = Runtime.getRuntime().availableProcessors();
       if (taskQueue.size() >= numCores) {
         LOG.debug("Re-encryption handler throttling because queue size {} is"

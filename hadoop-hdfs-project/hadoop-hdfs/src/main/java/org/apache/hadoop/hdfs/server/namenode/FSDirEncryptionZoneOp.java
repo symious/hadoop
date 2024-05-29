@@ -51,6 +51,7 @@ import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.ZoneEncryptionInfoProto;
 import org.apache.hadoop.hdfs.protocolPB.PBHelperClient;
 import org.apache.hadoop.hdfs.server.namenode.FSDirectory.DirOp;
 import org.apache.hadoop.hdfs.server.namenode.ReencryptionUpdater.FileEdekInfo;
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.security.SecurityUtil;
 
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
@@ -382,7 +383,7 @@ final class FSDirEncryptionZoneOp {
    */
   static void saveFileXAttrsForBatch(FSDirectory fsd,
       List<FileEdekInfo> batch) {
-    assert fsd.getFSNamesystem().hasWriteLock();
+    assert fsd.getFSNamesystem().hasWriteLock(FSNamesystemLockMode.FS);
     if (batch != null && !batch.isEmpty()) {
       for (FileEdekInfo entry : batch) {
         final INode inode = fsd.getInode(entry.getInodeId());
@@ -727,13 +728,13 @@ final class FSDirEncryptionZoneOp {
       final FSPermissionChecker pc, final String zone) throws IOException {
     assert dir.getProvider() != null;
     final INodesInPath iip;
-    dir.getFSNamesystem().readLock(OperationName.GET_KEY_NAME_FOR_ZONE);
+    dir.getFSNamesystem().readLock(FSNamesystemLockMode.FS, OperationName.GET_KEY_NAME_FOR_ZONE);
     try {
       iip = dir.resolvePath(pc, zone, DirOp.READ);
       dir.ezManager.checkEncryptionZoneRoot(iip.getLastINode(), zone);
       return dir.ezManager.getKeyName(iip);
     } finally {
-      dir.getFSNamesystem().readUnlock(OperationName.GET_KEY_NAME_FOR_ZONE);
+      dir.getFSNamesystem().readUnlock(FSNamesystemLockMode.FS, OperationName.GET_KEY_NAME_FOR_ZONE);
     }
   }
 }

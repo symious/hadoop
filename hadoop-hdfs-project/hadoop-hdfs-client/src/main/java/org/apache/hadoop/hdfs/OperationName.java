@@ -110,6 +110,7 @@ public class OperationName {
   public static String QUERY_ROLLING_UPGRADE = "queryRollingUpgrade";
   public static String RECOVER_LEASE = "recoverLease";
   public static String REENCRYPTION_HANDLER = "reencryptionHandler";
+  public static String REENCRYPTION_UPDATER = "reencryptUpdater";
   public static String REFRESH_NODES = "refreshNodes";
   public static String REFRESH_TOPOLOGY = "refreshTopology";
   public static String REGISTER_DATANODE = "registerDatanode";
@@ -156,6 +157,7 @@ public class OperationName {
   public static String START_ROLLING_UPGRADE = "startRollingUpgrade";
   public static String STOP_ACTIVE_SERVICE = "stopActiveServices";
   public static String STOP_COMMON_SERVICE = "stopCommonServices";
+  public static String STOP_REENCRYPT_THREAD = "stopReencryptThread";
   public static String TRUNCATE = "truncate";
   public static String UPDATE_PIPELINE = "updatePipeline";
   public static String UPDATE_NEEDED_RECONSTRUCTIONS = "updateNeededReconstructions";
