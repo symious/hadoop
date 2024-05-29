@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
@@ -465,6 +466,8 @@ public class TestLeaseManager {
     when(fsn.isRunning()).thenReturn(true);
     when(fsn.hasReadLock()).thenReturn(true);
     when(fsn.hasWriteLock()).thenReturn(true);
+    when(fsn.hasReadLock(FSNamesystemLockMode.FS)).thenReturn(true);
+    when(fsn.hasWriteLock(FSNamesystemLockMode.FS)).thenReturn(true);
     when(fsn.getFSDirectory()).thenReturn(dir);
     when(fsn.getMaxLockHoldToReleaseLeaseMs()).thenReturn(maxLockHoldToReleaseLeaseMs);
     return fsn;

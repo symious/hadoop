@@ -7171,13 +7171,13 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   void allowSnapshot(String path) throws IOException {
     checkOperation(OperationCategory.WRITE);
     checkSuperuserPrivilege(OperationName.ALLOW_SNAPSHOT);
-    writeLock(OperationName.ALLOW_SNAPSHOT);
+    writeLock(FSNamesystemLockMode.FS, OperationName.ALLOW_SNAPSHOT);
     try {
       checkOperation(OperationCategory.WRITE);
       checkNameNodeSafeMode("Cannot allow snapshot for " + path);
       FSDirSnapshotOp.allowSnapshot(dir, snapshotManager, path);
     } finally {
-      writeUnlock(OperationName.ALLOW_SNAPSHOT);
+      writeUnlock(FSNamesystemLockMode.FS, OperationName.ALLOW_SNAPSHOT);
     }
     getEditLog().logSync();
     logAuditEvent(true, OperationName.ALLOW_SNAPSHOT, path, null, null);
@@ -7187,13 +7187,13 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   void disallowSnapshot(String path) throws IOException {
     checkOperation(OperationCategory.WRITE);
     checkSuperuserPrivilege(OperationName.DISALLOW_SNAPSHOT);
-    writeLock(OperationName.DISALLOW_SNAPSHOT);
+    writeLock(FSNamesystemLockMode.FS, OperationName.DISALLOW_SNAPSHOT);
     try {
       checkOperation(OperationCategory.WRITE);
       checkNameNodeSafeMode("Cannot disallow snapshot for " + path);
       FSDirSnapshotOp.disallowSnapshot(dir, snapshotManager, path);
     } finally {
-      writeUnlock(OperationName.DISALLOW_SNAPSHOT);
+      writeUnlock(FSNamesystemLockMode.FS, OperationName.DISALLOW_SNAPSHOT);
     }
     getEditLog().logSync();
     logAuditEvent(true, OperationName.DISALLOW_SNAPSHOT, path, null, null);
@@ -7211,14 +7211,14 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(OperationName.CREATE_SNAPSHOT);
     try {
-      writeLock(OperationName.CREATE_SNAPSHOT);
+      writeLock(FSNamesystemLockMode.FS, OperationName.CREATE_SNAPSHOT);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot create snapshot for " + snapshotRoot);
         snapshotPath = FSDirSnapshotOp.createSnapshot(dir, pc,
             snapshotManager, snapshotRoot, snapshotName, logRetryCache);
       } finally {
-        writeUnlock(OperationName.CREATE_SNAPSHOT);
+        writeUnlock(FSNamesystemLockMode.FS, OperationName.CREATE_SNAPSHOT);
       }
     } catch (AccessControlException ace) {
       logAuditEvent(false, OperationName.CREATE_SNAPSHOT, snapshotRoot);
@@ -7247,14 +7247,14 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(OperationName.RENAME_SNAPSHOT);
     try {
-      writeLock(OperationName.RENAME_SNAPSHOT);
+      writeLock(FSNamesystemLockMode.FS, OperationName.RENAME_SNAPSHOT);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot rename snapshot for " + path);
         FSDirSnapshotOp.renameSnapshot(dir, pc, snapshotManager, path,
             snapshotOldName, snapshotNewName, logRetryCache);
       } finally {
-        writeUnlock(OperationName.RENAME_SNAPSHOT);
+        writeUnlock(FSNamesystemLockMode.FS, OperationName.RENAME_SNAPSHOT);
       }
     } catch (AccessControlException ace) {
       logAuditEvent(false, OperationName.RENAME_SNAPSHOT, oldSnapshotRoot,
@@ -7280,13 +7280,13 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(OperationName.LIST_SNAPSHOT_TABLE_DIRECTORY);
     try {
-      readLock(OperationName.LIST_SNAPSHOT_TABLE_DIRECTORY);
+      readLock(FSNamesystemLockMode.FS, OperationName.LIST_SNAPSHOT_TABLE_DIRECTORY);
       try {
         checkOperation(OperationCategory.READ);
         status = FSDirSnapshotOp.getSnapshottableDirListing(dir, pc,
             snapshotManager);
       } finally {
-        readUnlock(OperationName.LIST_SNAPSHOT_TABLE_DIRECTORY);
+        readUnlock(FSNamesystemLockMode.FS, OperationName.LIST_SNAPSHOT_TABLE_DIRECTORY);
       }
     } catch (AccessControlException ace) {
       logAuditEvent(false, OperationName.LIST_SNAPSHOT_TABLE_DIRECTORY, null, null, null);
@@ -7324,13 +7324,13 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     FSPermissionChecker.setOperationType(OperationName.COMPUTE_SNAPSHOT_DIFF);
     long actualTime = Time.monotonicNow();
     try {
-      readLock(OperationName.COMPUTE_SNAPSHOT_DIFF);
+      readLock(FSNamesystemLockMode.FS, OperationName.COMPUTE_SNAPSHOT_DIFF);
       try {
         checkOperation(OperationCategory.READ);
         diffs = FSDirSnapshotOp.getSnapshotDiffReport(dir, pc, snapshotManager,
             path, fromSnapshot, toSnapshot);
       } finally {
-        readUnlock(OperationName.COMPUTE_SNAPSHOT_DIFF);
+        readUnlock(FSNamesystemLockMode.FS, OperationName.COMPUTE_SNAPSHOT_DIFF);
       }
     } catch (AccessControlException ace) {
       logAuditEvent(false, OperationName.COMPUTE_SNAPSHOT_DIFF, fromSnapshotRoot,
@@ -7396,7 +7396,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(OperationName.COMPUTE_SNAPSHOT_DIFF);
     try {
-      readLock(OperationName.COMPUTE_SNAPSHOT_DIFF);
+      readLock(FSNamesystemLockMode.FS, OperationName.COMPUTE_SNAPSHOT_DIFF);
       try {
         checkOperation(OperationCategory.READ);
         diffs = FSDirSnapshotOp
@@ -7404,7 +7404,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
                 fromSnapshot, toSnapshot, startPath, index,
                 snapshotDiffReportLimit);
       } finally {
-        readUnlock(OperationName.COMPUTE_SNAPSHOT_DIFF);
+        readUnlock(FSNamesystemLockMode.FS, OperationName.COMPUTE_SNAPSHOT_DIFF);
       }
     } catch (AccessControlException ace) {
       logAuditEvent(false, OperationName.COMPUTE_SNAPSHOT_DIFF, fromSnapshotRoot, toSnapshotRoot,
@@ -7431,7 +7431,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     FSPermissionChecker.setOperationType(OperationName.DELETE_SNAPSHOT);
     checkOperation(OperationCategory.WRITE);
     try {
-      writeLock(OperationName.DELETE_SNAPSHOT);
+      writeLock(FSNamesystemLockMode.GLOBAL, OperationName.DELETE_SNAPSHOT);
       try {
         checkOperation(OperationCategory.WRITE);
         checkNameNodeSafeMode("Cannot delete snapshot for " + snapshotRoot);
@@ -7439,7 +7439,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
         blocksToBeDeleted = FSDirSnapshotOp.deleteSnapshot(dir, pc,
             snapshotManager, snapshotRoot, snapshotName, logRetryCache);
       } finally {
-        writeUnlock(OperationName.DELETE_SNAPSHOT);
+        writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.DELETE_SNAPSHOT);
       }
     } catch (AccessControlException ace) {
       logAuditEvent(false, OperationName.DELETE_SNAPSHOT, rootPath, null, null);
