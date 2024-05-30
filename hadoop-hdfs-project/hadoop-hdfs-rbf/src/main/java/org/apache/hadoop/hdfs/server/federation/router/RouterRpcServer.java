@@ -661,20 +661,6 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
         replication, blockSize, supportedVersions, ecPolicyName, storagePolicy);
   }
 
-
-  /**
-   * Get the location to create a file. It checks if the file already existed
-   * in one of the locations.
-   *
-   * @param src Path of the file to check.
-   * @return The remote location for this file.
-   * @throws IOException If the file has no creation location.
-   */
-  RemoteLocation getCreateLocation(final String src) throws IOException {
-    final List<RemoteLocation> locations = getLocationsForPath(src, true);
-    return getCreateLocation(src, locations);
-  }
-
   /**
    * Get the location to create a file. It checks if the file already existed
    * in one of the locations.
@@ -954,7 +940,7 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
     Set<FederationNamespaceInfo> nss = namenodeResolver.getNamespaces();
     Map<FederationNamespaceInfo, DatanodeInfo[]> results =
         rpcClient.invokeConcurrent(nss, method, requireResponse, false,
-            timeOutMs, DatanodeInfo[].class);
+            timeOutMs, DatanodeInfo[].class, false);
     for (Entry<FederationNamespaceInfo, DatanodeInfo[]> entry :
         results.entrySet()) {
       FederationNamespaceInfo ns = entry.getKey();
@@ -1832,7 +1818,8 @@ public class RouterRpcServer extends AbstractService implements ClientProtocol,
         MountTableResolver mountTable = (MountTableResolver) subclusterResolver;
         MountTable entry = mountTable.getMountPoint(path);
         if (entry != null) {
-          return entry.getDestOrder().equals(DestinationOrder.FIXED);
+          return entry.getDestOrder().equals(DestinationOrder.FIXED)
+              && entry.getDestinations().size() > 1;
         }
       } catch (IOException e) {
         LOG.error("Cannot get mount point", e);

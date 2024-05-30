@@ -54,9 +54,10 @@ public class RouterStoragePolicy {
         policyName);
     String invokeType = this.rpcServer.getClientProtocolModule().INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (rpcServer.isInvokeConcurrent(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (rpcServer.isInvokeConcurrent(src) || isFixedOrder) {
         invokeType = this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT;
-        rpcClient.invokeConcurrent(locations, method);
+        rpcClient.invokeConcurrent(locations, method, isFixedOrder);
       } else {
         rpcClient.invokeSequential(locations, method);
       }
@@ -86,9 +87,10 @@ public class RouterStoragePolicy {
         new RemoteParam());
     String invokeType = this.rpcServer.getClientProtocolModule().INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (rpcServer.isInvokeConcurrent(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (rpcServer.isInvokeConcurrent(src) || isFixedOrder) {
         invokeType = this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT;
-        rpcClient.invokeConcurrent(locations, method);
+        rpcClient.invokeConcurrent(locations, method, isFixedOrder);
       } else {
         rpcClient.invokeSequential(locations, method);
       }
@@ -133,16 +135,21 @@ public class RouterStoragePolicy {
     RemoteMethod method = new RemoteMethod("satisfyStoragePolicy",
         new Class<?>[] {String.class},
         new RemoteParam());
+    String invokeType = this.rpcServer.getClientProtocolModule().INVOKE_TYPE_SEQUENTIAL;
     try {
-      rpcClient.invokeSequential(locations, method);
+      boolean isFixedOrder = rpcServer.isFixedOrder(path);
+      if (isFixedOrder) {
+        invokeType = this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT;
+        rpcClient.invokeConcurrent(locations, method, true);
+      } else {
+        rpcClient.invokeSequential(locations, method);
+      }
     } catch (IOException e) {
-      this.rpcServer.getClientProtocolModule().
-          logAuditEvent(false, OperationName.SATISFY_STORAGE_POLICY,
-              this.rpcServer.getClientProtocolModule().INVOKE_TYPE_SEQUENTIAL, path);
+      this.rpcServer.getClientProtocolModule()
+          .logAuditEvent(false, OperationName.SATISFY_STORAGE_POLICY, invokeType, path);
       throw e;
     }
-    this.rpcServer.getClientProtocolModule().
-        logAuditEvent(true, OperationName.SATISFY_STORAGE_POLICY,
-            this.rpcServer.getClientProtocolModule().INVOKE_TYPE_SEQUENTIAL, path);
+    this.rpcServer.getClientProtocolModule()
+        .logAuditEvent(true, OperationName.SATISFY_STORAGE_POLICY, invokeType, path);
   }
 }

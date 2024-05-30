@@ -88,7 +88,6 @@ import org.apache.hadoop.hdfs.server.federation.resolver.RouterResolveException;
 import org.apache.hadoop.hdfs.server.federation.router.security.RouterSecurityManager;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
 import org.apache.hadoop.hdfs.server.namenode.AuditLogger;
-import org.apache.hadoop.hdfs.server.namenode.DefaultAuditLogger;
 import org.apache.hadoop.hdfs.server.namenode.HdfsAuditLogger;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
@@ -100,6 +99,7 @@ import org.apache.hadoop.net.ConnectTimeoutException;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -382,24 +382,11 @@ public class RouterClientProtocol implements ClientProtocol {
       throws IOException {
     rpcServer.checkOperation(NameNode.OperationCategory.WRITE);
 
-    if (createParent && rpcServer.isPathAll(src)) {
-      int index = src.lastIndexOf(Path.SEPARATOR);
-      String parent = src.substring(0, index);
-      LOG.debug("Creating {} requires creating parent {}", src, parent);
-      FsPermission parentPermissions = getParentPermission(masked);
-      boolean success = mkdirs(parent, parentPermissions, createParent);
-      if (!success) {
-        // This shouldn't happen as mkdirs returns true or exception
-        LOG.error("Couldn't create parents for {}", src);
-      }
-    }
-
     RemoteMethod method = new RemoteMethod("create",
         new Class<?>[] {String.class, FsPermission.class, String.class,
             EnumSetWritable.class, boolean.class, short.class,
             long.class, CryptoProtocolVersion[].class,
-            String.class, String.class},
-        new RemoteParam(), masked, clientName, flag, createParent,
+            String.class, String.class}, new RemoteParam(), masked, clientName, flag, true,
         replication, blockSize, supportedVersions, ecPolicyName, storagePolicy);
     final List<RemoteLocation> locations =
         rpcServer.getLocationsForPath(src, true);
@@ -407,7 +394,7 @@ public class RouterClientProtocol implements ClientProtocol {
     HdfsFileStatus status;
     try {
       try {
-        createLocation = rpcServer.getCreateLocation(src);
+        createLocation = rpcServer.getCreateLocation(src, locations);
         status = rpcClient.invokeSingle(createLocation, method, HdfsFileStatus.class);
         status.setNamespace(createLocation.getNameserviceId());
       } catch (IOException ioe) {
@@ -585,9 +572,10 @@ public class RouterClientProtocol implements ClientProtocol {
         new RemoteParam(), permissions);
     String invokeType = INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (rpcServer.isInvokeConcurrent(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (rpcServer.isInvokeConcurrent(src) || isFixedOrder) {
         invokeType = INVOKE_TYPE_CONCURRENT;
-        rpcClient.invokeConcurrent(locations, method);
+        rpcClient.invokeConcurrent(locations, method, isFixedOrder);
       } else {
         rpcClient.invokeSequential(locations, method);
       }
@@ -610,9 +598,10 @@ public class RouterClientProtocol implements ClientProtocol {
         new RemoteParam(), username, groupname);
     String invokeType = INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (rpcServer.isInvokeConcurrent(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (rpcServer.isInvokeConcurrent(src) || isFixedOrder) {
         invokeType = INVOKE_TYPE_CONCURRENT;
-        rpcClient.invokeConcurrent(locations, method);
+        rpcClient.invokeConcurrent(locations, method, isFixedOrder);
       } else {
         rpcClient.invokeSequential(locations, method);
       }
@@ -952,9 +941,10 @@ public class RouterClientProtocol implements ClientProtocol {
     boolean result;
     String invokeType = INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (rpcServer.isPathAll(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (rpcServer.isPathAll(src) || isFixedOrder) {
         invokeType = INVOKE_TYPE_CONCURRENT;
-        result = rpcClient.invokeAll(locations, method);
+        result = rpcClient.invokeAll(locations, method, isFixedOrder);
       } else {
         result = rpcClient.invokeSequential(locations, method, Boolean.class, Boolean.TRUE);
       }
@@ -981,9 +971,10 @@ public class RouterClientProtocol implements ClientProtocol {
     String invokeType = INVOKE_TYPE_SEQUENTIAL;
     try {
       // Create in all locations
-      if (rpcServer.isPathAll(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (rpcServer.isPathAll(src) || isFixedOrder) {
         invokeType = INVOKE_TYPE_CONCURRENT;
-        result = rpcClient.invokeAll(locations, method);
+        result = rpcClient.invokeAll(locations, method, isFixedOrder);
       } else {
         if (locations.size() > 1) {
           // Check if this directory already exists
@@ -1080,6 +1071,7 @@ public class RouterClientProtocol implements ClientProtocol {
   public DirectoryListing getListing(String src, long fileId, byte[] startAfter,
       boolean needLocation) throws IOException {
     rpcServer.checkOperation(NameNode.OperationCategory.READ);
+    boolean overwriteEntry = !rpcServer.isFixedOrder(src);
 
     List<RemoteResult<RemoteLocation, DirectoryListing>> listings =
         getListingInt(src, fileId, startAfter, needLocation);
@@ -1126,8 +1118,11 @@ public class RouterClientProtocol implements ClientProtocol {
                 filename.compareTo(lastName) > 0) {
               // Discarding entries further than the lastName
               remainingEntries++;
-            } else {
+            } else if (overwriteEntry) {
               nnListing.put(filename, file);
+            } else {
+              // Keep the first result for FIXED order
+              nnListing.putIfAbsent(filename, file);
             }
           }
           remainingEntries += listing.getRemainingEntries();
@@ -1601,8 +1596,7 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("listCorruptFileBlocks",
         new Class<?>[] {String.class, String.class},
         new RemoteParam(), cookie);
-    return rpcClient.invokeSequential(
-        locations, method, CorruptFileBlocks.class, null);
+    return rpcClient.invokeSequential(locations, method, CorruptFileBlocks.class, null);
   }
 
   @Override
@@ -1756,7 +1750,11 @@ public class RouterClientProtocol implements ClientProtocol {
         new Class<?>[] {String.class, long.class, long.class},
         new RemoteParam(), mtime, atime);
     try {
-      rpcClient.invokeSequential(locations, method);
+      if (rpcServer.isFixedOrder(src)) {
+        rpcClient.invokeConcurrent(locations, method, true);
+      } else {
+        rpcClient.invokeSequential(locations, method);
+      }
     } catch (IOException e) {
       logAuditEvent(false, OperationName.SET_TIMES, INVOKE_TYPE_SEQUENTIAL, src);
       throw e;
@@ -1779,7 +1777,11 @@ public class RouterClientProtocol implements ClientProtocol {
         new Class<?>[] {String.class, String.class, FsPermission.class,
             boolean.class},
         new RemoteParam(), linkLocation.getDest(), dirPerms, createParent);
-    rpcClient.invokeSequential(targetLocations, method);
+    if (rpcServer.isFixedOrder(target)) {
+      rpcClient.invokeConcurrent(targetLocations, method, true);
+    } else {
+      rpcClient.invokeSequential(targetLocations, method);
+    }
   }
 
   @Override
@@ -1795,17 +1797,29 @@ public class RouterClientProtocol implements ClientProtocol {
 
   @Override
   public void allowSnapshot(String snapshotRoot) throws IOException {
+    if (rpcServer.isFixedOrder(snapshotRoot)) {
+      throw new UnsupportedOperationException(
+          "Snapshot operations are not supported under FIXED order.");
+    }
     snapshotProto.allowSnapshot(snapshotRoot);
   }
 
   @Override
   public void disallowSnapshot(String snapshot) throws IOException {
+    if (rpcServer.isFixedOrder(snapshot)) {
+      throw new UnsupportedOperationException(
+          "Snapshot operations are not supported under FIXED order.");
+    }
     snapshotProto.disallowSnapshot(snapshot);
   }
 
   @Override
   public void renameSnapshot(String snapshotRoot, String snapshotOldName,
       String snapshotNewName) throws IOException {
+    if (rpcServer.isFixedOrder(snapshotRoot)) {
+      throw new UnsupportedOperationException(
+          "Snapshot operations are not supported under FIXED order.");
+    }
     snapshotProto.renameSnapshot(
         snapshotRoot, snapshotOldName, snapshotNewName);
   }
@@ -1819,6 +1833,10 @@ public class RouterClientProtocol implements ClientProtocol {
   @Override
   public SnapshotDiffReport getSnapshotDiffReport(String snapshotRoot,
       String earlierSnapshotName, String laterSnapshotName) throws IOException {
+    if (rpcServer.isFixedOrder(snapshotRoot)) {
+      throw new UnsupportedOperationException(
+          "Snapshot operations are not supported under FIXED order.");
+    }
     return snapshotProto.getSnapshotDiffReport(
         snapshotRoot, earlierSnapshotName, laterSnapshotName);
   }
@@ -1827,6 +1845,10 @@ public class RouterClientProtocol implements ClientProtocol {
   public SnapshotDiffReportListing getSnapshotDiffReportListing(
       String snapshotRoot, String earlierSnapshotName, String laterSnapshotName,
       byte[] startPath, int index) throws IOException {
+    if (rpcServer.isFixedOrder(snapshotRoot)) {
+      throw new UnsupportedOperationException(
+          "Snapshot operations are not supported under FIXED order.");
+    }
     return snapshotProto.getSnapshotDiffReportListing(
         snapshotRoot, earlierSnapshotName, laterSnapshotName, startPath, index);
   }
@@ -1888,9 +1910,10 @@ public class RouterClientProtocol implements ClientProtocol {
         new RemoteParam(), aclSpec);
     String invokeType = INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (rpcServer.isInvokeConcurrent(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (rpcServer.isInvokeConcurrent(src) || isFixedOrder) {
         invokeType = INVOKE_TYPE_CONCURRENT;
-        rpcClient.invokeConcurrent(locations, method);
+        rpcClient.invokeConcurrent(locations, method, isFixedOrder);
       } else {
         rpcClient.invokeSequential(locations, method);
       }
@@ -1914,9 +1937,10 @@ public class RouterClientProtocol implements ClientProtocol {
         new RemoteParam(), aclSpec);
     String invokeType = INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (rpcServer.isInvokeConcurrent(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (rpcServer.isInvokeConcurrent(src) || isFixedOrder) {
         invokeType = INVOKE_TYPE_CONCURRENT;
-        rpcClient.invokeConcurrent(locations, method);
+        rpcClient.invokeConcurrent(locations, method, isFixedOrder);
       } else {
         rpcClient.invokeSequential(locations, method);
       }
@@ -1938,9 +1962,10 @@ public class RouterClientProtocol implements ClientProtocol {
         new Class<?>[] {String.class}, new RemoteParam());
     String invokeType = INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (rpcServer.isInvokeConcurrent(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (rpcServer.isInvokeConcurrent(src) || isFixedOrder) {
         invokeType = INVOKE_TYPE_CONCURRENT;
-        rpcClient.invokeConcurrent(locations, method);
+        rpcClient.invokeConcurrent(locations, method, isFixedOrder);
       } else {
         rpcClient.invokeSequential(locations, method);
       }
@@ -1962,9 +1987,10 @@ public class RouterClientProtocol implements ClientProtocol {
         new Class<?>[] {String.class}, new RemoteParam());
     String invokeType = INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (rpcServer.isInvokeConcurrent(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (rpcServer.isInvokeConcurrent(src) || isFixedOrder) {
         invokeType = INVOKE_TYPE_CONCURRENT;
-        rpcClient.invokeConcurrent(locations, method);
+        rpcClient.invokeConcurrent(locations, method, isFixedOrder);
       } else {
         rpcClient.invokeSequential(locations, method);
       }
@@ -1987,9 +2013,10 @@ public class RouterClientProtocol implements ClientProtocol {
         new RemoteParam(), aclSpec);
     String invokeType = INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (rpcServer.isInvokeConcurrent(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (rpcServer.isInvokeConcurrent(src) || isFixedOrder) {
         invokeType = INVOKE_TYPE_CONCURRENT;
-        rpcClient.invokeConcurrent(locations, method);
+        rpcClient.invokeConcurrent(locations, method, isFixedOrder);
       } else {
         rpcClient.invokeSequential(locations, method);
       }
@@ -2031,7 +2058,11 @@ public class RouterClientProtocol implements ClientProtocol {
     RemoteMethod method = new RemoteMethod("createEncryptionZone",
         new Class<?>[] {String.class, String.class},
         new RemoteParam(), keyName);
-    rpcClient.invokeSequential(locations, method);
+    if (rpcServer.isFixedOrder(src)) {
+      rpcClient.invokeConcurrent(locations, method, true);
+    } else {
+      rpcClient.invokeSequential(locations, method);
+    }
   }
 
   @Override
@@ -2080,9 +2111,10 @@ public class RouterClientProtocol implements ClientProtocol {
         new RemoteParam(), xAttr, flag);
     String invokeType = INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (rpcServer.isInvokeConcurrent(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (rpcServer.isInvokeConcurrent(src) || isFixedOrder) {
         invokeType = INVOKE_TYPE_CONCURRENT;
-        rpcClient.invokeConcurrent(locations, method);
+        rpcClient.invokeConcurrent(locations, method, isFixedOrder);
       } else {
         rpcClient.invokeSequential(locations, method);
       }
@@ -2196,9 +2228,10 @@ public class RouterClientProtocol implements ClientProtocol {
         new Class<?>[] {String.class, XAttr.class}, new RemoteParam(), xAttr);
     String invokeType = INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (rpcServer.isInvokeConcurrent(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (rpcServer.isInvokeConcurrent(src) || isFixedOrder) {
         invokeType = INVOKE_TYPE_CONCURRENT;
-        rpcClient.invokeConcurrent(locations, method);
+        rpcClient.invokeConcurrent(locations, method, isFixedOrder);
       } else {
         rpcClient.invokeSequential(locations, method);
       }
@@ -2582,7 +2615,7 @@ public class RouterClientProtocol implements ClientProtocol {
     // Get the file info from everybody
     Map<RemoteLocation, HdfsFileStatus> results =
         rpcClient.invokeConcurrent(locations, method, false, false, timeOutMs,
-            HdfsFileStatus.class);
+            HdfsFileStatus.class, false);
     int children = 0;
     // We return the first file
     HdfsFileStatus dirStatus = null;

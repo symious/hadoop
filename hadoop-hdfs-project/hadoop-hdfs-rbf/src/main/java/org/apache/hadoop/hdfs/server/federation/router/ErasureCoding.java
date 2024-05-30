@@ -227,9 +227,10 @@ public class ErasureCoding {
         new RemoteParam(), ecPolicyName);
     String invokeType = this.rpcServer.getClientProtocolModule().INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (rpcServer.isInvokeConcurrent(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (rpcServer.isInvokeConcurrent(src) || isFixedOrder) {
         invokeType = this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT;
-        rpcClient.invokeConcurrent(locations, remoteMethod);
+        rpcClient.invokeConcurrent(locations, remoteMethod, isFixedOrder);
       } else {
         rpcClient.invokeSequential(locations, remoteMethod);
       }
@@ -251,9 +252,10 @@ public class ErasureCoding {
         new Class<?>[] {String.class}, new RemoteParam());
     String invokeType = this.rpcServer.getClientProtocolModule().INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (rpcServer.isInvokeConcurrent(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (rpcServer.isInvokeConcurrent(src) || isFixedOrder) {
         invokeType = this.rpcServer.getClientProtocolModule().INVOKE_TYPE_CONCURRENT;
-        rpcClient.invokeConcurrent(locations, remoteMethod);
+        rpcClient.invokeConcurrent(locations, remoteMethod, isFixedOrder);
       } else {
         rpcClient.invokeSequential(locations, remoteMethod);
       }
