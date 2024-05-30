@@ -23,6 +23,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_DEFAUL
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY;
 
 import java.util.function.Supplier;
+
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 
 import org.apache.commons.io.FileUtils;
@@ -696,14 +698,14 @@ public class TestDFSAdmin {
       LocatedStripedBlock bg =
           (LocatedStripedBlock)(lbs.get(0));
 
-      miniCluster.getNamesystem().writeLock();
+      miniCluster.getNamesystem().writeLock(FSNamesystemLockMode.BM, "testReportCommand");
       try {
         BlockManager bm = miniCluster.getNamesystem().getBlockManager();
         bm.findAndMarkBlockAsCorrupt(bg.getBlock(), bg.getLocations()[0],
             "STORAGE_ID", "TEST");
         BlockManagerTestUtil.updateState(bm);
       } finally {
-        miniCluster.getNamesystem().writeUnlock();
+        miniCluster.getNamesystem().writeUnlock(FSNamesystemLockMode.BM, "testReportCommand");
       }
       waitForCorruptBlock(miniCluster, client, file);
 

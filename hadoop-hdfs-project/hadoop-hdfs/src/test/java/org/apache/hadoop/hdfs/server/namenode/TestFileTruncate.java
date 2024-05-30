@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.apache.hadoop.hdfs.server.datanode.DataNodeFaultInjector;
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.test.LambdaTestUtils;
 import org.slf4j.Logger;
@@ -1073,7 +1074,7 @@ public class TestFileTruncate {
     INodeFile file = iip.getLastINode().asFile();
     long initialGenStamp = file.getLastBlock().getGenerationStamp();
     // Test that prepareFileForTruncate sets up in-place truncate.
-    fsn.writeLock();
+    fsn.writeLock(FSNamesystemLockMode.GLOBAL, "testTruncateRecovery");
     try {
       Block oldBlock = file.getLastBlock();
       Block truncateBlock = FSDirTruncateOp.prepareFileForTruncate(fsn, iip,
@@ -1093,7 +1094,7 @@ public class TestFileTruncate {
       fsn.getEditLog().logTruncate(
           src, client, clientMachine, BLOCK_SIZE-1, Time.now(), truncateBlock);
     } finally {
-      fsn.writeUnlock();
+      fsn.writeUnlock(FSNamesystemLockMode.GLOBAL, "testTruncateRecovery");
     }
 
     // Re-create file and ensure we are ready to copy on truncate
@@ -1107,7 +1108,7 @@ public class TestFileTruncate {
         (BlockInfoContiguous) file.getLastBlock()), is(true));
     initialGenStamp = file.getLastBlock().getGenerationStamp();
     // Test that prepareFileForTruncate sets up copy-on-write truncate
-    fsn.writeLock();
+    fsn.writeLock(FSNamesystemLockMode.GLOBAL, "testTruncateRecovery");
     try {
       Block oldBlock = file.getLastBlock();
       Block truncateBlock = FSDirTruncateOp.prepareFileForTruncate(fsn, iip,
@@ -1127,7 +1128,7 @@ public class TestFileTruncate {
       fsn.getEditLog().logTruncate(
           src, client, clientMachine, BLOCK_SIZE-1, Time.now(), truncateBlock);
     } finally {
-      fsn.writeUnlock();
+      fsn.writeUnlock(FSNamesystemLockMode.GLOBAL, "testTruncateRecovery");
     }
     checkBlockRecovery(srcPath);
     fs.deleteSnapshot(parent, "ss0");

@@ -164,8 +164,6 @@ public class TestBlockManager {
     conf.set(DFSConfigKeys.NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY,
              "need to set a dummy value here so it assumes a multi-rack cluster");
     fsn = Mockito.mock(FSNamesystem.class);
-    Mockito.doReturn(true).when(fsn).hasWriteLock();
-    Mockito.doReturn(true).when(fsn).hasReadLock();
     Mockito.doReturn(true).when(fsn).hasWriteLock(FSNamesystemLockMode.GLOBAL);
     Mockito.doReturn(true).when(fsn).hasReadLock(FSNamesystemLockMode.GLOBAL);
     Mockito.doReturn(true).when(fsn).hasWriteLock(FSNamesystemLockMode.BM);
@@ -1622,7 +1620,7 @@ public class TestBlockManager {
       }
       failedStorageDataNode.updateHeartbeat(reports.toArray(StorageReport
           .EMPTY_ARRAY), 0L, 0L, 0, 0, null);
-      ns.writeLock();
+      ns.writeLock(FSNamesystemLockMode.BM, "open");
       DatanodeStorageInfo corruptStorageInfo= null;
       for(int i=0; i<corruptStorageDataNode.getStorageInfos().length; i++) {
         corruptStorageInfo = corruptStorageDataNode.getStorageInfos()[i];
@@ -1636,16 +1634,16 @@ public class TestBlockManager {
       blockManager.findAndMarkBlockAsCorrupt(blk, corruptStorageDataNode,
           corruptStorageInfo.getStorageID(),
           CorruptReplicasMap.Reason.ANY.toString());
-      ns.writeUnlock();
+      ns.writeUnlock(FSNamesystemLockMode.BM, "open");
       BlockInfo[] blockInfos = new BlockInfo[] {blockInfo};
-      ns.readLock();
+      ns.readLock(FSNamesystemLockMode.BM, "open");
       LocatedBlocks locatedBlocks =
           blockManager.createLocatedBlocks(blockInfos, 3L, false, 0L, 3L,
               false, false, null, null);
       assertTrue("Located Blocks should exclude corrupt" +
               "replicas and failed storages",
           locatedBlocks.getLocatedBlocks().size() == 1);
-      ns.readUnlock();
+      ns.readUnlock(FSNamesystemLockMode.BM, "open");
     } finally {
       if (cluster != null) {
         cluster.shutdown();

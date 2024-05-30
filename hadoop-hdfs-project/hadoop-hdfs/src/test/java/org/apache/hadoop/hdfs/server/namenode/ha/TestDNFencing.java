@@ -30,6 +30,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadLocalRandom;
 
 import java.util.function.Supplier;
+
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -581,13 +583,13 @@ public class TestDNFencing {
   }
 
   private void doMetasave(NameNode nn2) {
-    nn2.getNamesystem().writeLock();
+    nn2.getNamesystem().writeLock(FSNamesystemLockMode.BM, "metaSave");
     try {
       PrintWriter pw = new PrintWriter(System.err);
       nn2.getNamesystem().getBlockManager().metaSave(pw);
       pw.flush();
     } finally {
-      nn2.getNamesystem().writeUnlock();
+      nn2.getNamesystem().writeUnlock(FSNamesystemLockMode.BM, "metaSave");
     }
   }
 

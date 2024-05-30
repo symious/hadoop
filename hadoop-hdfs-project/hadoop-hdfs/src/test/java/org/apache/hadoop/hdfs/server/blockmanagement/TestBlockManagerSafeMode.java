@@ -93,8 +93,6 @@ public class TestBlockManagerSafeMode {
         DATANODE_NUM);
 
     fsn = mock(FSNamesystem.class);
-    doReturn(true).when(fsn).hasWriteLock();
-    doReturn(true).when(fsn).hasReadLock();
     doReturn(true).when(fsn).hasWriteLock(FSNamesystemLockMode.BM);
     doReturn(true).when(fsn).hasReadLock(FSNamesystemLockMode.BM);
     doReturn(true).when(fsn).isRunning();

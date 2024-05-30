@@ -22,6 +22,7 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -67,7 +68,7 @@ public class TestReplicationPolicyConsiderLoadWithDataCenter
 
   @Test
   public void testConsiderLoadFactor() throws IOException {
-    namenode.getNamesystem().writeLock();
+    namenode.getNamesystem().writeLock(FSNamesystemLockMode.BM, "testConsiderLoadFactor");
     try {
       dnManager.getHeartbeatManager().updateHeartbeat(dataNodes[0],
           BlockManagerTestUtil.getStorageReportsForDatanode(dataNodes[0]),
@@ -120,7 +121,7 @@ public class TestReplicationPolicyConsiderLoadWithDataCenter
       assertEquals(dc2Load, dnManager.getFSClusterStats()
           .getDataCenterInServiceXceiverAverage("/dc2"), EPSILON);
     } finally {
-      namenode.getNamesystem().writeUnlock();
+      namenode.getNamesystem().writeUnlock(FSNamesystemLockMode.BM, "testConsiderLoadFactor");
     }
   }
 }

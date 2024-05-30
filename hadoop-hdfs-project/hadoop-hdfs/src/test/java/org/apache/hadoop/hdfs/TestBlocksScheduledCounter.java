@@ -35,6 +35,7 @@ import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeManager;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
 import org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter;
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.junit.After;
 import org.junit.Test;
 
@@ -175,7 +176,8 @@ public class TestBlocksScheduledCounter {
           .getBlockLocations(cluster.getNameNode(), filePath.toString(), 0, 1)
           .get(0);
       DatanodeInfo[] locs = block.getLocations();
-      cluster.getNamesystem().writeLock();
+      cluster.getNamesystem().writeLock(FSNamesystemLockMode.BM,
+          "testScheduledBlocksCounterDecrementOnDeletedBlock");
       try {
         bm.findAndMarkBlockAsCorrupt(block.getBlock(), locs[0], "STORAGE_ID",
             "TEST");
@@ -185,7 +187,8 @@ public class TestBlocksScheduledCounter {
         BlockManagerTestUtil.updateState(bm);
         assertEquals(1L, bm.getPendingReconstructionBlocksCount());
       } finally {
-        cluster.getNamesystem().writeUnlock();
+        cluster.getNamesystem().writeUnlock(FSNamesystemLockMode.BM,
+            "testScheduledBlocksCounterDecrementOnDeletedBlock");
       }
 
       // 4. delete the file
@@ -236,13 +239,15 @@ public class TestBlocksScheduledCounter {
         DataNodeTestUtils.setHeartbeatsDisabledForTests(dn, true);
       }
 
-      cluster.getNamesystem().writeLock();
+      cluster.getNamesystem().writeLock(FSNamesystemLockMode.BM,
+          "testBlocksScheduledCounterOnTruncate");
       try {
         BlockManagerTestUtil.computeAllPendingWork(bm);
         BlockManagerTestUtil.updateState(bm);
         assertEquals(1L, bm.getPendingReconstructionBlocksCount());
       } finally {
-        cluster.getNamesystem().writeUnlock();
+        cluster.getNamesystem().writeUnlock(FSNamesystemLockMode.BM,
+            "testBlocksScheduledCounterOnTruncate");
       }
 
       // 5.truncate the file whose block exists in pending reconstruction

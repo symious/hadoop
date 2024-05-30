@@ -147,11 +147,11 @@ public class TestFSImageWithSnapshot {
         conf);
     FSImageCompression compression = FSImageCompression.createCompression(conf);
     File imageFile = getImageFile(testDir, txid);
-    fsn.readLock();
+    fsn.readLock(FSNamesystemLockMode.GLOBAL, "saveFSImage");
     try {
       saver.save(imageFile, compression);
     } finally {
-      fsn.readUnlock();
+      fsn.readUnlock(FSNamesystemLockMode.GLOBAL, "saveFSImage");
     }
     return imageFile;
   }

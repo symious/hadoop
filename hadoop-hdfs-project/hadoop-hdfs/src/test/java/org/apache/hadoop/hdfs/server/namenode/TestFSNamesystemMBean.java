@@ -34,6 +34,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.metrics2.impl.ConfigBuilder;
 import org.apache.hadoop.metrics2.impl.TestMetricsConfig;
 import org.junit.Test;
@@ -149,7 +150,7 @@ public class TestFSNamesystemMBean {
       cluster.waitActive();
 
       fsn = cluster.getNameNode().namesystem;
-      fsn.writeLock();
+      fsn.writeLock(FSNamesystemLockMode.GLOBAL, "testWithFSNamesystemWriteLock");
       Thread.sleep(jmxCachePeriod * 1000);
 
       MBeanClient client = new MBeanClient();
@@ -159,8 +160,8 @@ public class TestFSNamesystemMBean {
           "is owned by another thread", client.succeeded);
       client.interrupt();
     } finally {
-      if (fsn != null && fsn.hasWriteLock()) {
-        fsn.writeUnlock();
+      if (fsn != null && fsn.hasWriteLock(FSNamesystemLockMode.GLOBAL)) {
+        fsn.writeUnlock(FSNamesystemLockMode.GLOBAL, "testWithFSNamesystemWriteLock");
       }
       if (cluster != null) {
         cluster.shutdown();

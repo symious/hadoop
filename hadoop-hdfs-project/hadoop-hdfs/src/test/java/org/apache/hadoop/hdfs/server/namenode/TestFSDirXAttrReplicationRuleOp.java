@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hdfs.server.namenode;
 
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
@@ -73,7 +74,7 @@ public class TestFSDirXAttrReplicationRuleOp {
         (short) 1, 128L);
     cluster = new MiniDFSCluster.Builder(getConf()).numDataNodes(1).build();
     FSDirectory fsd = new FSDirectory(cluster.getNamesystem(), getConf());
-    cluster.getNamesystem().readLock();
+    cluster.getNamesystem().readLock(FSNamesystemLockMode.FS, "testGetRuleFromXAttr");
     Assert.assertNull(FSDirXAttrReplicationRuleOp.getRuleFromInodeFile(fsd, iNodeFile));
 
     iNodeFile.addXAttrFeature(getFeature(rule.toString()));
@@ -82,7 +83,7 @@ public class TestFSDirXAttrReplicationRuleOp {
         (short) 1, 128L);
     iNodeFile.addXAttrFeature(getFeature(invalidRule));
     Assert.assertNull(FSDirXAttrReplicationRuleOp.getRuleFromInodeFile(fsd, iNodeFile));
-    cluster.getNamesystem().readUnlock();
+    cluster.getNamesystem().readUnlock(FSNamesystemLockMode.FS, "testGetRuleFromXAttr");
   }
 
   @Test
@@ -91,11 +92,11 @@ public class TestFSDirXAttrReplicationRuleOp {
         (short) 1, 128L);
     cluster = new MiniDFSCluster.Builder(getConf()).numDataNodes(1).build();
     FSDirectory fsd = new FSDirectory(cluster.getNamesystem(), getConf());
-    cluster.getNamesystem().readLock();
+    cluster.getNamesystem().readLock(FSNamesystemLockMode.FS, "testHasRuleInXAttr");
     Assert.assertFalse(FSDirXAttrReplicationRuleOp.hasRuleInXAttr(fsd, iNodeFile));
 
     iNodeFile.addXAttrFeature(getFeature(rule.toString()));
     Assert.assertTrue(FSDirXAttrReplicationRuleOp.hasRuleInXAttr(fsd, iNodeFile));
-    cluster.getNamesystem().readUnlock();
+    cluster.getNamesystem().readUnlock(FSNamesystemLockMode.FS, "testHasRuleInXAttr");
   }
 }

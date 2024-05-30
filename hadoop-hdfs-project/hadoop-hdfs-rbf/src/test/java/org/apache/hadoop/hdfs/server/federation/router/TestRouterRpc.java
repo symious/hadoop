@@ -113,6 +113,7 @@ import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.INodeDirectory;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.NameNodeAdapter;
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations;
 import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations.BlockWithLocations;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
@@ -1688,10 +1689,10 @@ public class TestRouterRpc {
       // mark a replica as corrupt
       LocatedBlock block = NameNodeAdapter
           .getBlockLocations(nameNode, testFile, 0, 1024).get(0);
-      namesystem.writeLock();
+      namesystem.writeLock(FSNamesystemLockMode.BM, "testGetReplicatedBlockStats");
       bm.findAndMarkBlockAsCorrupt(block.getBlock(), block.getLocations()[0],
           "STORAGE_ID", "TEST");
-      namesystem.writeUnlock();
+      namesystem.writeUnlock(FSNamesystemLockMode.BM, "testGetReplicatedBlockStats");
       BlockManagerTestUtil.updateState(bm);
       DFSTestUtil.waitCorruptReplicas(fileSystem, namesystem,
           new Path(testFile), block.getBlock(), 1);

@@ -61,6 +61,7 @@ import java.util.regex.Pattern;
 
 import java.util.function.Supplier;
 import org.apache.commons.logging.impl.Log4JLogger;
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.ChecksumException;
@@ -1553,11 +1554,11 @@ public class TestFsck {
     ExtendedBlock eb = util.getFirstBlock(dfs, path);
     BlockCollection bc = null;
     try {
-      fsn.writeLock();
+      fsn.writeLock(FSNamesystemLockMode.GLOBAL, "testBlockIdCKDecommission");
       BlockInfo bi = bm.getStoredBlock(eb.getLocalBlock());
       bc = fsn.getBlockCollection(bi);
     } finally {
-      fsn.writeUnlock();
+      fsn.writeUnlock(FSNamesystemLockMode.GLOBAL, "testBlockIdCKDecommission");
     }
     DatanodeDescriptor dn = bc.getBlocks()[0].getDatanode(0);
     bm.getDatanodeManager().getDatanodeAdminManager().startDecommission(dn);
@@ -1869,11 +1870,11 @@ public class TestFsck {
     ExtendedBlock eb = util.getFirstBlock(dfs, path);
     BlockCollection bc = null;
     try {
-      fsn.writeLock();
+      fsn.writeLock(FSNamesystemLockMode.GLOBAL, "testFsckWithDecommissionedReplicas");
       BlockInfo bi = bm.getStoredBlock(eb.getLocalBlock());
       bc = fsn.getBlockCollection(bi);
     } finally {
-      fsn.writeUnlock();
+      fsn.writeUnlock(FSNamesystemLockMode.GLOBAL, "testFsckWithDecommissionedReplicas");
     }
     DatanodeDescriptor dn = bc.getBlocks()[0]
         .getDatanode(0);

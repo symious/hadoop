@@ -1403,8 +1403,6 @@ public class TestReplicationPolicy extends BaseReplicationPolicyTest {
   public void testAddStoredBlockDoesNotCauseSkippedReplication()
       throws IOException {
     FSNamesystem mockNS = mock(FSNamesystem.class);
-    when(mockNS.hasWriteLock()).thenReturn(true);
-    when(mockNS.hasReadLock()).thenReturn(true);
     when(mockNS.hasWriteLock(FSNamesystemLockMode.GLOBAL)).thenReturn(true);
     when(mockNS.hasReadLock(FSNamesystemLockMode.GLOBAL)).thenReturn(true);
     when(mockNS.hasWriteLock(FSNamesystemLockMode.BM)).thenReturn(true);
@@ -1459,7 +1457,6 @@ public class TestReplicationPolicy extends BaseReplicationPolicyTest {
       testConvertLastBlockToUnderConstructionDoesNotCauseSkippedReplication()
           throws IOException {
     FSNamesystem mockNS = mock(FSNamesystem.class);
-    when(mockNS.hasWriteLock()).thenReturn(true);
     when(mockNS.hasWriteLock(FSNamesystemLockMode.BM)).thenReturn(true);
 
     BlockManager bm = new BlockManager(mockNS, false, new HdfsConfiguration());
@@ -1532,7 +1529,6 @@ public class TestReplicationPolicy extends BaseReplicationPolicyTest {
   public void testupdateNeededReplicationsDoesNotCauseSkippedReplication()
       throws IOException {
     FSNamesystem mockNS = mock(FSNamesystem.class);
-    when(mockNS.hasReadLock()).thenReturn(true);
     when(mockNS.hasReadLock(FSNamesystemLockMode.BM)).thenReturn(true);
 
     BlockManager bm = new BlockManager(mockNS, false, new HdfsConfiguration());

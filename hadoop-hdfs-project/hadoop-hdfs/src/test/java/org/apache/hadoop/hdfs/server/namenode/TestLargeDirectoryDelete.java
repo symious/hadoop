@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.namenode;
 import java.io.IOException;
 import java.util.Random;
 
+import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -120,11 +121,11 @@ public class TestLargeDirectoryDelete {
           try {
             int blockcount = getBlockCount();
             if (blockcount < TOTAL_BLOCKS && blockcount > 0) {
-              mc.getNamesystem().writeLock();
+              mc.getNamesystem().writeLock(FSNamesystemLockMode.GLOBAL, "runThreads");
               try {
                 lockOps++;
               } finally {
-                mc.getNamesystem().writeUnlock();
+                mc.getNamesystem().writeUnlock(FSNamesystemLockMode.GLOBAL, "runThreads");
               }
               Thread.sleep(1);
             }

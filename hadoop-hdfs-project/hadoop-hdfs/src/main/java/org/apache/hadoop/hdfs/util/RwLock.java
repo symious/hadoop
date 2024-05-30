@@ -22,6 +22,7 @@ import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 /** Read-write lock interface for FSNamesystem. */
 public interface RwLock {
   /** Acquire read lock. */
+  @Deprecated
   default void readLock() {
     readLock(FSNamesystemLockMode.GLOBAL, "OTHER");
   }
@@ -36,6 +37,7 @@ public interface RwLock {
   void readLock(FSNamesystemLockMode lockMode, String opName);
 
   /** Acquire read lock, unless interrupted while waiting.  */
+  @Deprecated
   default void readLockInterruptibly() throws InterruptedException {
     readLockInterruptibly(FSNamesystemLockMode.GLOBAL);
   }
@@ -44,6 +46,7 @@ public interface RwLock {
   void readLockInterruptibly(FSNamesystemLockMode lockMode) throws InterruptedException;
 
   /** Release read lock. */
+  @Deprecated
   default void readUnlock() {
     readUnlock(FSNamesystemLockMode.GLOBAL, "OTHER");
   }
@@ -64,6 +67,7 @@ public interface RwLock {
   void readUnlock(FSNamesystemLockMode lockMode, String opName);
 
   /** Check if the current thread holds read lock. */
+  @Deprecated
   default boolean hasReadLock() {
     return hasReadLock(FSNamesystemLockMode.GLOBAL);
   }
@@ -72,6 +76,7 @@ public interface RwLock {
   boolean hasReadLock(FSNamesystemLockMode lockMode);
 
   /** Acquire write lock. */
+  @Deprecated
   default void writeLock() {
     writeLock(FSNamesystemLockMode.GLOBAL, "OTHER");
   }
@@ -80,6 +85,7 @@ public interface RwLock {
    * Acquire write lock with operation name.
    * @param opName Option name.
    */
+  @Deprecated
   default void writeLock(String opName) {
     writeLock(FSNamesystemLockMode.GLOBAL, opName);
   }
@@ -97,6 +103,7 @@ public interface RwLock {
   void writeLockInterruptibly(FSNamesystemLockMode lockMode) throws InterruptedException;
 
   /** Release write lock. */
+  @Deprecated
   default void writeUnlock() {
     writeUnlock(FSNamesystemLockMode.GLOBAL, "OTHER");
   }
@@ -117,6 +124,7 @@ public interface RwLock {
   void writeUnlock(FSNamesystemLockMode lockMode, String opName);
 
   /** Check if the current thread holds write lock. */
+  @Deprecated
   default boolean hasWriteLock() {
     return hasWriteLock(FSNamesystemLockMode.GLOBAL);
   }

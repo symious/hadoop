@@ -464,8 +464,6 @@ public class TestLeaseManager {
     FSDirectory dir = mock(FSDirectory.class);
     FSNamesystem fsn = mock(FSNamesystem.class);
     when(fsn.isRunning()).thenReturn(true);
-    when(fsn.hasReadLock()).thenReturn(true);
-    when(fsn.hasWriteLock()).thenReturn(true);
     when(fsn.hasReadLock(FSNamesystemLockMode.FS)).thenReturn(true);
     when(fsn.hasWriteLock(FSNamesystemLockMode.FS)).thenReturn(true);
     when(fsn.hasReadLock(FSNamesystemLockMode.GLOBAL)).thenReturn(true);
