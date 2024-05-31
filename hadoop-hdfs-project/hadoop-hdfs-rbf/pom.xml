@@ -312,6 +312,7 @@ https://maven.apache.org/xsd/maven-4.0.0.xsd">
               <forkCount>${testsThreadCount}</forkCount>
               <rerunFailingTestsCount>6</rerunFailingTestsCount>
               <reuseForks>false</reuseForks>
+              <forkedProcessExitTimeoutInSeconds>600</forkedProcessExitTimeoutInSeconds>
               <argLine>${argLine} -XX:+HeapDumpOnOutOfMemoryError -DminiClusterDedicatedDirs=true
               </argLine>
               <systemPropertyVariables>

@@ -62,7 +62,7 @@ public class TestGenericRefresh {
   }
 
   @AfterClass
-  public static void tearDownBeforeClass() throws Exception {
+  public static void tearDownBeforeClass() {
     if (cluster != null) {
       cluster.shutdown();
     }

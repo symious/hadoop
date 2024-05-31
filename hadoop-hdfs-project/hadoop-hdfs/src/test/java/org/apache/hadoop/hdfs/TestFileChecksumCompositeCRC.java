@@ -17,13 +17,17 @@
  */
 package org.apache.hadoop.hdfs;
 
+import java.io.IOException;
+
 import org.apache.hadoop.fs.Options;
+import org.junit.BeforeClass;
 
 /**
  * Same as {@link TestFileChecksum}, just split out for parallel execution in surefire.
  */
 public class TestFileChecksumCompositeCRC extends TestFileChecksum {
-  public TestFileChecksumCompositeCRC() {
-    this.checksumCombineMode = Options.ChecksumCombineMode.COMPOSITE_CRC.name();
+  @BeforeClass
+  public static void setup() throws IOException {
+    setupInt(Options.ChecksumCombineMode.COMPOSITE_CRC);
   }
 }

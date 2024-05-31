@@ -714,6 +714,8 @@ public class TestTrash {
     conf.setClass("fs.file.impl", TestLFS.class, FileSystem.class);
     conf.set(FS_TRASH_INTERVAL_KEY, "50"); // in milliseconds for test
     Trash trash = new Trash(conf);
+    // Reset else auto retry will fail due to existing trash history
+    AuditableCheckpoints.deleteAll();
     // create 5 checkpoints
     for(int i=0; i<5; i++) {
       trash.checkpoint();

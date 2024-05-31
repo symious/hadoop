@@ -55,7 +55,7 @@ public final class FileContextTestHelper {
   public static int getDefaultBlockSize() {
     return DEFAULT_BLOCK_SIZE;
   }
-  
+
   public static byte[] getFileData(int numOfBlocks, long blockSize) {
     byte[] data = new byte[(int) (numOfBlocks * blockSize)];
     for (int i = 0; i < data.length; i++) {
@@ -81,13 +81,12 @@ public final class FileContextTestHelper {
       if (new Path(testRootDir).isAbsolute()) {
         absTestRootDir = testRootDir;
       } else {
-        absTestRootDir = fc.getWorkingDirectory().toString() + "/"
-            + new Path(testRootDir).toUri();
+        absTestRootDir = fc.getWorkingDirectory().toString() + "/" + new Path(testRootDir).toUri();
       }
     }
     return absTestRootDir;
   }
-  
+
   public Path getAbsoluteTestRootPath(FileContext fc) {
     return fc.makeQualified(new Path(getAbsoluteTestRootDir(fc)));
   }

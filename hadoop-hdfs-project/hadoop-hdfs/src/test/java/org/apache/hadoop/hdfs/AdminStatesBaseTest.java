@@ -125,6 +125,7 @@ public class AdminStatesBaseTest {
   public void teardown() throws IOException {
     hostsFileWriter.cleanup();
     shutdownCluster();
+    System.gc();
   }
 
   static public FSDataOutputStream writeIncompleteFile(FileSystem fileSys,

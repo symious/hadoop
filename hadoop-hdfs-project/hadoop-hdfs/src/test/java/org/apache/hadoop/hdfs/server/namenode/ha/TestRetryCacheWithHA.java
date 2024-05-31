@@ -160,6 +160,7 @@ public class TestRetryCacheWithHA {
       cluster.shutdown();
       cluster = null;
     }
+    System.gc();
   }
   
   /**

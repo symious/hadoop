@@ -173,6 +173,7 @@ public class TestReconstructStripedFile {
       cluster.shutdown();
       cluster = null;
     }
+    System.gc();
   }
 
   @Test(timeout = 120000)
