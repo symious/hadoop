@@ -125,7 +125,7 @@ public class ContentSummaryComputationContext {
 
     // sanity check.
     if (!hadDirReadLock || !hadFsnReadLock || hadDirWriteLock ||
-        hadFsnWriteLock || fsn.getReadHoldCount() != 1) {
+        hadFsnWriteLock || fsn.getReadHoldCount(FSNamesystemLockMode.GLOBAL) != 1) {
       // cannot relinquish
       return false;
     }

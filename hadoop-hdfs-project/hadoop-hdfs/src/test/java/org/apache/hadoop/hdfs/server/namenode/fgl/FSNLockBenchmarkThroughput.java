@@ -57,7 +57,7 @@ public class FSNLockBenchmarkThroughput extends Configured implements Tool {
   }
 
   public void benchmark(Path basePath, int readWriteRatio, int testingCount,
-                        int numClients) throws Exception {
+      int numClients) throws Exception {
     // private final
     ArrayList<Path> readingPaths = new ArrayList<>();
     for (int i = 0; i < 30; i++) {
@@ -104,7 +104,7 @@ public class FSNLockBenchmarkThroughput extends Configured implements Tool {
 
   // Write a little data to the path.
   private void internalWriteFile(FileSystem fs, Path path, boolean writeData,
-                                 HashMap<String, Integer> detailInfo) throws IOException {
+      HashMap<String, Integer> detailInfo) throws IOException {
     try (FSDataOutputStream outputStream = fs.create(path)) {
       incOp(detailInfo, "create");
       incOp(detailInfo, "complete");
@@ -119,7 +119,7 @@ public class FSNLockBenchmarkThroughput extends Configured implements Tool {
 
   // Append a little data to the path
   private void internalAppendFile(FileSystem fs, Path path, boolean writeData,
-                                  HashMap<String, Integer> detailInfo) throws IOException {
+      HashMap<String, Integer> detailInfo) throws IOException {
     try (FSDataOutputStream outputStream = fs.append(path)) {
       incOp(detailInfo, "append");
       incOp(detailInfo, "complete");
@@ -135,7 +135,7 @@ public class FSNLockBenchmarkThroughput extends Configured implements Tool {
    * Include getListing.
    */
   private Callable<Void> getListing(FileSystem fs, Path path,
-                                    HashMap<String, Integer> detailInfo) {
+      HashMap<String, Integer> detailInfo) {
     return () -> {
       fs.listStatus(path);
       incOp(detailInfo, "getListing");
@@ -154,7 +154,7 @@ public class FSNLockBenchmarkThroughput extends Configured implements Tool {
    * Include getBlockLocation.
    */
   private Callable<Void> getBlockLocation(FileSystem fs, Path path,
-                                          HashMap<String, Integer> detailInfo) {
+      HashMap<String, Integer> detailInfo) {
     return () -> {
       fs.getFileBlockLocations(path, 0, Long.MAX_VALUE);
       incOp(detailInfo, "getBlockLocation");
@@ -166,7 +166,7 @@ public class FSNLockBenchmarkThroughput extends Configured implements Tool {
    * Include getFileInfo.
    */
   private Callable<Void> getFileInfo(FileSystem fs, Path path,
-                                     HashMap<String, Integer> detailInfo) {
+      HashMap<String, Integer> detailInfo) {
     return () -> {
       fs.getFileStatus(path);
       incOp(detailInfo, "getFileInfo");
@@ -178,7 +178,7 @@ public class FSNLockBenchmarkThroughput extends Configured implements Tool {
    * Include create, addBlock, complete.
    */
   private Callable<Void> writeAndDeleteFile(FileSystem fs, Path path,
-                                            HashMap<String, Integer> detailInfo) {
+      HashMap<String, Integer> detailInfo) {
     return () -> {
       internalWriteFile(fs, path, false, detailInfo);
       fs.delete(path, false);
@@ -192,7 +192,7 @@ public class FSNLockBenchmarkThroughput extends Configured implements Tool {
    * setReplication and delete.
    */
   private Callable<Void> otherWriteOperation(FileSystem fs, Path path,
-                                             Path renameTargetPath, HashMap<String, Integer> detailInfo) {
+      Path renameTargetPath, HashMap<String, Integer> detailInfo) {
     return () -> {
       // Create one file
       internalWriteFile(fs, path, false, detailInfo);
@@ -228,7 +228,7 @@ public class FSNLockBenchmarkThroughput extends Configured implements Tool {
    * Building some callable tasks according to testingCount and readWriteRatio.
    */
   private List<Callable<Void>> buildTasks(FileSystem fs, Path basePath, int testingCount,
-                                          int readWriteRatio, ArrayList<Path> readingPaths, HashMap<String, Integer> detailInfo) {
+      int readWriteRatio, ArrayList<Path> readingPaths, HashMap<String, Integer> detailInfo) {
     List<Callable<Void>> tasks = new ArrayList<>();
 
     for (int i = 0; i < testingCount; i++) {

@@ -64,7 +64,7 @@ public class TestFSNLockBenchmarkThroughput {
   }
 
   private void testBenchmarkThroughput(boolean enableFGL, int readWriteRatio,
-                                       int testingCount, int numClients) throws Exception {
+      int testingCount, int numClients) throws Exception {
     MiniQJMHACluster qjmhaCluster = null;
 
     try {

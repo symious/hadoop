@@ -1909,10 +1909,6 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     this.fsLock.writeUnlock(lockMode, opName);
   }
 
-  public void writeUnlock(String opName, boolean suppressWriteLockReport) {
-    writeUnlock(FSNamesystemLockMode.GLOBAL, opName, suppressWriteLockReport);
-  }
-
   public void writeUnlock(FSNamesystemLockMode lockMode, String opName,
       boolean suppressWriteLockReport) {
     this.fsLock.writeUnlock(lockMode, opName, suppressWriteLockReport);
@@ -1927,8 +1923,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     return this.fsLock.hasReadLock(lockMode);
   }
 
-  public int getReadHoldCount() {
-    return this.fsLock.getReadHoldCount(FSNamesystemLockMode.GLOBAL);
+  public int getReadHoldCount(FSNamesystemLockMode lockMode) {
+    return this.fsLock.getReadHoldCount(lockMode);
   }
 
   /** Lock the checkpoint lock */
@@ -3708,10 +3704,10 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     final String operationName = getQuotaCommand(nsQuota, ssQuota);
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(operationName);
-    if(!allowOwnerSetQuota) {
-      checkSuperuserPrivilege(pc);
-    }
     try {
+      if(!allowOwnerSetQuota) {
+        checkSuperuserPrivilege(pc);
+      }
       // Need to compute the current space usage
       writeLock(FSNamesystemLockMode.GLOBAL, operationName);
       try {
