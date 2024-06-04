@@ -57,6 +57,10 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOCK_DETAILED_ME
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FAULTY_DC_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_KEY;
 import static org.junit.Assert.*;
@@ -672,6 +676,20 @@ public class TestNameNodeReconfigure {
 
     nameNode.reconfigureProperty(DFS_NAMENODE_DISABLE_EC_KEY, "false");
     assertFalse(rpcServer.isDisableECFeature());
+  }
+
+  @Test
+  public void testReconfigureFaultyDC() throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode(0);
+    BlockManager blockManager = nameNode.getNamesystem().getBlockManager();
+    assertNull(blockManager.getFaultyDC());
+
+    String newDC = "STT";
+    nameNode.reconfigureProperty(DFS_NAMENODE_FAULTY_DC_KEY, newDC);
+    assertEquals(newDC, blockManager.getFaultyDC());
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_FAULTY_DC_KEY, null);
+    assertNull(blockManager.getFaultyDC());
   }
 
   @Test

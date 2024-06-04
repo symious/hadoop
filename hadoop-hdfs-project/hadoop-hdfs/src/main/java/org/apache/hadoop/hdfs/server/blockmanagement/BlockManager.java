@@ -471,6 +471,8 @@ public class BlockManager implements BlockStatsMXBean {
   private volatile boolean isDataCenterAwareness;
   private volatile boolean isReplicationRuleEnabled;
 
+  private volatile String faultyDC = null;
+
   /**
    * Excess storage prioritizes specified data centers for to delete,
    * and it will only take effect if the dfs.block.replicator.classname parameter set to
@@ -538,6 +540,8 @@ public class BlockManager implements BlockStatsMXBean {
     isReplicationRuleEnabled = conf.getBoolean(
         DFSConfigKeys.DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY,
         DFSConfigKeys.DFS_NAMENODE_REPLICATION_RULE_ENABLE_DEFAULT);
+    setFaultyDC(conf.get(DFSConfigKeys.DFS_NAMENODE_FAULTY_DC_KEY,
+        DFS_NAMENODE_FAULTY_DC_DEFAULT));
     storagePolicySuite = BlockStoragePolicySuite.createDefaultSuite();
     pendingReconstruction = new PendingReconstructionBlocks(conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY,
@@ -791,6 +795,18 @@ public class BlockManager implements BlockStatsMXBean {
   /** Check if replication rule enabled  */
   public boolean getReplicationRuleEnabled() {
     return isReplicationRuleEnabled;
+  }
+
+  /**
+   * Set or clear faulty DC.
+   */
+  public void setFaultyDC(String faultyDC) {
+    LOG.info("Changing the faulty DC from {} to {}.", this.faultyDC, faultyDC);
+    this.faultyDC = faultyDC;
+  }
+
+  public String getFaultyDC() {
+    return this.faultyDC;
   }
 
   /** Enable/Disable replication rule */

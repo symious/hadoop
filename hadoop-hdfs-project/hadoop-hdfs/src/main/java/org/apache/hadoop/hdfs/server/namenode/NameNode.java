@@ -185,6 +185,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANC
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_SEC_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FAULTY_DC_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MSYNC_RPC_BIND_HOST_KEY;
@@ -454,6 +455,7 @@ public class NameNode extends ReconfigurableBase implements
           DFS_LEASE_HARDLIMIT_KEY,
           DFS_NAMENODE_QUOTA_INIT_THREADS_KEY,
           DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY,
+          DFS_NAMENODE_FAULTY_DC_KEY,
           DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY,
           DFS_NAMENODE_REMOVE_CORRUPTED_BLOCKS_KEY,
           DFS_NAMENODE_MAX_SLOWPEER_COLLECT_NODES_KEY,
@@ -2481,6 +2483,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfCallerContextEnabled(newVal);
     } else if (property.equals(DFS_NAMENODE_REPLICATION_RULE_ENABLE_KEY)) {
       return reconfReplicationRuleEnabled(newVal);
+    } else if (property.equals(DFS_NAMENODE_FAULTY_DC_KEY)) {
+      return reconfFaultyDC(newVal);
     } else if (property.equals(ipcClientRPCBackoffEnable)) {
       return reconfigureIPCBackoffEnabled(newVal);
     } else if (property.equals(DFS_STORAGE_POLICY_SATISFIER_MODE_KEY)) {
@@ -2741,6 +2745,11 @@ public class NameNode extends ReconfigurableBase implements
       LOG.info("RECONFIGURE* changed replicationRuleEnabled to " + enable);
     }
     return Boolean.toString(enable);
+  }
+
+  private String reconfFaultyDC(String newFaultyDC) {
+    namesystem.getBlockManager().setFaultyDC(newFaultyDC);
+    return newFaultyDC;
   }
 
   String reconfigureIPCBackoffEnabled(String newVal) {

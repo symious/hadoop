@@ -6576,4 +6576,12 @@
       the expected number of replicas.
     </description>
   </property>
+  <property>
+    <name>dfs.namenode.faulty.dc</name>
+    <value></value>
+    <description>
+      This configuration is used to mark the faulty DC when DR happens.
+      So that namenode can take some actions for this faulty DC.
+    </description>
+  </property>
 </configuration>
