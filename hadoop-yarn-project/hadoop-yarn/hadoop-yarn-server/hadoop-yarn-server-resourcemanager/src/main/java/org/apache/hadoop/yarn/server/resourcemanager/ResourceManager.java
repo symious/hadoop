@@ -901,6 +901,7 @@ public class ResourceManager extends CompositeService
           throw new YarnRuntimeException(errMsg);
         }
         federationStateStoreService = createFederationStateStoreService();
+        rmAppManager.setFederationStateStoreService(federationStateStoreService);
         addIfService(federationStateStoreService);
         LOG.info("Initialized Federation membership.");
       }

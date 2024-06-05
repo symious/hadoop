@@ -4479,6 +4479,17 @@ public class YarnConfiguration extends Configuration {
   private static final String FEDERATION_GPG_PREFIX =
       FEDERATION_PREFIX + "gpg.";
 
+  public static final String FEDERATION_STATESTORE_CLEANUP_RETRY_COUNT =
+      FEDERATION_PREFIX + "state-store.clean-up-retry-count";
+
+  public static final int DEFAULT_FEDERATION_STATESTORE_CLEANUP_RETRY_COUNT = 1;
+
+  public static final String FEDERATION_STATESTORE_CLEANUP_RETRY_SLEEP_TIME =
+      FEDERATION_PREFIX + "state-store.clean-up-retry-sleep-time";
+
+  public static final long DEFAULT_FEDERATION_STATESTORE_CLEANUP_RETRY_SLEEP_TIME =
+      TimeUnit.SECONDS.toMillis(1);
+
   public static final String GPG_WEBAPP_PREFIX = FEDERATION_GPG_PREFIX
       + "webapp.";
 

@@ -27,12 +27,15 @@ import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
+import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
+import org.apache.hadoop.yarn.server.federation.retry.FederationActionRetry;
 import org.apache.hadoop.yarn.server.federation.store.FederationStateStore;
 import org.apache.hadoop.yarn.server.federation.store.records.AddApplicationHomeSubClusterRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.AddApplicationHomeSubClusterResponse;
+import org.apache.hadoop.yarn.server.federation.store.records.ApplicationHomeSubCluster;
 import org.apache.hadoop.yarn.server.federation.store.records.DeleteApplicationHomeSubClusterRequest;
 import org.apache.hadoop.yarn.server.federation.store.records.DeleteApplicationHomeSubClusterResponse;
 import org.apache.hadoop.yarn.server.federation.store.records.DeleteSubClusterPolicyConfigurationRequest;
@@ -89,6 +92,8 @@ public class FederationStateStoreService extends AbstractService
   private SubClusterId subClusterId;
   private long heartbeatInterval;
   private RMContext rmContext;
+  private int cleanUpRetryCountNum;
+  private long cleanUpRetrySleepTime;
 
   public FederationStateStoreService(RMContext rmContext) {
     super(FederationStateStoreService.class.getName());
@@ -122,6 +127,15 @@ public class FederationStateStoreService extends AbstractService
       heartbeatInterval =
           YarnConfiguration.DEFAULT_FEDERATION_STATESTORE_HEARTBEAT_INTERVAL_SECS;
     }
+
+    cleanUpRetryCountNum = conf.getInt(YarnConfiguration.FEDERATION_STATESTORE_CLEANUP_RETRY_COUNT,
+        YarnConfiguration.DEFAULT_FEDERATION_STATESTORE_CLEANUP_RETRY_COUNT);
+
+    cleanUpRetrySleepTime = conf.getTimeDuration(
+        YarnConfiguration.FEDERATION_STATESTORE_CLEANUP_RETRY_SLEEP_TIME,
+        YarnConfiguration.DEFAULT_FEDERATION_STATESTORE_CLEANUP_RETRY_SLEEP_TIME,
+        TimeUnit.MILLISECONDS);
+
     LOG.info("Initialized federation membership service.");
 
     super.serviceInit(conf);
@@ -308,5 +322,93 @@ public class FederationStateStoreService extends AbstractService
   public DeleteApplicationHomeSubClusterResponse deleteApplicationHomeSubCluster(
       DeleteApplicationHomeSubClusterRequest request) throws YarnException {
     return stateStoreClient.deleteApplicationHomeSubCluster(request);
+  }
+
+  /**
+   * Clean up the federation completed Application.
+   *
+   * @param appId app id.
+   * @param isQuery true, need to query from statestore, false not query.
+   * @throws Exception exception occurs.
+   * @return true, successfully deleted; false, failed to delete or no need to delete
+   */
+  public boolean cleanUpFinishApplicationsWithRetries(ApplicationId appId, boolean isQuery)
+      throws Exception {
+
+    // Generate a request to delete data
+    DeleteApplicationHomeSubClusterRequest req =
+        DeleteApplicationHomeSubClusterRequest.newInstance(appId);
+
+    // CleanUp Finish App.
+    return ((FederationActionRetry<Boolean>) (retry) -> invokeCleanUpFinishApp(appId, isQuery, req))
+        .runWithRetries(cleanUpRetryCountNum, cleanUpRetrySleepTime);
+  }
+
+  /**
+   * CleanUp Finish App.
+   *
+   * @param applicationId app id.
+   * @param isQuery true, need to query from statestore, false not query.
+   * @param delRequest delete Application Request
+   * @return true, successfully deleted; false, failed to delete or no need to delete
+   * @throws YarnException
+   */
+  private boolean invokeCleanUpFinishApp(ApplicationId applicationId, boolean isQuery,
+      DeleteApplicationHomeSubClusterRequest delRequest) throws YarnException {
+    boolean isAppNeedClean = true;
+    // If we need to query the StateStore
+    if (isQuery) {
+      isAppNeedClean = isApplicationNeedClean(applicationId);
+    }
+    // When the App needs to be cleaned up, clean up the App.
+    if (isAppNeedClean) {
+      DeleteApplicationHomeSubClusterResponse response =
+          deleteApplicationHomeSubCluster(delRequest);
+      if (response != null) {
+        LOG.info("The applicationId = {} has been successfully cleaned up.", applicationId);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Used to determine whether the Application is cleaned up.
+   *
+   * When the app in the RM is completed,
+   * the HomeSC corresponding to the app will be queried in the StateStore.
+   * If the current RM is the HomeSC, the completed app will be cleaned up.
+   *
+   * @param applicationId applicationId
+   * @return true, app needs to be cleaned up;
+   *         false, app doesn't need to be cleaned up.
+   */
+  private boolean isApplicationNeedClean(ApplicationId applicationId) {
+    GetApplicationHomeSubClusterRequest queryRequest =
+        GetApplicationHomeSubClusterRequest.newInstance(applicationId);
+    // Here we need to use try...catch,
+    // because getApplicationHomeSubCluster may throw not exist exception
+    try {
+      GetApplicationHomeSubClusterResponse queryResp =
+          getApplicationHomeSubCluster(queryRequest);
+      if (queryResp != null) {
+        ApplicationHomeSubCluster appHomeSC = queryResp.getApplicationHomeSubCluster();
+        SubClusterId homeSubClusterId = appHomeSC.getHomeSubCluster();
+        if (!subClusterId.equals(homeSubClusterId)) {
+          LOG.warn("The homeSubCluster of applicationId = {} belong subCluster = {}, " +
+                  " not belong subCluster = {} and is not allowed to delete.",
+              applicationId, homeSubClusterId, subClusterId);
+          return false;
+        }
+      } else {
+        LOG.warn("The applicationId = {} not belong subCluster = {} " +
+            " and is not allowed to delete.", applicationId, subClusterId);
+        return false;
+      }
+    } catch (Exception e) {
+      LOG.warn("query applicationId = {} error.", applicationId, e);
+      return false;
+    }
+    return true;
   }
 }
