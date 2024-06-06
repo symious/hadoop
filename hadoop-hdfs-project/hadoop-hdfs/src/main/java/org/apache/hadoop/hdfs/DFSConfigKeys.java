@@ -307,6 +307,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_KEY =
       "dfs.namenode.faulty.dc.number.threshold";
   public static final int     DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_DEFAULT = 200;
+  public static final String  DFS_NAMENODE_BATCHED_SCAN_LIMIT = "dfs.namenode.batcher.scan.limit";
+  public static final int     DFS_NAMENODE_BATCHER_SCAN_LIMIT_DEFAULT = 2;
 
   public static final String  DFS_NAMENODE_FILE_CLOSE_NUM_COMMITTED_ALLOWED_KEY
       = "dfs.namenode.file.close.num-committed-allowed";

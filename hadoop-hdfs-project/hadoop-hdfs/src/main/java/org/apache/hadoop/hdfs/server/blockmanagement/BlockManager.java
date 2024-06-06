@@ -46,6 +46,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
@@ -397,6 +398,11 @@ public class BlockManager implements BlockStatsMXBean {
       new ExcessRedundancyMap();
 
   /**
+   * The queue stores the DN that may contain redundancy replica blocks.
+   */
+  private final BlockingQueue<DatanodeDescriptor> pendingScanDNs = new LinkedBlockingQueue<>();
+
+  /**
    * Store set of Blocks that need to be replicated 1 or more times.
    * We also store pending reconstruction-orders.
    */
@@ -533,6 +539,8 @@ public class BlockManager implements BlockStatsMXBean {
    * Whether to check for excess redundancy timeout.
    */
   private volatile boolean excessRedundancyTimeoutCheckEnabled;
+
+  private final int batchedScanLimit;
 
   public BlockManager(final FSNamesystem namesystem, boolean haEnabled,
       final Configuration conf) throws IOException {
@@ -714,6 +722,9 @@ public class BlockManager implements BlockStatsMXBean {
     setExcessRedundancyTimeoutCheckEnabled(conf.getBoolean(
         DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED,
         DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED_DEFAULT));
+
+    this.batchedScanLimit = conf.getInt(DFS_NAMENODE_BATCHED_SCAN_LIMIT,
+        DFS_NAMENODE_BATCHER_SCAN_LIMIT_DEFAULT);
 
     LOG.info("defaultReplication         = {}", defaultReplication);
     LOG.info("maxReplication             = {}", maxReplication);
@@ -2942,6 +2953,14 @@ public class BlockManager implements BlockStatsMXBean {
     }
     node.updateHeartbeat(reports, cacheCapacity, cacheUsed, xceiverCount,
         failedVolumes, volumeFailureSummary);
+
+    if (node.isProtectedByFaultyDC() &&
+        !NetworkTopologyUtil.getDataCenter(node).equals(this.faultyDC)) {
+      node.unprotectByFaultyDC();
+      // Add this node to the pendingScanDNs to
+      // let RedundancyMonitor process extra redundancy blocks.
+      this.pendingScanDNs.add(node);
+    }
   }
 
   void updateHeartbeatState(DatanodeDescriptor node,
@@ -3182,6 +3201,34 @@ public class BlockManager implements BlockStatsMXBean {
           " msecs. {} blocks are left. {} blocks were removed.",
           (Time.monotonicNow() - startTime), endSize, (startSize - endSize));
     }
+  }
+
+  /**
+   * Process some pendingScan datanodes. All extra redundancy blocks
+   * stored in this DN will be handled.
+   */
+  void processPendingScanDataNodes() {
+    int loopCount = 0;
+    while (!this.pendingScanDNs.isEmpty() && loopCount <= batchedScanLimit) {
+      DatanodeDescriptor descriptor = this.pendingScanDNs.poll();
+      if (descriptor != null) {
+        namesystem.writeLock(FSNamesystemLockMode.GLOBAL, "ProcessPendingScanDataNodes");
+        try {
+          DatanodeDescriptor storedDN = getDatanodeManager()
+              .getDatanode(descriptor.getDatanodeUuid());
+          if (storedDN != null && storedDN.isAlive()) {
+            processExtraRedundancyBlocksOnInService(storedDN);
+          }
+        } finally {
+          namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL, "ProcessPendingScanDataNodes");
+        }
+        loopCount++;
+      }
+    }
+  }
+
+  public int getNumberOfPendingScanDN() {
+    return this.pendingScanDNs.size();
   }
 
   /**
@@ -5619,6 +5666,7 @@ public class BlockManager implements BlockStatsMXBean {
             processPendingReconstructions();
             rescanPostponedMisreplicatedBlocks();
             processTimedOutExcessBlocks();
+            processPendingScanDataNodes();
             lastRedundancyCycleTS.set(Time.monotonicNow());
           }
           TimeUnit.MILLISECONDS.sleep(redundancyRecheckIntervalMs);

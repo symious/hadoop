@@ -6599,4 +6599,11 @@
       If the number of abnormal DNs in one DC is bigger than this threshold, namenode will mark the DC as the faultyDC.
     </description>
   </property>
+  <property>
+    <name>dfs.namenode.batcher.scan.limit</name>
+    <value>2</value>
+    <description>
+      The batched number that namenode processes the pendingScanDN.
+    </description>
+  </property>
 </configuration>

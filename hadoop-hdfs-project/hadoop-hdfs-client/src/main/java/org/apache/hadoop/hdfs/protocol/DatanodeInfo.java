@@ -538,6 +538,15 @@ public class DatanodeInfo extends DatanodeID implements Node {
   }
 
   /**
+   * The in_maintenance DN comes back only when the DN is not under
+   * the faultyDC and the DN is live.
+   */
+  public void unprotectByFaultyDC() {
+    stopMaintenance();
+    this.protectedByFaultyDC = false;
+  }
+
+  /**
    * Check whether this DN is protected by the faulty DC.
    * @return true if this DN is protected by the faulty DC, else false.
    */

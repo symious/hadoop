@@ -32,6 +32,7 @@ import org.apache.hadoop.hdfs.server.blockmanagement.BlockManagerTestUtil;
 import org.apache.hadoop.hdfs.server.protocol.SlowDiskReports;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -321,6 +322,7 @@ public class TestDeadDatanode {
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, 0);
     conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, 1L);
     conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY, true);
+    conf.setLong(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY, Long.MAX_VALUE);
 
     try {
       cluster = new MiniDFSCluster.Builder(conf).numDataNodes(racks.length).racks(racks)
@@ -329,10 +331,13 @@ public class TestDeadDatanode {
       BlockManager blockManager = cluster.getNamesystem(0).getBlockManager();
 
       DataNode dn2 = null;
+      DataNode dn3 = null;
       DataNode dn4 = null;
       for (DataNode node : cluster.getDataNodes()) {
         if (node.getDatanodeHostname().contains("host1")) {
           dn2 = node;
+        } else if (node.getDatanodeHostname().contains("host2")) {
+          dn3 = node;
         } else if (node.getDatanodeHostname().contains("host3")) {
           dn4 = node;
         }
@@ -347,10 +352,52 @@ public class TestDeadDatanode {
       GenericTestUtils.waitFor(() -> blockManager.getFaultyDC() != null, 500, 6000);
       assertEquals("/datacenter0", blockManager.getFaultyDC());
 
-      final DatanodeDescriptor dn2Desc = cluster.getNamesystem(0)
+      DatanodeDescriptor dn2Desc = cluster.getNamesystem(0)
           .getBlockManager().getDatanodeManager()
           .getDatanode(dn2.getDatanodeId());
       assertTrue(dn2Desc.isProtectedByFaultyDC());
+
+      DatanodeDescriptor dn3Desc = blockManager.getDatanodeManager()
+          .getDatanode(dn3.getDatanodeId());
+      assertTrue(dn3Desc.isProtectedByFaultyDC());
+
+      DatanodeDescriptor dn4Desc = blockManager.getDatanodeManager()
+          .getDatanode(dn4.getDatanodeId());
+      assertTrue(dn4Desc.isProtectedByFaultyDC());
+
+      cluster.setDataNodeDead(dn2.getDatanodeId());
+      cluster.setDataNodeDead(dn4.getDatanodeId());
+
+      blockManager.setFaultyDC(null);
+
+      // DN2 and DN4 still be protected by the FaultyDC since there are dead.
+      assertNull(blockManager.getFaultyDC());
+      dn2Desc = blockManager.getDatanodeManager()
+          .getDatanode(dn2.getDatanodeId());
+      assertTrue(dn2Desc.isProtectedByFaultyDC());
+
+      dn4Desc = blockManager.getDatanodeManager()
+          .getDatanode(dn4.getDatanodeId());
+      assertTrue(dn4Desc.isProtectedByFaultyDC());
+
+      // Restart the DN2, NN should process excess replicas.
+      dn2.setHeartbeatsDisabledForTests(false);
+      DatanodeDescriptor finalDn2Desc = dn2Desc;
+      GenericTestUtils.waitFor(
+          () -> finalDn2Desc.isAlive() && finalDn2Desc.isHeartbeatedSinceRegistration(), 100, 5000);
+
+      dn2Desc = blockManager.getDatanodeManager().getDatanode(dn2.getDatanodeId());
+      assertFalse(dn2Desc.isProtectedByFaultyDC());
+
+      // Restart the DN4, NN should process excess replicas.
+      dn4.setHeartbeatsDisabledForTests(false);
+      DatanodeDescriptor finalDn4Desc = dn4Desc;
+      GenericTestUtils.waitFor(
+          () -> finalDn4Desc.isAlive() && finalDn4Desc.isHeartbeatedSinceRegistration(), 100, 5000);
+      dn4Desc = blockManager.getDatanodeManager().getDatanode(dn4.getDatanodeId());
+      assertFalse(dn4Desc.isProtectedByFaultyDC());
+
+      assertEquals(3, blockManager.getNumberOfPendingScanDN());
     } finally {
       if (cluster != null) {
         cluster.shutdown();
