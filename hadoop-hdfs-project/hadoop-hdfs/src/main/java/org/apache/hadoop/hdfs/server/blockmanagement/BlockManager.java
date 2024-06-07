@@ -62,6 +62,7 @@ import org.apache.hadoop.fs.FileEncryptionInfo;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.OperationName;
+import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
@@ -123,6 +124,7 @@ import static org.apache.hadoop.hdfs.util.StripedBlockUtil.getInternalBlockLengt
 
 import org.apache.hadoop.hdfs.util.LightWeightHashSet;
 import org.apache.hadoop.metrics2.util.MBeans;
+import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
@@ -801,8 +803,19 @@ public class BlockManager implements BlockStatsMXBean {
    * Set or clear faulty DC.
    */
   public void setFaultyDC(String faultyDC) {
-    LOG.info("Changing the faulty DC from {} to {}.", this.faultyDC, faultyDC);
-    this.faultyDC = faultyDC;
+    this.namesystem.writeLock(FSNamesystemLockMode.BM, "SetFaultyDC");
+    try {
+      LOG.info("Changing the faulty DC from {} to {}.", this.faultyDC, faultyDC);
+      String oldFaultyDC = this.faultyDC;
+      this.faultyDC = faultyDC;
+      if (this.faultyDC != null && this.faultyDC.startsWith("/") &&
+          !this.faultyDC.equals(oldFaultyDC)) {
+        // Make DNs under this faultyDC as in_maintenance
+        getDatanodeManager().markDNsUnderFaultyDCMaintenance(this.faultyDC);
+      }
+    } finally {
+     this.namesystem.writeUnlock(FSNamesystemLockMode.BM, "SetFaultyDC");
+    }
   }
 
   public String getFaultyDC() {

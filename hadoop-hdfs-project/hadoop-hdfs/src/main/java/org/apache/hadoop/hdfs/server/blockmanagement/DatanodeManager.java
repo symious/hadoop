@@ -2328,6 +2328,23 @@ public class DatanodeManager {
   }
 
   /**
+   * Attempt to mark all DNs under the faulty DC as in_maintenance.
+   * @param faultyDC the input faulty DC
+   */
+  public void markDNsUnderFaultyDCMaintenance(String faultyDC) {
+    LOG.info("Marking datanodes under {} as in_maintenance.", faultyDC);
+    synchronized (this) {
+      for (DatanodeDescriptor dn : datanodeMap.values()) {
+        String dnDC = NetworkTopologyUtil.getDataCenter(dn);
+        if (dnDC.equals(faultyDC) && !dn.isProtectedByFaultyDC()) {
+          LOG.info("Marking the DN {} under {} as in_maintenance.", dn, faultyDC);
+          dn.protectByFaultyDC();
+        }
+      }
+    }
+  }
+
+  /**
    * Clear any actions that are queued up to be sent to the DNs
    * on their next heartbeats. This includes block invalidations,
    * recoveries, and replication requests.

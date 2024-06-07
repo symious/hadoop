@@ -17,7 +17,18 @@
  */
 package org.apache.hadoop.hdfs.server.namenode;
 
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+
+import org.apache.hadoop.fs.BlockLocation;
+import org.apache.hadoop.fs.HdfsBlockLocation;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockManagerTestUtil;
 import org.apache.hadoop.hdfs.server.protocol.SlowDiskReports;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -182,6 +193,123 @@ public class TestDeadDatanode {
       assertFalse("Dead node should not be chosen", datanodeStorageInfo
           .getDatanodeDescriptor().equals(clientNode));
     }
+  }
+
+  @Test
+  public void testDeadNodeProtectedByFaultyDC() throws Exception {
+    Configuration conf = new HdfsConfiguration();
+    final String[] racks = {"/datacenter1/rack0", "/datacenter0/rack1",
+        "/datacenter0/rack2", "/datacenter0/rack3"};
+    final String[] hosts = {"host0", "host1", "host2", "host3"};
+    conf.setLong(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY, 100);
+    try {
+      cluster = new MiniDFSCluster.Builder(conf).numDataNodes(racks.length).racks(racks)
+          .hosts(hosts).build();
+      cluster.waitActive();
+      BlockManager blockManager = cluster.getNamesystem(0).getBlockManager();
+      DistributedFileSystem fs = cluster.getFileSystem();
+
+      DataNode dn1 = null;
+      DataNode dn2 = null;
+      DataNode dn4 = null;
+      for (DataNode node : cluster.getDataNodes()) {
+        if (node.getDatanodeHostname().contains("host0")) {
+          dn1 = node;
+        } else if (node.getDatanodeHostname().contains("host1")) {
+          dn2 = node;
+        } else if (node.getDatanodeHostname().contains("host3")) {
+          dn4 = node;
+        }
+      }
+
+      // Stop DN4, so that the block can be stored from dn1 ~ dn3.
+      dn4.setHeartbeatsDisabledForTests(true);
+      cluster.setDataNodeDead(dn4.getDatanodeId());
+
+      Path filePath = new Path("/tmp/testDeadNodeProtectedByFaultyDC");
+      DFSTestUtil.createFile(fs, filePath, 1024, (short) 3, 0);
+
+      BlockLocation[] blockLocations = fs.getClient().getBlockLocations(
+          filePath.toUri().getPath(), 0, Long.MAX_VALUE);
+      assertEquals(1, blockLocations.length);
+      ExtendedBlock block = ((HdfsBlockLocation) blockLocations[0]).getLocatedBlock().getBlock();
+
+      final DatanodeDescriptor storeDN1 = blockManager.getDatanodeManager()
+          .getDatanode(dn1.getDatanodeId());
+      assertEquals(1, storeDN1.numBlocks());
+
+      // Mark the DN1 as the faulty DN
+      blockManager.setFaultyDC("/datacenter1");
+      assertTrue(storeDN1.isProtectedByFaultyDC());
+
+      // Start the DN4.
+      dn4.setHeartbeatsDisabledForTests(false);
+      final DatanodeDescriptor storeDN4 = blockManager.getDatanodeManager()
+          .getDatanode(dn4.getDatanodeId());
+      GenericTestUtils.waitFor(
+          () -> storeDN4.isAlive() && storeDN4.isHeartbeatedSinceRegistration(), 100, 5000);
+
+      // The replicas of this block still be stored from DN1 ~ DN3
+      BlockInfo blockInfo = blockManager.getStoredBlock(block.getLocalBlock());
+      Iterator<DatanodeStorageInfo> storageInfoIterator = blockInfo.getStorageInfos();
+      AtomicInteger counter = new AtomicInteger();
+      storageInfoIterator.forEachRemaining(k -> counter.getAndIncrement());
+      assertEquals(3, counter.get());
+      blockLocations = fs.getClient().getBlockLocations(
+          filePath.toUri().getPath(), 0, Long.MAX_VALUE);
+      assertEquals(2, blockLocations[0].getHosts().length);
+      assertFalse(Arrays.asList(blockLocations[0].getHosts()).contains("host0"));
+
+      // Stop the DN2, normally namenode will handle this under replicated block.
+      final DatanodeDescriptor storeDN2 = blockManager.getDatanodeManager()
+          .getDatanode(dn2.getDatanodeId());
+      dn2.setHeartbeatsDisabledForTests(true);
+      cluster.setDataNodeDead(dn2.getDatanodeId());
+      assertFalse(storeDN2.isProtectedByFaultyDC());
+
+      BlockManagerTestUtil.getComputedDatanodeWork(blockManager);
+
+      GenericTestUtils.waitFor(() -> {
+        BlockInfo tmpBlockInfo = blockManager.getStoredBlock(block.getLocalBlock());
+        Iterator<DatanodeStorageInfo> tmpStorageInfoIterator = tmpBlockInfo.getStorageInfos();
+        AtomicInteger tmpCounter = new AtomicInteger(0);
+        tmpStorageInfoIterator.forEachRemaining(k -> tmpCounter.getAndIncrement());
+        return 3 == tmpCounter.get();
+      }, 3000, 20000);
+
+      // Get BlockLocation will ignore the maintenance replicas
+      blockLocations = fs.getClient().getBlockLocations(
+          filePath.toUri().getPath(), 0, Long.MAX_VALUE);
+      assertEquals(1, blockLocations.length);
+      assertEquals(2, blockLocations[0].getHosts().length);
+      assertTrue(Arrays.asList(blockLocations[0].getHosts()).contains("host2"));
+      assertTrue(Arrays.asList(blockLocations[0].getHosts()).contains("host3"));
+
+      // Restart the DN2, NN should process excess replicas.
+      dn2.setHeartbeatsDisabledForTests(false);
+      GenericTestUtils.waitFor(
+          () -> storeDN2.isAlive() && storeDN2.isHeartbeatedSinceRegistration(), 100, 5000);
+
+      blockInfo = blockManager.getStoredBlock(block.getLocalBlock());
+      storageInfoIterator = blockInfo.getStorageInfos();
+      counter.set(0);
+      storageInfoIterator.forEachRemaining(k -> counter.getAndIncrement());
+      assertEquals(4, counter.get());
+
+      blockLocations = fs.getClient().getBlockLocations(
+          filePath.toUri().getPath(), 0, Long.MAX_VALUE);
+      assertEquals(1, blockLocations.length);
+      assertEquals(3, blockLocations[0].getHosts().length);
+      assertTrue(Arrays.asList(blockLocations[0].getHosts()).contains("host1"));
+      assertTrue(Arrays.asList(blockLocations[0].getHosts()).contains("host2"));
+      assertTrue(Arrays.asList(blockLocations[0].getHosts()).contains("host3"));
+
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+
   }
 
   @Test

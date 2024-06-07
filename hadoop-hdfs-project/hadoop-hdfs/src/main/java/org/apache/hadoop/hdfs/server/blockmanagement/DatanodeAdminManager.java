@@ -350,7 +350,7 @@ public class DatanodeAdminManager {
    */
   @VisibleForTesting
   public void stopMaintenance(DatanodeDescriptor node) {
-    if (node.isMaintenance()) {
+    if (node.isMaintenance() && !node.isProtectedByFaultyDC()) {
       // Update DN stats maintained by HeartbeatManager
       hbManager.stopMaintenance(node);
 
@@ -386,7 +386,7 @@ public class DatanodeAdminManager {
       // Remove from tracking in DatanodeAdminManager
       monitor.stopTrackingNode(node);
     } else {
-      LOG.trace("stopMaintenance: Node {} in {}, nothing to do.",
+      LOG.info("stopMaintenance: Node {} in {}, nothing to do.",
           node, node.getAdminState());
     }
   }

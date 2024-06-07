@@ -86,6 +86,7 @@ public class DatanodeInfo extends DatanodeID implements Node {
   }
 
   protected AdminStates adminState;
+  private volatile boolean protectedByFaultyDC = false;
   private long maintenanceExpireTimeInMS;
   private long lastBlockReportTime;
   private long lastBlockReportMonotonic;
@@ -523,6 +524,25 @@ public class DatanodeInfo extends DatanodeID implements Node {
    */
   public void setInMaintenance() {
     this.adminState = AdminStates.IN_MAINTENANCE;
+  }
+
+  /**
+   * The DN is protected by the faulty DC only when the FaultyDC is set.
+   * All DNs under the faulty DC will be marked as in_maintenance node.
+   */
+  public void protectByFaultyDC() {
+    if (!protectedByFaultyDC || !isMaintenance()) {
+      setInMaintenance();
+      this.protectedByFaultyDC = true;
+    }
+  }
+
+  /**
+   * Check whether this DN is protected by the faulty DC.
+   * @return true if this DN is protected by the faulty DC, else false.
+   */
+  public boolean isProtectedByFaultyDC() {
+    return protectedByFaultyDC && isMaintenance();
   }
 
   /**
