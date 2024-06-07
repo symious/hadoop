@@ -416,7 +416,7 @@ public class TestFairOrderingPolicy {
     AbstractComparatorOrderingPolicy.updateSchedulingResourceUsage(
         msp2.getSchedulingResourceUsage());
     AbstractComparatorOrderingPolicy.updateSchedulingResourceUsage(
-        msp2.getSchedulingResourceUsage());
+        msp3.getSchedulingResourceUsage());
 
     schedOrder.addSchedulableEntity(msp1);
     schedOrder.addSchedulableEntity(msp2);
@@ -456,4 +456,50 @@ public class TestFairOrderingPolicy {
     assertTrue(costTime2 < costTime1);
     assertTrue(costTime2 < costTime3);
   }
+
+  @Test
+  public void testScheduleRetryNodesIterators() {
+    FairOrderingPolicy<MockSchedulableEntity> schedOrder =
+        new FairOrderingPolicy<>();
+
+    long cacheTime = 0;
+    int maxRetryNodesThreshold = 500;
+    schedOrder.setAppsCacheTime(cacheTime);
+    schedOrder.setMaxRetryNodesThreshold(maxRetryNodesThreshold);
+
+    MockSchedulableEntity msp1 = new MockSchedulableEntity();
+    MockSchedulableEntity msp2 = new MockSchedulableEntity();
+    MockSchedulableEntity msp3 = new MockSchedulableEntity();
+
+    msp1.setId("1");
+    msp2.setId("2");
+    msp3.setId("3");
+
+    msp1.setUsed(Resources.createResource(10 * GB));
+    msp2.setUsed(Resources.createResource(10 * GB));
+    msp3.setUsed(Resources.createResource(10 * GB));
+
+    msp1.setLastScheduleRetryNodes(100);
+    msp2.setLastScheduleRetryNodes(600);
+    msp3.setLastScheduleRetryNodes(550);
+
+    AbstractComparatorOrderingPolicy.updateSchedulingResourceUsage(
+        msp1.getSchedulingResourceUsage());
+    AbstractComparatorOrderingPolicy.updateSchedulingResourceUsage(
+        msp2.getSchedulingResourceUsage());
+    AbstractComparatorOrderingPolicy.updateSchedulingResourceUsage(
+        msp3.getSchedulingResourceUsage());
+
+    schedOrder.addSchedulableEntity(msp1);
+    schedOrder.addSchedulableEntity(msp2);
+    schedOrder.addSchedulableEntity(msp3);
+
+
+    //Assignment, high priority jobs to low priority jobs
+    checkIds(schedOrder.getAssignmentIterator(
+        IteratorSelector.EMPTY_ITERATOR_SELECTOR),
+        new String[] {"1", "3", "2"});
+
+  }
+
 }

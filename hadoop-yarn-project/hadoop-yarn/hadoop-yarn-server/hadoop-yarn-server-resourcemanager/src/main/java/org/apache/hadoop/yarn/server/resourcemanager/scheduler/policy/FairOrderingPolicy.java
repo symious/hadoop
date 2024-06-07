@@ -56,6 +56,7 @@ public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
 
   private String queueName;
   private long cacheTime;
+  private int maxRetryNodesThreshold = 500;
 
   //global scheduler will have multiple threads, update visibility
   private volatile long lastUpdateTime;
@@ -92,6 +93,9 @@ public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
     }
   }
 
+  private final ScheduleRetryNodesComparator scheduleRetryNodesComparator =
+      new ScheduleRetryNodesComparator();
+
   private CompoundComparator fairComparator;
 
   private boolean sizeBasedWeight = false;
@@ -99,6 +103,8 @@ public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
   public FairOrderingPolicy() {
     List<Comparator<SchedulableEntity>> comparators =
       new ArrayList<Comparator<SchedulableEntity>>();
+    comparators.add(new InitUsedResourcesComparator());
+    comparators.add(scheduleRetryNodesComparator);
     comparators.add(new FairComparator());
     comparators.add(new FifoComparator());
     fairComparator = new CompoundComparator(
@@ -193,6 +199,11 @@ public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
     this.cacheTime = cacheTime;
   }
 
+  @VisibleForTesting
+  public void setMaxRetryNodesThreshold(int maxRetryNodesThreshold) {
+    this.maxRetryNodesThreshold = maxRetryNodesThreshold;
+  }
+
   @Override
   public void configure(Map<String, String> conf) {
     if (conf.containsKey(ENABLE_SIZE_BASED_WEIGHT)) {
@@ -201,6 +212,12 @@ public class FairOrderingPolicy<S extends SchedulableEntity> extends AbstractCom
     }
     if (conf.containsKey(APPS_ORDER_CACHE_TIME)) {
       this.cacheTime = Long.valueOf(conf.get(APPS_ORDER_CACHE_TIME));
+    }
+    if (conf.containsKey(APP_MAX_RETRY_NODES_THRESHOLD)) {
+      this.maxRetryNodesThreshold =
+          Integer.parseInt(conf.get(APP_MAX_RETRY_NODES_THRESHOLD));
+      scheduleRetryNodesComparator
+          .setMaxRetryNodesThreshold(this.maxRetryNodesThreshold);
     }
     this.queueName = conf.get("queueName");
   }

@@ -33,6 +33,8 @@ import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
 public abstract class AbstractComparatorOrderingPolicy<S extends SchedulableEntity> implements OrderingPolicy<S> {
 
   protected static final String APPS_ORDER_CACHE_TIME = "apps-order-cache-time";
+  protected static final String APP_MAX_RETRY_NODES_THRESHOLD =
+      "app-max-retry-nodes-threshold";
   protected ConcurrentSkipListSet<S> schedulableEntities;
   protected Comparator<SchedulableEntity> comparator;
   protected Map<String, S> entitiesToReorder = new HashMap<String, S>();

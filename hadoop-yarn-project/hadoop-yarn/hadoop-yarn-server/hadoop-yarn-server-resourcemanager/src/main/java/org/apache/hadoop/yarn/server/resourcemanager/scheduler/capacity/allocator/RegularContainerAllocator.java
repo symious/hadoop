@@ -1102,6 +1102,7 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
             (endTime - startTime) / 1000 + " us.");
       }
     }
+    application.setLastScheduleRetryNodes(i);
 
     return result;
   }

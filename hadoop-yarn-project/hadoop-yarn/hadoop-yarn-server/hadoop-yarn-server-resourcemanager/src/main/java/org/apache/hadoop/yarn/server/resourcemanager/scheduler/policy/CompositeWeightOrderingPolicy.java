@@ -94,6 +94,8 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity>
 
   private double pendingTimeWeightFactor = DEFAULT_APP_TIME_WEIGHT_FACTOR;
 
+  private int maxRetryNodesThreshold = 500;
+
   public String getQueueName() {
     return queueName;
   }
@@ -172,6 +174,10 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity>
 
   public void setNextFullOrderTime(long nextFullOrderTime) {
     this.nextFullOrderTime = nextFullOrderTime;
+  }
+
+  public void setMaxRetryNodesThreshold(int maxRetryNodesThreshold) {
+    this.maxRetryNodesThreshold = maxRetryNodesThreshold;
   }
 
   public CompoundComparator getWeightComparator() {
@@ -265,10 +271,14 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity>
 
   private CompoundComparator weightComparator;
 
+  private final ScheduleRetryNodesComparator scheduleRetryNodesComparator =
+      new ScheduleRetryNodesComparator();
+
   public CompositeWeightOrderingPolicy() {
     List<Comparator<SchedulableEntity>> comparators =
         new ArrayList<Comparator<SchedulableEntity>>();
     comparators.add(new InitUsedResourcesComparator());
+    comparators.add(scheduleRetryNodesComparator);
     comparators.add(new WeightComparator());
     comparators.add(new StartTimeComparator());
     comparators.add(new FifoComparator());
@@ -400,6 +410,12 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity>
       this.pendingTimeWeightFactor =
           Double.parseDouble(conf.get(APP_TIME_WEIGHT_FACTOR));
     }
+    if (conf.containsKey(APP_MAX_RETRY_NODES_THRESHOLD)) {
+      this.maxRetryNodesThreshold =
+          Integer.parseInt(conf.get(APP_MAX_RETRY_NODES_THRESHOLD));
+      scheduleRetryNodesComparator
+          .setMaxRetryNodesThreshold(this.maxRetryNodesThreshold);
+    }
     validateWeightFactor();
     LOG.info("highFlagPriority: " + highFlagPriority + " ,usedFlagMemory: "
         + usedFlagMemory + " ,pendingFlagTime: " + pendingFlagTime
@@ -407,7 +423,8 @@ public class CompositeWeightOrderingPolicy<S extends SchedulableEntity>
         + " ,fullReorderIntervalSecond: " + fullReorderIntervalSecond
         + " ,priorityWeightFactor: " + priorityWeightFactor
         + " ,usedMemoryWeightFactor: " + usedMemoryWeightFactor
-        + " ,pendingTimeWeightFactor: " + pendingTimeWeightFactor);
+        + " ,pendingTimeWeightFactor: " + pendingTimeWeightFactor
+        + " ,maxRetryNodesThreshold: " + maxRetryNodesThreshold);
   }
 
   private void validateWeightFactor() {

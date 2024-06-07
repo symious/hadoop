@@ -213,6 +213,7 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
 
   private final long startTime;
   private long reOrderTime;
+  private volatile int lastScheduleRetryNodes;
 
   public SchedulerApplicationAttempt(ApplicationAttemptId applicationAttemptId, 
       String user, Queue queue, AbstractUsersManager abstractUsersManager,
@@ -1546,5 +1547,15 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
     synchronized (resourceMetricsCacheLock) {
       lastMemoryAggregateAllocationUpdateTime = -1;
     }
+  }
+
+  @Override
+  public int getLastScheduleRetryNodes() {
+    return lastScheduleRetryNodes;
+  }
+
+  @Override
+  public void setLastScheduleRetryNodes(int retryNodes) {
+    lastScheduleRetryNodes = retryNodes;
   }
 }

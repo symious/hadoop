@@ -82,5 +82,16 @@ public interface SchedulableEntity {
    */
   void setReOrderTime(long reOrderTime);
 
+  /**
+   * last assign container retry nodes num
+   * @return retryNodes
+   */
+  int getLastScheduleRetryNodes();
+
+  /**
+   * update retryNodes
+   */
+  void setLastScheduleRetryNodes(int retryNodes);
+
   public Map<String, String> getApplicationSchedulingEnvs();
 }

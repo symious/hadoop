@@ -647,6 +647,77 @@ public class TestCompositeWeightOrderingPolicy {
     checkIds(iterator4, new String[]{"4", "3", "1"});
   }
 
+  @Test
+  public void testScheduleRetryNodesIterators() {
+    CompositeWeightOrderingPolicy<MockSchedulableEntity> schedOrder =
+        new CompositeWeightOrderingPolicy<MockSchedulableEntity>();
+
+    long cacheTime = 0;
+    double highFlagPriority = 60;
+    double usedFlagMemory = 100 * 1024 * 1024;
+    double pendingFlagTime = 120 * 60 * 1000;
+    double priorityWeight = 0.6;
+    double usedResourcesWeight = 0.2;
+    double pendingTimeWeight = 0.2;
+    int maxRetryNodesThreshold = 500;
+    schedOrder.setCacheTime(cacheTime);
+    schedOrder.setHighFlagPriority(highFlagPriority);
+    schedOrder.setUsedFlagMemory(usedFlagMemory);
+    schedOrder.setPendingFlagTime(pendingFlagTime);
+    schedOrder.setPriorityWeightFactor(priorityWeight);
+    schedOrder.setUsedMemoryWeightFactor(usedResourcesWeight);
+    schedOrder.setPendingTimeWeightFactor(pendingTimeWeight);
+    schedOrder.setMaxRetryNodesThreshold(maxRetryNodesThreshold);
+
+    MockSchedulableEntity r1 = new MockSchedulableEntity();
+    MockSchedulableEntity r2 = new MockSchedulableEntity();
+    MockSchedulableEntity r3 = new MockSchedulableEntity();
+    r1.setId("1");
+    r2.setId("2");
+    r3.setId("3");
+
+    //Set priority
+    Priority p1 = Priority.newInstance(30);
+    Priority p2 = Priority.newInstance(40);
+    Priority p3 = Priority.newInstance(60);
+    r1.setApplicationPriority(p1);
+    r2.setApplicationPriority(p2);
+    r3.setApplicationPriority(p3);
+
+    //Set start time, all pending 10 minutes
+    long currentTime = System.currentTimeMillis();
+    r1.setStartTime(currentTime - 10 * 60 * 1000);
+    r2.setStartTime(currentTime - 10 * 60 * 1000);
+    r3.setStartTime(currentTime - 10 * 60 * 1000);
+
+    //Set used resources, all used 10TB
+    r1.setUsed(Resources.createResource(10 * 1024 * GB));
+    r2.setUsed(Resources.createResource(10 * 1024 * GB));
+    r3.setUsed(Resources.createResource(10 * 1024 * GB));
+
+    //even r1 priority < r2&r3, but r2&r3 have high fail retry nodes
+    // Make r1 first to schedule
+    r1.setLastScheduleRetryNodes(100);
+    r2.setLastScheduleRetryNodes(600);
+    r3.setLastScheduleRetryNodes(4000);
+
+    AbstractComparatorOrderingPolicy
+        .updateSchedulingResourceUsage(r1.getSchedulingResourceUsage());
+    AbstractComparatorOrderingPolicy
+        .updateSchedulingResourceUsage(r2.getSchedulingResourceUsage());
+    AbstractComparatorOrderingPolicy
+        .updateSchedulingResourceUsage(r3.getSchedulingResourceUsage());
+
+    schedOrder.addSchedulableEntity(r1);
+    schedOrder.addSchedulableEntity(r2);
+    schedOrder.addSchedulableEntity(r3);
+
+    //Assignment, high priority jobs to low priority jobs
+    checkIds(schedOrder.getAssignmentIterator(
+        IteratorSelector.EMPTY_ITERATOR_SELECTOR),
+        new String[]{"1","2","3"});
+  }
+
   public void checkIds(Iterator<MockSchedulableEntity> si,
       String[] ids) {
     for (int i = 0;i < ids.length;i++) {
