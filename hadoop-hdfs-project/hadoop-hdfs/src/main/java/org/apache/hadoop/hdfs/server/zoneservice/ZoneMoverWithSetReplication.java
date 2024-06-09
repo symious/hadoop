@@ -67,8 +67,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -954,55 +952,11 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
     }
 
     /**
-     * Get the URI of the specified namespace
-     */
-    private static URI getNamespaceUri(CommandLine line, Configuration conf)
-        throws IllegalArgumentException {
-      Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
-      if (!line.hasOption("namespace")) {
-        if (namenodes.size() > 1) {
-          throw new IllegalArgumentException(
-              "Namespace must be specified in a federation cluster!");
-        } else {
-          return namenodes.iterator().next();
-        }
-      }
-
-      String namespace = line.getOptionValue("namespace");
-      for (URI namenode: namenodes) {
-        LOG.info("Get namenode: " + namenode);
-        if (namenode.getAuthority().equals(namespace)) {
-          return namenode;
-        }
-      }
-      throw new IllegalArgumentException(
-          "Cannot find the NameNode for namespace: " + namespace);
-    }
-
-    /**
      * Get {@link ReplicationRule} from command line
      */
     private static ReplicationRule getRule(CommandLine line)
         throws IllegalArgumentException {
       return ReplicationRule.parseFromString(line.getOptionValue("rule"));
-    }
-
-    private static List<Path> getPaths(CommandLine line)
-        throws IllegalArgumentException, IOException {
-      List<String> rawPaths;
-      if (line.hasOption("path")) {
-        rawPaths = new ArrayList<>(Collections.singletonList(line.getOptionValue("path")));
-      } else {
-        rawPaths = readPathFile(line.getOptionValue("pathFile"));
-      }
-      List<Path> paths = new ArrayList<>();
-      for (String path: rawPaths) {
-        if (!path.startsWith(ROOT)) {
-          throw new IllegalArgumentException("Invalid path: " + path);
-        }
-        paths.add(new Path(path));
-      }
-      return paths;
     }
 
     public static List<Path> getPaths(Map<String, ReplicationRule> pathRuleMap) {
@@ -1078,10 +1032,10 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
           pathRuleMap = getPathRuleMap(commandLine);
           paths = getPaths(pathRuleMap);
         } else if (commandLine.hasOption("rule")){
-          paths = getPaths(commandLine);
+          paths = ZoneMover.Cli.getPaths(commandLine);
           rule = getRule(commandLine);
         } else {
-          paths = getPaths(commandLine);
+          paths = ZoneMover.Cli.getPaths(commandLine);
         }
 
         if (commandLine.hasOption("dc")) {

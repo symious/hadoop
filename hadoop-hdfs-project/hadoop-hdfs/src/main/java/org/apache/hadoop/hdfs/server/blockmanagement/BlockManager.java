@@ -119,6 +119,7 @@ import org.apache.hadoop.hdfs.server.protocol.StorageReceivedDeletedBlocks;
 import org.apache.hadoop.hdfs.server.protocol.StorageReport;
 import org.apache.hadoop.hdfs.server.protocol.VolumeFailureSummary;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRuleUtil;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.server.namenode.CacheManager;
 
@@ -2466,8 +2467,9 @@ public class BlockManager implements BlockStatsMXBean {
         return null;
       }
       INodeFile inode = (INodeFile) bc;
-      boolean isColdData = isGenerateDrRuleForTest() ||
-          now() > inode.getModificationTime() + drColdDataThresholdMS;
+      long time = namesystem.getFSDirectory().isAccessTimeSupported() ? inode.getAccessTime()
+          : inode.getModificationTime();
+      boolean isColdData = isGenerateDrRuleForTest() || now() > time + drColdDataThresholdMS;
       if (isColdData) {
         Map<Short, ReplicationRule> copiedDRReplicationRuleForColdData =
             drReplicationRuleForColdData;
@@ -2477,23 +2479,7 @@ public class BlockManager implements BlockStatsMXBean {
         rule = copiedDRReplicationRuleForColdData.get(repl);
       }
       if (rule == null) {
-        // Noted if the 3 replica rule is not configured also will evenly distribute across 2 IDCs.
-        int replicasPerIDC = repl >> 1;
-        int remainingReplicas = repl & 1;
-
-        // Determine the main IDC based on the node count for IDC.
-        List<Map.Entry<String, Integer>> entries = new ArrayList<>(dcMap.entrySet());
-        String mainIDC = entries.get(0).getKey();
-        String otherIDC = entries.get(1).getKey();
-        if (entries.get(0).getValue() < entries.get(1).getValue()) {
-          mainIDC = entries.get(1).getKey();
-          otherIDC = entries.get(0).getKey();
-        }
-
-        Map<String, Short> distribution = new HashMap<>();
-        distribution.put(mainIDC, (short) (replicasPerIDC + remainingReplicas));
-        distribution.put(otherIDC, (short) replicasPerIDC);
-        rule = ReplicationRule.parseFromMap(distribution);
+        rule = ReplicationRuleUtil.generateRuleForDR(dcMap, repl);
       }
     }
     blockLog.debug("BLOCK = {} generate replica rule = {} for DR.", blockInfo, rule);
@@ -2522,7 +2508,6 @@ public class BlockManager implements BlockStatsMXBean {
       }
       return false;
     });
-
   }
 
   @VisibleForTesting

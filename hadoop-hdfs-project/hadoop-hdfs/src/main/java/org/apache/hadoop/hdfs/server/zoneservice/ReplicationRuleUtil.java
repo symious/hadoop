@@ -29,6 +29,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -294,5 +295,28 @@ public class ReplicationRuleUtil {
     }
 
     return ReplicationRule.parseFromString(ruleString.toString());
+  }
+
+  public static ReplicationRule generateRuleForDR(HashMap<String, Integer> dcMap, short repl) {
+    if (dcMap == null || dcMap.size() < 2) {
+      return null;
+    }
+    // Noted if the 3 replica rule is not configured also will evenly distribute across 2 IDCs.
+    int replicasPerIDC = repl >> 1;
+    int remainingReplicas = repl & 1;
+
+    // Determine the main IDC based on the node count for IDC.
+    List<Map.Entry<String, Integer>> entries = new ArrayList<>(dcMap.entrySet());
+    String mainIDC = entries.get(0).getKey();
+    String otherIDC = entries.get(1).getKey();
+    if (entries.get(0).getValue() < entries.get(1).getValue()) {
+      mainIDC = entries.get(1).getKey();
+      otherIDC = entries.get(0).getKey();
+    }
+
+    Map<String, Short> distribution = new HashMap<>();
+    distribution.put(mainIDC, (short) (replicasPerIDC + remainingReplicas));
+    distribution.put(otherIDC, (short) replicasPerIDC);
+    return ReplicationRule.parseFromMap(distribution);
   }
 }

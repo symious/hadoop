@@ -235,6 +235,9 @@ function hdfscmd_case
     zoneenhancedmover)
       HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneMoverWithSetReplication
     ;;
+    zonemoverwithdr)
+      HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneMoverWithDR
+    ;;
     zonechecker)
       HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneChecker
     ;;

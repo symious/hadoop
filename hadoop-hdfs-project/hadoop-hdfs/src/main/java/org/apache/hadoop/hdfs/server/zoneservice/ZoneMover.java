@@ -74,6 +74,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.OpenOption;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -125,6 +128,7 @@ public class ZoneMover {
   protected final Thread fetcher;
   protected static int checkUpdateInterval = 0;
   protected static final String DC_SEPARATOR = ",";
+  protected boolean enableDR = false;
 
   public ZoneMover(NameNodeConnector nnc,
       Configuration conf, AtomicInteger retryCount) {
@@ -177,6 +181,10 @@ public class ZoneMover {
     processor = initProcessor();
     fetcher = initFetcher(processor);
     fetcher.start();
+  }
+
+  public void setEnableDR(boolean enableDR) {
+    this.enableDR = enableDR;
   }
 
   protected Processor initProcessor() {
@@ -277,6 +285,9 @@ public class ZoneMover {
    * @return the corresponding rule
    */
   ReplicationRule getPathRule(String path) throws IllegalArgumentException {
+    if (enableDR) {
+      return null;
+    }
     String matchPath = "";
     for (Map.Entry<String, ReplicationRule> entry: pathRuleMap.entrySet()) {
       String key = entry.getKey();
@@ -663,6 +674,11 @@ public class ZoneMover {
   List<ZoneMoveItem> getZoneMoveItems(final LocatedBlock block, ReplicationRule rule) {
     // calculate sources and targets
     Map<String, Short> distribution = getBlockDistribution(block);
+    return getZoneMoveItems(distribution, rule);
+  }
+
+  List<ZoneMoveItem> getZoneMoveItems(final Map<String, Short> distribution, ReplicationRule rule) {
+    // calculate sources and targets
     Map<String, Short> sources = new HashMap<>();
     Map<String, Short> targets = new HashMap<>();
     Set<String> dcs = new HashSet<>();
@@ -1092,7 +1108,8 @@ public class ZoneMover {
         // get the first block
         LocatedBlock firstBlock = locatedBlocks.get(0);
         if (isBlockSatisfyRule(firstBlock, rule)) {
-          LOG.debug("Skip the file as all blocks already satisfy the rule: " + fullPath);
+          LOG.debug("Skip the file: {} as all blocks already satisfy the rule: {}.",
+              fullPath, rule);
           if (!hasPreMigration) {
             ZoneProgressTracker.incrFileCount();
           }
@@ -1375,6 +1392,32 @@ public class ZoneMover {
     }
   }
 
+  /**
+   * Get the URI of the specified namespace
+   */
+  protected static URI getNamespaceUri(CommandLine line, Configuration conf)
+      throws IllegalArgumentException {
+    Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
+    if (!line.hasOption("namespace")) {
+      if (namenodes.size() > 1) {
+        throw new IllegalArgumentException(
+            "Namespace must be specified in a federation cluster!");
+      } else {
+        return namenodes.iterator().next();
+      }
+    }
+
+    String namespace = line.getOptionValue("namespace");
+    for (URI namenode: namenodes) {
+      LOG.info("Get namenode: " + namenode);
+      if (namenode.getAuthority().equals(namespace)) {
+        return namenode;
+      }
+    }
+    throw new IllegalArgumentException(
+        "Cannot find the NameNode for namespace: " + namespace);
+  }
+
   static class Cli extends Configured implements Tool {
     private static final String USAGE = "Usage: hdfs zonemover"
         + "\n\t[-namespace <namespace>]\tthe namespace to apply the rule"
@@ -1431,32 +1474,6 @@ public class ZoneMover {
     }
 
     /**
-     * Get the URI of the specified namespace
-     */
-    private static URI getNamespaceUri(CommandLine line, Configuration conf)
-        throws IllegalArgumentException {
-      Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
-      if (!line.hasOption("namespace")) {
-        if (namenodes.size() > 1) {
-          throw new IllegalArgumentException(
-              "Namespace must be specified in a federation cluster!");
-        } else {
-          return namenodes.iterator().next();
-        }
-      }
-
-      String namespace = line.getOptionValue("namespace");
-      for (URI namenode: namenodes) {
-        LOG.info("Get namenode: " + namenode);
-        if (namenode.getAuthority().equals(namespace)) {
-          return namenode;
-        }
-      }
-      throw new IllegalArgumentException(
-          "Cannot find the NameNode for namespace: " + namespace);
-    }
-
-    /**
      * Get {@link ReplicationRule} from command line
      */
     private static ReplicationRule getRule(CommandLine line)
@@ -1464,7 +1481,7 @@ public class ZoneMover {
       return ReplicationRule.parseFromString(line.getOptionValue("rule"));
     }
 
-    private static List<Path> getPaths(CommandLine line)
+    public static List<Path> getPaths(CommandLine line)
         throws IllegalArgumentException, IOException {
       List<String> rawPaths;
       if (line.hasOption("path")) {
@@ -1512,7 +1529,7 @@ public class ZoneMover {
     private static List<String> readPathFile(String file) throws IOException {
       List<String> list = new ArrayList<>();
       BufferedReader reader = new BufferedReader(
-          new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8));
+          new InputStreamReader(Files.newInputStream(Paths.get(file)), StandardCharsets.UTF_8));
       try {
         String line;
         while ((line = reader.readLine()) != null) {

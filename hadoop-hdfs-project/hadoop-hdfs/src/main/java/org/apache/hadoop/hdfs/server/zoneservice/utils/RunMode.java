@@ -23,7 +23,8 @@ import java.util.Map;
 public enum RunMode {
   BATCH("batch"),
   MONITOR("monitor"),
-  CHECK("check");
+  CHECK("check"),
+  COLD("cold");
 
   private final String name;
 

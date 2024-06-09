@@ -234,32 +234,6 @@ public class ZoneChecker {
     }
 
     /**
-     * Get the URI of the specified namespace
-     */
-    private static URI getNamespaceUri(CommandLine line, Configuration conf)
-        throws IllegalArgumentException {
-      Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
-      if (!line.hasOption("namespace")) {
-        if (namenodes.size() > 1) {
-          throw new IllegalArgumentException(
-              "Namespace must be specified in a federation cluster!");
-        } else {
-          return namenodes.iterator().next();
-        }
-      }
-
-      String namespace = line.getOptionValue("namespace");
-      for (URI namenode: namenodes) {
-        LOG.info("Get namenode: " + namenode);
-        if (namenode.getAuthority().equals(namespace)) {
-          return namenode;
-        }
-      }
-      throw new IllegalArgumentException(
-          "Cannot find the NameNode for namespace: " + namespace);
-    }
-
-    /**
      * Get the path from args
      */
     private static String getPath(CommandLine line)
@@ -329,7 +303,7 @@ public class ZoneChecker {
           throw new IllegalArgumentException(
               "-blockSummary & -count cannot be used at the same time");
         }
-        return run(conf, getNamespaceUri(commandLine, conf),
+        return run(conf, ZoneMover.getNamespaceUri(commandLine, conf),
             getPath(commandLine), getRatio(commandLine), getBlockSummary(commandLine),
             getCountOnly(commandLine), getCountDepth(commandLine));
       } catch (ParseException | IllegalArgumentException e) {

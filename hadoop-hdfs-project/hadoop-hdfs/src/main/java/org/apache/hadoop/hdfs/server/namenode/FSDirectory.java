@@ -201,6 +201,8 @@ public class FSDirectory implements Closeable {
 
   // precision of access times.
   private volatile long accessTimePrecision;
+  private volatile boolean isAccessTimeSupported;
+
   // whether quota by storage type is allowed
   private final boolean quotaByStorageTypeEnabled;
 
@@ -361,6 +363,7 @@ public class FSDirectory implements Closeable {
     this.accessTimePrecision = conf.getLong(
         DFS_NAMENODE_ACCESSTIME_PRECISION_KEY,
         DFS_NAMENODE_ACCESSTIME_PRECISION_DEFAULT);
+    this.isAccessTimeSupported = this.accessTimePrecision > 0;
 
     this.quotaByStorageTypeEnabled =
         conf.getBoolean(DFS_QUOTA_BY_STORAGETYPE_ENABLED_KEY,
@@ -464,6 +467,7 @@ public class FSDirectory implements Closeable {
       LOG.info("Will set the accessTimePrecision from {} to {}.", accessTimePrecision, newValue);
       accessTimePrecision = newValue;
     }
+    isAccessTimeSupported = accessTimePrecision > 0;
     return accessTimePrecision;
   }
 
@@ -706,8 +710,8 @@ public class FSDirectory implements Closeable {
     return xattrsEnabled;
   }
   int getXattrMaxSize() { return xattrMaxSize; }
-  boolean isAccessTimeSupported() {
-    return accessTimePrecision > 0;
+  public boolean isAccessTimeSupported() {
+    return isAccessTimeSupported;
   }
   long getAccessTimePrecision() {
     return accessTimePrecision;
