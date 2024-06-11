@@ -30,10 +30,12 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+import org.apache.hadoop.hdfs.protocol.LocatedStripedBlock;
 import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
 import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
 import org.apache.hadoop.hdfs.server.mover.Mover;
@@ -68,13 +70,16 @@ import static org.apache.hadoop.util.Time.now;
 
 public class ZoneMoverWithDR extends ZoneMover {
 
-  private static final Logger LOG = LoggerFactory.getLogger(ZoneMoverWithDR.class);
+  public static final Logger LOG = LoggerFactory.getLogger(ZoneMoverWithDR.class);
   private static final String ID_PATH_PREFIX = "/system/zonemoverwithdr.id";
   private final RunMode runMode;
   private boolean useAccessTime;
+  private boolean skipReplica;
+  private boolean skipEC;
   private final long drColdDataThresholdMS;
   private Set<String> drDataCenters;
   private Map<Short, ReplicationRule> drReplicationRuleForColdData;
+  private Map<Short, ReplicationRule> drStripedBlockRule;
   private BlockingQueue<PreMigrationFile> preMigrationFileQueue;
   private long preMigrationCheckInterval;
   private CountDownLatch preMigrationLatch;
@@ -83,7 +88,7 @@ public class ZoneMoverWithDR extends ZoneMover {
       "ZoneMoverWithDR-PreMigrationChecker");
 
   public ZoneMoverWithDR(NameNodeConnector nnc, Configuration conf, AtomicInteger retryCount,
-      RunMode runMode, boolean useAccessTime)
+      RunMode runMode, boolean useAccessTime, boolean skipReplica, boolean skipEC)
       throws IOException {
     super(nnc, conf, retryCount);
     this.runMode = runMode;
@@ -94,8 +99,12 @@ public class ZoneMoverWithDR extends ZoneMover {
         conf.get(DFSConfigKeys.DFS_NAMENODE_DR_DATACENTERS_KEY))));
     setDrReplicationRuleForColdData(StringUtils.getTrimmedStringCollection(
         conf.get(DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY), ";"));
+    setDrStripedBlockRule(StringUtils.getTrimmedStringCollection(
+        conf.get(DFSConfigKeys.DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY), ";"));
     setEnableDR(true);
     this.useAccessTime = useAccessTime;
+    this.skipReplica = skipReplica;
+    this.skipEC = skipEC;
     preMigrationCheckInterval = conf.getLong(
         DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_KEY,
         DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_DEFAULT);
@@ -143,6 +152,33 @@ public class ZoneMoverWithDR extends ZoneMover {
     drReplicationRuleForColdData = replicationRules;
   }
 
+  public void setDrStripedBlockRule(Collection<String> stripedBlockRuleCollections)
+      throws IOException {
+    Map<Short, ReplicationRule> stripedBlockRules = new HashMap<>();
+    for (String strRule : stripedBlockRuleCollections) {
+      String[] keyValue = strRule.split("=");
+      if (keyValue.length == 2) {
+        Short replica = Short.valueOf(keyValue[0].trim());
+        String rule = keyValue[1].trim();
+        ReplicationRule replicationRule = ReplicationRule.parseFromString(rule);
+        // Verify the validity of IDC.
+        if (drDataCenters.containsAll(replicationRule.getDatacenters())) {
+          stripedBlockRules.put(replica, replicationRule);
+        } else {
+          String msg = String.format("Invalid striped block rule: %s for DR.",
+              strRule);
+          LOG.error(msg);
+          throw new IOException(msg);
+        }
+      }
+    }
+
+    Preconditions.checkArgument(stripedBlockRules.containsKey((short) 9),
+        "%s least should contain 9 replica corresponding " +
+            "striped block rule for DR",
+        DFSConfigKeys.DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY);
+    drStripedBlockRule = stripedBlockRules;
+  }
 
   @Override
   protected Processor initProcessor() {
@@ -229,7 +265,9 @@ public class ZoneMoverWithDR extends ZoneMover {
         + "\n\t-monitorByTrigger\tenable monitor mode with trigger"
         + "\n\t-cold\tenable cold mode"
         + "\n\t-useAccessTime\the definition of cold data determines whether to use " +
-        "accesstime or modifiedtime ";
+        "accesstime or modifiedtime"
+        + "\n\t-skipEC\twhether to skip EC files"
+        + "\n\t-skipReplica\twhether to skip replication files";
 
     private static Options buildCliOptions() {
       Options options = new Options();
@@ -257,6 +295,14 @@ public class ZoneMoverWithDR extends ZoneMover {
       option = new Option(null, "useAccessTime", false, "the " +
           "definition of cold data determines whether to use accesstime or modifiedtime");
       options.addOption(option);
+
+      option = new Option(null, "skipEC", false, "the " +
+          "Whether to skip EC files");
+      options.addOption(option);
+
+      option = new Option(null, "skipReplica", false, "the " +
+          "Whether to skip replication files");
+      options.addOption(option);
       return options;
     }
 
@@ -273,6 +319,12 @@ public class ZoneMoverWithDR extends ZoneMover {
         throw new IllegalArgumentException
             ("'-cold' and '-monitorByTrigger' only support specify one.");
       }
+
+      if (line.hasOption("-skipReplica") && line.hasOption("-skipEC")) {
+        throw new IllegalArgumentException
+            ("'The options '-skipReplica' and '-skipEC' cannot be specified together, " +
+                "can either specify one or leave both unspecified.");
+      }
     }
 
     @Override
@@ -287,9 +339,11 @@ public class ZoneMoverWithDR extends ZoneMover {
         additionalOptionsCheck(commandLine);
         URI namenode = getNamespaceUri(commandLine, conf);
         boolean useAccessTime = commandLine.hasOption("-useAccessTime");
+        boolean skipReplica = commandLine.hasOption("-skipReplica");
+        boolean skipEC = commandLine.hasOption("-skipEC");
         List<Path> paths = ZoneMover.Cli.getPaths(commandLine);
         if (commandLine.hasOption("cold")) {
-          return run(conf, namenode, paths, useAccessTime);
+          return run(conf, namenode, paths, useAccessTime, skipReplica, skipEC);
         }
       } catch (IOException e) {
         System.out.println(e + ".  Exiting ...");
@@ -311,18 +365,21 @@ public class ZoneMoverWithDR extends ZoneMover {
     /**
      * Run with ZoneMoverTrigger for cold mode.
      */
-    int run(Configuration conf, URI namenode, List<Path> paths, boolean useAccessTime)
+    int run(Configuration conf, URI namenode, List<Path> paths, boolean useAccessTime,
+        boolean skipReplica, boolean skipEC)
         throws IOException, InterruptedException {
-      return ZoneMoverWithDR.runWithColdDataReplication(conf, namenode, paths, useAccessTime);
+      return ZoneMoverWithDR.runWithColdDataReplication(conf, namenode, paths, useAccessTime,
+          skipReplica, skipEC);
     }
   }
 
   public static int runWithColdDataReplication(Configuration conf, URI namenode,
-      List<Path> paths, boolean useAccessTime) throws IOException, InterruptedException {
+      List<Path> paths, boolean useAccessTime, boolean skipReplica, boolean skipEC)
+      throws IOException, InterruptedException {
     ZoneProgressTracker.startCountingInitTime();
 
-    LOG.info("Start to apply dr cold data rule to namenode: {}, path: {}, useAccessTime: {}",
-        namenode, paths, useAccessTime);
+    LOG.info("Start to apply dr cold data rule to namenode: {}, path: {}, useAccessTime: {}, " +
+            "skipReplica: {}, skipEC: {}", namenode, paths, useAccessTime, skipReplica, skipEC);
     if (paths.isEmpty()) {
       ZoneProgressTracker.finishCountingInitTimeAndLog();
       return ExitStatus.SUCCESS.getExitCode();
@@ -343,7 +400,8 @@ public class ZoneMoverWithDR extends ZoneMover {
           namenode, getIdPath(RunMode.COLD), paths, conf, 1);
       nnc.getKeyManager().startBlockKeyUpdater();
 
-      zm = new ZoneMoverWithDR(nnc, conf, retryCount, RunMode.COLD, useAccessTime);
+      zm = new ZoneMoverWithDR(nnc, conf, retryCount, RunMode.COLD, useAccessTime,
+          skipReplica, skipEC);
       zm.init(conf);
       int round = 0;
 
@@ -476,7 +534,18 @@ public class ZoneMoverWithDR extends ZoneMover {
 
       if (runMode.equals(RunMode.COLD)) {
         if (status.getErasureCodingPolicy() != null) {
-          LOG.debug("No need to process cold data of ec file: {}", fullPath);
+          // if set ec.
+          if (skipEC) {
+            LOG.debug("No need to process cold data of ec file: {}", fullPath);
+            ZoneProgressTracker.incrFileCount();
+          } else {
+            LOG.debug("Process cold data of ec file: {}", fullPath);
+            processECFile(fullPath, firstBlock, status, result);
+          }
+          return;
+        }
+        if (skipReplica) {
+          LOG.debug("No need to process cold data of replication file: {}", fullPath);
           ZoneProgressTracker.incrFileCount();
           return;
         }
@@ -564,6 +633,70 @@ public class ZoneMoverWithDR extends ZoneMover {
         }
 
         if (scheduleMoves4Block(fullPath, block, getZoneMoveItems(distribution, rule))) {
+          result.setNoBlockMoved(false);
+        } else {
+          result.updateHasRemaining(true);
+        }
+      }
+      ZoneProgressTracker.dequeueFile(fullPath);
+    }
+
+
+    /**
+     * Process EC file.
+     * */
+    private void processECFile(String fullPath, LocatedBlock locatedBlock,
+        HdfsLocatedFileStatus status, Mover.Result result) {
+      if (!locatedBlock.isStriped()) {
+        LOG.debug("No need to process cold data of non ec file: {}", fullPath);
+        ZoneProgressTracker.incrFileCount();
+        return;
+      }
+      final ErasureCodingPolicy ecPolicy = status.getErasureCodingPolicy();
+      // Current `drStripedBlockRule` only configures RS-6-3.
+      int totalBlockNum = ecPolicy.getNumParityUnits() + ecPolicy.getNumDataUnits();
+      ReplicationRule rule = drStripedBlockRule.get((short) totalBlockNum);
+      if (rule == null) {
+        ZoneProgressTracker.incrFileCount();
+        return;
+      }
+      final LocatedBlocks locatedBlocks = status.getLocatedBlocks();
+      int n = locatedBlocks.locatedBlockCount();
+      ZoneProgressTracker.queueFile(fullPath);
+      for (int i = 0; i< n; i++) {
+        LocatedBlock block = locatedBlocks.get(i);
+
+        // Retrieve rule based on the total number of blocks in the striped block.
+        LocatedStripedBlock stripedBlock = (LocatedStripedBlock) locatedBlock;
+        int blockNumExpected = Math.min(ecPolicy.getNumDataUnits(),
+            (int) ((stripedBlock.getBlockSize() - 1) / ecPolicy.getCellSize() + 1)) +
+            ecPolicy.getNumParityUnits();
+
+        // If the block group is full blocks, return the rule directly.
+        // Otherwise, need to be generated new rule.
+        if (blockNumExpected < totalBlockNum) {
+          rule = ReplicationRuleUtil.generateStripedBlockRuleForDR(rule, blockNumExpected);
+        }
+
+        Map<String, Short> distribution = getBlockDistribution(block);
+
+        if (!drDataCenters.containsAll(distribution.keySet())) {
+          LOG.debug("Block: {} cannot generate valid striped rule for file: {}",
+              block.getBlock(), fullPath);
+          continue;
+        }
+
+        ReplicationRule dis = ReplicationRule.parseFromMap(distribution);
+        if (rule.equals(dis)) {
+          LOG.debug("Block: {} rule: {} is expected will skip for file: {}", block.getBlock(),
+              dis, fullPath);
+          continue;
+        }
+
+        LOG.info("Block: {} will apply the rule from {} to {} for ec file: {}", block.getBlock(),
+            dis, rule, fullPath);
+        if (scheduleMoves4Block(fullPath, block, getZoneMoveItems(distribution, rule),
+            ecPolicy)) {
           result.setNoBlockMoved(false);
         } else {
           result.updateHasRemaining(true);

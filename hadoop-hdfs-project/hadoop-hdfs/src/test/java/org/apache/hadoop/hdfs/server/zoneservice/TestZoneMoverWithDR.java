@@ -20,14 +20,18 @@ package org.apache.hadoop.hdfs.server.zoneservice;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSInputStream;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology;
+import org.apache.hadoop.hdfs.StripedFileTestUtil;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
@@ -47,16 +51,22 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.net.URI;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class TestZoneMoverWithDR {
   private static final long FILE_LEN = 1024;
+  private static final int DEFAULT_BLOCK_SIZE = 1024 * 1024;
+  private static final ErasureCodingPolicy ecPolicy = StripedFileTestUtil.getDefaultECPolicy();
+  private static final short parityBlocks = (short) ecPolicy.getNumParityUnits();
 
   @BeforeClass
   public static void setLogging() {
@@ -66,7 +76,7 @@ public class TestZoneMoverWithDR {
 
   private void initConfForDr(Configuration conf, String defaultDataCenter,
       long drColdDataThresholdMS) {
-    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, 1024);
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE);
     conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
         BlockPlacementPolicyWithDataCenter.class,
         BlockPlacementPolicy.class);
@@ -92,9 +102,15 @@ public class TestZoneMoverWithDR {
   public void testZoneMoverWithDRCli() throws Exception {
     GenericTestUtils.setLogLevel(BlockManager.LOG, Level.DEBUG);
     GenericTestUtils.setLogLevel(NameNode.blockStateChangeLog, Level.DEBUG);
+    GenericTestUtils.LogCapturer logs =
+        GenericTestUtils.LogCapturer.captureLogs(ZoneMoverWithDR.LOG);
+
     Configuration conf = new HdfsConfiguration();
-    final String[] racks = {"/datacenter0/rack0", "/datacenter0/rack0", "/datacenter0/rack1"};
-    final String[] hosts = {"host0", "host1", "host2"};
+    final String[] racks = {"/datacenter0/rack0", "/datacenter0/rack1", "/datacenter0/rack2"
+        , "/datacenter0/rack3", "/datacenter0/rack4", "/datacenter0/rack5",
+        "/datacenter0/rack6", "/datacenter0/rack7", "/datacenter0/rack8"};
+    final String[] hosts = {"host0", "host1", "host2", "host10", "host11", "host12",
+        "host20", "host21", "host22"};
     initConfForDr(conf, "/datacenter0", 0);
     try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).
         nnTopology(MiniDFSNNTopology.simpleHATopology()).
@@ -109,6 +125,8 @@ public class TestZoneMoverWithDR {
           Mockito.any(Configuration.class),
           Mockito.any(URI.class),
           Mockito.anyListOf(Path.class),
+          Mockito.any(Boolean.class),
+          Mockito.any(Boolean.class),
           Mockito.any(Boolean.class));
 
       tool.setConf(conf);
@@ -143,13 +161,29 @@ public class TestZoneMoverWithDR {
               DFSTestUtil.getAllBlocks(fs, path2).get(0))),
           ReplicationRule.parseFromString("/datacenter0:3"));
 
+      // Create ec dir.
+      Path ecDir = new Path("/ec");
+      fs.mkdirs(ecDir);
+      fs.enableErasureCodingPolicy(ecPolicy.getName());
+      fs.setErasureCodingPolicy(ecDir, ecPolicy.getName());
+      // Create ec file.
+      Path ecFile = new Path(ecDir, "file");
+      int dataSize = DEFAULT_BLOCK_SIZE * 6;
+      byte[] expected = StripedFileTestUtil.generateBytes(dataSize);
+      DFSTestUtil.writeFile(fs, ecFile, new String(expected));
+      StripedFileTestUtil.waitBlockGroupsReported(fs, ecFile.toString());
+      StripedFileTestUtil.verifyLength(fs, ecFile, dataSize);
+      assertEquals(ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
+              DFSTestUtil.getAllBlocks(fs, ecFile).get(0))),
+          ReplicationRule.parseFromString("/datacenter0:9"));
+
       // Adding 6 new hosts about '/datacenter1'.
       cluster.startDataNodes(conf, 3, true, null,
-          new String[]{"/datacenter1/rack0", "/datacenter1/rack0", "/datacenter1/rack1"},
+          new String[]{"/datacenter1/rack0", "/datacenter1/rack1", "/datacenter1/rack2"},
           new String[]{"host6", "host7", "host8"},
           null);
       cluster.triggerBlockReports();
-      assertEquals("Number of datanodes should be 6", 6,
+      assertEquals("Number of datanodes should be 12", 12,
           cluster.getDataNodes().size());
 
       // Validate use "-path" replica rule.
@@ -173,10 +207,13 @@ public class TestZoneMoverWithDR {
       BufferedWriter inputWriter =
           new BufferedWriter(new OutputStreamWriter(Files.newOutputStream(inputPath.toPath())));
       inputWriter.write(path1.toString());
+      inputWriter.write("\n");
+      inputWriter.write(ecFile.toString());
       inputWriter.flush();
       inputWriter.close();
 
-      String[] args4 = {"-namespace", "dev1", "-pathFile", inputPath.getAbsolutePath(), "-cold"};
+      String[] args4 = {"-namespace", "dev1", "-pathFile", inputPath.getAbsolutePath(), "-cold",
+          "-skipEC"};
       assertEquals(ExitStatus.SUCCESS.getExitCode(), tool1.run(args4));
 
       // Validate replica rule.
@@ -189,6 +226,42 @@ public class TestZoneMoverWithDR {
           return false;
         }
       }, 500, 30000);
+
+      // Since -skipEC is specified, the ec file will be skipped.
+      assertTrue(logs.getOutput().contains("No need to process cold data of ec file: " + ecFile));
+
+      // Validate param '-skipReplica' and '-skipEC' cannot be specified together,
+      // can either specify one or leave both unspecified.
+      String[] args5 = {"-namespace", "dev1", "-path", "/test2", "-cold", "-skipEC",
+          "-skipReplica"};
+      assertEquals(ExitStatus.ILLEGAL_ARGUMENTS.getExitCode(), tool1.run(args5));
+
+      String[] args6 = {"-namespace", "dev1", "-path", "/ec/file", "-cold", "-useAccessTime"};
+      assertEquals(ExitStatus.SUCCESS.getExitCode(), tool1.run(args6));
+
+      // Validate striped block rule.
+      GenericTestUtils.waitFor(() -> {
+        try {
+          return ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
+                  DFSTestUtil.getAllBlocks(fs, ecFile).get(0))).
+              equals(ReplicationRule.parseFromString("/datacenter0:6,/datacenter1:3"));
+        } catch (IOException e) {
+          return false;
+        }
+      }, 500, 30000);
+
+      // Validate ec data.
+      DFSClient dfsClient = fs.getClient();
+      int done = 0;
+      ByteBuffer readBuffer = ByteBuffer.allocate(dataSize);
+      try (DFSInputStream in = dfsClient.open(ecFile.toString())) {
+        while (done < dataSize) {
+          int ret = in.read(readBuffer);
+          assertTrue(ret > 0);
+          done += ret;
+        }
+        assertArrayEquals(expected, readBuffer.array());
+      }
     }
   }
 
@@ -226,7 +299,7 @@ public class TestZoneMoverWithDR {
       cluster.triggerBlockReports();
 
       ZoneMoverWithDR.runWithColdDataReplication(conf, cluster.getURI(), pathList,
-          false);
+          false, false, false);
 
       Map<Short, ReplicationRule> expectedRule = new HashMap<>();
       expectedRule.put((short) 2, ReplicationRule.parseFromString("/datacenter0:1,/datacenter1:1"));
@@ -247,6 +320,81 @@ public class TestZoneMoverWithDR {
             return false;
           }
         }, 500, 50000);
+      }
+    }
+  }
+
+  @Test
+  public void testZoneMoverWithDRColdModeByEC() throws Exception {
+    Configuration conf = new HdfsConfiguration();
+    final String[] racks = {"/datacenter0/rack0", "/datacenter0/rack1", "/datacenter0/rack2"
+        , "/datacenter0/rack3", "/datacenter0/rack4", "/datacenter0/rack5",
+        "/datacenter0/rack6", "/datacenter0/rack7", "/datacenter0/rack8"};
+    final String[] hosts = {"host0", "host1", "host2", "host10", "host11", "host12",
+        "host20", "host21", "host22"};
+    initConfForDr(conf, "/datacenter0", 0);
+
+    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).
+        numDataNodes(hosts.length).hosts(hosts).racks(racks).build()) {
+      cluster.waitActive();
+      DistributedFileSystem fs = cluster.getFileSystem();
+      // Create ec dir.
+      Path ecDir = new Path("/ec");
+      fs.mkdirs(ecDir);
+      fs.enableErasureCodingPolicy(ecPolicy.getName());
+      fs.setErasureCodingPolicy(ecDir, ecPolicy.getName());
+
+      final int[] listTest = {3, 5 ,6};
+      Map<Integer, Path> map = new HashMap<>();
+
+      // Prepare the files with different distribution.
+      for (int disNum: listTest) {
+        int dataSize = DEFAULT_BLOCK_SIZE * disNum;
+        // Create ec file.
+        Path ecFile = new Path(ecDir, "file" + disNum);
+        byte[] expected = StripedFileTestUtil.generateBytes(dataSize);
+        int totalNum = disNum + parityBlocks;
+        DFSTestUtil.writeFile(fs, ecFile, new String(expected));
+        StripedFileTestUtil.waitBlockGroupsReported(fs, ecFile.toString());
+        StripedFileTestUtil.verifyLength(fs, ecFile, dataSize);
+        assertEquals(ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
+                DFSTestUtil.getAllBlocks(fs, ecFile).get(0))),
+            ReplicationRule.parseFromString("/datacenter0:" + totalNum));
+        map.put(totalNum, ecFile);
+      }
+
+      // Adding 6 new hosts about '/datacenter1'.
+      cluster.startDataNodes(conf, 6, true, null,
+          new String[]{"/datacenter1/rack0", "/datacenter1/rack0", "/datacenter1/rack1",
+              "/datacenter1/rack1", "/datacenter1/rack2", "/datacenter1/rack2"},
+          new String[]{"host6", "host7", "host8", "host9", "host10", "host11"},
+          null);
+      cluster.triggerBlockReports();
+      List<Path> pathList = new ArrayList<>(map.values());
+      ZoneMoverWithDR.runWithColdDataReplication(conf, cluster.getURI(), pathList,
+          false, true, false);
+
+      Map<Integer, ReplicationRule> expectedRule = new HashMap<>();
+      expectedRule.put(3 + parityBlocks,
+          ReplicationRule.parseFromString("/datacenter0:6"));
+      expectedRule.put(5 + parityBlocks,
+          ReplicationRule.parseFromString("/datacenter0:6,/datacenter1:2"));
+      expectedRule.put(6 + parityBlocks,
+          ReplicationRule.parseFromString("/datacenter0:6,/datacenter1:3"));
+
+      // Validate striped block rule.
+      for (Map.Entry<Integer, Path> entry : map.entrySet()) {
+        Integer totalNum = entry.getKey();
+        Path path = entry.getValue();
+        GenericTestUtils.waitFor(() -> {
+          try {
+            return expectedRule.get(totalNum).equals(
+                ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
+                    DFSTestUtil.getAllBlocks(fs, path).get(0))));
+          } catch (IOException e) {
+            return false;
+          }
+        }, 500, 60000);
       }
     }
   }

@@ -69,13 +69,11 @@ import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nonnull;
 import java.io.BufferedReader;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.OpenOption;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1196,6 +1194,11 @@ public class ZoneMover {
       }
 
       final DBlock db = newDBlock(lb, locations, ecPolicy);
+      if (db == null) {
+        LOG.warn("Failed to get a DBlockStriped for {} since ecPolicy is null, " +
+            "will skip.", lb.getBlock());
+        return false;
+      }
       Set<StorageType> targetTypes = new HashSet<>(Arrays.asList(lb.getStorageTypes()));
       Set<StorageGroup> excluded = getExcluded(locations, moveItems);
       // get MLocation according to datacenter and select source
@@ -1218,11 +1221,24 @@ public class ZoneMover {
       return true;
     }
 
-    protected DBlock newDBlock(LocatedBlock lb, List<MLocation> locations, ErasureCodingPolicy ecPolicy) {
-      Block block = lb.getBlock().getLocalBlock();
-      final DBlock db = new DBlock(block);
-      for(MLocation ml : locations) {
-        StorageGroup source = storages.getSource(ml);
+    protected Dispatcher.DBlock newDBlock(LocatedBlock lb, List<Mover.MLocation> locations,
+        ErasureCodingPolicy ecPolicy) {
+      Block blk = lb.getBlock().getLocalBlock();
+      Dispatcher.DBlock db;
+      if (lb.isStriped()) {
+        if (ecPolicy == null) {
+          return null;
+        }
+        LocatedStripedBlock lsb = (LocatedStripedBlock) lb;
+        byte[] indices = new byte[lsb.getBlockIndices().length];
+        System.arraycopy(lsb.getBlockIndices(), 0, indices, 0, lsb.getBlockIndices().length);
+        db = new Dispatcher.DBlockStriped(blk, indices, (short) ecPolicy.getNumDataUnits(),
+            ecPolicy.getCellSize());
+      } else {
+        db = new Dispatcher.DBlock(blk);
+      }
+      for(Mover.MLocation ml : locations) {
+        Dispatcher.DDatanode.StorageGroup source = storages.getSource(ml);
         if (source != null) {
           db.addLocation(source);
         }

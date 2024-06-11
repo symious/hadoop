@@ -753,31 +753,6 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
       }
       ZoneProgressTracker.dequeueFile(fullPath);
     }
-
-    @Override
-    protected Dispatcher.DBlock newDBlock(LocatedBlock lb, List<Mover.MLocation> locations,
-        ErasureCodingPolicy ecPolicy) {
-      Block blk = lb.getBlock().getLocalBlock();
-      Dispatcher.DBlock db;
-      if (lb.isStriped()) {
-        LocatedStripedBlock lsb = (LocatedStripedBlock) lb;
-        byte[] indices = new byte[lsb.getBlockIndices().length];
-        for (int i = 0; i < indices.length; i++) {
-          indices[i] = (byte) lsb.getBlockIndices()[i];
-        }
-        db = new Dispatcher.DBlockStriped(blk, indices, (short) ecPolicy.getNumDataUnits(),
-            ecPolicy.getCellSize());
-      } else {
-        db = new Dispatcher.DBlock(blk);
-      }
-      for(Mover.MLocation ml : locations) {
-        Dispatcher.DDatanode.StorageGroup source = storages.getSource(ml);
-        if (source != null) {
-          db.addLocation(source);
-        }
-      }
-      return db;
-    }
   }
 
   class FetcherWithPreMigration extends Fetcher {
