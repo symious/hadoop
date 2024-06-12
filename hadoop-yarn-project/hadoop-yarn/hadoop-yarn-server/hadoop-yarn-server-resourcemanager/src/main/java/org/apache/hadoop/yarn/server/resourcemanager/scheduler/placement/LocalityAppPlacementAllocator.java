@@ -126,6 +126,8 @@ public class LocalityAppPlacementAllocator <N extends SchedulerNode>
               schedulerNode.getRMNode().getHostName());
         }
         return IteratorUtils.singletonIterator(schedulerNode);
+      } else {
+        return IteratorUtils.emptyIterator();
       }
     }
 
