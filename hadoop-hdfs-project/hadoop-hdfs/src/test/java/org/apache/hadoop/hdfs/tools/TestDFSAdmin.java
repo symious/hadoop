@@ -420,7 +420,7 @@ public class TestDFSAdmin {
     final List<String> outs = Lists.newArrayList();
     final List<String> errs = Lists.newArrayList();
     getReconfigurableProperties("namenode", address, outs, errs);
-    assertEquals(61, outs.size());
+    assertEquals(63, outs.size());
     assertEquals(errs.size(), 0);
   }
 

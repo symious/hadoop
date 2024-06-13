@@ -953,4 +953,22 @@ public class TestNameNodeReconfigure {
     nameNode.reconfigurePropertyImpl(DFS_NAMENODE_ACCESSTIME_PRECISION_KEY, "2000");
     assertEquals(fsDirectory.getAccessTimePrecision(), 2000);
   }
+
+  @Test
+  public void testReconfigureEnableFaultyDC()
+      throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode(0);
+    final BlockManager blockManager = nameNode.namesystem.getBlockManager();
+    // verify default value.
+    assertEquals(DFSConfigKeys.DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_DEFAULT,
+        blockManager.getEnableFaultyDCMonitor());
+
+    // try correct value.
+    nameNode.reconfigurePropertyImpl(DFSConfigKeys.DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY, "true");
+    assertTrue(blockManager.getEnableFaultyDCMonitor());
+
+    nameNode.reconfigurePropertyImpl(DFSConfigKeys.DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY, "false");
+    assertFalse(blockManager.getEnableFaultyDCMonitor());
+  }
+
 }

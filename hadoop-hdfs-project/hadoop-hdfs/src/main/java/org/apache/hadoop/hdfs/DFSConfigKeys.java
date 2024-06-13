@@ -301,6 +301,12 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final int     DFS_NAMENODE_REPLICATION_MIN_DEFAULT = 1;
   public static final String  DFS_NAMENODE_REPLICATION_MIN_CONSTRAINT_KEY =
       "dfs.namenode.replication.min.constraint";
+  public static final String  DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY =
+      "dfs.namenode.enable.faulty.dc.monitor";
+  public static final boolean DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_DEFAULT = false;
+  public static final String  DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_KEY =
+      "dfs.namenode.faulty.dc.number.threshold";
+  public static final int     DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_DEFAULT = 200;
 
   public static final String  DFS_NAMENODE_FILE_CLOSE_NUM_COMMITTED_ALLOWED_KEY
       = "dfs.namenode.file.close.num-committed-allowed";

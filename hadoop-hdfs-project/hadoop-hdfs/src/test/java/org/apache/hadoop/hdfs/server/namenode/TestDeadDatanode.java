@@ -309,7 +309,53 @@ public class TestDeadDatanode {
         cluster.shutdown();
       }
     }
+  }
 
+  @Test
+  public void testFaultyDCMonitor() throws Exception {
+    Configuration conf = new HdfsConfiguration();
+    final String[] racks = {"/datacenter1/rack0", "/datacenter0/rack1",
+        "/datacenter0/rack2", "/datacenter0/rack3"};
+    final String[] hosts = {"host0", "host1", "host2", "host3"};
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_KEY, 2);
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, 0);
+    conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, 1L);
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY, true);
+
+    try {
+      cluster = new MiniDFSCluster.Builder(conf).numDataNodes(racks.length).racks(racks)
+          .hosts(hosts).build();
+      cluster.waitActive();
+      BlockManager blockManager = cluster.getNamesystem(0).getBlockManager();
+
+      DataNode dn2 = null;
+      DataNode dn4 = null;
+      for (DataNode node : cluster.getDataNodes()) {
+        if (node.getDatanodeHostname().contains("host1")) {
+          dn2 = node;
+        } else if (node.getDatanodeHostname().contains("host3")) {
+          dn4 = node;
+        }
+      }
+
+      // Holding the heartbeat of DN2 and DN4
+      dn2.setHeartbeatsDisabledForTests(true);
+      dn4.setHeartbeatsDisabledForTests(true);
+
+      blockManager.setFaultyDCTimeThresholdMs(2500);
+      assertEquals(2500, blockManager.getFaultyDCTimeThresholdMs());
+      GenericTestUtils.waitFor(() -> blockManager.getFaultyDC() != null, 500, 6000);
+      assertEquals("/datacenter0", blockManager.getFaultyDC());
+
+      final DatanodeDescriptor dn2Desc = cluster.getNamesystem(0)
+          .getBlockManager().getDatanodeManager()
+          .getDatanode(dn2.getDatanodeId());
+      assertTrue(dn2Desc.isProtectedByFaultyDC());
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
   }
 
   @Test

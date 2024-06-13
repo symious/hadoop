@@ -6584,4 +6584,19 @@
       So that namenode can take some actions for this faulty DC.
     </description>
   </property>
+  <property>
+    <name>dfs.namenode.enable.faulty.dc.monitor</name>
+    <value>false</value>
+    <description>
+      If true, namenode starts the monitor to dynamically check whether the faultyDC exists or not.
+    </description>
+  </property>
+  <property>
+    <name>dfs.namenode.faulty.dc.number.threshold</name>
+    <value>200</value>
+    <description>
+      The threshold is used to check if the faulty DC exists.
+      If the number of abnormal DNs in one DC is bigger than this threshold, namenode will mark the DC as the faultyDC.
+    </description>
+  </property>
 </configuration>

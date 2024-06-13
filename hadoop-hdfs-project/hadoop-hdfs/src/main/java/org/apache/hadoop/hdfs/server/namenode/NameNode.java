@@ -146,6 +146,10 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOCK_DETAILED_METRICS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOCK_DETAILED_METRICS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_DEFAULT;
@@ -477,7 +481,9 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED,
           DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED,
           DFS_NAMENODE_BLOCK_MANAGER_ALERT_INSUFFICIENT_TARGETS_ENABLED_KEY,
-          DFS_NAMENODE_ACCESSTIME_PRECISION_KEY));
+          DFS_NAMENODE_ACCESSTIME_PRECISION_KEY,
+          DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY,
+          DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2576,6 +2582,10 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigureAlertInsufficientTargetsEnabled(newVal);
     } else if (property.equals(DFS_NAMENODE_ACCESSTIME_PRECISION_KEY)) {
       return reconfigurationAccessTimePrecision(newVal);
+    } else if (property.equals(DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY)) {
+      return reconfigureEnableFaultyDCMonitor(newVal);
+    } else if (property.equals(DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_KEY)) {
+      return reconfigureFaultyDCNumberThreshold(newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -3332,6 +3342,21 @@ public class NameNode extends ReconfigurableBase implements
         Long.parseLong(newValue));
     getNamesystem().getFSDirectory().setAccessTimePrecision(value);
     return Long.toString(value);
+  }
+
+  private String reconfigureEnableFaultyDCMonitor(String newValue) {
+    boolean enable = newValue == null ? DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_DEFAULT
+        : Boolean.parseBoolean(newValue);
+    this.namesystem.getBlockManager().setEnableFaultyDCMonitor(enable);
+    return String.valueOf(enable);
+  }
+
+  private String reconfigureFaultyDCNumberThreshold(String newVal) {
+    int faultyDCNumberThreshold = (newVal == null ?
+        DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_DEFAULT :
+        Integer.parseInt(newVal));
+    this.namesystem.getBlockManager().setFaultyDCNumberThreshold(faultyDCNumberThreshold);
+    return String.valueOf(faultyDCNumberThreshold);
   }
 
   @Override //NameNodeStatusMXBean

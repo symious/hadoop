@@ -341,8 +341,7 @@ public class DatanodeManager {
     heartbeatRecheckInterval = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, 
         DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_DEFAULT); // 5 minutes
-    this.heartbeatExpireInterval = 2 * heartbeatRecheckInterval
-        + 10 * 1000 * heartbeatIntervalSeconds;
+    setHeartbeatExpireInterval(2L * heartbeatRecheckInterval + 10 * 1000 * heartbeatIntervalSeconds);
 
     // Effected block invalidate limit is the bigger value between
     // value configured in hdfs-site.xml, and 20 * HB interval.
@@ -554,6 +553,8 @@ public class DatanodeManager {
   @VisibleForTesting
   public void setHeartbeatExpireInterval(long expiryMs) {
     this.heartbeatExpireInterval = expiryMs;
+    this.blockManager.setFaultyDCTimeThresholdMs((long) (0.6 * this.heartbeatExpireInterval));
+    this.blockManager.setFaultyDCRecheckIntervalMs((long) (0.1 * this.heartbeatExpireInterval));
   }
 
   @VisibleForTesting
@@ -2328,6 +2329,37 @@ public class DatanodeManager {
   }
 
   /**
+   * Check if faultyDC exists.
+   * @param timeThreshold the live DN may be abnormal if it has not been updated
+   *                      for longer than timeThreshold.
+   * @param numberThreshold the DC will be marked as faultyDC if it contains
+   *                        more than numberThreshold abnormal DNs.
+   * @return return the faultyDC if it exists, else null.
+   */
+  public String checkFaultyDC(long timeThreshold, long numberThreshold) {
+    LOG.info("Checking if faultyDC exists with timeThreshold {} and numberThreshold {}.",
+        timeThreshold, numberThreshold);
+    Map<String, Integer> abnormalDNs = new HashMap<>();
+    synchronized (this) {
+      for (DatanodeDescriptor dn : datanodeMap.values()) {
+        if (dn.isAlive() && monotonicNow() - dn.getLastUpdateMonotonic() >= timeThreshold) {
+          String dnDC = NetworkTopologyUtil.getDataCenter(dn);
+          int value = abnormalDNs.getOrDefault(dnDC, 0);
+          abnormalDNs.put(dnDC, value + 1);
+        }
+      }
+    }
+    for (Map.Entry<String, Integer> dcEntry : abnormalDNs.entrySet()) {
+      if (dcEntry.getValue() >= numberThreshold) {
+        LOG.info("DC {} has more abnormal DNs than allowed: {} >= {}, marking as faulty.",
+            dcEntry.getKey(), dcEntry.getValue(), numberThreshold);
+        return dcEntry.getKey();
+      }
+    }
+    return null;
+  }
+
+  /**
    * Attempt to mark all DNs under the faulty DC as in_maintenance.
    * @param faultyDC the input faulty DC
    */
@@ -2457,8 +2489,7 @@ public class DatanodeManager {
       int recheckInterval) {
     this.heartbeatIntervalSeconds = intervalSeconds;
     this.heartbeatRecheckInterval = recheckInterval;
-    this.heartbeatExpireInterval = 2L * recheckInterval + 10 * 1000
-        * intervalSeconds;
+    setHeartbeatExpireInterval(2L * recheckInterval + 10 * 1000 * intervalSeconds);
     this.blockInvalidateLimit = Math.max(20 * (int) (intervalSeconds),
         blockInvalidateLimit);
   }

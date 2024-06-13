@@ -313,6 +313,27 @@ public class BlockManager implements BlockStatsMXBean {
   private final long redundancyRecheckIntervalMs;
 
   /**
+   * faultyDCRecheckIntervalMs is how often namenode checks the faulty DC.
+   */
+  private long faultyDCRecheckIntervalMs;
+
+  /**
+   * faultyDCTimeThresholdMs is used to check whether the LiveDN is abnormal.
+   */
+  private long faultyDCTimeThresholdMs;
+
+  /**
+   * If the number of abnormal LiveDN is bigger than this threshold,
+   * this DC will be marked as faulty DC.
+   */
+  private volatile int faultyDCNumberThreshold;
+
+  /**
+   * Enable or not this faultyDC monitor.
+   */
+  private volatile boolean enableFaultyDCMonitor = true;
+
+  /**
    * Tracks how many calls have been made to chooseLowReduncancyBlocks since
    * the queue position was last reset to the queue head. If CallsSinceReset
    * crosses the threshold the next call will reset the iterators. A threshold
@@ -330,6 +351,10 @@ public class BlockManager implements BlockStatsMXBean {
 
   /** Redundancy thread. */
   private final Daemon redundancyThread = new Daemon(new RedundancyMonitor());
+
+  /** FaultyDC monitor thread */
+  private final Daemon faultyDCThread = new Daemon(new FaultyDCMonitor());
+
   /**
    * Timestamp marking the end time of {@link #redundancyThread}'s full cycle.
    * This value can be checked by the Junit tests to verify that the
@@ -600,6 +625,14 @@ public class BlockManager implements BlockStatsMXBean {
         DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_DEFAULT,
         TimeUnit.SECONDS, TimeUnit.MILLISECONDS);
 
+    setEnableFaultyDCMonitor(conf.getBoolean(
+        DFSConfigKeys.DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY,
+        DFSConfigKeys.DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_DEFAULT));
+
+    setFaultyDCNumberThreshold(conf.getInt(
+        DFSConfigKeys.DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_KEY,
+        DFSConfigKeys.DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_DEFAULT));
+
     this.encryptDataTransfer =
         conf.getBoolean(DFSConfigKeys.DFS_ENCRYPT_DATA_TRANSFER_KEY,
             DFSConfigKeys.DFS_ENCRYPT_DATA_TRANSFER_DEFAULT);
@@ -689,6 +722,38 @@ public class BlockManager implements BlockStatsMXBean {
     LOG.info("redundancyRecheckInterval  = {}ms", redundancyRecheckIntervalMs);
     LOG.info("encryptDataTransfer        = {}", encryptDataTransfer);
     LOG.info("maxNumBlocksToLog          = {}", maxNumBlocksToLog);
+  }
+
+  public void setFaultyDCRecheckIntervalMs(long newInterval) {
+    LOG.info("Changing faultyDCRecheckIntervalMs from {} to {}.",
+        this.faultyDCRecheckIntervalMs, newInterval);
+    this.faultyDCRecheckIntervalMs = newInterval;
+  }
+
+  public void setFaultyDCTimeThresholdMs(long newTimeThreshold) {
+    LOG.info("Changing faultyDCTimeThresholdMs from {} to {}.",
+        this.faultyDCTimeThresholdMs, newTimeThreshold);
+    this.faultyDCTimeThresholdMs = newTimeThreshold;
+  }
+
+  public long getFaultyDCTimeThresholdMs() {
+    return this.faultyDCTimeThresholdMs;
+  }
+
+  public void setEnableFaultyDCMonitor(boolean newValue) {
+    LOG.info("Changing enableFaultyDCMonitor from {} to {}.",
+        this.enableFaultyDCMonitor, newValue);
+    this.enableFaultyDCMonitor = newValue;
+  }
+
+  public boolean getEnableFaultyDCMonitor() {
+    return this.enableFaultyDCMonitor;
+  }
+
+  public void setFaultyDCNumberThreshold(int newNumberThreshold) {
+    LOG.info("Changing faultyDCNumberThreshold from {} to {}.",
+        this.faultyDCNumberThreshold, newNumberThreshold);
+    this.faultyDCNumberThreshold = newNumberThreshold;
   }
 
   public void setDeleteRedundantDCReplica(boolean deleteRedundantDCReplica) {
@@ -853,6 +918,8 @@ public class BlockManager implements BlockStatsMXBean {
     datanodeManager.activate(conf);
     this.redundancyThread.setName("RedundancyMonitor");
     this.redundancyThread.start();
+    this.faultyDCThread.setName("FaultyDCMonitor");
+    this.faultyDCThread.start();
     this.blockReportThread.start();
     mxBeanName = MBeans.register("NameNode", "BlockStats", this);
     bmSafeMode.activate(blockTotal);
@@ -866,8 +933,10 @@ public class BlockManager implements BlockStatsMXBean {
     try {
       redundancyThread.interrupt();
       blockReportThread.interrupt();
+      faultyDCThread.interrupt();
       redundancyThread.join(3000);
       blockReportThread.join(3000);
+      faultyDCThread.join(3000);
     } catch (InterruptedException ie) {
     }
     datanodeManager.close();
@@ -5489,6 +5558,50 @@ public class BlockManager implements BlockStatsMXBean {
   @VisibleForTesting
   public long getLastRedundancyMonitorTS() {
     return lastRedundancyCycleTS.get();
+  }
+
+  /**
+   * Check if faultyDC exists, and set the faultyDC if it exists.
+   */
+  void checkAndSetFaultyDC() {
+    namesystem.writeLock(FSNamesystemLockMode.BM, "CheckAndSetFaultyDC");
+    try {
+      String faultyDC = this.getDatanodeManager().checkFaultyDC(
+          this.faultyDCTimeThresholdMs, this.faultyDCNumberThreshold);
+      if (faultyDC != null && faultyDC.startsWith("/")) {
+        setFaultyDC(faultyDC);
+      }
+    } finally {
+      namesystem.writeUnlock(FSNamesystemLockMode.BM, "CheckAndSetFaultyDC");
+    }
+  }
+
+  private class FaultyDCMonitor implements Runnable {
+    @Override
+    public void run() {
+      while (namesystem.isRunning()) {
+        try {
+          if (enableFaultyDCMonitor) {
+            // Check if there are faulty DCs.
+            checkAndSetFaultyDC();
+          }
+
+          TimeUnit.MILLISECONDS.sleep(faultyDCRecheckIntervalMs);
+        } catch (Throwable t) {
+          if (!namesystem.isRunning()) {
+            LOG.info("Stopping FaultyDCMonitor.");
+            if (!(t instanceof InterruptedException)) {
+              LOG.info("FaultyDCMonitor received an exception while shutting down.", t);
+            }
+            break;
+          } else if (!checkNSRunning && t instanceof InterruptedException) {
+            LOG.info("Stopping FaultyDCMonitor for testing.", t);
+            break;
+          }
+          LOG.error("FaultyDCMonitor thread received Runtime exception. ", t);
+        }
+      }
+    }
   }
 
   /**
