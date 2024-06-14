@@ -99,3 +99,44 @@ function mapred_subcommand_compatibilitytest
 }
 
 fi
+
+
+if ! declare -f hadoop_subcommand_nsmigrate >/dev/null 2>/dev/null; then
+  if [[ "${HADOOP_SHELL_EXECNAME}" = hadoop ]]; then
+    hadoop_add_subcommand "nsmigrate" client "migrate a directory across namespaces"
+  fi
+
+## @description  nsmigrate
+## @audience     public
+## @stability    stable
+## @replaceable  yes
+function hadoop_subcommand_nsmigrate
+{
+  # shellcheck disable=SC2034
+  HADOOP_CLASSNAME=org.apache.hadoop.tools.federation.NSMigrationTool
+  hadoop_add_to_classpath_tools hadoop-shopee
+}
+
+fi
+
+
+if ! declare -f mapred_subcommand_nsmigrate
+
+  if [[ "${HADOOP_SHELL_EXECNAME}" = mapred ]]; then
+    hadoop_add_subcommand "nsmigrate" client "migrate a directory across namespaces"
+  fi
+
+  # this can't be indented otherwise shelldocs won't get it
+
+## @description  nsmigrate
+## @audience     public
+## @stability    stable
+## @replaceable  yes
+function mapred_subcommand_nsmigrate
+{
+  # shellcheck disable=SC2034
+  HADOOP_CLASSNAME=org.apache.hadoop.tools.federation.NSMigrationTool
+  hadoop_add_to_classpath_tools hadoop-shopee
+}
+
+fi

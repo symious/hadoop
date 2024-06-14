@@ -440,6 +440,24 @@ hadoop-common:
   $SUFFIX
 EOF
       ;;
+      hadoop-shopee)
+      EMPTY=false
+      cat <<EOF >> "${CI_CONFIG_FILE}"
+hadoop-shopee:
+  stage: test
+  $TAGS
+  script:
+    - cd hadoop-tools/hadoop-shopee/
+    $COMMON_SCRIPTS
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - hadoop-tools/hadoop-shopee/target/surefire-reports/TEST-*.xml
+  $SUFFIX
+EOF
+      ;;
      *)
      echo default
      ;;
