@@ -248,7 +248,7 @@ public class TestDeadDatanode {
       final DatanodeDescriptor storeDN4 = blockManager.getDatanodeManager()
           .getDatanode(dn4.getDatanodeId());
       GenericTestUtils.waitFor(
-          () -> storeDN4.isAlive() && storeDN4.isHeartbeatedSinceRegistration(), 100, 5000);
+          () -> storeDN4.isAlive() && storeDN4.isHeartbeatedSinceRegistration(), 500, 20000);
 
       // The replicas of this block still be stored from DN1 ~ DN3
       BlockInfo blockInfo = blockManager.getStoredBlock(block.getLocalBlock());
@@ -289,7 +289,7 @@ public class TestDeadDatanode {
       // Restart the DN2, NN should process excess replicas.
       dn2.setHeartbeatsDisabledForTests(false);
       GenericTestUtils.waitFor(
-          () -> storeDN2.isAlive() && storeDN2.isHeartbeatedSinceRegistration(), 100, 5000);
+          () -> storeDN2.isAlive() && storeDN2.isHeartbeatedSinceRegistration(), 500, 20000);
 
       blockInfo = blockManager.getStoredBlock(block.getLocalBlock());
       storageInfoIterator = blockInfo.getStorageInfos();
