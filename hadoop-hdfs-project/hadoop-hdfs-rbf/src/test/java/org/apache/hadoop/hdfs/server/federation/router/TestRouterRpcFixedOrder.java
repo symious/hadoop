@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hdfs.server.federation.router;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.LinkedHashMap;
@@ -26,7 +27,9 @@ import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FileAlreadyExistsException;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Options;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSClient;
@@ -42,21 +45,27 @@ import org.apache.hadoop.hdfs.server.federation.StateStoreDFSCluster;
 import org.apache.hadoop.hdfs.server.federation.resolver.MultipleDestinationMountTableResolver;
 import org.apache.hadoop.hdfs.server.federation.resolver.order.DestinationOrder;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
+import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.function.ThrowingRunnable;
 
+import static org.apache.hadoop.test.Whitebox.setInternalState;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.spy;
 
 public class TestRouterRpcFixedOrder {
 
-  final private static int NUM_SUBCLUSTERS = 3;
+  private final static int NUM_SUBCLUSTERS = 3;
   private static StateStoreDFSCluster cluster;
   private static MiniRouterDFSCluster.RouterContext routerContext;
   private static DFSClient routerClient;
@@ -66,6 +75,7 @@ public class TestRouterRpcFixedOrder {
   private static FileSystem nnFsMain;
   private static FileSystem nnFsSub0;
   private static FileSystem nnFsSub1;
+  private static RouterClientProtocol spyClientProtocol;
 
   @BeforeClass
   public static void setup() throws Exception {
@@ -82,6 +92,8 @@ public class TestRouterRpcFixedOrder {
     routerContext = cluster.getRandomRouter();
     routerContext.getRouter().getStateStore().stopCacheUpdateService();
     routerClient = routerContext.getClient();
+    spyClientProtocol = spy(routerContext.getRouterRpcServer().getClientProtocolModule());
+    setInternalState(routerContext.getRouterRpcServer(), "clientProto", spyClientProtocol);
     nnContextMain = cluster.getNamenode("ns2", null);
     nnContextSub0 = cluster.getNamenode("ns0", null);
     nnContextSub1 = cluster.getNamenode("ns1", null);
@@ -250,5 +262,344 @@ public class TestRouterRpcFixedOrder {
     // SetStoragePolicy should fail on the readonly dir
     assertThrows(AccessControlException.class, () -> bobClient.setStoragePolicy("/testThrow/2/a/e",
         HdfsConstants.COLD_STORAGE_POLICY_NAME));
+  }
+
+  @Test
+  public void testRename() throws Exception {
+    nnFsMain.delete(new Path("/testRename"), true);
+    nnFsSub0.delete(new Path("/testRename"), true);
+    nnFsSub1.delete(new Path("/testRename"), true);
+    MultipleDestinationMountTableResolver mountTable =
+        (MultipleDestinationMountTableResolver) routerContext.getRouter().getSubclusterResolver();
+    Map<String, String> mapFixed = new LinkedHashMap<>();
+    mapFixed.put("ns2", "/testRename");
+    mapFixed.put("ns0", "/testRename");
+    mapFixed.put("ns1", "/testRename");
+    MountTable fixedEntry = MountTable.newInstance("/mnt", mapFixed);
+    fixedEntry.setDestOrder(DestinationOrder.FIXED);
+    mountTable.addEntry(fixedEntry);
+
+    // Failure cases
+    // src does not exist
+    setupRename(nnFsSub0, "dst", true, false);
+    assertThrowsWithMessage(FileNotFoundException.class,
+        "Source /mnt/src/src does not exist on any namespace.",
+        () -> routerClient.rename("/mnt/src/src", "/mnt/dst/dst"));
+    cleanupRename();
+    // dst parent does not exist
+    setupRename(nnFsSub0, "src", true, false);
+    assertThrowsWithMessage(FileNotFoundException.class,
+        "Destination parent /mnt/dst does not exist on any namespace.",
+        () -> routerClient.rename("/mnt/src/src", "/mnt/dst/dst"));
+    cleanupRename();
+    // dst is an existing file, regardless of same ns as src or not
+    setupRename(nnFsSub0, "src", true, false);
+    setupRename(nnFsSub1, "src.file", true, true);
+    setupRename(nnFsMain, "dst.file", false, true);
+    assertThrowsWithMessage(IOException.class,
+        "Cannot rename a directory /mnt/src/src to a file /mnt/dst/dst.file",
+        () -> routerClient.rename("/mnt/src/src", "/mnt/dst/dst.file"));
+    assertThrowsWithMessage(IOException.class,
+        "Destination already exists: /mnt/dst/dst.file",
+        () -> routerClient.rename("/mnt/src/src.file", "/mnt/dst/dst.file"));
+    cleanupRename();
+    // Inconsistent src being file on one ns and dir on another
+    setupRename(nnFsSub0, "src", true, true);
+    setupRename(nnFsSub1, "src", true, false);
+    setupRename(nnFsSub0, "dst0", false, false);
+    setupRename(nnFsSub1, "dst1", false, false);
+    assertThrowsWithMessage(IOException.class,
+        "Inconsistent state with mixed files/dirs in /mnt/src/src",
+        () -> routerClient.rename("/mnt/src/src", "/mnt/dst/dst0"));
+    assertThrowsWithMessage(IOException.class,
+        "Inconsistent state with mixed files/dirs in /mnt/src/src",
+        () -> routerClient.rename("/mnt/src/src", "/mnt/dst/dst1"));
+    cleanupRename();
+    // Inconsistent src being multiple files on multiple namespaces
+    setupRename(nnFsSub0, "src.file", true, true);
+    setupRename(nnFsSub1, "src.file", true, true);
+    setupRename(nnFsSub0, "dst", false, false);
+    assertThrowsWithMessage(IOException.class,
+        "Inconsistent state with the same file /mnt/src/src.file detected on multiple namespaces",
+        () -> routerClient.rename("/mnt/src/src.file", "/mnt/dst/dst"));
+    cleanupRename();
+    // dst already contains a dir/file with the same name as src
+    setupRename(nnFsSub0, "src", true, true);
+    setupRename(nnFsSub1, "src.file", true, false);
+    setupRename(nnFsMain, "dst0", false, false);
+    nnFsMain.mkdirs(new Path("/testRename/dst/dst0/src"));
+    setupRename(nnFsMain, "dst1", false, false);
+    nnFsMain.create(new Path("/testRename/dst/dst1/src.file")).close();
+    assertThrowsWithMessage(IOException.class,
+        "Destination already exists: /mnt/dst/dst0/src",
+        () -> routerClient.rename("/mnt/src/src", "/mnt/dst/dst0"));
+    assertThrowsWithMessage(IOException.class,
+        "Destination already exists: /mnt/dst/dst1/src.file",
+        () -> routerClient.rename("/mnt/src/src.file", "/mnt/dst/dst1"));
+    cleanupRename();
+
+    // All cases below should not fail
+    // 2 cases for src being a file
+    setupRename(nnFsSub0, "src.file", true, true);
+    setupRename(nnFsSub1, "", false, false);
+    routerClient.rename("/mnt/src/src.file", "/mnt/dst/dst.file");
+    assertTrue(nnFsSub0.getFileStatus(new Path("/testRename/dst/dst.file")).isFile());
+    cleanupRename();
+    setupRename(nnFsSub0, "src.file", true, true);
+    setupRename(nnFsSub1, "dst", false, false);
+
+    routerClient.rename("/mnt/src/src.file", "/mnt/dst/dst");
+    assertTrue(nnFsSub0.exists(new Path("/testRename/dst/dst/src.file")));
+    cleanupRename();
+
+    // ==============
+    // Single dir src
+    // dst doesn't exist, parent exists, doesn't matter which ns
+    setupRename(nnFsSub0, "src", true, false);
+    setupRename(nnFsMain, "", false, false);
+
+    routerClient.rename("/mnt/src/src", "/mnt/dst/dst");
+    assertTrue(nnFsSub0.exists(new Path("/testRename/dst/dst/file")));
+    assertFalse(nnFsMain.exists(new Path("/testRename/dst/dst")));
+    cleanupRename();
+
+    // dst dir exists on same ns and on different ns
+    setupRename(nnFsSub0, "src1", true, false);
+    setupRename(nnFsSub0, "src2", true, false);
+    setupRename(nnFsSub0, "dst1", false, false);
+    setupRename(nnFsSub1, "dst2", false, false);
+
+    routerClient.rename("/mnt/src/src1", "/mnt/dst/dst1");
+    routerClient.rename("/mnt/src/src2", "/mnt/dst/dst2");
+    assertTrue(nnFsSub0.exists(new Path("/testRename/dst/dst1/src1/file")));
+    assertFalse(nnFsSub1.exists(new Path("/testRename/dst/dst1")));
+    assertTrue(nnFsSub0.exists(new Path("/testRename/dst/dst2/src2/file")));
+    assertTrue(nnFsSub1.exists(new Path("/testRename/dst/dst2")));
+    cleanupRename();
+
+    // ================
+    // Multiple dir src
+    // dst doesn't exist, parent exists, doesn't matter which ns, doesn't matter how many parent
+    setupRename(nnFsSub0, "src", true, false);
+    setupRename(nnFsSub1, "src", true, false);
+    setupRename(nnFsMain, "", false, false);
+
+    routerClient.rename("/mnt/src/src", "/mnt/dst/dst");
+    assertTrue(nnFsSub0.exists(new Path("/testRename/dst/dst/file")));
+    assertTrue(nnFsSub1.exists(new Path("/testRename/dst/dst/file")));
+    assertFalse(nnFsMain.exists(new Path("/testRename/dst/dst")));
+    cleanupRename();
+
+    // dst exists
+    // same ns
+    setupRename(nnFsSub0, "src1", true, false);
+    setupRename(nnFsSub1, "src1", true, false);
+    setupRename(nnFsSub1, "dst1", false, false);
+
+    routerClient.rename("/mnt/src/src1", "/mnt/dst/dst1");
+    assertTrue(nnFsSub0.exists(new Path("/testRename/dst/dst1/src1/file")));
+    assertTrue(nnFsSub1.exists(new Path("/testRename/dst/dst1/src1/file")));
+    // different ns
+    setupRename(nnFsSub0, "src2", true, false);
+    setupRename(nnFsSub1, "src2", true, false);
+    setupRename(nnFsMain, "dst2", false, false);
+
+    routerClient.rename("/mnt/src/src2", "/mnt/dst/dst2");
+    assertTrue(nnFsSub0.exists(new Path("/testRename/dst/dst2/src2/file")));
+    assertTrue(nnFsSub1.exists(new Path("/testRename/dst/dst2/src2/file")));
+    assertFalse(nnFsMain.exists(new Path("/testRename/dst/dst2/src2")));
+    // mixed ns
+    setupRename(nnFsSub0, "src3", true, false);
+    setupRename(nnFsSub1, "src3", true, false);
+    setupRename(nnFsSub1, "dst3", false, false);
+    setupRename(nnFsMain, "dst3", false, false);
+
+    routerClient.rename("/mnt/src/src3", "/mnt/dst/dst3");
+    assertTrue(nnFsSub0.exists(new Path("/testRename/dst/dst3/src3/file")));
+    assertTrue(nnFsSub1.exists(new Path("/testRename/dst/dst3/src3/file")));
+    assertFalse(nnFsMain.exists(new Path("/testRename/dst/dst3/src3/file")));
+    cleanupRename();
+  }
+
+  @Test
+  public void testRename2() throws Exception {
+    nnFsMain.delete(new Path("/testRename"), true);
+    nnFsSub0.delete(new Path("/testRename"), true);
+    nnFsSub1.delete(new Path("/testRename"), true);
+    MultipleDestinationMountTableResolver mountTable =
+        (MultipleDestinationMountTableResolver) routerContext.getRouter().getSubclusterResolver();
+    Map<String, String> mapFixed = new LinkedHashMap<>();
+    mapFixed.put("ns2", "/testRename");
+    mapFixed.put("ns0", "/testRename");
+    mapFixed.put("ns1", "/testRename");
+    MountTable fixedEntry = MountTable.newInstance("/mnt", mapFixed);
+    fixedEntry.setDestOrder(DestinationOrder.FIXED);
+    mountTable.addEntry(fixedEntry);
+
+    // Failure cases
+    // src does not exist
+    setupRename(nnFsSub0, "", true, false);
+    assertThrowsWithMessage(FileNotFoundException.class,
+        "Source /mnt/src/src does not exist on any namespace.",
+        () -> routerClient.rename("/mnt/src/src", "/mnt/dst/dst",
+            Options.Rename.OVERWRITE));
+    cleanupRename();
+    // dst parent does not exist
+    setupRename(nnFsSub0, "src", true, false);
+    assertThrowsWithMessage(FileNotFoundException.class,
+        "Destination parent /mnt/dst does not exist on any namespace.",
+        () -> routerClient.rename("/mnt/src/src", "/mnt/dst/dst",
+            Options.Rename.OVERWRITE));
+    cleanupRename();
+    // dst is an existing dir
+    setupRename(nnFsSub0, "src", true, false);
+    setupRename(nnFsSub1, "src.file", true, true);
+    setupRename(nnFsMain, "dst", false, false);
+    assertThrowsWithMessage(IOException.class, "Destination already exists: /mnt/dst/dst",
+        () -> routerClient.rename("/mnt/src/src", "/mnt/dst/dst",
+            Options.Rename.NONE));
+    assertThrowsWithMessage(IOException.class, "Destination already exists: /mnt/dst/dst",
+        () -> routerClient.rename("/mnt/src/src", "/mnt/dst/dst",
+            Options.Rename.OVERWRITE));
+    assertThrowsWithMessage(IOException.class, "Destination already exists: /mnt/dst/dst",
+        () -> routerClient.rename("/mnt/src/src.file", "/mnt/dst/dst",
+            Options.Rename.OVERWRITE));
+    cleanupRename();
+    // dst is an existing file but OVERWRITE option is not used
+    setupRename(nnFsSub0, "src.file", true, true);
+    setupRename(nnFsSub0, "dst.file", false, true);
+    assertThrowsWithMessage(FileAlreadyExistsException.class,
+        "rename destination /testRename/dst/dst.file already exists",
+        () -> routerClient.rename("/mnt/src/src.file", "/mnt/dst/dst.file",
+            Options.Rename.NONE));
+    cleanupRename();
+    // dst is an existing file, OVERWRITE option is used but src is a directory
+    setupRename(nnFsSub0, "src", true, false);
+    setupRename(nnFsSub0, "dst.file", false, true);
+    assertThrowsWithMessage(IOException.class,
+        "Source /testRename/src/src and destination /testRename/dst/dst.file must both be directories",
+        () -> routerClient.rename("/mnt/src/src", "/mnt/dst/dst.file",
+            Options.Rename.OVERWRITE));
+    cleanupRename();
+    // dst is an existing file, OVERWRITE option is used but src is on a different ns
+    setupRename(nnFsSub0, "src.file", true, true);
+    setupRename(nnFsMain, "dst.file", false, true);
+    assertThrowsWithMessage(IOException.class,
+        "Cannot rename /mnt/src/src.file from ns0 to ns2",
+        () -> routerClient.rename("/mnt/src/src.file", "/mnt/dst/dst.file",
+            Options.Rename.OVERWRITE));
+    cleanupRename();
+    // Inconsistent src being file on one ns and dir on another
+    setupRename(nnFsSub0, "src", true, true);
+    setupRename(nnFsSub1, "src", true, false);
+    setupRename(nnFsSub0, "", false, false);
+    setupRename(nnFsSub1, "", false, false);
+    assertThrowsWithMessage(IOException.class,
+        "Inconsistent state with mixed files/dirs in /mnt/src/src",
+        () -> routerClient.rename("/mnt/src/src", "/mnt/dst/dst0",
+            Options.Rename.OVERWRITE));
+    assertThrowsWithMessage(IOException.class,
+        "Inconsistent state with mixed files/dirs in /mnt/src/src",
+        () -> routerClient.rename("/mnt/src/src", "/mnt/dst/dst1",
+            Options.Rename.OVERWRITE));
+    cleanupRename();
+    // Inconsistent src being multiple files on multiple namespaces
+    setupRename(nnFsSub0, "src.file", true, true);
+    setupRename(nnFsSub1, "src.file", true, true);
+    setupRename(nnFsSub0, "", false, false);
+    assertThrowsWithMessage(IOException.class,
+        "Inconsistent state with the same file /mnt/src/src.file detected on multiple namespaces",
+        () -> routerClient.rename("/mnt/src/src.file", "/mnt/dst/dst1",
+            Options.Rename.OVERWRITE));
+    cleanupRename();
+
+    // All cases below should not fail
+    // 3 cases for src being a file
+    setupRename(nnFsSub0, "src.file", true, true);
+    setupRename(nnFsSub1, "", false, false);
+    routerClient.rename("/mnt/src/src.file", "/mnt/dst/dst.file",
+        Options.Rename.NONE);
+    assertTrue(nnFsSub0.getFileStatus(new Path("/testRename/dst/dst.file")).isFile());
+    cleanupRename();
+    // overwriting dst directly
+    setupRename(nnFsSub0, "src.file", true, true);
+    setupRename(nnFsSub0, "dst.file", false, true);
+    routerClient.rename("/mnt/src/src.file", "/mnt/dst/dst.file",
+        Options.Rename.OVERWRITE);
+    assertFalse(nnFsSub0.exists(new Path("/testRename/src/src.file")));
+    assertTrue(nnFsSub0.exists(new Path("/testRename/dst/dst.file")));
+    cleanupRename();
+
+    // ==============
+    // Single dir src
+    // dst doesn't exist, parent exists, doesn't matter which ns
+    setupRename(nnFsSub0, "src", true, false);
+    setupRename(nnFsMain, "", false, false);
+    routerClient.rename("/mnt/src/src", "/mnt/dst/dst", Options.Rename.OVERWRITE);
+    assertTrue(nnFsSub0.exists(new Path("/testRename/dst/dst/file")));
+    assertFalse(nnFsMain.exists(new Path("/testRename/dst/dst")));
+    cleanupRename();
+
+    // Multiple dir src
+    // dst doesn't exist, parent exists, doesn't matter which ns, doesn't matter how many parent
+    setupRename(nnFsSub0, "src", true, false);
+    setupRename(nnFsSub1, "src", true, false);
+    setupRename(nnFsMain, "", false, false);
+    routerClient.rename("/mnt/src/src", "/mnt/dst/dst", Options.Rename.OVERWRITE);
+    assertTrue(nnFsSub0.exists(new Path("/testRename/dst/dst/file")));
+    assertTrue(nnFsSub1.exists(new Path("/testRename/dst/dst/file")));
+    assertFalse(nnFsMain.exists(new Path("/testRename/dst/dst")));
+    cleanupRename();
+  }
+
+  private void assertThrowsWithMessage(Class<? extends IOException> exceptionClass, String subStr,
+      ThrowingRunnable runnable) {
+    try {
+      runnable.run();
+      fail("Should throw RemoteException or IOException.");
+    } catch (RemoteException re) {
+      IOException unwrappedException = re.unwrapRemoteException();
+      assertEquals(exceptionClass, unwrappedException.getClass());
+      assertTrue(unwrappedException.getMessage().contains(subStr));
+    } catch (IOException e) {
+      assertEquals(exceptionClass, e.getClass());
+      assertTrue(e.getMessage().contains(subStr));
+    } catch (Throwable e) {
+      fail("Should throw RemoteException.");
+    }
+  }
+
+  /**
+   * Create necessary files/dirs for tests. Prefixes (parents) will be created if this method
+   * is called at all.
+   * For sources, prefix is /testRename/src/
+   * For destinations, /testRename/dst/
+   * E.g. path=abc/xyz as a source will create the full path /testRename/src/abc/xyz
+   * @param pathStr path to create, does not contain the prefix
+   */
+  private static void setupRename(FileSystem fs, String pathStr, boolean isSource, boolean isFile)
+      throws IOException {
+    if (isSource) {
+      pathStr = "/testRename/src/" + pathStr;
+    } else {
+      pathStr = "/testRename/dst/" + pathStr;
+    }
+    if (isFile) {
+      fs.mkdirs(new Path(pathStr.substring(0, pathStr.lastIndexOf('/'))));
+      fs.create(new Path(pathStr)).close();
+      return;
+    }
+    fs.mkdirs(new Path(pathStr));
+    // Should create an inner file if it's a source dir
+    if (isSource) {
+      fs.create(new Path(pathStr, "file")).close();
+    }
+  }
+
+  private static void cleanupRename() throws IOException {
+    reset(spyClientProtocol);
+    nnFsMain.delete(new Path("/testRename"));
+    nnFsSub0.delete(new Path("/testRename"));
+    nnFsSub1.delete(new Path("/testRename"));
   }
 }

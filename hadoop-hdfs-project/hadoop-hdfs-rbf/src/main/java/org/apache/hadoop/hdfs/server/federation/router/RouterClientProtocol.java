@@ -99,7 +99,6 @@ import org.apache.hadoop.net.ConnectTimeoutException;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
-import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -121,6 +120,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
@@ -792,7 +792,9 @@ public class RouterClientProtocol implements ClientProtocol {
     boolean result;
     String invokeType = INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (isMultiDestDirectory(src)) {
+      if (rpcServer.isFixedOrder(src)) {
+        result = renameForFixedOrder(src, dst, locs, false, null);
+      } else if (isMultiDestDirectory(src)) {
         invokeType = INVOKE_TYPE_CONCURRENT;
         result = rpcClient.invokeAll(locs, method);
       } else {
@@ -807,34 +809,36 @@ public class RouterClientProtocol implements ClientProtocol {
   }
 
   @Override
-  public void rename2(final String src, final String dst,
-      final Options.Rename... options) throws IOException {
+  public void rename2(final String src, final String dst, final Options.Rename... options)
+      throws IOException {
     rpcServer.checkOperation(NameNode.OperationCategory.WRITE);
 
-    final List<RemoteLocation> srcLocations =
-        rpcServer.getLocationsForPath(src, true, false);
+    final List<RemoteLocation> srcLocations = rpcServer.getLocationsForPath(src, true, false);
     // srcLocations may be trimmed by getRenameDestinations()
     final List<RemoteLocation> locs = new LinkedList<>(srcLocations);
     RemoteParam dstParam;
     // srcLocations may be trimmed by getRenameDestinations()
-    if (Arrays.asList(options).contains(Options.Rename.TO_TRASH)) {
+    boolean isTrash = Arrays.asList(options).contains(Options.Rename.TO_TRASH);
+    if (isTrash) {
       dstParam = getRenameDestinationsForTrash(locs, dst);
     } else {
       dstParam = getRenameDestinations(locs, dst);
     }
     if (locs.isEmpty()) {
-      throw new IOException(
-          "Rename of " + src + " to " + dst + " is not allowed," +
-              " no eligible destination in the same namespace was found.");
+      throw new IOException("Rename of " + src + " to " + dst + " is not allowed,"
+          + " no eligible destination in the same namespace was found.");
     }
     RemoteMethod method = new RemoteMethod("rename2",
-        new Class<?>[] {String.class, String.class, options.getClass()},
-        new RemoteParam(), dstParam, options);
+        new Class<?>[] { String.class, String.class, options.getClass() }, new RemoteParam(),
+        dstParam, options);
     String invokeType = INVOKE_TYPE_SEQUENTIAL;
     try {
-      if (isMultiDestDirectory(src)) {
+      boolean isFixedOrder = rpcServer.isFixedOrder(src);
+      if (isTrash || isMultiDestDirectory(src)) {
         invokeType = INVOKE_TYPE_CONCURRENT;
         rpcClient.invokeConcurrent(locs, method);
+      } else if (isFixedOrder) {
+        renameForFixedOrder(src, dst, locs, true, options);
       } else {
         rpcClient.invokeSequential(locs, method, null, null);
       }
@@ -843,6 +847,253 @@ public class RouterClientProtocol implements ClientProtocol {
       throw e;
     }
     logAuditEvent(true, OperationName.RENAME2, invokeType, src, dst, null);
+  }
+
+  static class FixedOrderRenameContext {
+    // Basic stuff
+    final String src;
+    final String dst;
+    final Map<RemoteLocation, HdfsFileStatus> srcInfos;
+    Map<RemoteLocation, HdfsFileStatus> dstInfos = null;
+    final List<RemoteLocation> srcLocs;
+    final List<RemoteLocation> dstLocs;
+    final Set<String> srcNss;
+    boolean canBypass;
+    // Rename2 stuff
+    final boolean isRename2;
+    final Options.Rename[] options;
+    // For mkdirs
+    String mkdirPath;
+    FsPermission mkdirPerm;
+    List<RemoteLocation> mkdirLocs;
+
+    FixedOrderRenameContext(RouterClientProtocol protocol, String src, String dst,
+        List<RemoteLocation> locs, boolean isRename2, final Options.Rename[] options)
+        throws IOException {
+      this.src = src;
+      this.dst = dst;
+      this.isRename2 = isRename2;
+      this.options = options;
+
+      /* Allow bypassing the checks and mkdir step if single shared source and destination ns
+       * or if there's only one valid destination ns and source exists on the same ns.
+       */
+      this.canBypass = false;
+
+      this.srcInfos = protocol.getHomogeneousFileInfoAll(this.src, locs);
+      if (this.srcInfos.isEmpty()) {
+        throw new FileNotFoundException("Source " + this.src + " does not exist on any namespace.");
+      }
+      this.srcLocs = new ArrayList<>(this.srcInfos.keySet());
+      this.dstLocs = protocol.rpcServer.getLocationsForPath(this.dst, true, false);
+      this.srcNss =
+          this.srcLocs.stream().map(RemoteLocation::getNameserviceId).collect(Collectors.toSet());
+      Set<String> dstNss =
+          this.dstLocs.stream().map(RemoteLocation::getNameserviceId).collect(Collectors.toSet());
+      if (!dstNss.containsAll(this.srcNss)) {
+        throw new IOException(
+            String.format("Source %s exists on nss where destination %s cannot reach.",
+                String.join(",", this.srcNss), String.join(",", dstNss)));
+      }
+
+      boolean srcOnSingleValidDstNs =
+          dstLocs.size() == 1 && srcNss.contains(dstLocs.get(0).getNameserviceId());
+      this.canBypass |= srcOnSingleValidDstNs;
+      if (!this.canBypass) {
+        this.dstInfos = protocol.getHomogeneousFileInfoAll(this.dst, this.dstLocs);
+        boolean srcDstOnSameNs = dstInfos.size() == 1 && srcInfos.size() == 1 && srcNss.contains(
+            new ArrayList<>(dstInfos.keySet()).get(0).getNameserviceId());
+        this.canBypass |= srcDstOnSameNs;
+      }
+    }
+
+    /**
+     * Populate {@link FixedOrderRenameContext#mkdirLocs} with only {@link RemoteLocation}
+     * where parent dir doesn't exist yet.
+     * @param expectedLocs all valid destinations to mkdir
+     * @param existingDestinations getFileInfo results of parent dir
+     */
+    public void generateMkdirLocs(List<RemoteLocation> expectedLocs,
+        Map<RemoteLocation, HdfsFileStatus> existingDestinations) {
+      Set<String> existingNss =
+          existingDestinations.keySet().stream().map(RemoteLocation::getNameserviceId)
+              .collect(Collectors.toSet());
+      mkdirLocs = expectedLocs.stream().filter(x -> srcNss.contains(x.getNameserviceId()))
+          .collect(Collectors.toList());
+      mkdirLocs.removeIf(x -> existingNss.contains(x.getNameserviceId()));
+    }
+  }
+
+  private boolean renameForFixedOrder(String src, String dst, List<RemoteLocation> locs,
+      boolean isRename2, final Options.Rename[] options) throws IOException {
+    FixedOrderRenameContext context =
+        new FixedOrderRenameContext(this, src, dst, locs, isRename2, options);
+    if (context.canBypass) {
+      return fixedRenameProxyCalls(context);
+    }
+    assert context.dstInfos != null;
+    if (context.dstInfos.isEmpty()) {
+      fixedRenameValidityCheckNonexistentDst(context);
+    } else {
+      fixedRenameValidityCheckExistingDst(context);
+    }
+    if (!fixedRenamePreProxyMkdirs(context)) {
+      if (isRename2) {
+        throw new IOException(
+            String.format("Failed to create ancestor directory for rename2 from %s to %s", src,
+                dst));
+      }
+      return false;
+    }
+    return fixedRenameProxyCalls(context);
+  }
+
+  /**
+   * Check if rename is valid in the case of dst not existing on any namespace.
+   */
+  private void fixedRenameValidityCheckNonexistentDst(FixedOrderRenameContext context)
+      throws IOException {
+    // If dst doesn't exist, there's a chance parent also doesn't exist
+    String parentPath = new Path(context.dst).getParent().toString();
+    final List<RemoteLocation> parentLocs = rpcServer.getLocationsForPath(parentPath, false, false);
+    Map<RemoteLocation, HdfsFileStatus> parentInfo = getHomogeneousFileInfoAll(parentPath, parentLocs);
+    if (parentInfo.isEmpty()) {
+      throw new FileNotFoundException(
+          "Destination parent " + parentPath + " does not exist on any namespace.");
+    }
+    HdfsFileStatus firstParent = parentInfo.values().iterator().next();
+
+    if (!firstParent.isDirectory()) {
+      throw new IOException("Destination parent " + parentPath + " should not be a file.");
+    }
+    // If dst doesn't exist and parent exists, just need to create parents on
+    // namespaces where src exists, and rename should go through smoothly
+    context.mkdirPath = parentPath;
+    context.mkdirPerm = firstParent.getPermission();
+    context.generateMkdirLocs(parentLocs, parentInfo);
+  }
+
+  /**
+   * Check if rename is valid in the case of dst already existing somewhere.
+   */
+  private void fixedRenameValidityCheckExistingDst(FixedOrderRenameContext context)
+      throws IOException {
+    // getHomogeneousFileInfoAll results are homogeneous, the first entry can act as a representative
+    HdfsFileStatus firstDstStatus = context.dstInfos.values().iterator().next();
+    if (firstDstStatus.isFile()) {
+      // dst is an existing file. only rename2 supports this case
+      // Cross-check with src
+      HdfsFileStatus firstSrcStatus = context.srcInfos.values().iterator().next();
+      if (firstSrcStatus.isDirectory()) {
+        throw new IOException(
+            String.format("Cannot rename a directory %s to a file %s", context.src, context.dst));
+      }
+      // dst is an existing file. only rename2 supports overwrite this case
+      if (!context.isRename2 || context.options == null || !Arrays.asList(context.options)
+          .contains(Options.Rename.OVERWRITE)) {
+        throw new IOException("Destination already exists: " + context.dst);
+      }
+      // -- File only exists in one namespace.
+      String firstSrcNs = new ArrayList<>(context.srcInfos.keySet()).get(0).getNameserviceId();
+      String firstDstNs = new ArrayList<>(context.dstInfos.keySet()).get(0).getNameserviceId();
+      // -- fail if src file and dst file are on different ns
+      if (!firstSrcNs.equals(firstDstNs)) {
+        throw new IOException(
+            String.format("Cannot rename %s from %s to %s", context.src, firstSrcNs, firstDstNs));
+      }
+    } else if (firstDstStatus.isDirectory()) {
+      // dst is an existing dir, rename2 doesn't support this case
+      if (context.isRename2) {
+        throw new IOException("Destination already exists: " + context.dst);
+      }
+      // src will be moved inside dst
+      // path to mkdir is now dst instead of parent
+      context.mkdirPath = context.dst;
+      context.mkdirPerm = firstDstStatus.getPermission();
+      context.generateMkdirLocs(context.dstLocs, context.dstInfos);
+
+      // => true dst = "dst/src.getName()"
+      String trueDst = new Path(context.dst, new Path(context.src).getName()).toUri().getPath();
+      if (!getHomogeneousFileInfoAll(trueDst,
+          rpcServer.getLocationsForPath(trueDst, true, false)).isEmpty()) {
+        throw new IOException("Destination already exists: " + trueDst);
+      }
+    }
+    // Neither files nor dirs. Symlinks?
+  }
+
+  /**
+   * Create parent dir on all valid dst namespaces that src exists. Return false if mkdir required
+   * but there's no valid destination.
+   */
+  private boolean fixedRenamePreProxyMkdirs(FixedOrderRenameContext context) throws IOException {
+    // If no need to mkdir or already exist
+    if (context.mkdirPath == null || context.mkdirPerm == null || context.mkdirLocs == null
+        || context.mkdirLocs.isEmpty()) {
+      return true;
+    }
+
+    RemoteMethod method = new RemoteMethod("mkdirs",
+        new Class<?>[] { String.class, FsPermission.class, boolean.class }, new RemoteParam(),
+        context.mkdirPerm, true);
+    return rpcClient.invokeConcurrent(context.mkdirLocs, method, true, false, -1, Boolean.class,
+        false).values().stream().allMatch(Boolean::booleanValue);
+  }
+
+  private boolean fixedRenameProxyCalls(FixedOrderRenameContext context) throws IOException {
+    RemoteParam dstParam = getFixedRenameDestinations(context);
+    RemoteMethod method;
+    if (context.isRename2) {
+      method = new RemoteMethod("rename2",
+          new Class<?>[] { String.class, String.class, context.options.getClass() },
+          new RemoteParam(), dstParam, context.options);
+      // Will throw exception if failed
+      rpcClient.invokeConcurrent(context.srcLocs, method, true, false, -1, Void.class, false);
+      return true;
+    } else {
+      method = new RemoteMethod("rename", new Class<?>[] { String.class, String.class },
+          new RemoteParam(), dstParam);
+      return rpcClient.invokeConcurrent(context.srcLocs, method, true, false, -1, Boolean.class,
+          false).values().stream().allMatch(Boolean::booleanValue);
+    }
+  }
+
+  /**
+   * Iterate through all locs, filter out null (FNFE) values, check if
+   * all results are consistent, i.e. all dirs no files or at most 1 file.
+   */
+  private Map<RemoteLocation, HdfsFileStatus> getHomogeneousFileInfoAll(String path,
+      List<RemoteLocation> locs) throws IOException {
+    RemoteMethod method =
+        new RemoteMethod("getFileInfo", new Class<?>[] { String.class }, new RemoteParam());
+    Map<RemoteLocation, HdfsFileStatus> infos =
+        rpcClient.invokeConcurrent(locs, method, true, false, -1, HdfsFileStatus.class, true);
+    infos.values().removeIf(Objects::isNull);
+
+    List<RemoteLocation> fileNss = new ArrayList<>();
+    List<RemoteLocation> dirNss = new ArrayList<>();
+    for (Map.Entry<RemoteLocation, HdfsFileStatus> entry : infos.entrySet()) {
+      if (entry.getValue().isDirectory()) {
+        dirNss.add(entry.getKey());
+      } else {
+        fileNss.add(entry.getKey());
+      }
+    }
+    if (!dirNss.isEmpty() && !fileNss.isEmpty()) {
+      String dirNssStr =
+          dirNss.stream().map(RemoteLocation::getNameserviceId).collect(Collectors.joining(","));
+      String fileNssStr =
+          fileNss.stream().map(RemoteLocation::getNameserviceId).collect(Collectors.joining(","));
+      throw new IOException(String.format(
+          "Inconsistent state with mixed files/dirs in %s, unsafe for renaming: files on %s, dirs on %s",
+          path, fileNssStr, dirNssStr));
+    }
+    if (fileNss.size() > 1) {
+      throw new IOException(String.format(
+          "Inconsistent state with the same file %s detected on multiple namespaces %s", path,
+          fileNss));
+    }
+    return infos;
   }
 
   private RemoteParam getRenameDestinationsForTrash(
@@ -961,8 +1212,7 @@ public class RouterClientProtocol implements ClientProtocol {
       throws IOException {
     rpcServer.checkOperation(NameNode.OperationCategory.WRITE);
 
-    final List<RemoteLocation> locations =
-        rpcServer.getLocationsForPath(src, false);
+    List<RemoteLocation> locations = rpcServer.getLocationsForPath(src, false);
     RemoteMethod method = new RemoteMethod("mkdirs",
         new Class<?>[] {String.class, FsPermission.class, boolean.class},
         new RemoteParam(), masked, createParent);
@@ -2479,6 +2729,20 @@ public class RouterClientProtocol implements ClientProtocol {
       return HAServiceProtocol.HAServiceState.STANDBY;
     }
     return HAServiceProtocol.HAServiceState.ACTIVE;
+  }
+
+  /**
+   * See {@link RouterClientProtocol#getRenameDestinations(List, String)}.
+   * Exclusive use for renames under FIXED order.
+   */
+  private RemoteParam getFixedRenameDestinations(FixedOrderRenameContext context) {
+    final Map<RemoteLocation, String> dstMap = new HashMap<>();
+    for (RemoteLocation srcLocation : context.srcLocs) {
+      RemoteLocation eligibleDst = getFirstMatchingLocation(srcLocation, context.dstLocs);
+      assert eligibleDst != null;
+      dstMap.put(srcLocation, eligibleDst.getDest());
+    }
+    return new RemoteParam(dstMap);
   }
 
   /**
