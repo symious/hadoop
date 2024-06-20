@@ -3638,12 +3638,12 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     final FSPermissionChecker pc = getPermissionChecker();
     FSPermissionChecker.setOperationType(OperationName.CONTENT_SUMMARY);
     try {
-      readLock(FSNamesystemLockMode.FS, OperationName.CONTENT_SUMMARY);
+      readLock(FSNamesystemLockMode.GLOBAL, OperationName.CONTENT_SUMMARY);
       try {
         checkOperation(OperationCategory.READ);
         cs = FSDirStatAndListingOp.getContentSummary(dir, pc, src);
       } finally {
-        readUnlock(FSNamesystemLockMode.FS, OperationName.CONTENT_SUMMARY);
+        readUnlock(FSNamesystemLockMode.GLOBAL, OperationName.CONTENT_SUMMARY);
       }
     } catch (AccessControlException ace) {
       logAuditEvent(false, OperationName.CONTENT_SUMMARY, src);
