@@ -280,6 +280,7 @@ class BlockReceiver implements Closeable {
     } catch (ReplicaNotFoundException bne) {
       throw bne;
     } catch(IOException ioe) {
+      datanode.checkAndHandleAbnormalVolume(block, ioe);
       if (replicaInfo != null) {
         replicaInfo.releaseAllBytesReserved();
       }
@@ -844,6 +845,7 @@ class BlockReceiver implements Closeable {
           manageWriterOsCache(offsetInBlock);
         }
       } catch (IOException iex) {
+        datanode.checkAndHandleAbnormalVolume(block, iex);
         // Volume error check moved to FileIoProvider
         throw iex;
       }

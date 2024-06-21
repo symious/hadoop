@@ -901,6 +901,11 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
     return null;
   }
 
+  @Override
+  public String[] getAbnormalStorageLocations() {
+    return null;
+  }
+
   @Override // FSDatasetMBean
   public long getLastVolumeFailureDate() {
     return 0L;
@@ -1254,6 +1259,11 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
 
   @Override
   public void handleVolumeFailures(Set<FsVolumeSpi> failedVolumes) {
+  }
+
+  @Override
+  public void checkAndHandleAbnormalVolume(FsVolumeSpi volume, Exception e) {
+    // do nothing
   }
 
   @Override // FsDatasetSpi

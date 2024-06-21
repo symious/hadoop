@@ -1374,6 +1374,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
       fileNames =
           fileIoProvider.listDirectory(this, dir, BlockDirFilter.INSTANCE);
     } catch (IOException ioe) {
+      dataset.checkAndHandleAbnormalVolume(this, ioe);
       LOG.warn("Exception occurred while compiling report", ioe);
       // Volume error check moved to FileIoProvider.
       // Ignore this directory and proceed.

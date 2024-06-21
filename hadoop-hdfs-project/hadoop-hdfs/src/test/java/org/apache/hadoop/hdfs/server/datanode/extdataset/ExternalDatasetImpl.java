@@ -252,6 +252,11 @@ public class ExternalDatasetImpl implements FsDatasetSpi<ExternalVolumeImpl> {
   }
 
   @Override
+  public void checkAndHandleAbnormalVolume(FsVolumeSpi volume, Exception e) {
+    // do nothing
+  }
+
+  @Override
   public void shutdown() {
   }
 
@@ -378,6 +383,11 @@ public class ExternalDatasetImpl implements FsDatasetSpi<ExternalVolumeImpl> {
 
   @Override
   public String[] getFailedStorageLocations() {
+    return null;
+  }
+
+  @Override
+  public String[] getAbnormalStorageLocations() {
     return null;
   }
 

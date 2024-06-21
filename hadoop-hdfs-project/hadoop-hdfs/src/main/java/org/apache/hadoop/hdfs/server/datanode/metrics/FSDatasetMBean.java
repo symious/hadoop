@@ -86,6 +86,12 @@ public interface FSDatasetMBean extends MetricsSource {
   String[] getFailedStorageLocations();
 
   /**
+   * Returns each storage location that contains some damaged tracks.
+   * @return each storage location that is abnormal but has not been marked as failure.
+   */
+  String[] getAbnormalStorageLocations();
+
+  /**
    * Returns the date/time of the last volume failure in milliseconds since
    * epoch.
    * @return date/time of last volume failure in milliseconds since epoch

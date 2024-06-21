@@ -133,6 +133,8 @@ import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.hadoop.hdfs.server.datanode.DataNode.EIO_ERROR;
+
 /**************************************************
  * FSDataset manages a set of data blocks.  Each block
  * has a unique name and an extent on disk.
@@ -674,6 +676,16 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
     }
     return failedStorageLocations.toArray(
         new String[failedStorageLocations.size()]);
+  }
+
+  @Override // FSDatasetMBean
+  public String[] getAbnormalStorageLocations() {
+    VolumeFailureInfo[] infos = volumes.getAbnormalVolumeInfos();
+    List<String> abnormalStorageLocations = Lists.newArrayListWithCapacity(infos.length);
+    for (VolumeFailureInfo info: infos) {
+      abnormalStorageLocations.add(info.getFailedStorageLocation().getNormalizedUri().toString());
+    }
+    return abnormalStorageLocations.toArray(new String[0]);
   }
 
   @Override // FSDatasetMBean
@@ -2401,7 +2413,13 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   public void handleVolumeFailures(Set<FsVolumeSpi> failedVolumes) {
     volumes.handleVolumeFailures(failedVolumes);
   }
-    
+
+  public void checkAndHandleAbnormalVolume(FsVolumeSpi abnormalVolume, Exception e) {
+    if (e.getMessage().contains(EIO_ERROR) && abnormalVolume != null) {
+      datanode.getMetrics().incrNumInputOutputError();
+      volumes.handleAbnormalVolumes(abnormalVolume);
+    }
+  }
 
   @Override // FsDatasetSpi
   public String toString() {

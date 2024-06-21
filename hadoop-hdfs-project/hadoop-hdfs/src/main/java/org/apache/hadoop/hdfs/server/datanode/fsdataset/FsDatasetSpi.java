@@ -511,6 +511,14 @@ public interface FsDatasetSpi<V extends FsVolumeSpi> extends FSDatasetMBean {
   void handleVolumeFailures(Set<FsVolumeSpi> failedVolumes);
 
   /**
+   * Check if the volume is abnormal according to the exception.
+   * If the volume is abnormal, and handle it.
+   * @param volume the volume need to be checked.
+   * @param e the given exception.
+   */
+  void checkAndHandleAbnormalVolume(FsVolumeSpi volume, Exception e);
+
+  /**
    * Shutdown the FSDataset
    */
   void shutdown();

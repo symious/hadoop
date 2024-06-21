@@ -208,6 +208,8 @@ public class DataNodeMetrics {
   private MutableCounterLong sumOfActorCommandQueueLength;
   @Metric("Num of processed commands of all BPServiceActors")
   private MutableCounterLong numProcessedCommands;
+  @Metric("Num of input/output error")
+  private MutableCounterLong numInputOutputError;
   @Metric("Rate of processed commands of all BPServiceActors")
   private MutableRate processedCommandsOp;
   @Metric MutableCounterLong packetsReceived;
@@ -819,6 +821,10 @@ public class DataNodeMetrics {
 
   public void incrNumProcessedCommands() {
     numProcessedCommands.incr();
+  }
+
+  public void incrNumInputOutputError() {
+    numInputOutputError.incr();
   }
 
   /**

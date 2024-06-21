@@ -56,6 +56,14 @@ class FsVolumeList {
   private final Map<StorageLocation, VolumeFailureInfo> volumeFailureInfos =
       Collections.synchronizedMap(
           new TreeMap<StorageLocation, VolumeFailureInfo>());
+  /**
+   * This map is used to store all abnormal volumes which may contains some damaged tracks.
+   * These volumes are detected by reading or writing processes,
+   * but datanode doesn't mark them to failure volumes. Administrator can let datanode to mark them
+   * as failures volumes and move them from this map to volumeFailureInfos.
+   */
+  private final Map<StorageLocation, VolumeFailureInfo> abnormalVolumeInfos =
+      Collections.synchronizedMap(new TreeMap<>());
   private final ConcurrentLinkedQueue<FsVolumeImpl> volumesBeingRemoved =
       new ConcurrentLinkedQueue<>();
   private final AutoCloseableLock checkDirsLock;
@@ -270,6 +278,25 @@ class FsVolumeList {
   }
 
   /**
+   * Updates the abnormal volume info in the abnormalVolumeInfos Map.
+   *
+   * @param abnormalVolume volume marked abnormal.
+   */
+  void handleAbnormalVolumes(FsVolumeSpi abnormalVolume) {
+    try (AutoCloseableLock ignoredLock = checkDirsLock.acquire()) {
+      FsVolumeImpl fsv = (FsVolumeImpl) abnormalVolume;
+      try (FsVolumeReference ignoredRef = fsv.obtainReference()) {
+        addAbnormalVolumeInfo(fsv);
+      } catch (ClosedChannelException e) {
+        FsDatasetImpl.LOG.warn("Caught exception when obtaining " +
+            "reference count on handling abnormal volume", e);
+      } catch (IOException e) {
+        FsDatasetImpl.LOG.error("Unexpected IOException", e);
+      }
+    }
+  }
+
+  /**
    * Wait for the reference of the volume removed from a previous
    * {@link #removeVolume(FsVolumeImpl)} call to be released.
    *
@@ -388,6 +415,11 @@ class FsVolumeList {
     return infos.toArray(new VolumeFailureInfo[infos.size()]);
   }
 
+  VolumeFailureInfo[] getAbnormalVolumeInfos() {
+    Collection<VolumeFailureInfo> infos = abnormalVolumeInfos.values();
+    return infos.toArray(new VolumeFailureInfo[0]);
+  }
+
   /**
    * Check whether the reference of the volume from a previous
    * {@link #removeVolume(FsVolumeImpl)} call is released.
@@ -411,10 +443,23 @@ class FsVolumeList {
     // volume because of repeated DataNode reconfigure with same list
     // of volumes. Ignoring update on failed volume so as to preserve
     // old failed capacity details in the map.
-    if (!volumeFailureInfos.containsKey(volumeFailureInfo
-        .getFailedStorageLocation())) {
-      volumeFailureInfos.put(volumeFailureInfo.getFailedStorageLocation(),
-          volumeFailureInfo);
+    StorageLocation location = volumeFailureInfo.getFailedStorageLocation();
+    if (!volumeFailureInfos.containsKey(location)) {
+      volumeFailureInfos.put(location, volumeFailureInfo);
+      abnormalVolumeInfos.remove(location);
+    }
+  }
+
+  /**
+   * Try to make a FsVolumeImpl as an abnormal volume if this volume is marked
+   * as an abnormal or a failure volume.
+   * @param vol the abnormal volume.
+   */
+  void addAbnormalVolumeInfo(FsVolumeImpl vol) {
+    StorageLocation location = vol.getStorageLocation();
+    VolumeFailureInfo abnormalInfo = new VolumeFailureInfo(location, Time.now(), vol.getCapacity());
+    if (!volumeFailureInfos.containsKey(location) && !abnormalVolumeInfos.containsKey(location)) {
+      abnormalVolumeInfos.put(location, abnormalInfo);
     }
   }
 
@@ -427,6 +472,7 @@ class FsVolumeList {
 
   void removeVolumeFailureInfo(StorageLocation location) {
     volumeFailureInfos.remove(location);
+    abnormalVolumeInfos.remove(location);
   }
 
   void addBlockPool(final String bpid, final Configuration conf) throws IOException {

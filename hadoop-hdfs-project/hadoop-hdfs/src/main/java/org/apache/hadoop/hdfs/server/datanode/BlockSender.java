@@ -54,6 +54,7 @@ import org.apache.hadoop.util.DataChecksum;
 import org.apache.hadoop.util.Time;
 import org.apache.htrace.core.TraceScope;
 
+import static org.apache.hadoop.hdfs.server.datanode.DataNode.EIO_ERROR;
 import static org.apache.hadoop.io.nativeio.NativeIO.POSIX.POSIX_FADV_DONTNEED;
 import static org.apache.hadoop.io.nativeio.NativeIO.POSIX.POSIX_FADV_SEQUENTIAL;
 
@@ -186,7 +187,6 @@ class BlockSender implements java.io.Closeable {
   // is likely to result in minimal extra IO.
   private static final long CHUNK_SIZE = 512;
 
-  private static final String EIO_ERROR = "Input/output error";
   /**
    * Constructor
    * 
@@ -437,6 +437,7 @@ class BlockSender implements java.io.Closeable {
       ris = new ReplicaInputStreams(
           blockIn, checksumIn, volumeRef, fileIoProvider);
     } catch (IOException ioe) {
+      datanode.checkAndHandleAbnormalVolume(block, ioe);
       IOUtils.cleanupWithLogger(null, volumeRef);
       IOUtils.closeStream(this);
       org.apache.commons.io.IOUtils.closeQuietly(blockIn);
@@ -603,6 +604,7 @@ class BlockSender implements java.io.Closeable {
         if (ioe.getMessage().startsWith(EIO_ERROR)) {
           throw new DiskFileCorruptException("A disk IO error occurred", ioe);
         }
+        datanode.checkAndHandleAbnormalVolume(block, ioe);
         throw ioe;
       }
 
@@ -632,6 +634,7 @@ class BlockSender implements java.io.Closeable {
         out.write(buf, headerOff, dataOff + dataLen - headerOff);
       }
     } catch (IOException e) {
+      datanode.checkAndHandleAbnormalVolume(block, e);
       if (e instanceof SocketTimeoutException) {
         /*
          * writing to client timed out.  This happens if the client reads
@@ -699,6 +702,9 @@ class BlockSender implements java.io.Closeable {
       LOG.warn(" Could not read or failed to verify checksum for data"
           + " at offset " + offset + " for block " + block, e);
       ris.closeChecksumStream();
+
+      datanode.checkAndHandleAbnormalVolume(block, e);
+
       if (corruptChecksumOk) {
         if (checksumLen > 0) {
           // Just fill the array with zeros.

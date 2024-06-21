@@ -336,6 +336,8 @@ public class DataNode extends ReconfigurableBase
 
   public static final String LOCAL_HOST = "127.0.0.1";
 
+  public static final String EIO_ERROR = "Input/output error";
+
   public static final String DN_CLIENTTRACE_FORMAT =
         "src: %s" +      // src IP
         ", dest: %s" +   // dst IP
@@ -2314,6 +2316,14 @@ public class DataNode extends ReconfigurableBase
       if (data == null) {
         data = factory.newInstance(this, storage, getConf());
       }
+    }
+  }
+
+  public void checkAndHandleAbnormalVolume(ExtendedBlock block, Exception e) {
+    if (data != null) {
+      // Obtain a reference before reading data
+      FsVolumeSpi volume = data.getVolume(block);
+      data.checkAndHandleAbnormalVolume(volume, e);
     }
   }
 
@@ -4588,6 +4598,7 @@ public class DataNode extends ReconfigurableBase
             + dstBlock
             + "( " + dstBlpi.getBlockPath() + " " + dstBlpi.getMetaPath() + " ) ");
       } catch (Exception e) {
+        checkAndHandleAbnormalVolume(srcBlock, e);
         LOG.warn("Local block copy for src : " + srcBlock.getBlockName()
             + ", dst : " + dstBlock.getBlockName() + " failed", e);
         throw e;

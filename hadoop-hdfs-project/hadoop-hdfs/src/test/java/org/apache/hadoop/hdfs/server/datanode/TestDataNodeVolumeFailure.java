@@ -898,6 +898,11 @@ public class TestDataNodeVolumeFailure {
     }
 
     @Override
+    public void checkAndHandleAbnormalVolume(FsVolumeSpi volume, Exception e) {
+      // do nothing
+    }
+
+    @Override
     public VolumeFailureSummary getVolumeFailureSummary() {
       if (failedStorageLocations != null) {
         return new VolumeFailureSummary(failedStorageLocations, 0, 0);
