@@ -50,14 +50,18 @@ public class NioInetPeer implements Peer {
   
   private final String localHostAddress;
 
-  public NioInetPeer(Socket socket) throws IOException {
+  public NioInetPeer(Socket socket, boolean resolveHostName) throws IOException {
     this.socket = socket;
     this.in = new SocketInputStream(socket.getChannel(), 0);
     this.out = new SocketOutputStream(socket.getChannel(), 0);
     this.isLocal = socket.getInetAddress().equals(socket.getLocalAddress());
     // The reason to use InetAddress is that socket.getLocalAddress()
     // may return "0.0.0.0" (isLocal is also not correct in such cases).
-    this.localHostAddress = InetAddress.getLocalHost().getHostAddress();
+    if (resolveHostName) {
+      this.localHostAddress = InetAddress.getLocalHost().getHostAddress();
+    } else {
+      this.localHostAddress = socket.getLocalAddress().getHostAddress();
+    }
   }
 
   @Override

@@ -39,14 +39,18 @@ public class BasicInetPeer implements Peer {
   private final boolean isLocal;
   private final String localHostAddress;
 
-  public BasicInetPeer(Socket socket) throws IOException {
+  public BasicInetPeer(Socket socket, boolean resolveHostName) throws IOException {
     this.socket = socket;
     this.out = socket.getOutputStream();
     this.in = socket.getInputStream();
     this.isLocal = socket.getInetAddress().equals(socket.getLocalAddress());
-    // The reason to use InetAddress is that socket.getLocalAddress()
-    // may return "0.0.0.0" (isLocal is also not correct in such cases).
-    this.localHostAddress = InetAddress.getLocalHost().getHostAddress();
+    if (resolveHostName) {
+      // The reason to use InetAddress is that socket.getLocalAddress()
+      // may return "0.0.0.0" (isLocal is also not correct in such cases).
+      this.localHostAddress = InetAddress.getLocalHost().getHostAddress();
+    } else {
+      this.localHostAddress = socket.getLocalAddress().getHostAddress();
+    }
   }
 
   @Override
