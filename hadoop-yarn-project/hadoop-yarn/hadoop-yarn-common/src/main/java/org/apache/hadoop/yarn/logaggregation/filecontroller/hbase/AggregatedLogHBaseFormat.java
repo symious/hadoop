@@ -341,9 +341,12 @@ public class AggregatedLogHBaseFormat {
   }
 
   public static byte[] getRowKey(ApplicationId appId, ContainerId containerId) {
-    byte[] first = Bytes.toBytes(Long.MAX_VALUE - appId.getId());
+    int id = appId.getId();
+    int suffix = id % 1000;
+    String strSuffix = String.format("%03d", suffix);
+    StringBuilder builder = new StringBuilder();
+    byte[] first = builder.append(strSuffix).append(":").toString().getBytes();
     byte[] second = encodeAppId(appId);
-    //    byte[] third = inetAddress.getAddress();
     byte[] third = encodeContainerId(containerId);
     return join(first, second, third);
   }
