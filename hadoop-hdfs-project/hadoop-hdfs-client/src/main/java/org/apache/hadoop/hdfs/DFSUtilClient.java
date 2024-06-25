@@ -682,7 +682,11 @@ public class DFSUtilClient {
     return new ReconfigurationProtocolTranslatorPB(addr, ticket, conf, factory);
   }
 
-  public static Peer peerFromSocket(Socket socket)
+  public static Peer peerFromSocket(Socket socket) throws IOException {
+    return peerFromSocket(socket, false);
+  }
+
+  public static Peer peerFromSocket(Socket socket, boolean resolveLocalHost)
       throws IOException {
     Peer peer;
     boolean success = false;
@@ -703,9 +707,9 @@ public class DFSUtilClient {
       socket.setTcpNoDelay(true);
       SocketChannel channel = socket.getChannel();
       if (channel == null) {
-        peer = new BasicInetPeer(socket);
+        peer = new BasicInetPeer(socket, resolveLocalHost);
       } else {
-        peer = new NioInetPeer(socket);
+        peer = new NioInetPeer(socket, resolveLocalHost);
       }
       success = true;
       return peer;

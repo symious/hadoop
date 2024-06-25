@@ -82,7 +82,7 @@ public class TcpPeerServer implements PeerServer {
 
   @Override
   public Peer accept() throws IOException, SocketTimeoutException {
-    Peer peer = DFSUtilClient.peerFromSocket(serverSocket.accept());
+    Peer peer = DFSUtilClient.peerFromSocket(serverSocket.accept(), true);
     return peer;
   }
 
