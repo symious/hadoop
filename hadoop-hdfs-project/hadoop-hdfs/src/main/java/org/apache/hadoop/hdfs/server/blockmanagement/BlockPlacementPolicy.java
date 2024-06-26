@@ -25,8 +25,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.hadoop.hdfs.server.blockmanagement.utils.BlockPlacementCommonUtil;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
-import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.AddBlockFlag;
@@ -354,18 +354,6 @@ public abstract class BlockPlacementPolicy {
     }
   }
 
-  protected <T> DatanodeInfo getDatanodeInfo(T datanode) {
-    Preconditions.checkArgument(
-        datanode instanceof DatanodeInfo ||
-        datanode instanceof DatanodeStorageInfo,
-        "class " + datanode.getClass().getName() + " not allowed");
-    if (datanode instanceof DatanodeInfo) {
-      return ((DatanodeInfo)datanode);
-    } else {
-      return ((DatanodeStorageInfo)datanode).getDatanodeDescriptor();
-    }
-  }
-
   /**
    * Get rack string from a data node
    * @return rack of data node
@@ -392,7 +380,7 @@ public abstract class BlockPlacementPolicy {
       final List<T> moreThanOne,
       final List<T> exactlyOne) {
     for(T s: availableSet) {
-      final String rackName = getRack(getDatanodeInfo(s));
+      final String rackName = getRack(BlockPlacementCommonUtil.getDatanodeInfo(s));
       List<T> storageList = rackMap.get(rackName);
       if (storageList == null) {
         storageList = new ArrayList<>();
@@ -401,7 +389,7 @@ public abstract class BlockPlacementPolicy {
       storageList.add(s);
     }
     for (T candidate : candidates) {
-      final String rackName = getRack(getDatanodeInfo(candidate));
+      final String rackName = getRack(BlockPlacementCommonUtil.getDatanodeInfo(candidate));
       if (rackMap.get(rackName).size() == 1) {
         // exactlyOne contains nodes on rack with only one replica
         exactlyOne.add(candidate);

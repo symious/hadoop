@@ -29,6 +29,7 @@ import static org.apache.hadoop.util.Time.monotonicNow;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.hadoop.hdfs.server.blockmanagement.utils.BlockPlacementCommonUtil;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
@@ -1317,19 +1318,8 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
       return false; // delHint storage type is not an excess type
     } else {
       // check if removing delHint reduces the number of racks
-      return notReduceNumOfGroups(moreThanOne, delHint, added);
+      return BlockPlacementCommonUtil.notReduceNumOfGroups(moreThanOne, delHint, added);
     }
-  }
-
-  // Check if moving from source to target will reduce the number of
-  // groups. The groups could be based on racks or upgrade domains.
-  <T> boolean notReduceNumOfGroups(List<T> moreThanOne, T source, T target) {
-    if (moreThanOne.contains(source)) {
-      return true; // source and some other nodes are under the same group.
-    } else if (target != null && !moreThanOne.contains(target)) {
-      return true; // the added node adds a new group.
-    }
-    return false; // removing delHint reduces the number of groups.
   }
 
   @Override
@@ -1339,7 +1329,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     final List<DatanodeInfo> moreThanOne = new ArrayList<>();
     final List<DatanodeInfo> exactlyOne = new ArrayList<>();
     splitNodesWithRack(locs, locs, rackMap, moreThanOne, exactlyOne);
-    return notReduceNumOfGroups(moreThanOne, source, target);
+    return BlockPlacementCommonUtil.notReduceNumOfGroups(moreThanOne, source, target);
   }
 
   /**
