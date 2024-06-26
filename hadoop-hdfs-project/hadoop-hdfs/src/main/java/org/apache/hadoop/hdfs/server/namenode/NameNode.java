@@ -137,6 +137,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_IGNORE_MISS_REPLICA_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_MAX_NODES_TO_REPORT_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_PEER_STATS_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_PEER_STATS_ENABLED_KEY;
@@ -496,7 +497,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_DR_DATACENTERS_KEY,
           DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY,
           DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY,
-          DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY));
+          DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY,
+          DFS_BLOCK_IGNORE_MISS_REPLICA_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2605,6 +2607,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigureEnableFaultyDCMonitor(newVal);
     } else if (property.equals(DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_KEY)) {
       return reconfigureFaultyDCNumberThreshold(newVal);
+    } else if (property.equals(DFS_BLOCK_IGNORE_MISS_REPLICA_KEY)) {
+      return reconfigureIgnoreMissReplica(newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -2689,6 +2693,17 @@ public class NameNode extends ReconfigurableBase implements
   private void reconfBlockPlacementPolicy() {
     getNamesystem().getBlockManager()
         .refreshBlockPlacementPolicy(getNewConf());
+  }
+
+  private String reconfigureIgnoreMissReplica(String newVal) {
+    boolean ignoreMissReplica;
+    if (newVal == null) {
+      ignoreMissReplica = DFSConfigKeys.DFS_BLOCK_IGNORE_MISS_REPLICA_DEFAULT;
+    } else {
+      ignoreMissReplica = Boolean.parseBoolean(newVal);
+    }
+    this.namesystem.getBlockManager().setIgnoreMissReplica(ignoreMissReplica);
+    return String.valueOf(ignoreMissReplica);
   }
 
   private int adjustNewVal(int defaultVal, String newVal) {

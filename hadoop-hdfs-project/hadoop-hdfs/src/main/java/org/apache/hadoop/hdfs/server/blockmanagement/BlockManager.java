@@ -206,6 +206,8 @@ public class BlockManager implements BlockStatsMXBean {
   private volatile long lowRedundancyBlocksCount = 0L;
   private volatile long scheduledReplicationBlocksCount = 0L;
 
+  private volatile boolean ignoreMissReplica = false;
+
   /** flag indicating whether replication queues have been initialized */
   private boolean initializedReplQueues;
 
@@ -725,6 +727,10 @@ public class BlockManager implements BlockStatsMXBean {
 
     bmSafeMode = new BlockManagerSafeMode(this, namesystem, haEnabled, conf);
 
+    this.ignoreMissReplica = conf.getBoolean(
+        DFSConfigKeys.DFS_BLOCK_IGNORE_MISS_REPLICA_KEY,
+        DFSConfigKeys.DFS_BLOCK_IGNORE_MISS_REPLICA_DEFAULT);
+
     int queueSize = conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_BLOCKREPORT_QUEUE_SIZE_KEY,
         DFSConfigKeys.DFS_NAMENODE_BLOCKREPORT_QUEUE_SIZE_DEFAULT);
@@ -762,6 +768,7 @@ public class BlockManager implements BlockStatsMXBean {
     LOG.info("redundancyRecheckInterval  = {}ms", redundancyRecheckIntervalMs);
     LOG.info("encryptDataTransfer        = {}", encryptDataTransfer);
     LOG.info("maxNumBlocksToLog          = {}", maxNumBlocksToLog);
+    LOG.info("ignoreMissReplica          = {}", ignoreMissReplica);
   }
 
   public void setFaultyDCRecheckIntervalMs(long newInterval) {
@@ -2479,10 +2486,15 @@ public class BlockManager implements BlockStatsMXBean {
   // the expected redundancy.
   boolean hasEnoughEffectiveReplicas(BlockInfo block,
       NumberReplicas numReplicas, int pendingReplicaNum) {
+    return hasEnoughEffectiveReplicas(block, numReplicas, pendingReplicaNum, false);
+  }
+
+  boolean hasEnoughEffectiveReplicas(BlockInfo block,
+      NumberReplicas numReplicas, int pendingReplicaNum, boolean ignoreMissReplica) {
     int required = getExpectedLiveRedundancyNum(block, numReplicas);
     int numEffectiveReplicas = numReplicas.liveReplicas() + pendingReplicaNum;
     return (numEffectiveReplicas >= required) &&
-        (pendingReplicaNum > 0 || isPlacementPolicySatisfied(block));
+        (pendingReplicaNum > 0 || isPlacementPolicySatisfied(block, ignoreMissReplica));
   }
 
   // Generate replica rules for DR.
@@ -3420,7 +3432,8 @@ public class BlockManager implements BlockStatsMXBean {
               "in block map.", b);
           continue;
         }
-        MisReplicationResult res = processMisReplicatedBlock(bi, rescannedMisreplicatedBlocks);
+        MisReplicationResult res = processMisReplicatedBlock(bi,
+            rescannedMisreplicatedBlocks, this.ignoreMissReplica);
         LOG.debug("BLOCK* rescanPostponedMisreplicatedBlocks: " +
             "Re-scanned block {}, result is {}", b, res);
         if (res == MisReplicationResult.POSTPONE) {
@@ -4507,7 +4520,7 @@ public class BlockManager implements BlockStatsMXBean {
       try {
         while (processed < numBlocksPerIteration && blocksItr.hasNext()) {
           BlockInfo block = blocksItr.next();
-          MisReplicationResult res = processMisReplicatedBlock(block);
+          MisReplicationResult res = processMisReplicatedBlock(block, this.ignoreMissReplica);
           switch (res) {
           case UNDER_REPLICATED:
             LOG.trace("under replicated block {}: {}", block, res);
@@ -4652,7 +4665,7 @@ public class BlockManager implements BlockStatsMXBean {
         try {
           while (iter.hasNext() && processed < limit) {
             BlockInfo blk = iter.next();
-            MisReplicationResult r = processMisReplicatedBlock(blk);
+            MisReplicationResult r = processMisReplicatedBlock(blk, false);
             processed++;
             LOG.debug("BLOCK* processMisReplicatedBlocks: " +
                     "Re-scanned block {}, result is {}", blk, r);
@@ -4675,12 +4688,13 @@ public class BlockManager implements BlockStatsMXBean {
    * appropriate queues if necessary, and returns a result code indicating
    * what happened with it.
    */
-  private MisReplicationResult processMisReplicatedBlock(BlockInfo block) {
-    return processMisReplicatedBlock(block, postponedMisreplicatedBlocks);
+  private MisReplicationResult processMisReplicatedBlock(
+      BlockInfo block, boolean ignoreMissReplica) {
+    return processMisReplicatedBlock(block, postponedMisreplicatedBlocks, ignoreMissReplica);
   }
 
   private MisReplicationResult processMisReplicatedBlock(BlockInfo block,
-      Collection<Block> postponeBlocks) {
+      Collection<Block> postponeBlocks, boolean ignoreMissReplica) {
     if (block.isDeleted()) {
       // block does not belong to any file
       addToInvalidates(block);
@@ -4696,7 +4710,7 @@ public class BlockManager implements BlockStatsMXBean {
     NumberReplicas num = countNodes(block);
     final int numCurrentReplica = num.liveReplicas();
     // add to low redundancy queue if need to be
-    if (isNeededReconstruction(block, num)) {
+    if (isNeededReconstruction(block, num, ignoreMissReplica)) {
       if (neededReconstruction.add(block, numCurrentReplica,
           num.readOnlyReplicas(), num.outOfServiceReplicas(),
           expectedRedundancy)) {
@@ -5524,6 +5538,19 @@ public class BlockManager implements BlockStatsMXBean {
     return false;
   }
 
+  public void setIgnoreMissReplica(boolean ignoreMissReplica) {
+    if (this.ignoreMissReplica != ignoreMissReplica) {
+      LOG.info("Will reset the ignoreMissReplica from {} to {}.",
+          this.ignoreMissReplica, ignoreMissReplica);
+      this.ignoreMissReplica = ignoreMissReplica;
+    }
+  }
+
+  @VisibleForTesting
+  public boolean isIgnoreMissReplica() {
+    return this.ignoreMissReplica;
+  }
+
   public int getActiveBlockCount() {
     return blocksMap.size();
   }
@@ -5683,8 +5710,20 @@ public class BlockManager implements BlockStatsMXBean {
   }
 
   boolean isPlacementPolicySatisfied(BlockInfo storedBlock) {
-    return getBlockPlacementStatus(storedBlock, null)
-        .isPlacementPolicySatisfied();
+      return isPlacementPolicySatisfied(storedBlock, false);
+  }
+
+  boolean isPlacementPolicySatisfied(BlockInfo storedBlock, boolean ignoreMissReplica) {
+    BlockPlacementStatus status = getBlockPlacementStatus(storedBlock, null);
+    if (ignoreMissReplica && status instanceof BlockPlacementStatusWithUpgradeDomain) {
+      boolean result = ((BlockPlacementStatusWithUpgradeDomain) status)
+          .isPlacementPolicySatisfiedViaParent();
+      LOG.debug("Use the parent placementPolicy to verify PolicySatisfied for {} and result is {}.",
+          storedBlock, result);
+      return result;
+    } else {
+        return status.isPlacementPolicySatisfied();
+    }
   }
 
   BlockPlacementStatus getBlockPlacementStatus(BlockInfo storedBlock) {
@@ -5751,8 +5790,13 @@ public class BlockManager implements BlockStatsMXBean {
   }
 
   boolean isNeededReconstruction(BlockInfo storedBlock,
-      NumberReplicas numberReplicas) {
-    return isNeededReconstruction(storedBlock, numberReplicas, 0);
+       NumberReplicas numberReplicas) {
+    return isNeededReconstruction(storedBlock, numberReplicas, 0, false);
+  }
+
+  boolean isNeededReconstruction(BlockInfo storedBlock,
+      NumberReplicas numberReplicas, boolean ignoreMissReplica) {
+    return isNeededReconstruction(storedBlock, numberReplicas, 0, ignoreMissReplica);
   }
 
   /**
@@ -5761,8 +5805,14 @@ public class BlockManager implements BlockStatsMXBean {
    */
   boolean isNeededReconstruction(BlockInfo storedBlock,
       NumberReplicas numberReplicas, int pending) {
+    return isNeededReconstruction(storedBlock, numberReplicas, pending, false);
+  }
+
+  boolean isNeededReconstruction(BlockInfo storedBlock,
+      NumberReplicas numberReplicas, int pending, boolean ignoreMissReplica) {
     return storedBlock.isComplete() &&
-        !hasEnoughEffectiveReplicas(storedBlock, numberReplicas, pending);
+        !hasEnoughEffectiveReplicas(storedBlock, numberReplicas, pending,
+            ignoreMissReplica);
   }
 
   // Exclude maintenance, but make sure it has minimal live replicas
@@ -6052,7 +6102,7 @@ public class BlockManager implements BlockStatsMXBean {
 
   /**
    * A simple result enum for the result of
-   * {@link BlockManager#processMisReplicatedBlock(BlockInfo)}.
+   * {@link BlockManager#processMisReplicatedBlock(BlockInfo, boolean)}.
    */
   enum MisReplicationResult {
     /** The block should be invalidated since it belongs to a deleted file. */

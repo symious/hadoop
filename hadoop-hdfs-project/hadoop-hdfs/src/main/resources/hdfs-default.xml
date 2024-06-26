@@ -673,6 +673,15 @@
   </description>
 </property>
 
+  <property>
+    <name>dfs.block.ignore.miss.replica</name>
+    <value>false</value>
+    <description>If the value is true, NameNode will just ignore the blockPlacement
+      during processMisReplicatedBlocks after the namenode become active when
+      the blockPolicy is BlockPlacementPolicyWithUpgradeDomain
+    </description>
+  </property>
+
 <property>
   <name>dfs.namenode.replication.min</name>
   <value>1</value>

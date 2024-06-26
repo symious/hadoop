@@ -58,6 +58,10 @@ public class BlockPlacementStatusWithUpgradeDomain implements
         isUpgradeDomainPolicySatisfied();
   }
 
+  public boolean isPlacementPolicySatisfiedViaParent() {
+    return parentBlockPlacementStatus.isPlacementPolicySatisfied();
+  }
+
   private boolean isUpgradeDomainPolicySatisfied() {
     if (numberOfReplicas <= upgradeDomainFactor) {
       return (numberOfReplicas <= upgradeDomains.size());

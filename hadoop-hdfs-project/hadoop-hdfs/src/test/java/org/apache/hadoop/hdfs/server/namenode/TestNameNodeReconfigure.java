@@ -34,6 +34,8 @@ import org.junit.After;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_IGNORE_MISS_REPLICA_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_BLOCK_IGNORE_MISS_REPLICA_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_PEER_STATS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HA_TAILEDITS_ONLY_DURABLE_TXNS_ENABLE_KEY;
@@ -1116,6 +1118,22 @@ public class TestNameNodeReconfigure {
 
     nameNode.reconfigurePropertyImpl(DFSConfigKeys.DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY, "false");
     assertFalse(blockManager.getEnableFaultyDCMonitor());
+  }
+
+
+  @Test
+  public void testReconfigureIgnoreMissReplica()
+      throws ReconfigurationException {
+    NameNode nameNode = cluster.getNameNode(0);
+    assertFalse(nameNode.getConf().getBoolean(
+        DFS_BLOCK_IGNORE_MISS_REPLICA_KEY,
+        DFS_BLOCK_IGNORE_MISS_REPLICA_DEFAULT));
+    nameNode.reconfigureProperty(DFS_BLOCK_IGNORE_MISS_REPLICA_KEY,
+        Boolean.toString(true));
+    assertTrue(nameNode.getConf().getBoolean(
+        DFS_BLOCK_IGNORE_MISS_REPLICA_KEY,
+        DFS_BLOCK_IGNORE_MISS_REPLICA_DEFAULT));
+    assertTrue(nameNode.getNamesystem().getBlockManager().isIgnoreMissReplica());
   }
 
 }
