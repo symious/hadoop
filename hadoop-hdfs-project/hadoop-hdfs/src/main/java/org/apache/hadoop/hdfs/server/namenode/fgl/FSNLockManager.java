@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.namenode.fgl;
 
-import com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 

@@ -84,7 +84,6 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MSYNC_RPC_ADDRES
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSUtilClient.addSuffix;
-import static org.apache.hadoop.hdfs.DFSUtilClient.getConfValue;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_HA_NAMENODES_KEY_PREFIX;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_NAMENODE_RPC_ADDRESS_AUXILIARY_KEY;
 import static org.apache.hadoop.hdfs.protocol.datatransfer.BlockConstructionStage.PIPELINE_SETUP_APPEND_RECOVERY;
@@ -128,7 +127,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -164,12 +162,18 @@ import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.server.datanode.checker.DatasetVolumeChecker;
 import org.apache.hadoop.hdfs.server.datanode.checker.StorageLocationChecker;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.BlockPoolSlice;
+import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.DatanodeVolumeRefreshHandler;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.FsVolumeImpl;
 import org.apache.hadoop.hdfs.util.DataTransferThrottler;
+import org.apache.hadoop.ipc.GenericRefreshProtocol;
+import org.apache.hadoop.ipc.RefreshRegistry;
+import org.apache.hadoop.ipc.RefreshResponse;
+import org.apache.hadoop.ipc.proto.GenericRefreshProtocolProtos;
+import org.apache.hadoop.ipc.protocolPB.GenericRefreshProtocolPB;
+import org.apache.hadoop.ipc.protocolPB.GenericRefreshProtocolServerSideTranslatorPB;
 import org.apache.hadoop.net.DNSToSwitchMapping;
 import org.apache.hadoop.net.IpRangeScriptBasedMapping;
 import org.apache.hadoop.net.ScriptBasedMapping;
-import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
 import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.hdfs.client.BlockReportOptions;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
@@ -240,7 +244,6 @@ import org.apache.hadoop.hdfs.server.protocol.InterDatanodeProtocol;
 import org.apache.hadoop.hdfs.server.protocol.NamespaceInfo;
 import org.apache.hadoop.hdfs.server.protocol.ReplicaRecoveryInfo;
 import org.apache.hadoop.hdfs.server.throttler.ThrottlerCalibrationSlavePolicy;
-import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 import org.apache.hadoop.http.HttpConfig;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.ReadaheadPool;
@@ -327,7 +330,8 @@ import org.slf4j.LoggerFactory;
 @InterfaceAudience.Private
 public class DataNode extends ReconfigurableBase
     implements InterDatanodeProtocol, ClientDatanodeProtocol,
-        TraceAdminProtocol, DataNodeMXBean, ReconfigurationProtocol {
+        TraceAdminProtocol, DataNodeMXBean, ReconfigurationProtocol,
+        GenericRefreshProtocol {
   public static final Logger LOG = LoggerFactory.getLogger(DataNode.class);
   
   static{
@@ -649,6 +653,10 @@ public class DataNode extends ReconfigurableBase
     }
 
     this.socketFactory = NetUtils.getDefaultSocketFactory(conf);
+
+    RefreshRegistry.defaultRegistry().register(
+        DatanodeVolumeRefreshHandler.DATANODE_VOLUME_REFRESH_HANDLER_IDENTIFIER,
+        new DatanodeVolumeRefreshHandler(this));
 
     try {
       hostName = getHostName(conf);
@@ -1194,6 +1202,13 @@ public class DataNode extends ReconfigurableBase
     return fileIoProvider;
   }
 
+  @Override
+  public Collection<RefreshResponse> refresh(String identifier, String[] args)
+      throws IOException {
+    // Let the registry handle as needed
+    return RefreshRegistry.defaultRegistry().dispatch(identifier, args);
+  }
+
   /**
    * Contains the StorageLocations for changed data volumes.
    */
@@ -1298,6 +1313,90 @@ public class DataNode extends ReconfigurableBase
     }
 
     return results;
+  }
+
+  /**
+   * Dynamically add a new volume location.
+   * This method can do the two things:
+   *   1. Add a new volume for this DN (DN doesn't contain this volume right now)
+   *   2. Remove the volume from failureVolumes
+   * @param volumeLocation the new location to be added
+   * @throws IOException
+   */
+  public void addVolume(String volumeLocation) throws IOException {
+    // Add volumes for each Namespace
+    final List<NamespaceInfo> nsInfos = Lists.newArrayList();
+    for (BPOfferService bpos : blockPoolManager.getAllNamenodeThreads()) {
+      nsInfos.add(bpos.getNamespaceInfo());
+    }
+    synchronized (this) {
+      StorageLocation newLocation = StorageLocation.parse(volumeLocation);
+      for (Iterator<Storage.StorageDirectory> it = storage.dirIterator(); it.hasNext();) {
+        Storage.StorageDirectory dir = it.next();
+        if (newLocation.matchesStorageDirectory(dir)) {
+          LOG.info("The {} already existed.", volumeLocation);
+          return;
+        }
+      }
+
+      data.addVolume(newLocation, nsInfos);
+    }
+  }
+
+  /**
+   * Dynamically mark one unhealthy volume as failure volume.
+   * If the volume is not stored in the DN or has been marked as a failed volume,
+   * the method does nothing.
+   * @param volumeLocation the unhealthy location to be handled
+   */
+  public void handleFailureVolume(String volumeLocation) throws IOException {
+    synchronized (this) {
+      StorageLocation unhealthyLocation = StorageLocation.parse(volumeLocation);
+      Set<FsVolumeSpi> unhealthyVolumes = new HashSet<>();
+      // First get list of data directories
+      try (FsDatasetSpi.FsVolumeReferences volumes = data.getFsVolumeReferences()) {
+        for (final FsVolumeSpi volume : volumes) {
+          if (unhealthyLocation.equals(volume.getStorageLocation())) {
+            unhealthyVolumes.add(volume);
+            LOG.info("Mark the volume {} as the failure volume.", volumeLocation);
+            break;
+          }
+        }
+      }
+      LOG.info("{} will be marked as failure volumes.", unhealthyVolumes);
+      handleVolumeFailures(unhealthyVolumes);
+    }
+  }
+
+  /**
+   * Dynamically remove a volume from DN. This volume can be stored in storages or failureVolumes.
+   * @param volumeLocation The location of the volume to be removed
+   */
+  public void removeVolume(String volumeLocation) throws IOException {
+    synchronized (this) {
+      StorageLocation removeLocation = StorageLocation.parse(volumeLocation);
+      final Collection<StorageLocation> removedLocations = new ArrayList<>();
+
+      for (Iterator<Storage.StorageDirectory> it = storage.dirIterator(); it.hasNext();) {
+        Storage.StorageDirectory dir = it.next();
+        if (removeLocation.matchesStorageDirectory(dir)) {
+          removedLocations.add(removeLocation);
+          break;
+        }
+      }
+
+      if (getFSDataset().getNumFailedVolumes() > 0) {
+        for (String failedStorageLocation : getFSDataset()
+            .getVolumeFailureSummary().getFailedStorageLocations()) {
+          if (volumeLocation.equals(failedStorageLocation)) {
+            removedLocations.add(removeLocation);
+            break;
+          }
+        }
+      }
+
+      removeVolumes(removedLocations);
+    }
   }
 
   /**
@@ -1576,6 +1675,13 @@ public class DataNode extends ReconfigurableBase
     service = ReconfigurationProtocolService
         .newReflectiveBlockingService(reconfigurationProtocolXlator);
     DFSUtil.addPBProtocol(getConf(), ReconfigurationProtocolPB.class, service,
+        ipcServer);
+
+    GenericRefreshProtocolServerSideTranslatorPB genericRefreshXlator =
+        new GenericRefreshProtocolServerSideTranslatorPB(this);
+    BlockingService genericRefreshService = GenericRefreshProtocolProtos.GenericRefreshProtocolService
+        .newReflectiveBlockingService(genericRefreshXlator);
+    DFSUtil.addPBProtocol(getConf(), GenericRefreshProtocolPB.class, genericRefreshService,
         ipcServer);
 
     InterDatanodeProtocolServerSideTranslatorPB interDatanodeProtocolXlator = 
@@ -2743,6 +2849,8 @@ public class DataNode extends ReconfigurableBase
     }
     tracer.close();
     dataSetLockManager.lockLeakCheck();
+    RefreshRegistry.defaultRegistry().unregisterAll(
+        DatanodeVolumeRefreshHandler.DATANODE_VOLUME_REFRESH_HANDLER_IDENTIFIER);
   }
 
   /**
