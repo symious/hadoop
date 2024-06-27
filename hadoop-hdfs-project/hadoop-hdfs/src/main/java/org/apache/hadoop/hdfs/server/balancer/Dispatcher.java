@@ -51,6 +51,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
 import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -349,6 +350,15 @@ public class Dispatcher {
       // check if there is replica which is on the same rack with the target
       for (StorageGroup loc : reportedBlock.getLocations()) {
         if (cluster.isOnSameRack(loc.getDatanodeInfo(), targetDN) && addTo(loc)) {
+          return true;
+        }
+      }
+
+      // check if there is replica which is on the same data center with the target
+      for (StorageGroup loc : reportedBlock.getLocations()) {
+        String targetDC = NetworkTopologyUtil.getDataCenter(targetDN);
+        String currentDC = NetworkTopologyUtil.getDataCenter(loc.getDatanodeInfo());
+        if (targetDC.equals(currentDC) && addTo(loc)) {
           return true;
         }
       }
@@ -1298,7 +1308,7 @@ public class Dispatcher {
   public NetworkTopology getCluster() {
     return cluster;
   }
-  
+
   long getBytesMoved() {
     return nnc.getBytesMoved().get();
   }
@@ -1623,7 +1633,14 @@ public class Dispatcher {
 
   /** Reset all fields in order to prepare for the next iteration */
   void reset(Configuration conf) {
-    cluster = NetworkTopology.getInstance(conf);
+    Configuration newConf = new Configuration(conf);
+    newConf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+        DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_DEFAULT,
+        BlockPlacementPolicy.class);
+    newConf.setClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_IMPL_KEY,
+        NetworkTopology.class, NetworkTopology.class);
+    cluster = NetworkTopology.getInstance(newConf);
+    placementPolicies = new BlockPlacementPolicies(newConf, null, cluster, null);
     storageGroupMap.clear();
     sources.clear();
 

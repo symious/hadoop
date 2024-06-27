@@ -17,6 +17,9 @@
  */
 package org.apache.hadoop.hdfs.server.mover;
 
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementStatus;
+import org.apache.hadoop.hdfs.server.blockmanagement.utils.UpgradeDomainUtil;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
@@ -118,7 +121,10 @@ public class Mover {
   private final AtomicInteger retryCount;
   private final Map<Long, Set<DatanodeInfo>> excludedPinnedBlocks;
 
+  private final int upgradeDomainFactor;
+
   private final BlockStoragePolicy[] blockStoragePolicies;
+  private final boolean moverForMigration;
 
   Mover(NameNodeConnector nnc, Configuration conf, AtomicInteger retryCount,
       Map<Long, Set<DatanodeInfo>> excludedPinnedBlocks) {
@@ -153,7 +159,12 @@ public class Mover {
     this.targetPaths = nnc.getTargetPaths();
     this.blockStoragePolicies = new BlockStoragePolicy[1 <<
         BlockStoragePolicySuite.ID_BIT_LENGTH];
+    this.moverForMigration = conf.getBoolean(DFSConfigKeys.DFS_MOVER_FOR_MIGRATION_KEY,
+        DFSConfigKeys.DFS_MOVER_FOR_MIGRATION_DEFAULT);
     this.excludedPinnedBlocks = excludedPinnedBlocks;
+    this.upgradeDomainFactor = conf.getInt(
+        DFSConfigKeys.DFS_UPGRADE_DOMAIN_FACTOR,
+        DFSConfigKeys.DFS_UPGRADE_DOMAIN_FACTOR_DEFAULT);
   }
 
   void init() throws IOException {
@@ -372,11 +383,85 @@ public class Mover {
           if (!isSnapshotPathInCurrent(fullPath)) {
             // the full path is a snapshot path but it is also included in the
             // current directory tree, thus ignore it.
-            processFile(fullPath, (HdfsLocatedFileStatus) status, result);
+            if (!moverForMigration) {
+              // Move block to satisfy the storage policy
+              processFile(fullPath, (HdfsLocatedFileStatus) status, result);
+            } else {
+              // Move block to satisfy the placement policy. Normally it is used to migrate
+              // the blocks to satisfy the new blockPlacementPolicy.
+              processFileForMigration(fullPath, (HdfsLocatedFileStatus) status, result);
+            }
           }
         } catch (IOException e) {
           LOG.warn("Failed to check the status of " + parent
               + ". Ignore it and continue.", e);
+        }
+      }
+    }
+
+    /**
+     * Process the file for upgrade domain migration.
+     */
+    private void processFileForMigration(String fullPath,
+        HdfsLocatedFileStatus status, Result result) {
+      final LocatedBlocks locatedBlocks = status.getLocatedBlocks();
+      final boolean lastBlkComplete = locatedBlocks.isLastBlockComplete();
+      List<LocatedBlock> lbs = locatedBlocks.getLocatedBlocks();
+      final ErasureCodingPolicy ecPolicy = status.getErasureCodingPolicy();
+
+      for (int i = 0; i < lbs.size(); i++) {
+        if (i == lbs.size() - 1 && !lastBlkComplete) {
+          // last block is incomplete, skip it
+          continue;
+        }
+        LocatedBlock lb = lbs.get(i);
+        BlockPlacementStatus placementStatus = UpgradeDomainUtil.verifyBlockPlacement(
+            lb.getLocations(), status.getReplication(),
+            dispatcher.getCluster(), upgradeDomainFactor);
+        if (!placementStatus.isPlacementPolicySatisfied()) {
+          LOG.debug("The block {} of {} is not satisfied the block placement policy.",
+              lb, fullPath);
+          DatanodeInfo[] targetInfos;
+          try {
+            targetInfos = UpgradeDomainUtil.correctBlock(lb.getLocations(),
+                upgradeDomainFactor, dispatcher.getCluster());
+          } catch (BlockPlacementPolicy.NotEnoughReplicasException e) {
+            LOG.info("Skip migrate {} of {} with {}.", lb, fullPath, e.getLocalizedMessage());
+            LOG.debug("Failed correct the block {} of {} and will skip migrate it.",
+                lb, fullPath, e);
+            // Just ignore this block
+            continue;
+          }
+
+          /*
+           * Create a list of sources and targets out of the locations. Nodes
+           * are sources if they are in currentInfos but not in the targetInfos
+           * list. Nodes are targets if they are in the targetInfos list but not
+           * in the currentInfos list. This gives us a list of replicas that
+           * will be deleted (sources) and a list of replicas that will be added
+           * (targets).
+           */
+          List<DatanodeInfo> currentInfos = Arrays.asList(lb.getLocations());
+          Set<DatanodeInfo> sources = new HashSet<>(currentInfos);
+          sources.removeAll(Arrays.asList(targetInfos));
+          Set<DatanodeInfo> targets = new HashSet<>(Arrays.asList(targetInfos));
+          targets.removeAll(currentInfos);
+          Iterator<DatanodeInfo> sourcesIt = sources.iterator();
+
+          for (DatanodeInfo target : targets) {
+            // Check if we have run out of sources (we have more targets than
+            // sources for some reason). If so, then make a new iterator.
+            if (!sourcesIt.hasNext()) {
+              sourcesIt = sources.iterator();
+            }
+            DatanodeInfo sourceInfo = sourcesIt.next();
+            if (sourceInfo != null && target != null
+                && scheduleMovers4Migration(sourceInfo, target, lb, ecPolicy)) {
+              LOG.info("Schedule migrate the block {} of {} from {} to {}.",
+                  lb, fullPath, sourceInfo, target);
+              result.setNoBlockMoved(false);
+            }
+          }
         }
       }
     }
@@ -440,6 +525,26 @@ public class Mover {
           }
         }
       }
+    }
+
+    /**
+     * Schedule move one block from source to target.
+     */
+    boolean scheduleMovers4Migration(DatanodeInfo srcDN, DatanodeInfo targetDN, LocatedBlock lb,
+        ErasureCodingPolicy ecPolicy) {
+      MLocation sourceLocation = new MLocation(srcDN, StorageType.DISK, lb.getBlockSize());
+      final Source source = storages.getSource(sourceLocation);
+      final StorageGroup target = storages.getTarget(targetDN.getDatanodeUuid(), StorageType.DISK);
+
+      final List<MLocation> locations = MLocation.toLocations(lb);
+      Collections.shuffle(locations);
+      final DBlock db = newDBlock(lb, locations, ecPolicy);
+      final PendingMove pm = source.addPendingMove(db, target);
+      if (pm != null) {
+        dispatcher.executePendingMove(pm);
+        return true;
+      }
+      return false;
     }
 
     boolean scheduleMoves4Block(StorageTypeDiff diff, LocatedBlock lb,

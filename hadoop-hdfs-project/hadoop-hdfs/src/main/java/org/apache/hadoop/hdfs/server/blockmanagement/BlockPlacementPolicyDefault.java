@@ -79,7 +79,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
       CHOOSE_RANDOM_REASONS = ThreadLocal
       .withInitial(() -> new HashMap<NodeNotChosenReason, Integer>());
 
-  private static final BlockPlacementStatus ONE_RACK_PLACEMENT =
+  public static final BlockPlacementStatus ONE_RACK_PLACEMENT =
       new BlockPlacementStatusDefault(1, 1, 1);
 
   private enum NodeNotChosenReason {
@@ -1392,4 +1392,3 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
     return minBlocksForWrite;
   }
 }
-

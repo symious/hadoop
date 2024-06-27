@@ -205,20 +205,6 @@ public class ZoneMover {
     this.pathRuleMap = pathRuleMap;
   }
 
-  /**
-   * Check if zonemover is compatible with the block placement policy
-   * used by the NameNode.
-   */
-  protected static void checkReplicationPolicyCompatibility(Configuration conf)
-      throws UnsupportedActionException {
-    String clazz = conf.get(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY);
-    if (clazz == null || !clazz.equals(
-        BlockPlacementPolicyWithDataCenter.class.getName())) {
-      throw new UnsupportedActionException(
-          "ZoneMover must work with BlockPlacementPolicyWithDataCenter");
-    }
-  }
-
   void init(Configuration conf) throws IOException {
     LOG.info("Initializing ...");
     final List<DatanodeStorageReport> reports = dispatcher.init();
@@ -1569,7 +1555,6 @@ public class ZoneMover {
           DFSConfigKeys.DFS_ZONEMOVER_MONITOR_CHECK_INTERVAL_KEY,
           DFSConfigKeys.DFS_ZONEMOVER_MONITOR_CHECK_INTERVAL_DEFAULT);
       try {
-        checkReplicationPolicyCompatibility(conf);
         CommandLine commandLine = parser.parse(options, args, true);
         additionalOptionsCheck(commandLine);
         URI namenode = getNamespaceUri(commandLine, conf);

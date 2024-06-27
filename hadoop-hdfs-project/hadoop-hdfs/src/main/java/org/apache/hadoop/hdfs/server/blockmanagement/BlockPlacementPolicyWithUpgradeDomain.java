@@ -25,7 +25,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
@@ -162,7 +161,7 @@ public class BlockPlacementPolicyWithUpgradeDomain extends
     // shareRackAndUDSet contains those DatanodeStorageInfo that
     // share rack and upgrade domain with another DatanodeStorageInfo.
     List<DatanodeStorageInfo> shareRackAndUDSet = new ArrayList<>();
-    if (shareUDSet.size() == 0) {
+    if (shareUDSet.isEmpty()) {
       // All upgrade domains are unique, use the parent set.
       return super.pickupReplicaSet(moreThanOne, exactlyOne, rackMap);
     } else if (moreThanOne != null) {
@@ -172,7 +171,7 @@ public class BlockPlacementPolicyWithUpgradeDomain extends
         }
       }
     }
-    return (shareRackAndUDSet.size() > 0) ? shareRackAndUDSet : shareUDSet;
+    return shareRackAndUDSet.isEmpty() ? shareUDSet : shareRackAndUDSet;
   }
 
   @Override

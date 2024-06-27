@@ -5301,6 +5301,14 @@
   </description>
 </property>
 
+  <property>
+    <name>dfs.mover.for.migration</name>
+    <value>false</value>
+    <description>
+      If true, the mover will migrate blocks to satisfy the new block placement policy.
+    </description>
+  </property>
+
 <property>
   <name>dfs.namenode.audit.log.async</name>
   <value>false</value>

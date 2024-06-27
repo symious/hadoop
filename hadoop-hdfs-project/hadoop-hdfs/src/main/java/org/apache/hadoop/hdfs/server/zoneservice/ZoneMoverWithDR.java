@@ -386,7 +386,6 @@ public class ZoneMoverWithDR extends ZoneMover {
       final Options options = buildCliOptions();
       CommandLineParser parser = new GnuParser();
       try {
-        checkReplicationPolicyCompatibility(conf);
         CommandLine commandLine = parser.parse(options, args, true);
         additionalOptionsCheck(commandLine);
         URI namenode = getNamespaceUri(commandLine, conf);

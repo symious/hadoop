@@ -1001,6 +1001,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_MOVER_MAX_NO_MOVE_INTERVAL_KEY = "dfs.mover.max-no-move-interval";
   public static final int    DFS_MOVER_MAX_NO_MOVE_INTERVAL_DEFAULT = 60*1000; // One minute
 
+  public static final String  DFS_MOVER_FOR_MIGRATION_KEY = "dfs.mover.for.migration";
+  public static final boolean DFS_MOVER_FOR_MIGRATION_DEFAULT = false;
+
   // ZoneMover related keys
   public static final String  DFS_ZONEMOVER_MOVEDWINWIDTH_KEY = "dfs.zonemover.movedWinWidth";
   public static final long    DFS_ZONEMOVER_MOVEDWINWIDTH_DEFAULT = 5400*1000L;

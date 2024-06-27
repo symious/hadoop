@@ -51,7 +51,7 @@ public abstract class BlockPlacementPolicy {
   @InterfaceAudience.Private
   public static class NotEnoughReplicasException extends Exception {
     private static final long serialVersionUID = 1L;
-    NotEnoughReplicasException(String msg) {
+    public NotEnoughReplicasException(String msg) {
       super(msg);
     }
   }

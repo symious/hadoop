@@ -996,7 +996,6 @@ public class ZoneMoverWithSetReplication extends ZoneMover {
           DFSConfigKeys.DFS_ZONEMOVER_MONITOR_CHECK_INTERVAL_KEY,
           DFSConfigKeys.DFS_ZONEMOVER_MONITOR_CHECK_INTERVAL_DEFAULT);
       try {
-        checkReplicationPolicyCompatibility(conf);
         CommandLine commandLine = parser.parse(options, args, true);
         additionalOptionsCheck(commandLine);
         URI namenode = getNamespaceUri(commandLine, conf);

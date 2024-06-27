@@ -44,10 +44,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.conf.Configuration;
@@ -77,6 +79,8 @@ import org.apache.hadoop.hdfs.server.balancer.Dispatcher.DBlock;
 import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
 import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
 import org.apache.hadoop.hdfs.server.balancer.TestBalancer;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithUpgradeDomain;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.InternalDataNodeTestUtils;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants;
@@ -1224,5 +1228,72 @@ public class TestMover {
     cluster.startDataNodes(conf, newNodesRequired, newTypes, true, null, null,
         null, null, null, false, false, false, null);
     cluster.triggerHeartbeats();
+  }
+
+  @Test
+  public void testMoverForMigration() throws Exception {
+    // HDFS-8147
+    final Configuration conf = new HdfsConfiguration();
+    initConf(conf);
+    conf.set(DFSConfigKeys.DFS_MOVER_RETRY_MAX_ATTEMPTS_KEY, "2");
+    conf.setBoolean(DFSConfigKeys.DFS_MOVER_FOR_MIGRATION_KEY, true);
+    final MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf)
+        .numDataNodes(4)
+        .racks(new String[] { "/rack1", "/rack1", "/rack2", "/rack2" })
+        .storageTypes(
+            new StorageType[][] {{StorageType.DISK, StorageType.ARCHIVE},
+                {StorageType.DISK, StorageType.ARCHIVE},
+                {StorageType.DISK, StorageType.ARCHIVE},
+                {StorageType.DISK, StorageType.ARCHIVE}}).build();
+
+    try {
+      cluster.waitActive();
+      final DistributedFileSystem dfs = cluster.getFileSystem();
+      final String file = "/testMoverForMigration";
+      // write to DISK
+      final FSDataOutputStream out = dfs.create(new Path(file), (short) 2);
+      out.writeChars("testMoverForMigration");
+      out.close();
+
+      LocatedBlock lb = dfs.getClient().getLocatedBlocks(file, 0).get(0);
+      Assert.assertEquals(2, lb.getLocations().length);
+      Set<String> uds = new HashSet<>();
+      for (DatanodeInfo dn : lb.getLocations()) {
+        String upgradeDomain = dn.getUpgradeDomain();
+        if (upgradeDomain == null) {
+          upgradeDomain = dn.getXferAddr();
+        }
+        uds.add(upgradeDomain);
+        cluster.getNamesystem(0).getBlockManager().getDatanodeManager()
+            .getDatanode(dn.getDatanodeUuid()).setUpgradeDomain("mockUD");
+      }
+      Assert.assertEquals(2, uds.size());
+
+      lb = dfs.getClient().getLocatedBlocks(file, 0).get(0);
+      uds.clear();
+      for (DatanodeInfo dn : lb.getLocations()) {
+        String upgradeDomain = dn.getUpgradeDomain();
+        if (upgradeDomain == null) {
+          upgradeDomain = dn.getXferAddr();
+        }
+        uds.add(upgradeDomain);
+      }
+      Assert.assertEquals(1, uds.size());
+
+      ToolRunner.run(conf, new Mover.Cli(), new String[] {"-p", file});
+
+      lb = dfs.getClient().getLocatedBlocks(file, 0).get(0);
+      uds.clear();
+      for (DatanodeInfo dn : lb.getLocations()) {
+        String upgradeDomain = dn.getUpgradeDomain();
+        if (upgradeDomain == null) {
+          upgradeDomain = dn.getXferAddr();
+        }
+        uds.add(upgradeDomain);
+      }
+      Assert.assertEquals(2, uds.size());
+    } finally {
+      cluster.shutdown();
+    }
   }
 }
