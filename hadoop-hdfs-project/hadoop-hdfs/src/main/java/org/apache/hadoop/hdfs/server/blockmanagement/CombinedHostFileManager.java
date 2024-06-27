@@ -179,9 +179,12 @@ public class CombinedHostFileManager extends HostConfigManager {
 
   @Override
   public void refresh() throws IOException {
-    refresh(conf.get(DFSConfigKeys.DFS_HOSTS, ""));
+    refresh(conf.get(DFSConfigKeys.DFS_HOSTS, ""),
+        conf.get(DFSConfigKeys.DFS_HOSTS_EXCLUDE, ""));
   }
-  private void refresh(final String hostsFile) throws IOException {
+
+  private void refresh(final String hostsFile, String excludeFile) throws IOException {
+    HostSet newExcludes = HostFileManager.readFile("excluded", excludeFile);
     HostProperties hostProps = new HostProperties();
     DatanodeAdminProperties[] all =
         CombinedHostsFileReader.readFile(hostsFile);
@@ -189,6 +192,10 @@ public class CombinedHostFileManager extends HostConfigManager {
       InetSocketAddress addr = parseEntry(hostsFile,
           properties.getHostName(), properties.getPort());
       if (addr != null) {
+        // Set the admin state to AdminStates.DECOMMISSIONED if this DN in exclude file.
+        if (newExcludes.match(addr)) {
+          properties.setAdminState(AdminStates.DECOMMISSIONED);
+        }
         hostProps.add(addr.getAddress(), properties);
       }
     }

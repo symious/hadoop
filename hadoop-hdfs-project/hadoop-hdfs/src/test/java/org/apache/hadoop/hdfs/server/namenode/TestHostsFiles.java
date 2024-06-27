@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.lang.management.ManagementFactory;
+import java.net.InetSocketAddress;
 import java.util.Arrays;
 
 import org.apache.hadoop.hdfs.server.blockmanagement.HostFileWithMaintenanceManager;
@@ -212,6 +213,48 @@ public class TestHostsFiles {
       }
       writer1.cleanup();
       writer2.cleanup();
+    }
+  }
+
+  @Test
+  public void testCombinedHostFileManagerWithExclude() throws Exception {
+    if (hostFileMgrClass.equals(CombinedHostFileManager.class)) {
+      Configuration conf = getConf();
+      HostsFileWriter hostsFileWriter = new HostsFileWriter();
+      hostsFileWriter.initialize(conf, "temp/combineWithExclude");
+      hostsFileWriter.initIncludeHosts(new String[]
+          {"localhost:52","127.0.0.1:7777"});
+
+      CombinedHostFileManager combinedHostFileManager = new CombinedHostFileManager();
+      combinedHostFileManager.setConf(conf);
+
+      combinedHostFileManager.refresh();
+      int totalNode = 0;
+      int decommissionNode = 0;
+      for (InetSocketAddress ignored : combinedHostFileManager.getIncludes()) {
+        totalNode++;
+      }
+      for (InetSocketAddress ignored : combinedHostFileManager.getExcludes()) {
+        decommissionNode++;
+      }
+      assertEquals(2, totalNode);
+      assertEquals(0, decommissionNode);
+
+      hostsFileWriter.initExcludeHostsForCombine(new String[]{"localhost:52"}, conf);
+      combinedHostFileManager.setConf(conf);
+      combinedHostFileManager.refresh();
+      totalNode = 0;
+      decommissionNode = 0;
+      for (InetSocketAddress ignored : combinedHostFileManager.getIncludes()) {
+        totalNode++;
+      }
+      for (InetSocketAddress ignored : combinedHostFileManager.getExcludes()) {
+        decommissionNode++;
+      }
+
+      assertEquals(2, totalNode);
+      assertEquals(1, decommissionNode);
+      hostsFileWriter.cleanup();
     }
   }
 

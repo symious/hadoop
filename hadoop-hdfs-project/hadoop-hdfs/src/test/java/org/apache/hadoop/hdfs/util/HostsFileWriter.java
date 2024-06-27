@@ -196,4 +196,17 @@ public class HostsFileWriter {
   public Path getExcludeFile() {
     return excludeFile;
   }
+
+  public void initExcludeHostsForCombine(String[] decommissionHostNameAndPorts, Configuration conf)
+      throws IOException {
+    excludeFile = new Path(fullDir, "exclude");
+    DFSTestUtil.writeFile(localFileSys, excludeFile, "");
+    conf.set(DFSConfigKeys.DFS_HOSTS_EXCLUDE, excludeFile.toUri().getPath());
+
+    StringBuilder excludeHosts = new StringBuilder();
+    for (String hostNameAndPort : decommissionHostNameAndPorts) {
+      excludeHosts.append(hostNameAndPort).append("\n");
+    }
+    DFSTestUtil.writeFile(localFileSys, excludeFile, excludeHosts.toString());
+  }
 }
