@@ -18,7 +18,9 @@
 package org.apache.hadoop.hdfs.server.namenode;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.net.InetSocketAddress;
 import java.util.function.Supplier;
+import com.google.common.collect.ImmutableMap;
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.Uninterruptibles;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -33,6 +35,7 @@ import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology;
 import org.apache.hadoop.hdfs.StripedFileTestUtil;
+import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
 import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants.SafeModeAction;
@@ -301,6 +304,32 @@ public class TestNameNodeMXBean {
         cluster.shutdown();
       }
     }
+  }
+
+  @Test
+  public void testDeadNodesInNameNodeMXBean() {
+    InetSocketAddress mockedAddress = new InetSocketAddress(12345);
+    DatanodeDescriptor node = new DatanodeDescriptor(new DatanodeID(mockedAddress
+        .getAddress().getHostAddress(), mockedAddress.getHostName(), "",
+        mockedAddress.getPort(), 50075, 9865, 8010));
+
+    assertEquals("", node.getDatanodeUuidForMetric());
+
+    final Map<String, Map<String, Object>> info = new HashMap<>();
+    Map<String, Object> innerinfo = ImmutableMap.<String, Object>builder()
+        .put("lastContact", Time.monotonicNow())
+        .put("decommissioned", node.isDecommissioned())
+        .put("adminState", node.getAdminState().toString())
+        .put("xferaddr", node.getXferAddr())
+        .put("location", node.getNetworkLocation())
+        .put("uuid", node.getDatanodeUuidForMetric())
+        .build();
+
+    assertEquals("", innerinfo.get("uuid"));
+    info.put(node.getHostName() + ":" + node.getXferPort(), innerinfo);
+
+    String json = JSON.toString(info);
+    LOG.info("DeadNodesInNameNodeMXBean is {}.", json);
   }
 
   @SuppressWarnings({ "unchecked" })
