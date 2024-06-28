@@ -149,6 +149,13 @@ public class DatanodeID implements Comparable<DatanodeID> {
     return datanodeUuid;
   }
 
+  /**
+   * @return data node ID.
+   */
+  public String getDatanodeUuidForMetric() {
+    return datanodeUuid != null ? datanodeUuid : "";
+  }
+
   public ByteString getDatanodeUuidBytes() {
     return datanodeUuidBytes;
   }
