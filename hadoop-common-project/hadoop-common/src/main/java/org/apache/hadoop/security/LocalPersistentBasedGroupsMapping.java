@@ -19,7 +19,6 @@
 package org.apache.hadoop.security;
 
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -31,18 +30,12 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.io.MD5Hash;
 import org.apache.hadoop.metrics2.annotation.Metric;
@@ -51,8 +44,8 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.util.Time;
-import org.apache.hadoop.util.concurrent.HadoopExecutors;
 import org.apache.hadoop.util.hash.MD5FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,30 +57,19 @@ import org.slf4j.LoggerFactory;
  */
 @InterfaceAudience.LimitedPrivate({ "HDFS", "MapReduce" })
 @InterfaceStability.Evolving
-public class LocalPersistentBasedGroupsMapping extends Configured
+public class LocalPersistentBasedGroupsMapping extends PollingBasedFileWatcher
     implements GroupMappingServiceProvider {
 
   @VisibleForTesting
   protected static final Logger LOG =
       LoggerFactory.getLogger(LocalPersistentBasedGroupsMapping.class);
 
-  private long refreshInterval =
-      CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_REFRESH_INTERVAL_DEFAULT;
-  private String localFile =
-      CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_FILE_PATH_DEFAULT;
-  private boolean useChecksum =
-      CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_CHECKSUM_DEFAULT;
+  private boolean useChecksum;
   private static final List<String> EMPTY_GROUPS = new LinkedList<>();
 
   private final AtomicReference<ConcurrentHashMap<String, List<String>>>
       mappingCache = new AtomicReference<>();
   private volatile boolean isStartup = true;
-  private static final ScheduledExecutorService scheduledExecutor =
-      HadoopExecutors.newSingleThreadScheduledExecutor(
-          new ThreadFactoryBuilder().setDaemon(true)
-              .setNameFormat("LocalGroupsMappingRefresh").build());
-  private ScheduledFuture<?> refreshTask;
-  private LocalMappingRefreshService mappingRefreshService;
 
   // Metrics
   protected static LocalGroupsMappingMetrics metrics =
@@ -96,6 +78,20 @@ public class LocalPersistentBasedGroupsMapping extends Configured
   @VisibleForTesting
   protected static void resetMetrics() {
     metrics = LocalGroupsMappingMetrics.create();
+  }
+
+  LocalPersistentBasedGroupsMapping() {
+  }
+
+  @Override
+  public boolean onModified() {
+    try {
+      refreshMapping(false);
+      return true;
+    } catch (IOException e) {
+      LOG.error("In-memory usergroup mapping refresh failed.", e);
+      return false;
+    }
   }
 
   @Metrics(about = "Local Groups mapping refresh metrics", context = "localGroups")
@@ -111,8 +107,6 @@ public class LocalPersistentBasedGroupsMapping extends Configured
     MutableGaugeLong refreshTotal;
     @Metric("Empty refreshes since startup")
     MutableGaugeLong emptyRefreshTotal;
-    // Force refreshes are only triggered by cacheGroupsRefresh, which is from
-    // by "dfsadmin -refreshUserToGroupsMappings" calls
     @Metric("Total force refreshes since startup")
     MutableGaugeLong forceRefreshTotal;
     @Metric("Refresh failures since startup")
@@ -130,225 +124,152 @@ public class LocalPersistentBasedGroupsMapping extends Configured
     }
   }
 
-  class LocalMappingRefreshService implements Runnable {
-    private final AtomicLong lastRefreshTime = new AtomicLong(-1L);
+  synchronized protected void refreshMapping(boolean force)
+      throws IOException {
+    long start = Time.now();
+    if (force) {
+      metrics.forceRefreshTotal.incr();
+    }
+    metrics.refreshTotal.incr();
 
-    @Override
-    public void run() {
-      try {
-        refreshMapping(false);
-      } catch (IOException e) {
-        LOG.error("In-memory usergroup mapping refresh failed.", e);
+    MD5Hash md5Hash = null;
+    if (useChecksum && !isStartup) {
+      md5Hash = checksum();
+      if (md5Hash == null) {
+        refreshFailure("First round checksum failed.", start);
       }
     }
 
-    synchronized protected void refreshMapping(boolean force)
-        throws IOException {
-      long start = Time.now();
-      if (force) {
-        metrics.forceRefreshTotal.incr();
-      }
-      metrics.refreshTotal.incr();
+    ConcurrentHashMap<String, List<String>> groupUsers =
+        new ConcurrentHashMap<>();
+    ConcurrentHashMap<String, List<String>> localMappings =
+        new ConcurrentHashMap<>();
+    BufferedReader br = null;
 
-      MD5Hash md5Hash = null;
-      if (useChecksum && !isStartup) {
-        md5Hash = checksum();
-        if (md5Hash == null) {
-          refreshFailure("First round checksum failed.", start);
+    try {
+      FileInputStream file = new FileInputStream(trackFile);
+      Reader fr = new InputStreamReader(file, StandardCharsets.UTF_8);
+      br = new BufferedReader(fr);
+      String line;
+      while ((line = br.readLine()) != null) {
+        try {
+          processLine(groupUsers, line);
+        } catch (EmptyLocalMappingException e) {
+          metrics.mappingLineFailuresTotal.incr();
+          LOG.debug("Empty group: " + line, start);
+        } catch (IllegalLocalMappingException e) {
+          metrics.mappingLineFailuresTotal.incr();
+          LOG.warn("Unable to process mapping: " + line, start);
         }
       }
-
-      ConcurrentHashMap<String, List<String>> groupUsers =
-          new ConcurrentHashMap<>();
-      ConcurrentHashMap<String, List<String>> localMappings =
-          new ConcurrentHashMap<>();
-      BufferedReader br = null;
-
-      try {
-        FileInputStream file = new FileInputStream(localFile);
-        Reader fr = new InputStreamReader(file, StandardCharsets.UTF_8);
-        br = new BufferedReader(fr);
-        String line;
-        while ((line = br.readLine()) != null) {
-          try {
-            processLine(groupUsers, line);
-          } catch (EmptyLocalMappingException e) {
-            metrics.mappingLineFailuresTotal.incr();
-            LOG.debug("Empty group: " + line, start);
-          } catch (IllegalLocalMappingException e) {
-            metrics.mappingLineFailuresTotal.incr();
-            LOG.warn("Unable to process mapping: " + line, start);
-          }
-        }
-      } finally {
-        if (br != null) {
-          br.close();
-        }
-      }
-
-      convertGroupUsersToUserGroups(groupUsers, localMappings);
-
-      if (useChecksum && !isStartup) {
-        MD5Hash fileHash = MD5FileUtils.computeMd5ForFile(new File(localFile));
-        if (md5Hash != null && !md5Hash.equals(fileHash)) {
-          refreshFailure("Local mappings changed during renewal.", start);
-        }
-      }
-
-      if (localMappings.isEmpty()) {
-        metrics.emptyRefreshTotal.incr();
-        LOG.warn("Usergroup mappings are empty.");
-      }
-
-      mappingCache.set(localMappings);
-      metrics.refreshSuccess.add(Time.now() - start);
-      metrics.userCount.set(localMappings.size());
-      metrics.groupCount.set(groupUsers.size());
-      String logMsg =
-          "Loaded " + localMappings.size() + " user-groups from local mappings";
-      if (lastRefreshTime.get() == -1) {
-        logMsg += ".";
-      } else {
-        logMsg +=
-            ", last refresh time was " + (Time.now() - lastRefreshTime.get())
-                + "ms ago.";
-      }
-      LOG.info(logMsg);
-      lastRefreshTime.set(Time.now());
-      if (isStartup) {
-        isStartup = false;
+    } finally {
+      if (br != null) {
+        br.close();
       }
     }
 
-    private void refreshFailure(String msg, long start)
-        throws LocalMappingException {
-      lastRefreshTime.set(Time.now());
-      metrics.refreshFailure.add(Time.now() - start);
-      metrics.refreshFailuresTotal.incr();
-      throw new LocalMappingException(msg);
-    }
+    convertGroupUsersToUserGroups(groupUsers, localMappings);
 
-    /**
-     * Convert mappings of groups -> users into mappings of users -> groups
-     *
-     * @param groupUsers    map of groups:users
-     * @param localMappings map of users:groups
-     */
-    protected void convertGroupUsersToUserGroups(
-        ConcurrentHashMap<String, List<String>> groupUsers,
-        ConcurrentHashMap<String, List<String>> localMappings) {
-      for (Map.Entry<String, List<String>> entry : groupUsers.entrySet()) {
-        for (String user : entry.getValue()) {
-          if (!localMappings.containsKey(user)) {
-            localMappings.put(user, new ArrayList<>());
-          }
-          localMappings.get(user).add(entry.getKey());
-        }
+    if (useChecksum && !isStartup) {
+      MD5Hash fileHash = MD5FileUtils.computeMd5ForFile(this.file);
+      if (md5Hash != null && !md5Hash.equals(fileHash)) {
+        refreshFailure("Local mappings changed during renewal.", start);
       }
     }
 
-    private void processLine(ConcurrentHashMap<String, List<String>> groupUsers,
-        String line) throws LocalMappingException {
-      if (line.startsWith("#"))
-        return;
-      String[] colonSplit = line.split(":");
-      if (colonSplit.length == 1) {
-        throw new EmptyLocalMappingException(line);
-      }
-      if (colonSplit.length != 2) {
-        throw new IllegalLocalMappingException(line);
-      }
-      String group = colonSplit[0];
-      String[] users = colonSplit[1].split(",");
-      groupUsers.put(group, Arrays.asList(users));
+    if (localMappings.isEmpty()) {
+      metrics.emptyRefreshTotal.incr();
+      refreshFailure("Usergroup mappings are empty. Keeping old mappings.", start);
     }
 
-    private MD5Hash checksum() {
-      MD5Hash result = null;
-      try {
-        MD5Hash fileHash = MD5FileUtils.computeMd5ForFile(new File(localFile));
-        MD5Hash storedHash =
-            MD5FileUtils.readStoredMd5ForFile(new File(localFile));
-        if (storedHash == null) {
-          LOG.error("MD5 file does not exist: " + MD5FileUtils
-              .getDigestFileForFile(new File(localFile)));
-        }
-        if (!fileHash.equals(storedHash)) {
-          return null;
-        }
-        result = fileHash;
-      } catch (IOException e) {
-        LOG.error("Error checksum: " + e.getMessage());
-      }
-      return result;
+    mappingCache.set(localMappings);
+    metrics.refreshSuccess.add(Time.now() - start);
+    metrics.userCount.set(localMappings.size());
+    metrics.groupCount.set(groupUsers.size());
+    LOG.info("Loaded {} user-groups from local mappings", localMappings.size());
+    if (isStartup) {
+      isStartup = false;
     }
   }
 
-  public static LocalPersistentBasedGroupsMapping getInstanceForTesting(
-      Configuration conf) {
-    LocalPersistentBasedGroupsMapping instance =
-        new LocalPersistentBasedGroupsMapping();
-    instance.setConfWithoutServiceInit(conf);
-    return instance;
+  private void refreshFailure(String msg, long start)
+      throws LocalMappingException {
+    metrics.refreshFailure.add(Time.now() - start);
+    metrics.refreshFailuresTotal.incr();
+    throw new LocalMappingException(msg);
+  }
+
+  /**
+   * Convert mappings of groups -> users into mappings of users -> groups
+   *
+   * @param groupUsers    map of groups:users
+   * @param localMappings map of users:groups
+   */
+  protected void convertGroupUsersToUserGroups(
+      ConcurrentHashMap<String, List<String>> groupUsers,
+      ConcurrentHashMap<String, List<String>> localMappings) {
+    for (Map.Entry<String, List<String>> entry : groupUsers.entrySet()) {
+      for (String user : entry.getValue()) {
+        if (!localMappings.containsKey(user)) {
+          localMappings.put(user, new ArrayList<>());
+        }
+        localMappings.get(user).add(entry.getKey());
+      }
+    }
+  }
+
+  private void processLine(ConcurrentHashMap<String, List<String>> groupUsers,
+      String line) throws LocalMappingException {
+    if (line.startsWith("#"))
+      return;
+    String[] colonSplit = line.split(":");
+    if (colonSplit.length == 1) {
+      throw new EmptyLocalMappingException(line);
+    }
+    if (colonSplit.length != 2) {
+      throw new IllegalLocalMappingException(line);
+    }
+    String group = colonSplit[0];
+    String[] users = colonSplit[1].split(",");
+    groupUsers.put(group, Arrays.asList(users));
+  }
+
+  private MD5Hash checksum() {
+    MD5Hash result = null;
+    try {
+      MD5Hash fileHash = MD5FileUtils.computeMd5ForFile(file);
+      MD5Hash storedHash = MD5FileUtils.readStoredMd5ForFile(file);
+      if (storedHash == null) {
+        LOG.error("MD5 file does not exist: " + MD5FileUtils.getDigestFileForFile(file));
+      }
+      if (!fileHash.equals(storedHash)) {
+        return null;
+      }
+      result = fileHash;
+    } catch (IOException e) {
+      LOG.error("Error checksum: " + e.getMessage());
+    }
+    return result;
   }
 
   @Override
   synchronized public void setConf(Configuration conf) {
-    this.setConfWithoutServiceInit(conf);
-    if (conf != null && mappingRefreshService == null) {
-      initializeMappingRefreshService();
-    }
-  }
-
-  @VisibleForTesting
-  protected void setConfWithoutServiceInit(Configuration conf) {
-    super.setConf(conf);
     if (conf != null) {
-      refreshInterval = conf.getTimeDuration(
-          CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_REFRESH_INTERVAL_KEY,
-          CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_REFRESH_INTERVAL_DEFAULT,
-          TimeUnit.MILLISECONDS);
-      localFile = conf.get(
-          CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_FILE_PATH_KEY,
-          CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_FILE_PATH_DEFAULT);
+      super.setConf(conf);
+      updateParams(
+          conf.get(CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_FILE_PATH_KEY,
+              CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_FILE_PATH_DEFAULT),
+          conf.getTimeDuration(
+              CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_REFRESH_INTERVAL_KEY,
+              CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_REFRESH_INTERVAL_DEFAULT,
+              TimeUnit.MILLISECONDS),
+          conf.getTimeDuration(
+              CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_FORCE_REFRESH_INTERVAL_KEY,
+              CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_FORCE_REFRESH_INTERVAL_DEFAULT,
+              TimeUnit.MILLISECONDS));
       useChecksum = conf.getBoolean(
           CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_CHECKSUM_KEY,
           CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_CHECKSUM_DEFAULT);
-    }
-  }
-
-  protected void initializeMappingRefreshService() {
-    if (refreshInterval <= 0) {
-      LOG.warn("Invalid refresh interval: {}", refreshInterval);
-      return;
-    }
-    mappingRefreshService = new LocalMappingRefreshService();
-    try {
-      mappingRefreshService.refreshMapping(false);
-    } catch (IOException e) {
-      LOG.error("Failed to initialize mapping refresh service.", e);
-    }
-    refreshTask = scheduledExecutor
-        .scheduleWithFixedDelay(mappingRefreshService, refreshInterval,
-            refreshInterval, TimeUnit.MILLISECONDS);
-    LOG.info("Initialized mapping loader with refreshInterval: " + refreshInterval + "ms");
-  }
-
-  @VisibleForTesting
-  protected boolean isStartup() {
-    return this.isStartup;
-  }
-
-  @VisibleForTesting
-  protected void setRefreshInterval(long milliseconds) {
-    this.refreshInterval = milliseconds;
-    if (refreshTask != null) {
-      refreshTask.cancel(true);
-    }
-    if (mappingRefreshService != null && scheduledExecutor != null) {
-      refreshTask = scheduledExecutor
-          .scheduleWithFixedDelay(mappingRefreshService, 0, refreshInterval,
-              TimeUnit.MILLISECONDS);
     }
   }
 
@@ -387,7 +308,7 @@ public class LocalPersistentBasedGroupsMapping extends Configured
 
   @Override
   public void cacheGroupsRefresh() throws IOException {
-    mappingRefreshService.refreshMapping(true);
+    refreshMapping(true);
   }
 
   @Override

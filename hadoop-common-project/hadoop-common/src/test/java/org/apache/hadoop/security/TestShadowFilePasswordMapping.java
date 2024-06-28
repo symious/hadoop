@@ -17,20 +17,26 @@
  */
 package org.apache.hadoop.security;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.concurrent.TimeoutException;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.io.MD5Hash;
+import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.hash.MD5FileUtils;
 import org.junit.Test;
 
-import java.io.File;
-import java.io.IOException;
-
+import static org.apache.hadoop.security.PollingBasedFileWatcher.NAMENODE_SIGNAL;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -39,16 +45,29 @@ public class TestShadowFilePasswordMapping {
   private final static String TEST_SHADOW_FILE_1 = "shadow1";
   private final static String TEST_SHADOW_FILE_2 = "shadow2";
 
+  private void overwriteTestFileContent(File src, File dst) throws IOException {
+    InputStream in = new FileInputStream(src);
+    OutputStream out = new FileOutputStream(dst);
+    int n;
+    while ((n = in.read()) != -1) {
+      out.write(n);
+    }
+    in.close();
+    out.close();
+  }
+
   @Test
-  public void testCacheRefresh() throws IOException, InterruptedException {
-    ShadowFileRpcPasswordMapping mapping = new ShadowFileRpcPasswordMapping();
+  public void testCacheRefresh() throws IOException, InterruptedException, TimeoutException {
     Configuration conf = new Configuration();
     ClassLoader classLoader = getClass().getClassLoader();
+    File tempFile = File.createTempFile(GenericTestUtils.getMethodName(), null);
 
     File shadowFile1 = new File(classLoader.getResource(TEST_SHADOW_FILE_1).getFile());
-    conf.set(CommonConfigurationKeys.
-        HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, shadowFile1.getAbsolutePath());
-    System.out.println(shadowFile1.getAbsolutePath());
+    overwriteTestFileContent(shadowFile1, tempFile);
+    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE,
+        tempFile.getAbsolutePath());
+    conf.setLong(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_REFRESH_INTERVAL, 1);
+    ShadowFileRpcPasswordMapping mapping = new ShadowFileRpcPasswordMapping();
     mapping.setConf(conf);
 
     mapping.cacheRefresh(true);
@@ -58,11 +77,8 @@ public class TestShadowFilePasswordMapping {
     assertEquals(mapping.getRpcPassword("c"), "cccShadow1");
 
     File shadowFile2 = new File(classLoader.getResource(TEST_SHADOW_FILE_2).getFile());
-    conf.set(CommonConfigurationKeys.
-        HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, shadowFile2.getAbsolutePath());
-    System.out.println(shadowFile2.getAbsolutePath());
-    mapping.setConf(conf);
-
+    overwriteTestFileContent(shadowFile2, tempFile);
+    tempFile.setLastModified(Time.now() + 10000);
     mapping.cacheRefresh(true);
 
     assertEquals(mapping.getRpcPassword("a"), "aaaShadow2");
@@ -70,24 +86,16 @@ public class TestShadowFilePasswordMapping {
     assertEquals(mapping.getRpcPassword("c"), "cccShadow2");
 
     //Test cache refresh async
-    conf.set(CommonConfigurationKeys.
-        HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, shadowFile1.getAbsolutePath());
-    conf.setBoolean(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_REFRESH_ASYNC, true);
-    conf.setLong(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_REFRESH_INTERVAL, 8);
-    System.out.println(shadowFile1.getAbsolutePath());
-    mapping.setConf(conf);
-    mapping.start();
+    overwriteTestFileContent(shadowFile1, tempFile);
+    tempFile.setLastModified(Time.now() + 20000);
+    GenericTestUtils.waitFor(() -> mapping.getRpcPassword("a").equals("aaaShadow1"), 100, 5000);
 
-    Thread.sleep(900);
-
-    assertEquals(mapping.getRpcPassword("a"), "aaaShadow1");
     assertNull(mapping.getRpcPassword("b"));
     assertEquals(mapping.getRpcPassword("c"), "cccShadow1");
   }
 
   @Test
   public void testChecksum() throws IOException {
-    ShadowFileRpcPasswordMapping mapping = new ShadowFileRpcPasswordMapping();
     ClassLoader classLoader = getClass().getClassLoader();
     File shadowFile1 = new File(classLoader.getResource(TEST_SHADOW_FILE_1).getFile());
     File shadowFile2 = new File(classLoader.getResource(TEST_SHADOW_FILE_2).getFile());
@@ -96,6 +104,11 @@ public class TestShadowFilePasswordMapping {
         HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CHECKSUM_ENABLED, true);
     conf.set(CommonConfigurationKeys.
         HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, shadowFile1.getAbsolutePath());
+    // Test using manual refreshing
+    conf.setLong(
+        CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_REFRESH_INTERVAL,
+        100000000);
+    ShadowFileRpcPasswordMapping mapping = new ShadowFileRpcPasswordMapping();
     mapping.setConf(conf);
 
     try {
@@ -104,8 +117,8 @@ public class TestShadowFilePasswordMapping {
       if (md5File.exists()) {
         MD5FileUtils.getDigestFileForFile(shadowFile1).delete();
       }
-      // Ignore md5 when start up
-      mapping.cacheRefresh(true);
+      // Ignore md5 when starting up
+      // Start up sequence is already triggered by constructor
 
       // shadow1.md5 not exists
       try {
@@ -138,23 +151,15 @@ public class TestShadowFilePasswordMapping {
 
   @Test
   public void testCacheNotStarted() {
-    ShadowFileRpcPasswordMapping mapping = new ShadowFileRpcPasswordMapping();
     Configuration conf = new Configuration();
-    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_REFRESH_ASYNC, "true");
-    conf.set(CommonConfigurationKeys.
-        HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, "NOT_EXIST_FILE");
-    mapping.setConf(conf);
-    mapping.start();
-    assertNull(mapping.getCacheRefreshService());
-
-
+    conf.set(CommonConfigurationKeys.IPC_SERVER_RPC_CATEGORY_INTERNAL, NAMENODE_SIGNAL);
+    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, "NOT_EXIST_FILE");
+    assertThrows(RuntimeException.class, () -> new ShadowFileRpcPasswordMapping().setConf(conf));
 
     ClassLoader classLoader = getClass().getClassLoader();
     File shadowFile1 = new File(classLoader.getResource(TEST_SHADOW_FILE_1).getFile());
     conf.set(CommonConfigurationKeys.
         HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, shadowFile1.getAbsolutePath());
-    mapping.setConf(conf);
-    mapping.start();
-    assertNotNull(mapping.getCacheRefreshService());
+    new ShadowFileRpcPasswordMapping().setConf(conf);
   }
 }

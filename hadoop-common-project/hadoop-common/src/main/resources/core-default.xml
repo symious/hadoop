@@ -4089,9 +4089,20 @@
 
   <property>
     <name>hadoop.security.groups.in-memory.refresh.interval</name>
+    <value>60s</value>
+    <description>
+      Interval between each in-memory cache refresh poll. If timeModified of the file hasn't changed
+      during this period, refresh method will not be called.
+      Expressed with units (e.g. 100ms, 10s, 1m, etc.), default in milliseconds.
+    </description>
+  </property>
+
+  <property>
+    <name>hadoop.security.groups.in-memory.force.refresh.interval</name>
     <value>300s</value>
     <description>
-      Interval between each in-memory cache refresh.
+      Interval between each force in-memory cache refresh. Refresh method is always called
+      regardless of timeModified of the file.
       Expressed with units (e.g. 100ms, 10s, 1m, etc.), default in milliseconds.
     </description>
   </property>

@@ -1277,6 +1277,18 @@ public class CommonConfigurationKeysPublic {
       "hadoop.security.groups.in-memory.refresh.interval";
   public static final long
       HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_REFRESH_INTERVAL_DEFAULT =
+      60000;
+
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String
+      HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_FORCE_REFRESH_INTERVAL_KEY =
+      "hadoop.security.groups.in-memory.force.refresh.interval";
+  public static final long
+      HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_FORCE_REFRESH_INTERVAL_DEFAULT =
       300000;
 
   /**

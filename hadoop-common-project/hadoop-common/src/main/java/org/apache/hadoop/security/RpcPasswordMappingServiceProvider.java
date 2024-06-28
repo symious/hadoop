@@ -19,7 +19,6 @@ package org.apache.hadoop.security;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
-import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 
 import java.io.IOException;
 
@@ -30,9 +29,6 @@ import java.io.IOException;
 @InterfaceAudience.Public
 @InterfaceStability.Evolving
 public interface RpcPasswordMappingServiceProvider {
-  static final String RPC_PASSWORD_MAPPING_CONFIG_PREFIX =
-      CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_PASSWORD_MAPPING;
-
   /**
    * Get rpc password of a given user.
    * Returns null in case of non-existing user
@@ -55,10 +51,5 @@ public interface RpcPasswordMappingServiceProvider {
    * @throws IOException
    */
   void cacheRefresh(boolean force) throws IOException;
-
-  /**
-   * Start service
-   */
-  public void start();
 }
 

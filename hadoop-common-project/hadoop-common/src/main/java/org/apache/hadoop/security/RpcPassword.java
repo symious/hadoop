@@ -72,7 +72,6 @@ public class RpcPassword {
       new AtomicLong(0);
   private final AtomicLong backgroundRefreshRunning =
       new AtomicLong(0);
-  private static final String NAMENODE_SIGNAL = "org.apache.hadoop.hdfs.server.namenode.NameNode";
 
   public RpcPassword(Configuration conf) {
     this(conf, new Timer());
@@ -83,7 +82,6 @@ public class RpcPassword {
         CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_MAPPING,
         ShadowFileRpcPasswordMapping.class,
         RpcPasswordMappingServiceProvider.class), conf);
-    impl.start();
 
     cacheTimeout = conf.getLong(
         CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_CACHE_SECS,
