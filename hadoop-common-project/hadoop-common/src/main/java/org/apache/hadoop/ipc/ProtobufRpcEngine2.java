@@ -231,7 +231,7 @@ public class ProtobufRpcEngine2 implements RpcEngine {
     public Message invoke(Object proxy, final Method method, Object[] args)
         throws ServiceException {
       long startTime = 0;
-      if (LOG.isDebugEnabled() || doesLogSlowCalls) {
+      if (doesLogSlowCalls) {
         startTime = Time.monotonicNow();
       }
 
@@ -286,13 +286,13 @@ public class ProtobufRpcEngine2 implements RpcEngine {
         }
       }
 
-      if (LOG.isDebugEnabled() || doesLogSlowCalls) {
+      if (doesLogSlowCalls) {
         long callTime = Time.monotonicNow() - startTime;
-        if (doesLogSlowCalls && callTime > slowThreshold) {
-          LOG.info("Slow call: {} to {} took {}ms, over threshold {}ms", method.getName(),
+        if (callTime > slowThreshold) {
+          LOG.warn("Slow call: {} to {} took {}ms, over threshold {}ms", method.getName(),
               this.remoteId, callTime, slowThreshold);
         } else {
-          LOG.debug("Call: " + method.getName() + " took " + callTime + "ms");
+          LOG.trace("Call: " + method.getName() + " took " + callTime + "ms");
         }
       }
 
