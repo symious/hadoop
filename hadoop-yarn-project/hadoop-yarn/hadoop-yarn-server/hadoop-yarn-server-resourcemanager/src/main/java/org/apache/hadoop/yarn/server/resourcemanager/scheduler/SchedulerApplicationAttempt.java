@@ -109,8 +109,9 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
   private FastDateFormat fdf =
       FastDateFormat.getInstance("EEE MMM dd HH:mm:ss Z yyyy");
 
+  private Object resourceMetricsCacheLock = new Object();
   private static final long MEM_AGGREGATE_ALLOCATION_CACHE_MSECS = 3000;
-  protected long lastMemoryAggregateAllocationUpdateTime = 0;
+  private long lastMemoryAggregateAllocationUpdateTime = 0;
   private Map<String, Long> lastResourceSecondsMap = new HashMap<>();
   protected final AppSchedulingInfo appSchedulingInfo;
   protected ApplicationAttemptId attemptId;
@@ -1114,31 +1115,33 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
 
   private AggregateAppResourceUsage getRunningAggregateAppResourceUsage() {
     long currentTimeMillis = System.currentTimeMillis();
-    // Don't walk the whole container list if the resources were computed
-    // recently.
-    if ((currentTimeMillis - lastMemoryAggregateAllocationUpdateTime)
-        > MEM_AGGREGATE_ALLOCATION_CACHE_MSECS) {
-      Map<String, Long> resourceSecondsMap = new HashMap<>();
-      for (RMContainer rmContainer : this.liveContainers.values()) {
-        long usedMillis = currentTimeMillis - rmContainer.getCreationTime();
-        Resource resource = rmContainer.getContainer().getResource();
-        for (ResourceInformation entry : resource.getResources()) {
-          long value = RMServerUtils
-              .getOrDefault(resourceSecondsMap, entry.getName(), 0L);
-          value += entry.getValue() * usedMillis
-              / DateUtils.MILLIS_PER_SECOND;
-          resourceSecondsMap.put(entry.getName(), value);
+    synchronized (resourceMetricsCacheLock) {
+      // Don't walk the whole container list if the resources were computed
+      // recently.
+      if ((currentTimeMillis - lastMemoryAggregateAllocationUpdateTime)
+          > MEM_AGGREGATE_ALLOCATION_CACHE_MSECS) {
+        Map<String, Long> resourceSecondsMap = new HashMap<>();
+        for (RMContainer rmContainer : this.liveContainers.values()) {
+          long usedMillis = currentTimeMillis - rmContainer.getCreationTime();
+          Resource resource = rmContainer.getContainer().getResource();
+          for (ResourceInformation entry : resource.getResources()) {
+            long value = RMServerUtils
+                .getOrDefault(resourceSecondsMap, entry.getName(), 0L);
+            value += entry.getValue() * usedMillis
+                / DateUtils.MILLIS_PER_SECOND;
+            resourceSecondsMap.put(entry.getName(), value);
+          }
         }
-      }
 
-      lastMemoryAggregateAllocationUpdateTime = currentTimeMillis;
-      lastResourceSecondsMap = resourceSecondsMap;
+        lastMemoryAggregateAllocationUpdateTime = currentTimeMillis;
+        lastResourceSecondsMap = resourceSecondsMap;
+      }
     }
     return new AggregateAppResourceUsage(lastResourceSecondsMap);
   }
 
   public ApplicationResourceUsageReport getResourceUsageReport() {
-    writeLock.lock();
+    readLock.lock();
     try {
       AggregateAppResourceUsage runningResourceUsage =
           getRunningAggregateAppResourceUsage();
@@ -1174,7 +1177,7 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
               runningResourceUsage.getResourceUsageSecondsMap(), queueUsagePerc,
               clusterUsagePerc, preemptedResourceSecondsMaps);
     } finally {
-      writeLock.unlock();
+      readLock.unlock();
     }
   }
 
@@ -1537,5 +1540,11 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
   @Override
   public void setReOrderTime(long reOrderTime) {
     this.reOrderTime = reOrderTime;
+  }
+
+  public void clearResourceUtilizationMetricsCache() {
+    synchronized (resourceMetricsCacheLock) {
+      lastMemoryAggregateAllocationUpdateTime = -1;
+    }
   }
 }

@@ -183,7 +183,7 @@ public class FSAppAttempt extends SchedulerApplicationAttempt
       getQueue().decUsedResource(containerResource);
 
       // Clear resource utilization metrics cache.
-      lastMemoryAggregateAllocationUpdateTime = -1;
+      clearResourceUtilizationMetricsCache();
     } finally {
       writeLock.unlock();
     }

@@ -241,7 +241,7 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
       attemptResourceUsage.decUsed(partition, containerResource);
 
       // Clear resource utilization metrics cache.
-      lastMemoryAggregateAllocationUpdateTime = -1;
+      clearResourceUtilizationMetricsCache();
 
       return true;
     } finally {
@@ -1129,7 +1129,7 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
    */
   @Override
   public ApplicationResourceUsageReport getResourceUsageReport() {
-    writeLock.lock();
+    readLock.lock();
     try {
       // Use write lock here because
       // SchedulerApplicationAttempt#getResourceUsageReport updated fields
@@ -1153,7 +1153,7 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
       }
       return report;
     } finally {
-      writeLock.unlock();
+      readLock.unlock();
     }
   }
 
