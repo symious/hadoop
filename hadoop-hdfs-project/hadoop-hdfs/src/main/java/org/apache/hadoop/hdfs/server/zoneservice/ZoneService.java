@@ -39,6 +39,7 @@ import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.tracing.TraceUtils;
 import org.apache.hadoop.tracing.TracerConfigurationManager;
+import org.apache.hadoop.util.GenericOptionsParser;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.htrace.core.Tracer;
@@ -118,7 +119,7 @@ public class ZoneService extends ReconfigurableBase  {
         DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_ENABLED_KEY_DEFAULT);
 
     try {
-      initialize(getConf());
+      initialize(conf);
     } catch (IOException | HadoopIllegalArgumentException e) {
       this.stopAtException(e);
       throw e;
@@ -128,9 +129,10 @@ public class ZoneService extends ReconfigurableBase  {
   public static void createZoneService(String[] argv, Configuration conf)
       throws IOException {
     LOG.info("createZoneService " + Arrays.asList(argv));
-    if (conf == null)
+    if (conf == null) {
       conf = new HdfsConfiguration();
-
+    }
+    new GenericOptionsParser(conf, argv);
     DefaultMetricsSystem.initialize("ZoneService");
     new ZoneService(conf);
   }
