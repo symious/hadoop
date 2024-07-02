@@ -17,14 +17,18 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
+import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.hdfs.util.StripedBlockUtil;
 import org.apache.hadoop.net.Node;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -35,6 +39,7 @@ class ErasureCodingWork extends BlockReconstructionWork {
   private final byte[] liveBusyBlockIndicies;
   private final byte[] excludeReconstructedIndices;
   private final String blockPoolId;
+  private boolean adjustTargetNodes = false;
 
   public ErasureCodingWork(String blockPoolId, BlockInfo block,
       BlockCollection bc,
@@ -43,15 +48,18 @@ class ErasureCodingWork extends BlockReconstructionWork {
       List<DatanodeStorageInfo> liveReplicaStorages,
       int additionalReplRequired, int priority,
       byte[] liveBlockIndicies, byte[] liveBusyBlockIndicies,
-      byte[] excludeReconstrutedIndices) {
+      byte[] excludeReconstructedIndices, boolean notEnoughRack) {
     super(block, bc, srcNodes, containingNodes,
         liveReplicaStorages, additionalReplRequired, priority);
     this.blockPoolId = blockPoolId;
     this.liveBlockIndicies = liveBlockIndicies;
     this.liveBusyBlockIndicies = liveBusyBlockIndicies;
-    this.excludeReconstructedIndices = excludeReconstrutedIndices;
-    LOG.debug("Creating an ErasureCodingWork to {} reconstruct ",
-        block);
+    this.excludeReconstructedIndices = excludeReconstructedIndices;
+    if (notEnoughRack) {
+      setNotEnoughRack();
+    }
+    LOG.info("Creating an ErasureCodingWork to {} reconstruct and notEnoughRack is {}",
+        block, notEnoughRack);
   }
 
   byte[] getLiveBlockIndicies() {
@@ -68,14 +76,34 @@ class ErasureCodingWork extends BlockReconstructionWork {
     // BlockCommand.NO_ACK (LONG.MAX_VALUE) . This kind of block we don't need
     // to send for replication or reconstruction
     if (!getBlock().isDeleted()) {
-      chosenTargets = blockplacement.chooseTarget(
-          getSrcPath(), getAdditionalReplRequired(), getSrcNodes()[0],
-          getLiveReplicaStorages(), false, excludedNodes, getBlockSize(),
-          storagePolicySuite.getPolicy(getStoragePolicyID()), null);
+      if (rule != null) {
+        DatanodeDescriptor source;
+        if (hasNotEnoughRack()) {
+          // If there are not enough racks, choose a source for simple replication.
+          source = getSrcNodes()[chooseSource4SimpleReplication()];
+        } else {
+          source = getSrcNodes()[0];
+        }
+        chosenTargets = blockplacement.chooseTarget(
+            getSrcPath(), getAdditionalReplRequired(), rule, source,
+            getLiveReplicaStorages(), false,
+            excludedNodes, getBlockSize(),
+            storagePolicySuite.getPolicy(getStoragePolicyID()), null, hasNotEnoughRack());
+        setAdjustTargetNodes(true);
+      } else {
+        chosenTargets = blockplacement.chooseTarget(
+            getSrcPath(), getAdditionalReplRequired(), getSrcNodes()[0],
+            getLiveReplicaStorages(), false, excludedNodes, getBlockSize(),
+            storagePolicySuite.getPolicy(getStoragePolicyID()), null);
+      }
     } else {
       LOG.warn("ErasureCodingWork could not need choose targets for {}", getBlock());
     }
     setTargets(chosenTargets);
+  }
+
+  public void setAdjustTargetNodes(boolean adjustTargetNodes) {
+    this.adjustTargetNodes = adjustTargetNodes;
   }
 
   /**
@@ -138,7 +166,7 @@ class ErasureCodingWork extends BlockReconstructionWork {
 
   @Override
   boolean addTaskToDatanode(NumberReplicas numberReplicas) {
-    final DatanodeStorageInfo[] targets = getTargets();
+    DatanodeStorageInfo[] targets = getTargets();
     assert targets.length > 0;
     BlockInfoStriped stripedBlk = (BlockInfoStriped) getBlock();
     boolean flag = true;
@@ -151,6 +179,11 @@ class ErasureCodingWork extends BlockReconstructionWork {
         numberReplicas.liveEnteringMaintenanceReplicas() > 0) &&
         hasAllInternalBlocks()) {
       List<Integer> leavingServiceSources = findLeavingServiceSources();
+      if (adjustTargetNodes) {
+        List<DatanodeDescriptor> sourceNodes = new ArrayList<>(
+            Arrays.asList(getSrcNodes()).subList(0, leavingServiceSources.size()));
+        targets = adjustTargetNodes(sourceNodes);
+      }
       // decommissioningSources.size() should be >= targets.length
       final int num = Math.min(leavingServiceSources.size(), targets.length);
       if (num == 0) {
@@ -206,4 +239,55 @@ class ErasureCodingWork extends BlockReconstructionWork {
     }
     return srcIndices;
   }
+
+  /**
+   * Adjusts the target nodes based on the given source nodes.
+   * the method selects target storage nodes from the targets
+   * based on the matching data center of the source nodes.
+   * ensure that the copied data remains within the
+   * same data center during the decommissioning of datanodes.
+   *
+   * @param sourceNodes The list of source datanodes.
+   * @return An array of adjusted target storage nodes.
+   */
+  private DatanodeStorageInfo[] adjustTargetNodes(List<DatanodeDescriptor> sourceNodes) {
+    DatanodeStorageInfo[] originalTargets = getTargets();
+    if (sourceNodes.isEmpty() || originalTargets.length == 0) {
+      return DatanodeStorageInfo.EMPTY_ARRAY;
+    }
+    int targetsLength = originalTargets.length;
+    DatanodeStorageInfo[] targets = new DatanodeStorageInfo[targetsLength];
+    Map<String, Deque<DatanodeStorageInfo>> idcToStorageMap = new HashMap<>();
+    for (DatanodeStorageInfo storage : originalTargets) {
+      String idc = NetworkTopologyUtil.getDataCenter(storage.getDatanodeDescriptor());
+      idcToStorageMap.computeIfAbsent(idc, k -> new ArrayDeque<>()).add(storage);
+    }
+
+    int i = 0;
+    for (DatanodeDescriptor datanodeDescriptor : sourceNodes) {
+      if (i >= targetsLength) {
+        break;
+      }
+      String idc = NetworkTopologyUtil.getDataCenter(datanodeDescriptor);
+      Deque<DatanodeStorageInfo> storageDeque = idcToStorageMap.get(idc);
+
+      if (storageDeque != null && !storageDeque.isEmpty()) {
+        targets[i] = storageDeque.poll();
+        if (storageDeque.isEmpty()) {
+          idcToStorageMap.remove(idc);
+        }
+      } else if (!idcToStorageMap.isEmpty()) {
+        // If no matching IDC found, assign the first available element from any IDC.
+        Map.Entry<String, Deque<DatanodeStorageInfo>> entry =
+            idcToStorageMap.entrySet().iterator().next();
+        targets[i] = entry.getValue().pollLast();
+        if (entry.getValue().isEmpty()) {
+          idcToStorageMap.remove(entry.getKey());
+        }
+      }
+      i++;
+    }
+    return targets;
+  }
+
 }

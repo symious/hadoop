@@ -1346,6 +1346,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY =
       "dfs.namenode.dr.replication-rule.cold-data";
 
+  // value such as `9=/datacenter0:6,/datacenter1:3`
+  public static final String DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY =
+      "dfs.namenode.dr.striped.block-rule";
+
   public static final String DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY = "dfs.block.placement.ec.classname";
   public static final Class<BlockPlacementPolicyRackFaultTolerant> DFS_BLOCK_PLACEMENT_EC_CLASSNAME_DEFAULT = BlockPlacementPolicyRackFaultTolerant.class;
 

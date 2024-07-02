@@ -146,6 +146,22 @@ public abstract class BlockPlacementPolicy {
         returnChosenNodes, excludedNodes, blocksize, storagePolicy, flags);
   }
 
+  public DatanodeStorageInfo[] chooseTarget(
+      String srcPath,
+      int numOfReplicas,
+      ReplicationRule rule,
+      Node writer,
+      List<DatanodeStorageInfo> chosenNodes,
+      boolean returnChosenNodes,
+      Set<Node> excludedNodes,
+      long blocksize,
+      final BlockStoragePolicy storagePolicy,
+      EnumSet<AddBlockFlag> flags,
+      boolean notEnoughRack) {
+    return chooseTarget(srcPath, numOfReplicas, writer, chosenNodes,
+        returnChosenNodes, excludedNodes, blocksize, storagePolicy, flags);
+  }
+
   /**
    * Verify if the block's placement meets requirement of placement policy,
    * i.e. replicas are placed on no less than minRacks racks in the system.

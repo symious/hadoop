@@ -148,6 +148,18 @@ public class ReplicationRule {
     return mainDC;
   }
 
+  public String getOtherDataCenter() {
+    short min = Short.MAX_VALUE;
+    String otherDC = "";
+    for (ReplicationRuleSection s: sections) {
+      if (s.getReplica() < min) {
+        min = s.getReplica();
+        otherDC = s.getDataCenter();
+      }
+    }
+    return otherDC;
+  }
+
   @Override
   public String toString() {
     return Joiner.on(",").join(sections);

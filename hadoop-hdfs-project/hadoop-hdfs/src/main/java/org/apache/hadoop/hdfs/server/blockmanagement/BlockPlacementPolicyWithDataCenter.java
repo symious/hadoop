@@ -26,6 +26,7 @@ import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
 import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRuleSection;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRuleUtil;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.net.NodeBase;
@@ -62,8 +63,8 @@ public class BlockPlacementPolicyWithDataCenter extends
   protected DFSNetworkTopologyWithDataCenter dcClusterMap;
   // use a virtual base to limit scope to the target datacenter
   private static final Map<String, Node> dcBaseNodes = new HashMap<>();
-  private static final String VIRTUAL_HOST = "virtual_host";
-  private static final String VIRTUAL_RACK = "/virtual_rack";
+  protected static final String VIRTUAL_HOST = "virtual_host";
+  protected static final String VIRTUAL_RACK = "/virtual_rack";
   private static final List<DatanodeStorageInfo> EMPTY_NODES = Collections.emptyList();
 
   @Override
@@ -347,7 +348,7 @@ public class BlockPlacementPolicyWithDataCenter extends
     List<DatanodeStorageInfo> excessReplicas = new ArrayList<>();
     final Map<String, List<DatanodeStorageInfo>> dcMap = new HashMap<>();
 
-    splitNodesWithDataCenter(delCandidates, dcMap);
+    ReplicationRuleUtil.splitNodesWithDataCenter(delCandidates, dcMap);
 
     // Handle the replicas which are not included in the rule.
     for (String dcName : dcMap.keySet()) {
@@ -394,7 +395,7 @@ public class BlockPlacementPolicyWithDataCenter extends
       Collection<String> delRedundantDataCenters) {
 
     final Map<String, List<DatanodeStorageInfo>> dcMap = new HashMap<>();
-    splitNodesWithDataCenter(delCandidates, dcMap);
+    ReplicationRuleUtil.splitNodesWithDataCenter(delCandidates, dcMap);
     // Check if there is only one data center.
     if (dcMap.size() == 1) {
       return super.chooseReplicasToDelete(availableReplicas, delCandidates,
@@ -433,7 +434,7 @@ public class BlockPlacementPolicyWithDataCenter extends
   /**
    * Add replicas to excessReplicas list.
    */
-  private boolean addExcessReplicas(
+  protected boolean addExcessReplicas(
       Collection<DatanodeStorageInfo> candidates,
       int expectedNumOfReplicas,
       List <DatanodeStorageInfo> toAddReplicas,
@@ -462,24 +463,6 @@ public class BlockPlacementPolicyWithDataCenter extends
     return candidates.size() - expectedNumOfReplicas == excessReplicas.size();
   }
 
-  /**
-   * Split data nodes into datacenter sets.
-   *
-   * @param storageInfos DatanodeStorageInfo to be split
-   * @param dcMap a map from datacenter to datanodes
-   */
-  public void splitNodesWithDataCenter(
-      final Collection<DatanodeStorageInfo> storageInfos,
-      final Map<String, List<DatanodeStorageInfo>> dcMap) {
-    for (DatanodeStorageInfo s : storageInfos) {
-      final String dcName = NetworkTopologyUtil.getDataCenter(
-          s.getDatanodeDescriptor());
-      List<DatanodeStorageInfo> storageList = dcMap.computeIfAbsent(
-          dcName, k -> new ArrayList<>());
-      storageList.add(s);
-    }
-  }
-
   @Override
   public DatanodeStorageInfo[] chooseTarget(
       String srcPath, int numOfReplicas,
@@ -489,7 +472,7 @@ public class BlockPlacementPolicyWithDataCenter extends
       long blocksize, final BlockStoragePolicy storagePolicy,
       EnumSet<AddBlockFlag> flags) {
     final Map<String, List<DatanodeStorageInfo>> dcMap = new HashMap<>();
-    splitNodesWithDataCenter(chosenNodes, dcMap);
+    ReplicationRuleUtil.splitNodesWithDataCenter(chosenNodes, dcMap);
 
     // Replicate to the datacenter without any replicas first
     Set<String> exists = dcMap.keySet();
@@ -519,7 +502,7 @@ public class BlockPlacementPolicyWithDataCenter extends
         continue;
       }
       List<DatanodeStorageInfo> storages = dcMap.get(section.getDataCenter());
-      if ((storages != null) && (section.getReplica() > storages.size())) {
+      if (storages != null && section.getReplica() > storages.size()) {
         int n = Math.min(numOfReplicas, section.getReplica() - storages.size());
         Node base = (writer != null && NetworkTopologyUtil.getDataCenter(writer)
             .equals(section.getDataCenter())) ?

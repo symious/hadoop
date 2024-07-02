@@ -19,20 +19,30 @@ package org.apache.hadoop.hdfs.server.blockmanagement;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageType;
+import org.apache.hadoop.hdfs.AddBlockFlag;
 import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
+import org.apache.hadoop.hdfs.protocol.BlockStoragePolicy;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRuleSection;
+import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRuleUtil;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.net.NodeBase;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY;
@@ -120,6 +130,51 @@ public class BlockPlacementPolicyRackFaultTolerantDataCenter extends
     // If more replicas than racks, evenly spread the replicas.
     // This calculation rounds up.
     return (totalNumOfReplicas - 1) / numOfRacks + 1;
+  }
+
+  @Override
+  public DatanodeStorageInfo[] chooseTarget(
+      String srcPath, int numOfReplicas,
+      ReplicationRule rule, Node writer,
+      List<DatanodeStorageInfo> chosenNodes,
+      boolean returnChosenNodes, Set<Node> excludedNodes,
+      long blocksize, final BlockStoragePolicy storagePolicy,
+      EnumSet<AddBlockFlag> flags, boolean notEnoughRack) {
+
+    if (notEnoughRack) {
+      return chooseTarget(srcPath, numOfReplicas, writer,
+          chosenNodes, returnChosenNodes, excludedNodes, blocksize, storagePolicy, flags);
+    }
+
+    final Map<String, List<DatanodeStorageInfo>> dcMap = new HashMap<>();
+    ReplicationRuleUtil.splitNodesWithDataCenter(chosenNodes, dcMap);
+
+    // Replicate to datacenters without enough replicas.
+    List<DatanodeStorageInfo> targetNodes = new ArrayList<>();
+    for (ReplicationRuleSection section: rule.getSections()) {
+      if (section.getReplica() <= 0) {
+        continue;
+      }
+      String dc = section.getDataCenter();
+      List<DatanodeStorageInfo> storages = dcMap.getOrDefault(dc, new ArrayList<>());
+      if (section.getReplica() > storages.size()) {
+        int n = Math.min(numOfReplicas, section.getReplica() - storages.size());
+        Node base = (writer != null && NetworkTopologyUtil.getDataCenter(writer)
+            .equals(dc)) ? writer : new NodeBase(VIRTUAL_HOST, dc + VIRTUAL_RACK);
+        DatanodeStorageInfo[] result =  super.chooseTarget(srcPath, n, base,
+            NetworkTopologyUtil.getStoragesInDataCenter(chosenNodes,
+                section.getDataCenter()), returnChosenNodes,
+            excludedNodes, blocksize, storagePolicy, flags);
+        Collections.addAll(targetNodes, result);
+        if (result.length == numOfReplicas) {
+          return targetNodes.toArray(DatanodeStorageInfo.EMPTY_ARRAY);
+        }
+        Collections.addAll(storages, result);
+        numOfReplicas = Math.max(numOfReplicas - result.length, 0);
+      }
+    }
+
+    return DatanodeStorageInfo.EMPTY_ARRAY;
   }
 
   /**
@@ -422,5 +477,60 @@ public class BlockPlacementPolicyRackFaultTolerantDataCenter extends
   public void setDefaultDC(String defaultDC) {
     this.defaultDC = defaultDC;
     this.defaultScope = "/" + defaultDC;
+  }
+
+  @Override
+  public List<DatanodeStorageInfo> chooseReplicasToDelete(
+      Collection<DatanodeStorageInfo> availableReplicas,
+      Collection<DatanodeStorageInfo> delCandidates,
+      int expectedNumOfReplicas, ReplicationRule rule,
+      List<StorageType> excessTypes, DatanodeDescriptor addedNode,
+      DatanodeDescriptor delNodeHint) {
+
+    List<DatanodeStorageInfo> excessReplicas = new ArrayList<>();
+    Map<String, List<DatanodeStorageInfo>> delDCMap = new HashMap<>();
+    ReplicationRuleUtil.splitNodesWithDataCenter(delCandidates, delDCMap);
+    // DelCandidates are in one datacenter.
+    if (delDCMap.size() == 1) {
+      return super.chooseReplicasToDelete(availableReplicas, delCandidates,
+          expectedNumOfReplicas, excessTypes, addedNode, delNodeHint);
+    }
+
+    // Handle the replicas which are not included in the rule.
+    for (Map.Entry<String, List<DatanodeStorageInfo>> entry : delDCMap.entrySet()) {
+      String dcName = entry.getKey();
+      List<DatanodeStorageInfo> storageInfos = entry.getValue();
+      if (!rule.getDatacenters().contains(dcName)) {
+        if (addExcessReplicas(delCandidates, expectedNumOfReplicas,
+            storageInfos, excessReplicas, delNodeHint)) {
+          break;
+        }
+      }
+    }
+
+    // Handle the excess replicas in the rule.
+    if (excessReplicas.size() < delCandidates.size() - expectedNumOfReplicas) {
+      Map<String, List<DatanodeStorageInfo>> availableDCMap = new HashMap<>();
+      ReplicationRuleUtil.splitNodesWithDataCenter(availableReplicas, availableDCMap);
+      for (DatanodeStorageInfo datanodeStorageInfo : delCandidates) {
+        String dcName = NetworkTopologyUtil.getDataCenter(
+            datanodeStorageInfo.getDatanodeDescriptor());
+        List<DatanodeStorageInfo> availableDCStorageInfos = availableDCMap.get(dcName);
+        List<DatanodeStorageInfo> delDCStorageInfos = delDCMap.get(dcName);
+        if (availableDCStorageInfos.size() > rule.getReplica(dcName)) {
+          List<DatanodeStorageInfo> replicasToDelete = (delDCStorageInfos.size() == 1) ?
+              Stream.of(datanodeStorageInfo).collect(Collectors.toList()) :
+              super.chooseReplicasToDelete(availableDCStorageInfos,
+                  Stream.of(datanodeStorageInfo).collect(Collectors.toList()),
+                  0, excessTypes, addedNode,
+                  datanodeStorageInfo.getDatanodeDescriptor());
+          if (addExcessReplicas(delCandidates, expectedNumOfReplicas,
+              replicasToDelete, excessReplicas, delNodeHint)) {
+            break;
+          }
+        }
+      }
+    }
+    return excessReplicas;
   }
 }

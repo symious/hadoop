@@ -23,21 +23,33 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.PermissionStatus;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.StripedFileTestUtil;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
+import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfoWithStorage;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
+import org.apache.hadoop.hdfs.protocol.LocatedStripedBlock;
+import org.apache.hadoop.hdfs.protocol.SystemErasureCodingPolicies;
+import org.apache.hadoop.hdfs.server.datanode.DataNode;
+import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
+import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
 import org.apache.hadoop.net.StaticMapping;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
+import org.apache.log4j.Level;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -51,7 +63,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeoutException;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -443,6 +459,618 @@ public class TestBlockPlacementPolicyRackFaultTolerantDataCenter {
           .verifyBlockPlacement(block.getLocations(), 5);
       Assert.assertTrue(status.isPlacementPolicySatisfied());
     }
+  }
+
+  private void initConfForDr(Configuration conf, long drColdDataThresholdMS,
+      String defaultDataCenter) {
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE * 1024);
+    conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+        BlockPlacementPolicyWithDataCenter.class,
+        BlockPlacementPolicy.class);
+    conf.setClass(DFSConfigKeys.DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY,
+        BlockPlacementPolicyRackFaultTolerantDataCenter.class,
+        BlockPlacementPolicy.class);
+    conf.setBoolean(DFSConfigKeys.DFS_USE_DFS_NETWORK_TOPOLOGY_KEY, true);
+    conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY,
+        DFSNetworkTopologyWithDataCenter.class, DFSNetworkTopology.class);
+    conf.set(DFSConfigKeys.DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY,
+        defaultDataCenter);
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, 10);
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY, 10);
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_DECOMMISSION_INTERVAL_KEY, 1);
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_KEY,
+        false);
+    conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, 1L);
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY, true);
+    conf.set(DFSConfigKeys.DFS_NAMENODE_DR_DATACENTERS_KEY, "/datacenter0,/datacenter1");
+    conf.setLong(DFSConfigKeys.DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY,
+        drColdDataThresholdMS);
+    conf.set(DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY,
+        "3=/datacenter0:1,/datacenter1:2");
+    conf.set(DFSConfigKeys.DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY,
+        "9=/datacenter0:6,/datacenter1:3;5=/datacenter0:3,/datacenter1:2");
+  }
+
+  /**
+   * Test the ec policy is "RS-6-3-1024k", and the full group blocks choose target in DR.
+   */
+  @Test
+  public void testFullBlockGroupChooseTargetForDR() throws Exception {
+    Configuration conf = createConfigurationForDr();
+    final String[] racks = createRacks(12, "/datacenter0/rack");
+    final String[] hosts = createHosts(12, "host");
+    ErasureCodingPolicy ecPolicy =
+        StripedFileTestUtil.getDefaultECPolicy();
+    short dataBlocks = (short) ecPolicy.getNumDataUnits();
+    short parityBlocks = (short) ecPolicy.getNumParityUnits();
+
+    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(12).
+        racks(racks).hosts(hosts).build()) {
+      cluster.waitActive();
+      FSNamesystem namesystem = cluster.getNamesystem();
+      NamenodeProtocols nameNodeRpc = cluster.getNameNodeRpc();
+      DistributedFileSystem fs = cluster.getFileSystem();
+      fs.enableErasureCodingPolicy("RS-6-3-1024k");
+      fs.setErasureCodingPolicy(new Path("/"), "RS-6-3-1024k");
+      BlockManager blockManager = cluster.getNamesystem().getBlockManager();
+
+      // Create ec file.
+      Path src = new Path("/ec/file");
+      int dataSize = createECFile(fs, src, dataBlocks);
+
+      short blockNum = (short) (dataBlocks + parityBlocks);
+      LocatedBlocks lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+      LocatedBlock locatedBlock = lbs.get(0);
+      LocatedStripedBlock blk = (LocatedStripedBlock) locatedBlock;
+      BlockInfoStriped blockInfo = (BlockInfoStriped) blockManager.getStoredBlock(
+          new Block(blk.getBlock().getBlockId()));
+      validateInitIdc(lbs, blockNum, "/datacenter0");
+
+      // Adding 6 new hosts about '/datacenter1'.
+      addDataNodes(cluster, fs, "/datacenter1", 6);
+
+      // Stop datanodes and schedule the reconstruction work.
+      List<MiniDFSCluster.DataNodeProperties> dataNodePropertiesList =
+          stopDataNodes(cluster, locatedBlock, 3);
+
+      // Wait for the dead datanode count to be 3.
+      GenericTestUtils.waitFor(()
+              -> namesystem.getNumDeadDataNodes() == 3, 10, 2000);
+
+      // Wait for redundancy monitor to complete and
+      // check the number of internal blocks of the ec block group is 9.
+      DFSTestUtil.waitForReplication(fs, src, blockNum, 15 * 1000);
+      lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+      validateIdcForDr(lbs, blockNum, dataBlocks,
+          "/datacenter0", "/datacenter1");
+
+      // Restart DataNodes.
+      restartDataNodes(cluster, dataNodePropertiesList, blockManager);
+
+      // Wait for excessRedundancyMap size to be 0.
+      GenericTestUtils.waitFor(()
+          -> blockManager.getExcessBlocksCount() == 0, 10, 20000);
+
+      // Check the number of internal blocks of the ec block group is 9.
+      DFSTestUtil.waitForReplication(fs, src, blockNum, 15 * 1000);
+      lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+      validateIdcForDr(lbs, blockNum, dataBlocks,
+          "/datacenter0", "/datacenter1");
+
+      // Test decommissioning 1 nodes in `/datacenter1` and
+      // decommissioning 2 nodes in `/datacenter0`.
+      DatanodeManager dm = blockManager.getDatanodeManager();
+      locatedBlock = lbs.get(0);
+      decommissionDataNodes1(cluster, dm, locatedBlock);
+
+      // Check live+decommissioned datanodes.
+      lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+      locatedBlock = lbs.get(0);
+      assertEquals(blockNum + 3, locatedBlock.getLocations().length);
+
+      // Check the number of real live internal blocks of the ec block group is 9,
+      // ignoring decommissioned datanodes.
+      assertEquals(blockNum, blockManager.countLiveNodes(blockInfo));
+
+      // Validate rule is "/datacenter0:6,/datacenter1:3"
+      Map<String, Integer> idcMap = countDataNodeDC(locatedBlock.getLocations(),
+          true);
+      assertEquals(dataBlocks, idcMap.get("/datacenter0").intValue());
+      assertEquals(parityBlocks, idcMap.get("/datacenter1").intValue());
+    }
+  }
+
+  /**
+   * Test the ec policy is "RS-6-3-1024k", and the less than full group blocks choose target in DR.
+   */
+  @Test
+  public void testLessThanFullBlockGroupChooseTargetForDR() throws Exception {
+    Configuration conf = createConfigurationForDr();
+    final String[] racks = createRacks(9, "/datacenter1/rack");
+    final String[] hosts = createHosts(9, "host");
+
+    ErasureCodingPolicy ecPolicy =
+        StripedFileTestUtil.getDefaultECPolicy();
+    short dataBlocks = (short) ecPolicy.getNumDataUnits();
+    short parityBlocks = (short) ecPolicy.getNumParityUnits();
+
+    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(9).
+        racks(racks).hosts(hosts).build()) {
+      cluster.waitActive();
+      FSNamesystem namesystem = cluster.getNamesystem();
+      NamenodeProtocols nameNodeRpc = cluster.getNameNodeRpc();
+      DistributedFileSystem fs = cluster.getFileSystem();
+      fs.enableErasureCodingPolicy("RS-6-3-1024k");
+      fs.setErasureCodingPolicy(new Path("/"), "RS-6-3-1024k");
+      BlockManager blockManager = cluster.getNamesystem().getBlockManager();
+
+      // Create ec file.
+      Path src = new Path("/ec/file1");
+      int dataSize = createECFile(fs, src, (short) (dataBlocks - 1));
+
+      short blockNum = (short) (dataBlocks + parityBlocks - 1) ;
+      LocatedBlocks lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+      LocatedBlock locatedBlock = lbs.get(0);
+      LocatedStripedBlock blk = (LocatedStripedBlock) locatedBlock;
+      BlockInfoStriped blockInfo = (BlockInfoStriped) blockManager.getStoredBlock(
+          new Block(blk.getBlock().getBlockId()));
+      validateInitIdc(lbs, blockNum, "/datacenter1");
+
+      // Adding 6 new hosts about '/datacenter0'.
+      addDataNodes(cluster, fs, "/datacenter0", 6);
+
+      // Stop datanodes and schedule the reconstruction work.
+      List<MiniDFSCluster.DataNodeProperties> dataNodePropertiesList =
+          stopDataNodes(cluster, locatedBlock, 3);
+
+      // Wait for the dead datanode count to be 3.
+      GenericTestUtils.waitFor(()
+          -> namesystem.getNumDeadDataNodes() == 3, 10, 2000);
+
+      // Wait for redundancy monitor to complete and
+      // check the number of internal blocks of the ec block group is 8.
+      DFSTestUtil.waitForReplication(fs, src, blockNum, 15 * 1000);
+
+      // Validate rule is "/datacenter0:3,/datacenter1:5"
+      lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+      validateIdcForDr(lbs, blockNum, parityBlocks,
+          "/datacenter0", "/datacenter1");
+
+      // Restart DataNodes.
+      restartDataNodes(cluster, dataNodePropertiesList, blockManager);
+
+      // Wait for excessRedundancyMap size to be 0.
+      GenericTestUtils.waitFor(()
+          -> blockManager.getExcessBlocksCount() == 0, 10, 20000);
+
+      // Check the number of internal blocks of the ec block group is 8.
+      DFSTestUtil.waitForReplication(fs, src, blockNum, 15 * 1000);
+
+      // Validate rule is "/datacenter0:3,/datacenter1:5"
+      lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+      validateIdcForDr(lbs, blockNum, parityBlocks,
+          "/datacenter0", "/datacenter1");
+
+      // Test decommissioning 3 nodes in `/datacenter1`.
+      DatanodeManager dm = blockManager.getDatanodeManager();
+      locatedBlock = lbs.get(0);
+      decommissionDataNodes2(cluster, dm, locatedBlock);
+
+      lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+      locatedBlock = lbs.get(0);
+
+      // Check live+decommissioned datanodes.
+      assertEquals(blockNum + 3, locatedBlock.getLocations().length);
+
+      // Check the number of real live internal blocks of the ec block group is 8,
+      // ignoring decommissioned datanodes.
+      assertEquals(blockNum, blockManager.countLiveNodes(blockInfo));
+
+      // If the real total number of blocks is less than or equal to the number of data blocks and
+      // all internal blocks are located the main idc.
+      // Otherwise, the number of data blocks located the main idc,
+      // the remaining blocks located the another idc.
+      // `/datacenter0` is mainIDC, so will choose the number of data blocks.
+      // the number of internal blocks of the ec block group is 8 will generate
+      // striped blockRule /datacenter0:6,/datacenter1:2.
+      Map<String, Integer> idcMap = countDataNodeDC(locatedBlock.getLocations(),
+          true);
+      assertEquals(dataBlocks, idcMap.get("/datacenter0").intValue());
+      assertEquals(blockNum - dataBlocks, idcMap.get("/datacenter1").intValue());
+    }
+  }
+
+  /**
+   * Test the ec policy is "RS-6-3-1024k", and the less than data blocks choose target in DR.
+   */
+  @Test
+  public void testLessThanFullDataBlockChooseTargetForDR() throws Exception {
+    Configuration conf = createConfigurationForDr();
+    final String[] racks = createRacks(9, "/datacenter1/rack");
+    final String[] hosts = createHosts(9, "host");
+
+    ErasureCodingPolicy ecPolicy =
+        StripedFileTestUtil.getDefaultECPolicy();
+    short dataBlocks = (short) ecPolicy.getNumDataUnits();
+    short parityBlocks = (short) ecPolicy.getNumParityUnits();
+
+    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(9).
+        racks(racks).hosts(hosts).build()) {
+      cluster.waitActive();
+      FSNamesystem namesystem = cluster.getNamesystem();
+      NamenodeProtocols nameNodeRpc = cluster.getNameNodeRpc();
+      DistributedFileSystem fs = cluster.getFileSystem();
+      fs.enableErasureCodingPolicy("RS-6-3-1024k");
+      fs.setErasureCodingPolicy(new Path("/"), "RS-6-3-1024k");
+      BlockManager blockManager = cluster.getNamesystem().getBlockManager();
+
+      // Create ec file.
+      Path src = new Path("/ec/file2");
+      int dataSize = createECFile(fs, src, (short) (dataBlocks - 3));
+      short blockNum = (short) (dataBlocks + parityBlocks - 3) ;
+      LocatedBlocks lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+      LocatedBlock locatedBlock = lbs.get(0);
+      LocatedStripedBlock blk = (LocatedStripedBlock) locatedBlock;
+      BlockInfoStriped blockInfo = (BlockInfoStriped) blockManager.getStoredBlock(
+          new Block(blk.getBlock().getBlockId()));
+      validateInitIdc(lbs, blockNum, "/datacenter1");
+
+      // Adding 6 new hosts about '/datacenter0'.
+      addDataNodes(cluster, fs, "/datacenter0", 6);
+
+      // Stop datanodes and schedule the reconstruction work.
+      List<MiniDFSCluster.DataNodeProperties> dataNodePropertiesList =
+          stopDataNodes(cluster, locatedBlock, 3);
+
+      // Wait for the dead datanode count to be 3.
+      GenericTestUtils.waitFor(()
+          -> namesystem.getNumDeadDataNodes() == 3, 10, 2000);
+
+      // Wait for redundancy monitor to complete and
+      // check the number of internal blocks of the ec block group is 6.
+      DFSTestUtil.waitForReplication(fs, src, blockNum, 15 * 1000);
+      lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+
+      // Validate rule is "/datacenter0:3,/datacenter1:3"
+      validateIdcForDr(lbs, blockNum, parityBlocks,
+          "/datacenter0", "/datacenter1");
+
+      // Restart DataNodes.
+      restartDataNodes(cluster, dataNodePropertiesList, blockManager);
+
+      // Wait for excessRedundancyMap size to be 0.
+      GenericTestUtils.waitFor(()
+          -> blockManager.getExcessBlocksCount() == 0, 10, 20000);
+
+      // Check the number of internal blocks of the ec block group is 6.
+      DFSTestUtil.waitForReplication(fs, src, blockNum, 15 * 1000);
+      lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+      validateIdcForDr(lbs, blockNum, parityBlocks,
+          "/datacenter0", "/datacenter1");
+
+      // Test decommissioning 3 nodes in `/datacenter1`.
+      DatanodeManager dm = blockManager.getDatanodeManager();
+      locatedBlock = lbs.get(0);
+      decommissionDataNodes2(cluster, dm, locatedBlock);
+
+      lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+      locatedBlock = lbs.get(0);
+
+      // Check live+decommissioned datanodes.
+      assertEquals(blockNum + 3, locatedBlock.getLocations().length);
+
+      // Check the number of real live internal blocks of the ec block group is 6,
+      // ignoring decommissioned datanodes.
+      assertEquals(blockNum, blockManager.countLiveNodes(blockInfo));
+
+      // If the real total number of blocks is less than or equal to the number of data blocks and
+      // all internal blocks are located the main idc.
+      // Otherwise, the number of data blocks located the main idc,
+      // the remaining blocks located the another idc.
+      // `/datacenter0` is mainIDC, so will choose the number of data blocks.
+      // the number of internal blocks of the ec block group is 6
+      // will generate striped blockRule is /datacenter0:6.
+      Map<String, Integer> idcMap = countDataNodeDC(locatedBlock.getLocations(),
+          true);
+      assertEquals(dataBlocks, idcMap.get("/datacenter0").intValue());
+    }
+  }
+
+  /**
+   * Test the ec policy is "RS-3-2-1024k", and the full block groups choose target in DR.
+   */
+  @Test
+  public void testFullBlockGroupChooseTargetForDR2() throws Exception {
+    Configuration conf = createConfigurationForDr();
+    final String[] racks = createRacks(6, "/datacenter0/rack");
+    final String[] hosts = createHosts(6, "host");
+    ErasureCodingPolicy ecPolicy = SystemErasureCodingPolicies.getByID(
+        SystemErasureCodingPolicies.RS_3_2_POLICY_ID);
+    short dataBlocks = (short) ecPolicy.getNumDataUnits();
+    short parityBlocks = (short) ecPolicy.getNumParityUnits();
+    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(6).
+        racks(racks).hosts(hosts).build()) {
+      cluster.waitActive();
+      FSNamesystem namesystem = cluster.getNamesystem();
+      NamenodeProtocols nameNodeRpc = cluster.getNameNodeRpc();
+      DistributedFileSystem fs = cluster.getFileSystem();
+      fs.enableErasureCodingPolicy("RS-3-2-1024k");
+      fs.setErasureCodingPolicy(new Path("/"), "RS-3-2-1024k");
+      BlockManager blockManager = cluster.getNamesystem().getBlockManager();
+
+      // Create ec file.
+      Path src = new Path("/ec/file");
+      int dataSize = createECFile(fs, src, dataBlocks);
+
+      short blockNum = (short) (dataBlocks + parityBlocks);
+      LocatedBlocks lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+      LocatedBlock locatedBlock = lbs.get(0);
+      LocatedStripedBlock blk = (LocatedStripedBlock) locatedBlock;
+      BlockInfoStriped blockInfo = (BlockInfoStriped) blockManager.getStoredBlock(
+          new Block(blk.getBlock().getBlockId()));
+      validateInitIdc(lbs, blockNum, "/datacenter0");
+
+      // Adding 6 new hosts about '/datacenter1'.
+      addDataNodes(cluster, fs, "/datacenter1", 6);
+
+      // Stop datanodes and schedule the reconstruction work.
+      List<MiniDFSCluster.DataNodeProperties> dataNodePropertiesList =
+          stopDataNodes(cluster, locatedBlock, 2);
+
+      // Wait for the dead datanode count to be 2.
+      GenericTestUtils.waitFor(()
+          -> namesystem.getNumDeadDataNodes() == 2, 10, 2000);
+
+      // Wait for redundancy monitor to complete and
+      // check the number of internal blocks of the ec block group is 5.
+      DFSTestUtil.waitForReplication(fs, src, blockNum, 15 * 1000);
+      lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+      // /datacenter0:3,/datacenter1:2
+      validateIdcForDr(lbs, blockNum, dataBlocks,
+          "/datacenter0", "/datacenter1");
+
+      // Restart DataNodes.
+      restartDataNodes(cluster, dataNodePropertiesList, blockManager);
+
+      // Wait for excessRedundancyMap size to be 0.
+      GenericTestUtils.waitFor(()
+          -> blockManager.getExcessBlocksCount() == 0, 10, 20000);
+
+      // Check the number of internal blocks of the ec block group is 5.
+      DFSTestUtil.waitForReplication(fs, src, blockNum, 15 * 1000);
+      lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+      // /datacenter0:3,/datacenter1:2
+      validateIdcForDr(lbs, blockNum, dataBlocks,
+          "/datacenter0", "/datacenter1");
+
+      // Test decommissioning 2 nodes in `/datacenter1` and
+      // decommissioning 2 nodes in `/datacenter0`.
+      DatanodeManager dm = blockManager.getDatanodeManager();
+      locatedBlock = lbs.get(0);
+      decommissionDataNodes3(cluster, dm, locatedBlock);
+
+      // Check live+decommissioned datanodes.
+      lbs = nameNodeRpc.getBlockLocations(src.toString(), 0, dataSize);
+      locatedBlock = lbs.get(0);
+      assertEquals(blockNum + 4, locatedBlock.getLocations().length);
+
+      // Check the number of real live internal blocks of the ec block group is 5,
+      // ignoring decommissioned datanodes.
+      assertEquals(blockNum, blockManager.countLiveNodes(blockInfo));
+
+      // Validate rule is "/datacenter0:3,/datacenter1:2"
+      Map<String, Integer> idcMap = countDataNodeDC(locatedBlock.getLocations(),
+          true);
+      assertEquals(dataBlocks, idcMap.get("/datacenter0").intValue());
+      assertEquals(parityBlocks, idcMap.get("/datacenter1").intValue());
+    }
+  }
+
+  private void validateInitIdc(LocatedBlocks lbs, int blockNum, String idc) {
+    LocatedBlock locatedBlock = lbs.get(0);
+    Map<String, Integer> idcMap = countDataNodeDC(locatedBlock.getLocations(),
+        false);
+    Optional<Integer> idcCount = Optional.ofNullable(idcMap.get(idc));
+    assertEquals((int) idcCount.orElse(0), blockNum);
+    StripedFileTestUtil.verifyLocatedStripedBlocks(lbs, blockNum);
+  }
+
+  private void validateIdcForDr(LocatedBlocks lbs, int blockNum, int assignBlocks,
+      String mainIdc, String secondaryIdc) {
+    LocatedBlock locatedBlock = lbs.get(0);
+    Map<String, Integer> idcMap = countDataNodeDC(locatedBlock.getLocations(),
+        false);
+    StripedFileTestUtil.verifyLocatedStripedBlocks(lbs, blockNum);
+    assertEquals(assignBlocks, idcMap.get(mainIdc).intValue());
+    assertEquals(blockNum - assignBlocks, idcMap.get(secondaryIdc).intValue());
+  }
+
+  private void decommissionDataNodes1(MiniDFSCluster cluster, DatanodeManager dm,
+      LocatedBlock locatedBlock) throws Exception {
+    DatanodeInfoWithStorage[] datanodeInfoWithStorages = locatedBlock.getLocations();
+    DatanodeDescriptor dn1 = dm.getDatanode(
+        cluster.getDataNode(datanodeInfoWithStorages[1].getIpcPort()).getDatanodeUuid());
+    assertEquals("/datacenter1", NetworkTopologyUtil.getDataCenter(dn1));
+    DatanodeDescriptor dn5 = dm.getDatanode(cluster.getDataNode(
+        datanodeInfoWithStorages[5].getIpcPort()).getDatanodeUuid());
+    assertEquals("/datacenter0", NetworkTopologyUtil.getDataCenter(dn5));
+    DatanodeDescriptor dn3 = dm.getDatanode(cluster.getDataNode(
+        datanodeInfoWithStorages[3].getIpcPort()).getDatanodeUuid());
+    assertEquals("/datacenter0", NetworkTopologyUtil.getDataCenter(dn3));
+
+    dm.getDatanodeAdminManager().startDecommission(dn1);
+    GenericTestUtils.waitFor(dn1::isDecommissioned, 1000, 20 * 1000);
+    dm.getDatanodeAdminManager().startDecommission(dn5);
+    GenericTestUtils.waitFor(dn5::isDecommissioned, 1000, 20 * 1000);
+    dm.getDatanodeAdminManager().startDecommission(dn3);
+    GenericTestUtils.waitFor(dn3::isDecommissioned, 1000, 20 * 1000);
+  }
+
+  private void decommissionDataNodes2(MiniDFSCluster cluster, DatanodeManager dm,
+      LocatedBlock locatedBlock) throws Exception {
+    DatanodeInfoWithStorage[] datanodeInfoWithStorages = locatedBlock.getLocations();
+    DatanodeDescriptor dn3 = dm.getDatanode(
+        cluster.getDataNode(datanodeInfoWithStorages[3].getIpcPort()).getDatanodeUuid());
+    assertEquals("/datacenter1", NetworkTopologyUtil.getDataCenter(dn3));
+    DatanodeDescriptor dn4 = dm.getDatanode(cluster.getDataNode(
+        datanodeInfoWithStorages[4].getIpcPort()).getDatanodeUuid());
+    assertEquals("/datacenter1", NetworkTopologyUtil.getDataCenter(dn4));
+    DatanodeDescriptor dn5 = dm.getDatanode(cluster.getDataNode(
+        datanodeInfoWithStorages[5].getIpcPort()).getDatanodeUuid());
+    assertEquals("/datacenter1", NetworkTopologyUtil.getDataCenter(dn5));
+
+    dm.getDatanodeAdminManager().startDecommission(dn3);
+    GenericTestUtils.waitFor(dn3::isDecommissioned, 1000, 20 * 1000);
+    dm.getDatanodeAdminManager().startDecommission(dn5);
+    GenericTestUtils.waitFor(dn5::isDecommissioned, 1000, 20 * 1000);
+    dm.getDatanodeAdminManager().startDecommission(dn4);
+    GenericTestUtils.waitFor(dn4::isDecommissioned, 1000, 20 * 1000);
+  }
+
+  private void decommissionDataNodes3(MiniDFSCluster cluster, DatanodeManager dm,
+      LocatedBlock locatedBlock) throws Exception {
+    DatanodeInfoWithStorage[] datanodeInfoWithStorages = locatedBlock.getLocations();
+    DatanodeDescriptor dn0 = dm.getDatanode(
+        cluster.getDataNode(datanodeInfoWithStorages[0].getIpcPort()).getDatanodeUuid());
+    assertEquals("/datacenter1", NetworkTopologyUtil.getDataCenter(dn0));
+    DatanodeDescriptor dn1 = dm.getDatanode(
+        cluster.getDataNode(datanodeInfoWithStorages[1].getIpcPort()).getDatanodeUuid());
+    assertEquals("/datacenter1", NetworkTopologyUtil.getDataCenter(dn1));
+    DatanodeDescriptor dn3 = dm.getDatanode(cluster.getDataNode(
+        datanodeInfoWithStorages[3].getIpcPort()).getDatanodeUuid());
+    assertEquals("/datacenter0", NetworkTopologyUtil.getDataCenter(dn3));
+    DatanodeDescriptor dn2 = dm.getDatanode(cluster.getDataNode(
+        datanodeInfoWithStorages[2].getIpcPort()).getDatanodeUuid());
+    assertEquals("/datacenter0", NetworkTopologyUtil.getDataCenter(dn2));
+
+    dm.getDatanodeAdminManager().startDecommission(dn0);
+    GenericTestUtils.waitFor(dn0::isDecommissioned, 1000, 20 * 1000);
+    dm.getDatanodeAdminManager().startDecommission(dn1);
+    GenericTestUtils.waitFor(dn1::isDecommissioned, 1000, 20 * 1000);
+    dm.getDatanodeAdminManager().startDecommission(dn2);
+    GenericTestUtils.waitFor(dn2::isDecommissioned, 1000, 20 * 1000);
+    dm.getDatanodeAdminManager().startDecommission(dn3);
+    GenericTestUtils.waitFor(dn3::isDecommissioned, 1000, 20 * 1000);
+  }
+
+  private void restartDataNodes(MiniDFSCluster cluster,
+      List<MiniDFSCluster.DataNodeProperties> dataNodePropertiesList, BlockManager blockManager)
+      throws IOException, InterruptedException, TimeoutException {
+    for (MiniDFSCluster.DataNodeProperties dataNodeProperties: dataNodePropertiesList) {
+      cluster.restartDataNode(dataNodeProperties);
+    }
+    cluster.waitActive();
+
+    for (MiniDFSCluster.DataNodeProperties dataNodeProperties: dataNodePropertiesList) {
+      DataNodeTestUtils.triggerBlockReport(dataNodeProperties.getDatanode());
+    }
+
+    // Check excessRedundancyMap and invalidateBlocks.
+    GenericTestUtils.waitFor(()
+        -> blockManager.getExcessBlocksCount() == dataNodePropertiesList.size(),
+        10, 20000);
+
+    for (DataNode dn : cluster.getDataNodes()) {
+      DataNodeTestUtils.triggerHeartbeat(dn);
+    }
+
+    // Wait for the datanode in the cluster to process any block
+    // deletions that have already been asynchronously queued.
+    cluster.waitForDNDeletions();
+    for (DataNode dn : cluster.getDataNodes()) {
+      DataNodeTestUtils.triggerDeletionReport(dn);
+    }
+  }
+
+  private void addDataNodes(MiniDFSCluster cluster, DistributedFileSystem fs,
+      String secondaryDC, int numDataNodes) throws Exception {
+    String[] newRacks = new String[numDataNodes];
+    String[] newHosts = new String[numDataNodes];
+    for (int i = 0; i < numDataNodes; i++) {
+      newRacks[i] = secondaryDC + "/rack" + (i + 1);
+      newHosts[i] = "host" + (20 + i);
+    }
+    cluster.startDataNodes(fs.getConf(), numDataNodes, true, null,
+        newRacks, newHosts, null);
+    cluster.triggerHeartbeats();
+  }
+
+  private Configuration createConfigurationForDr() {
+    GenericTestUtils.setLogLevel(NameNode.blockStateChangeLog, Level.DEBUG);
+    Configuration conf = new HdfsConfiguration();
+    long drColdDataThresholdMS = 30000;
+    // set dfs.namenode.dr.striped.block-rule is `9=/datacenter0:6,/datacenter1:3;
+    // 5=/datacenter0:3,/datacenter1:2`;.
+    initConfForDr(conf, drColdDataThresholdMS, "datacenter0");
+    return conf;
+  }
+
+  private String[] createRacks(int numRacks, String rackPrefix) {
+    String[] racks = new String[numRacks];
+    for (int i = 0; i < numRacks; i++) {
+      racks[i] = rackPrefix + (i + 1);
+    }
+    return racks;
+  }
+
+  private String[] createHosts(int numHosts, String hostPrefix) {
+    String[] hosts = new String[numHosts];
+    for (int i = 0; i < numHosts; i++) {
+      hosts[i] = hostPrefix + i;
+    }
+    return hosts;
+  }
+
+  private int createECFile(DistributedFileSystem fs, Path src, short blockNum) throws Exception {
+    int dataSize = DEFAULT_BLOCK_SIZE * 1024 * blockNum;
+    byte[] expected = StripedFileTestUtil.generateBytes(dataSize);
+    DFSTestUtil.writeFile(fs, src, new String(expected));
+    StripedFileTestUtil.waitBlockGroupsReported(fs, src.toString());
+    StripedFileTestUtil.verifyLength(fs, src, dataSize);
+    return dataSize;
+  }
+
+  private List<MiniDFSCluster.DataNodeProperties> stopDataNodes(
+      MiniDFSCluster cluster, LocatedBlock locatedBlock, int stopNum) throws Exception {
+    DatanodeInfoWithStorage[] datanodeInfoWithStorages = locatedBlock.getLocations();
+    List<String> hostnames = new ArrayList<>();
+    for (int i = 0 ;i < stopNum; i++) {
+      hostnames.add(datanodeInfoWithStorages[i].getXferAddr());
+    }
+    List<MiniDFSCluster.DataNodeProperties> dataNodePropertiesList = stopDataNodes(cluster,
+        hostnames);
+    cluster.waitActive();
+    return dataNodePropertiesList;
+  }
+
+  private List<MiniDFSCluster.DataNodeProperties> stopDataNodes(MiniDFSCluster cluster,
+      List<String> dnNames) throws IOException {
+    List<MiniDFSCluster.DataNodeProperties> stoppedDataNodeProperties = new ArrayList<>();
+    for (String dnName : dnNames) {
+      for (int i = 0; i < cluster.getDataNodes().size(); i++) {
+        DataNode dn = cluster.getDataNodes().get(i);
+        if (dn.getDatanodeId().getXferAddr().equals(dnName)) {
+          MiniDFSCluster.DataNodeProperties dnProp = cluster.stopDataNode(i);
+          cluster.setDataNodeDead(dn.getDatanodeId());
+          LOG.info("Stopped datanode " + dnName);
+          stoppedDataNodeProperties.add(dnProp);
+          break;
+        }
+      }
+    }
+    return stoppedDataNodeProperties;
+  }
+
+  private Map<String, Integer> countDataNodeDC(DatanodeInfo[] loc, boolean skipDecommissionedDn) {
+    Map<String, Integer> dcMap = new HashMap<>();
+    for (DatanodeInfo dn : loc) {
+      if (skipDecommissionedDn && dn.isDecommissioned()) {
+        continue;
+      }
+      String dcName = NetworkTopologyUtil.getDataCenter(dn);
+      dcMap.put(dcName, dcMap.getOrDefault(dcName, 0) + 1);
+    }
+    return dcMap;
   }
 
   private void shuffle(DatanodeInfo[] locs, String[] storageIDs) {

@@ -190,6 +190,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_DATACENTERS_K
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT;
@@ -493,6 +494,7 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_KEY,
           DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY,
           DFS_NAMENODE_DR_DATACENTERS_KEY,
+          DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY,
           DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY,
           DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY));
 
@@ -2596,7 +2598,8 @@ public class NameNode extends ReconfigurableBase implements
     } else if (property.equals(DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY) ||
         property.equals(DFS_NAMENODE_DR_DATACENTERS_KEY) ||
         property.equals(DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY) ||
-        property.equals(DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY)) {
+        property.equals(DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY) ||
+        property.equals(DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY)) {
       return reconfigureDRParameters(property, newVal);
     } else if (property.equals(DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY)) {
       return reconfigureEnableFaultyDCMonitor(newVal);
@@ -3404,6 +3407,11 @@ public class NameNode extends ReconfigurableBase implements
         case DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY: {
           bm.setDrReplicationRuleForColdData(
               StringUtils.getTrimmedStringCollection(newVal, ";"));
+          result = newVal;
+          break;
+        }
+        case DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY: {
+          bm.setDrStripedBlockRule(StringUtils.getTrimmedStringCollection(newVal, ";"));
           result = newVal;
           break;
         }

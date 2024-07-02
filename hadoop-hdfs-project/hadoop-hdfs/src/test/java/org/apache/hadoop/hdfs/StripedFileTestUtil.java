@@ -74,7 +74,7 @@ public class StripedFileTestUtil {
     return (byte) (pos % mod + 1);
   }
 
-  static void verifyLength(FileSystem fs, Path srcPath, int fileLength)
+  public static void verifyLength(FileSystem fs, Path srcPath, int fileLength)
       throws IOException {
     FileStatus status = fs.getFileStatus(srcPath);
     assertEquals("File length should be the same", fileLength, status.getLen());

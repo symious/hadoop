@@ -454,6 +454,8 @@ public class TestBlockPlacementPolicyWithDefaultFallbackDataCenter
         drColdDataThresholdMS);
     conf.set(DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY,
         "3=/datacenter0:1,/datacenter1:2");
+    conf.set(DFSConfigKeys.DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY,
+        "9=/datacenter0:6,/datacenter1:3");
   }
 
   private Map<String, Integer> countDataNodeDC(DatanodeInfo[] loc) {

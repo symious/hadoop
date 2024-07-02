@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.hdfs.server.zoneservice;
 
+import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
+import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeStorageInfo;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileSystem;
@@ -31,6 +33,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -297,6 +300,13 @@ public class ReplicationRuleUtil {
     return ReplicationRule.parseFromString(ruleString.toString());
   }
 
+  /**
+   * Generates a replication rule for DR.
+   * The rule evenly distributes replicas across the two IDCs.
+   * @param dcMap  The map of data centers with their corresponding node counts.
+   * @param repl The total number of replicas.
+   * @return ReplicationRule.
+   */
   public static ReplicationRule generateRuleForDR(HashMap<String, Integer> dcMap, short repl) {
     if (dcMap == null || dcMap.size() < 2) {
       return null;
@@ -318,5 +328,51 @@ public class ReplicationRuleUtil {
     distribution.put(mainIDC, (short) (replicasPerIDC + remainingReplicas));
     distribution.put(otherIDC, (short) replicasPerIDC);
     return ReplicationRule.parseFromMap(distribution);
+  }
+
+  /**
+   * Generates a striped block replication rule for DR.
+   * The rule specifies the distribution of internal blocks across IDCs.
+   *
+   * @param rule The existing replication rule specifying the main and other data centers.
+   * @param realTotalBlockNum The number of actual data blocks.
+   * @return ReplicationRule.
+   */
+  public static ReplicationRule generateStripedBlockRuleForDR(ReplicationRule rule,
+      int realTotalBlockNum) {
+    String mainDC = rule.getMainDataCenter();
+    short mainDCBlockNum = rule.getReplica(mainDC);
+    Map<String, Short> distribution = new HashMap<>();
+    // If the real total number of blocks is less than or equal to the number of data blocks
+    // in the main DC then all internal blocks are located the main idc.
+    // Otherwise, the number of data blocks in the main IDC is satisfied first,
+    // the remaining blocks located the another idc.
+    if (realTotalBlockNum <= mainDCBlockNum) {
+      distribution.put(mainDC, (short) realTotalBlockNum);
+    } else {
+      distribution.put(mainDC, mainDCBlockNum);
+      distribution.put(rule.getOtherDataCenter(), (short) (realTotalBlockNum - mainDCBlockNum));
+    }
+
+    rule = ReplicationRule.parseFromMap(distribution);
+    return rule;
+  }
+
+  /**
+   * Split data nodes into datacenter sets.
+   *
+   * @param storageInfos DatanodeStorageInfo to be split
+   * @param dcMap a map from datacenter to datanodes
+   */
+  public static void splitNodesWithDataCenter(
+      final Collection<DatanodeStorageInfo> storageInfos,
+      final Map<String, List<DatanodeStorageInfo>> dcMap) {
+    for (DatanodeStorageInfo s : storageInfos) {
+      final String dcName = NetworkTopologyUtil.getDataCenter(
+          s.getDatanodeDescriptor());
+      List<DatanodeStorageInfo> storageList = dcMap.computeIfAbsent(
+          dcName, k -> new ArrayList<>());
+      storageList.add(s);
+    }
   }
 }

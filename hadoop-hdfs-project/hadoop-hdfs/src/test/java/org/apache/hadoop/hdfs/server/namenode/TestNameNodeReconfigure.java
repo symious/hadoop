@@ -54,6 +54,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_COLD_DATA_THR
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_DATACENTERS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT_DEFAULT;
@@ -1042,6 +1043,35 @@ public class TestNameNodeReconfigure {
           "to '3=/DC1:1,/DC3:2'", e.getMessage());
     }
 
+    // try correct drStripedBlockRule.
+    nameNode.reconfigureProperty(DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY,
+        "9=/DC1:6,/DC2:3");
+    assertEquals(1, bm.getDrStripedBlockRule().size());
+    assertTrue(bm.getDrStripedBlockRule().containsKey((short) 9));
+    assertEquals(ReplicationRule.parseFromString("/DC1:6,/DC2:3"),
+        bm.getDrStripedBlockRule().get((short) 9));
+
+    // try invalid drStripedBlockRule.
+    try {
+      nameNode.reconfigureProperty(DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY,
+          "");
+      fail("Should not reach here");
+    } catch (ReconfigurationException e) {
+      assertEquals("Could not change property " +
+          "dfs.namenode.dr.striped.block-rule from '9=/DC1:6,/DC2:3' " +
+          "to ''", e.getMessage());
+    }
+
+    try {
+      nameNode.reconfigureProperty(DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY,
+          "9=/DC1:6,/DC3:3");
+      fail("Should not reach here");
+    } catch (ReconfigurationException e) {
+      assertEquals("Could not change property " +
+          "dfs.namenode.dr.striped.block-rule from '9=/DC1:6,/DC2:3' " +
+          "to '9=/DC1:6,/DC3:3'", e.getMessage());
+    }
+
     // Update drDataCenters and will reset drReplicationRuleForColdData.
     nameNode.reconfigureProperty(DFS_NAMENODE_DR_DATACENTERS_KEY,
         "/DC1,/DC3");
@@ -1049,6 +1079,7 @@ public class TestNameNodeReconfigure {
     assertTrue(bm.getDrDataCenters().contains("/DC1"));
     assertTrue(bm.getDrDataCenters().contains("/DC3"));
     assertEquals(0, bm.getDrReplicationRuleForColdData().size());
+    assertEquals(0, bm.getDrStripedBlockRule().size());
 
     // Update drReplicationRuleForColdData.
     nameNode.reconfigureProperty(DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY,
@@ -1057,6 +1088,17 @@ public class TestNameNodeReconfigure {
     assertTrue(bm.getDrReplicationRuleForColdData().containsKey((short) 3));
     assertEquals(ReplicationRule.parseFromString("/DC1:1,/DC3:2"),
         bm.getDrReplicationRuleForColdData().get((short) 3));
+
+    // Update drStripedBlockRule.
+    nameNode.reconfigureProperty(DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY,
+        "9=/DC1:3,/DC3:6;14=/DC1:10,/DC3:4");
+    assertEquals(2, bm.getDrStripedBlockRule().size());
+    assertTrue(bm.getDrStripedBlockRule().containsKey((short) 9));
+    assertTrue(bm.getDrStripedBlockRule().containsKey((short) 14));
+    assertEquals(ReplicationRule.parseFromString("/DC1:3,/DC3:6"),
+        bm.getDrStripedBlockRule().get((short) 9));
+    assertEquals(ReplicationRule.parseFromString("/DC1:10,/DC3:4"),
+        bm.getDrStripedBlockRule().get((short) 14));
   }
 
   @Test
