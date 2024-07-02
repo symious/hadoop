@@ -19,6 +19,7 @@ package org.apache.hadoop.hdfs.server.zoneservice;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSTestUtil;
@@ -26,11 +27,11 @@ import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -43,6 +44,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 public class TestZoneChecker {
   private static final long FILE_LEN = 1024;
@@ -68,21 +70,32 @@ public class TestZoneChecker {
     Path path1 = new Path(pathName);
     // client(127.0.0.1) will be mapped to a random node in (host0, host1, host2)
     DFSTestUtil.createFile(fs, path1, FILE_LEN, REPLICATION, 0L);
-    DFSTestUtil.createFile(fs, new Path(dirName + "/testGetReplicaInfo2.txt"),
-        FILE_LEN, REPLICATION, 0L);
-
-    NameNodeConnector nnc;
-    Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
-    nnc = new NameNodeConnector(namenodes.iterator().next(),
-        Collections.singletonList(new Path(pathName)), conf, 1);
-    final ZoneChecker zch = new ZoneChecker(nnc, conf);
+    Path path2 = new Path(dirName + "/testGetReplicaInfo2.txt");
+    DFSTestUtil.createFile(fs, path2, FILE_LEN, REPLICATION, 0L);
 
     //Check the zone check for file
     Map<String, Short> replicaInfoMap = new HashMap<>();
     replicaInfoMap.put("/dc0", (short) 2);
     replicaInfoMap.put("/dc1", (short) 1);
-    ReplicationRule replicationRule =
-        ReplicationRule.parseFromMap(replicaInfoMap);
+    ReplicationRule replicationRule = ReplicationRule.parseFromMap(replicaInfoMap);
+
+    final ZoneChecker zc = new ZoneChecker(conf);
+    List<String> paths = new ArrayList<>();
+    paths.add(path1.toUri().getPath());
+    paths.add(path2.toUri().getPath());
+    Map<String, Set<ReplicationRule>> dis1 = zc.getBlockDistribution(paths, 1);
+    Map<String, Set<ReplicationRule>> dis2 = zc.getBlockDistribution(paths, 2);
+    assertTrue(dis1.get(path1.toUri().getPath()).contains(replicationRule));
+    assertTrue(dis1.get(path2.toUri().getPath()).contains(replicationRule));
+    assertEquals(1, dis2.get(path1.toUri().getPath()).size());
+    assertEquals(1, dis2.get(path2.toUri().getPath()).size());
+    assertEquals(dis1, dis2);
+
+    Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
+    DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(namenodes.iterator().next(), conf);
+    final ZoneChecker zch = new ZoneChecker(dfs, conf);
+
+
     Map<ReplicationRule, Set<String>> replicationRuleListMap =
         new HashMap<>();
     replicationRuleListMap.put(replicationRule, new HashSet<>(
@@ -155,10 +168,8 @@ public class TestZoneChecker {
     createChildAndSubdirsRecursively(fs, 0, MAX_DEPTH, basePath);
 
     Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
-    NameNodeConnector nnc =
-        new NameNodeConnector(namenodes.iterator().next(), Collections.singletonList(basePath),
-            conf, 1);
-    ZoneChecker zc = new ZoneChecker(nnc, conf);
+    DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(namenodes.iterator().next(), conf);
+    final ZoneChecker zc = new ZoneChecker(dfs, conf);
 
     ConcurrentHashMap<ReplicationRule, Set<String>> rulePathMap;
     Map<String, List<Long>> dcStatMap;

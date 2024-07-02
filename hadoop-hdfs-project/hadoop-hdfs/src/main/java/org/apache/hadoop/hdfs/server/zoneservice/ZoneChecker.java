@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice;
 
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
@@ -38,9 +39,7 @@ import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
-import org.apache.hadoop.hdfs.server.balancer.Dispatcher;
 import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
-import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Tool;
@@ -60,7 +59,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RecursiveAction;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 public class ZoneChecker {
   private static final Logger LOG = LoggerFactory.getLogger(ZoneChecker.class);
@@ -72,14 +75,73 @@ public class ZoneChecker {
       "Data Size:%-20d";
   private static final String SUMMARY_FORMAT = "Distribution:%-30sBlocks Number:%9d (%5.2f%%)    Total Size:%d";
 
-  public ZoneChecker(NameNodeConnector nnc, Configuration conf) {
-    Dispatcher dispatcher = new ZoneDispatcher(
-        nnc, Collections.emptySet(),
-        Collections.emptySet(), 0, 0,
-        0, conf, 0, 0);
+  public ZoneChecker(DistributedFileSystem dfs, Configuration conf) {
     ratio = conf.getFloat(DFSConfigKeys.DFS_ZONECHECKER_DEFAULT_RATIO,
         DFSConfigKeys.DFS_ZONECHECKER_DEFAULT_RATIO_DEFAULT);
-    this.dfs = dispatcher.getDistributedFileSystem();
+    this.dfs = dfs;
+  }
+
+  public ZoneChecker(Configuration conf) throws IOException {
+    ratio = conf.getFloat(DFSConfigKeys.DFS_ZONECHECKER_DEFAULT_RATIO,
+        DFSConfigKeys.DFS_ZONECHECKER_DEFAULT_RATIO_DEFAULT);
+    this.dfs = (DistributedFileSystem) FileSystem.get(conf);
+  }
+
+  /**
+   * Get block distribution for paths.
+   * @param paths input path
+   * @param threads the number of threads to check blocks distribution.
+   *                These paths will be checked one by one if threads < 1
+   * @return a mapping from path to ReplicationRule.
+   */
+  public Map<String, Set<ReplicationRule>> getBlockDistribution(
+      List<String> paths, int threads) throws Exception {
+    Map<String, Set<ReplicationRule>> blockDistribution = new ConcurrentHashMap<>();
+    if (threads > 1) {
+      ThreadPoolExecutor executor = new ThreadPoolExecutor(
+          threads, threads, 0, TimeUnit.SECONDS,
+          new LinkedBlockingQueue<>());
+      List<Future<?>> futures = new ArrayList<>();
+      for (String path : paths) {
+        futures.add(executor.submit(() ->  collectBlockDistribution(path, blockDistribution)));
+      }
+
+      for(Future<?> f : futures) {
+        f.get();
+      }
+    } else {
+      for (String path : paths) {
+        collectBlockDistribution(path, blockDistribution);
+      }
+    }
+    return blockDistribution;
+  }
+
+  /**
+   * Collection block distribution for the given path.
+   */
+  private void collectBlockDistribution(String path,
+      Map<String, Set<ReplicationRule>> blockDistribution) {
+    try {
+      HdfsLocatedFileStatus fileStatus = this.dfs.getClient().getLocatedFileInfo(
+          new Path(path).toUri().getPath(), false);
+      final LocatedBlocks locatedBlocks = fileStatus.getLocatedBlocks();
+      final boolean lastBlkComplete = locatedBlocks.isLastBlockComplete();
+      List<LocatedBlock> lbs = locatedBlocks.getLocatedBlocks();
+      blockDistribution.put(path, new HashSet<>());
+      for (int i = 0; i < lbs.size(); i++) {
+        if (i == lbs.size() - 1 && !lastBlkComplete) {
+          // last block is incomplete, skip it
+          continue;
+        }
+        LocatedBlock lb = lbs.get(i);
+        Map<String, Short> mapDCReplica = ZoneMover.getBlockDistribution(lb);
+        ReplicationRule replicationRule = ReplicationRule.parseFromMap(mapDCReplica);
+        blockDistribution.get(path).add(replicationRule);
+      }
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   /**
@@ -93,11 +155,9 @@ public class ZoneChecker {
    */
   private static int check(Configuration conf, URI nameNode, String path, Float ratio,
       boolean blockSummary, boolean countOnly, int countDepth, int threadCount) {
-    NameNodeConnector nnc;
     try {
-      nnc = new NameNodeConnector(nameNode, Collections.singletonList(new Path(path)),
-          conf, 1);
-      final ZoneChecker zch = new ZoneChecker(nnc, conf);
+      DistributedFileSystem fs = (DistributedFileSystem) FileSystem.get(nameNode, conf);
+      final ZoneChecker zch = new ZoneChecker(fs, conf);
       //if ratio is inputted by user, set it
       if (blockSummary) {
         LOG.info("Start to summary the blocks of {}", path);
@@ -137,12 +197,9 @@ public class ZoneChecker {
       Configuration conf, URI namenode, String path, float ratio, int threads) {
     LOG.info("Start to get replication rules for {} with ratio {} in {} threads.",
         path, ratio, threads);
-    NameNodeConnector nnc;
     try {
-      nnc = new NameNodeConnector(namenode,
-          Collections.singletonList(new Path(path)),
-          conf, 1);
-      final ZoneChecker zch = new ZoneChecker(nnc, conf);
+      DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(namenode, conf);
+      final ZoneChecker zch = new ZoneChecker(dfs, conf);
       //if ratio is inputted by user, set it
       if (ratio > 0.0f) {
         zch.setRatio(ratio);
@@ -163,12 +220,11 @@ public class ZoneChecker {
   public static Map<String, List<Long>> getBlockSummary(
       Configuration conf, URI namenode, String path, int threads) {
     LOG.info("Start to get block summary of path {} in {} threads.", path, threads);
-    NameNodeConnector nnc;
     try {
       // Clear up the map
       Map<String, List<Long>> dcBlockStat = new HashMap<>();
-      nnc = new NameNodeConnector(namenode, Collections.singletonList(new Path(path)), conf, 1);
-      final ZoneChecker zch = new ZoneChecker(nnc, conf);
+      DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(namenode, conf);
+      final ZoneChecker zch = new ZoneChecker(dfs, conf);
       if (threads > 1) {
         zch.concurrentlyCheck(path, new ConcurrentHashMap<>(), dcBlockStat, null, true, false, threads);
       } else {
@@ -184,12 +240,11 @@ public class ZoneChecker {
   public static Map<String, List<Long>> getCountSummary(
       Configuration conf, URI namenode, String path, int threads) {
     LOG.info("Start to get block summary of path {} in {} threads.", path, threads);
-    NameNodeConnector nnc;
     try {
       // Clear up the map
       Map<String, List<Long>> dcBlockStat = new HashMap<>();
-      nnc = new NameNodeConnector(namenode, Collections.singletonList(new Path(path)), conf, 1);
-      final ZoneChecker zch = new ZoneChecker(nnc, conf);
+      DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(namenode, conf);
+      final ZoneChecker zch = new ZoneChecker(dfs, conf);
       ZoneCheckerCountTree zcct = new ZoneCheckerCountTree(path, 0);
       if (threads > 1) {
         zch.concurrentlyCheck(path, new ConcurrentHashMap<>(), dcBlockStat, zcct, false, true, threads);
