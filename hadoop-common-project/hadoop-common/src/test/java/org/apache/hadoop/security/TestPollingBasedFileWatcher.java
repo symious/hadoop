@@ -57,6 +57,6 @@ public class TestPollingBasedFileWatcher {
       writer.write("a");
     }
     tempFile.setLastModified(Time.now() + 10000);
-    GenericTestUtils.waitFor(() -> changed.get(), 100, 2000);
+    GenericTestUtils.waitFor(changed::get, 100, 2000);
   }
 }

@@ -1,6 +1,7 @@
 variables:
   HADOOP_PROTOC_PATH: /usr/bin/protoc
   RUNNER: "default"
+  GIT_CLEAN_FLAGS: -ffdx -e ci_commit_sha
 
 workflow:
   rules:
@@ -25,7 +26,7 @@ compile-release:
     - k8s
     - release
   script:
-    - mvn install -T 1C -DskipTests
+    - mvn install -T 1C -DskipTests && echo $CI_COMMIT_SHA > ./ci_commit_sha
   rules:
     - if: $RUNNER == "release"
 
@@ -60,7 +61,7 @@ compile-default:
     - k8s
     - default
   script:
-    - mvn install -T 1C -DskipTests
+    - mvn install -T 1C -DskipTests && echo $CI_COMMIT_SHA > ./ci_commit_sha
   rules:
     - if: $RUNNER == "default"
 

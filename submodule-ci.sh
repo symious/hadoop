@@ -30,6 +30,10 @@ TAGS="tags:
     - k8s
     - $RUNNER"
 
+REBUILD_BEFORE_SCRIPT="before_script:
+    - |
+      if [ ! -f ./ci_commit_sha ] || [ \$(cat ./ci_commit_sha) != \"$CI_COMMIT_SHA\" ]; then mvn install -T 1C -DskipTests  && echo $CI_COMMIT_SHA > ./ci_commit_sha; fi"
+
 COMMON_SCRIPTS="- export _JAVA_OPTIONS=\"\$_JAVA_OPTIONS -Djava.net.preferIPv4Stack=true\"
     - mvn test
     - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
@@ -49,6 +53,8 @@ CI_CONFIG_FILE="submodule-ci.yml"
 EMPTY=true
 
 cat <<EOF > "${CI_CONFIG_FILE}"
+variables:
+  GIT_CLEAN_FLAGS: -ffdx -e ci_commit_sha
 stages:
   - test
 
@@ -63,6 +69,7 @@ do
 hadoop-yarn-api:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-api
     $COMMON_SCRIPTS
@@ -81,6 +88,7 @@ EOF
 hadoop-yarn-client:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-client
     $COMMON_SCRIPTS
@@ -99,6 +107,7 @@ EOF
 hadoop-yarn-common:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-common
     $COMMON_SCRIPTS
@@ -117,6 +126,7 @@ EOF
 hadoop-yarn-csi:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - hadoop-yarn-project/hadoop-yarn/hadoop-yarn-csi
     $COMMON_SCRIPTS
@@ -135,6 +145,7 @@ EOF
 hadoop-yarn-registry:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-registry
     $COMMON_SCRIPTS
@@ -153,6 +164,7 @@ EOF
 hadoop-yarn-server-applicationhistoryservice:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-applicationhistoryservice
     $COMMON_SCRIPTS
@@ -171,6 +183,7 @@ EOF
 hadoop-yarn-server-common:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-common
     $COMMON_SCRIPTS
@@ -189,6 +202,7 @@ EOF
 hadoop-yarn-server-globalpolicygenerator:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-globalpolicygenerator
     $COMMON_SCRIPTS
@@ -207,6 +221,7 @@ EOF
 hadoop-yarn-server-nodemanager:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-nodemanager
     $COMMON_SCRIPTS
@@ -225,6 +240,7 @@ EOF
 hadoop-yarn-server-resourcemanager:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-resourcemanager
     - export _JAVA_OPTIONS="-Djava.net.preferIPv4Stack=true"
@@ -263,6 +279,7 @@ EOF
 hadoop-yarn-server-sharecachemanager:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-sharedcachemanager
     $COMMON_SCRIPTS
@@ -281,6 +298,7 @@ EOF
 hadoop-yarn-server-timeline-pluginstorage:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-timeline-pluginstorage
     $COMMON_SCRIPTS
@@ -299,6 +317,7 @@ EOF
 hadoop-yarn-server-timelineservice:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-timelineservice
     $COMMON_SCRIPTS
@@ -317,6 +336,7 @@ EOF
 hadoop-yarn-server-timelineservice-documentstore:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-timelineservice-documentstore
     $COMMON_SCRIPTS
@@ -335,6 +355,7 @@ EOF
 hadoop-yarn-server-web-proxy:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-yarn-project/hadoop-yarn/hadoop-yarn-server/hadoop-yarn-server-web-proxy
     $COMMON_SCRIPTS
@@ -353,6 +374,7 @@ EOF
 hadoop-hdfs:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs
     $COMMON_SCRIPTS_PARALLEL_TESTS
@@ -374,6 +396,7 @@ EOF
 hadoop-hdfs-client:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs-client
     $COMMON_SCRIPTS
@@ -392,6 +415,7 @@ EOF
 hadoop-hdfs-httpfs:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs-httpfs
     $COMMON_SCRIPTS
@@ -410,6 +434,7 @@ EOF
 hadoop-hdfs-rbf:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs-rbf
     $COMMON_SCRIPTS_PARALLEL_TESTS
@@ -428,6 +453,7 @@ EOF
 hadoop-common:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-common-project/hadoop-common
     $COMMON_SCRIPTS_PARALLEL_TESTS
@@ -446,6 +472,7 @@ EOF
 hadoop-shopee:
   stage: test
   $TAGS
+  $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-tools/hadoop-shopee/
     $COMMON_SCRIPTS
