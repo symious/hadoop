@@ -91,6 +91,11 @@ public class TestZoneChecker {
     assertEquals(1, dis2.get(path2.toUri().getPath()).size());
     assertEquals(dis1, dis2);
 
+    Set<String> dcs = zc.getValidateDCs();
+    assertEquals(2, dcs.size());
+    assertTrue(dcs.contains("/dc0"));
+    assertTrue(dcs.contains("/dc1"));
+
     Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
     DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(namenodes.iterator().next(), conf);
     final ZoneChecker zch = new ZoneChecker(dfs, conf);

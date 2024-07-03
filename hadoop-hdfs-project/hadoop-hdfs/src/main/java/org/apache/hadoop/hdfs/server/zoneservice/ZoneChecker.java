@@ -21,6 +21,9 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -115,6 +118,21 @@ public class ZoneChecker {
       }
     }
     return blockDistribution;
+  }
+
+  /**
+   * Getting validate DC names from Server.
+   * Notices: Please don't call this method frequently, since it's heavy.
+   */
+  public Set<String> getValidateDCs() throws IOException {
+    Set<String> dcs = new HashSet<>();
+    DatanodeInfo[] datanodeInfos = this.dfs.getDataNodeStats(
+        HdfsConstants.DatanodeReportType.LIVE);
+    for (DatanodeInfo dn : datanodeInfos) {
+      String dnDC = DFSNetworkTopologyWithDataCenter.getDataCenter(dn.getNetworkLocation());
+      dcs.add(dnDC);
+    }
+    return dcs;
   }
 
   /**
