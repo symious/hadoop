@@ -150,6 +150,7 @@ public final class DistCpConstants {
       = "distcp.fast.copy.enable";
 
   public static final String CONF_LABEL_USE_ITERATOR = "distcp.use.iterator";
+  public static final String CONF_LABEL_EXIST_IGNORE_PRESERVE = "distcp.exist.ignore.preserve";
   /**
    * Constants for DistCp return code to shell / consumer of ToolRunner's run
    */

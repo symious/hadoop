@@ -120,7 +120,7 @@ function hadoop_subcommand_nsmigrate
 fi
 
 
-if ! declare -f mapred_subcommand_nsmigrate
+if ! declare -f mapred_subcommand_nsmigrate >/dev/null 2>/dev/null; then
 
   if [[ "${HADOOP_SHELL_EXECNAME}" = mapred ]]; then
     hadoop_add_subcommand "nsmigrate" client "migrate a directory across namespaces"

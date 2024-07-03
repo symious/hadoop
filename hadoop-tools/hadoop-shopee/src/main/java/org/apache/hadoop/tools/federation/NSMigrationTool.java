@@ -371,7 +371,7 @@ public class NSMigrationTool extends Configured implements Tool {
       Path pathObj = new Path(path);
       String src = String.format("hdfs://%s%s", context.srcNs, pathObj);
       String dst = String.format("hdfs://%s%s", context.dstNs, pathObj.getParent().toString());
-      String[] args = { "-fastCopyEnable", "-prbugpcaxt", src, dst };
+      String[] args = { "-fastCopyEnable", "-existIgnorePreserve", "-prbugpcaxt", src, dst };
 
       Configuration config = new Configuration(conf);
       if (context.jobID.isEmpty()) {
@@ -385,7 +385,25 @@ public class NSMigrationTool extends Configured implements Tool {
         JobClient client = new JobClient(config);
         RunningJob job = client.getJob(JobID.forName(context.jobID));
         if (job == null) {
-          return true;
+          FileStatus[] listing = null;
+          try {
+            listing = srcFs.listStatus(context.path);
+          } catch (FileNotFoundException ignored) {
+          }
+          if (listing == null && listing.length == 0) {
+            LOG.info("Cannot find past job {}, source ns is empty, job succeeded.", context.jobID);
+            return true;
+          } else {
+            // Submit a new one
+            LOG.info("Cannot find past job {}, source ns is not empty, submitting a new job...",
+                context.jobID);
+            DistCp distCp = new DistCp(config, OptionsParser.parse(args));
+            Job newJob = distCp.createAndSubmitJob();
+            context.jobID = newJob.getJobID().toString();
+            writeContext();
+            interruptForTesting();
+            return newJob.waitForCompletion(false);
+          }
         } else {
           if (job.isComplete() && !job.isSuccessful()) {
             // Submit a new one
