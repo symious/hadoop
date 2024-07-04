@@ -78,15 +78,16 @@ public class ZoneMoverWithDR extends ZoneMover {
   public static final Logger LOG = LoggerFactory.getLogger(ZoneMoverWithDR.class);
   private static final String ID_PATH_PREFIX = "/system/zonemoverwithdr.id";
   private final RunMode runMode;
-  private boolean useAccessTime;
-  private boolean skipReplica;
-  private boolean skipEC;
+  private final boolean useAccessTime;
+  private final boolean skipReplica;
+  private final boolean skipEC;
+  private final boolean skipCheckCold;
   private final long drColdDataThresholdMS;
   private Set<String> drDataCenters;
   private Map<Short, ReplicationRule> drReplicationRuleForColdData;
   private Map<Short, ReplicationRule> drStripedBlockRule;
-  private BlockingQueue<PreMigrationFile> preMigrationFileQueue;
-  private long preMigrationCheckInterval;
+  private final BlockingQueue<PreMigrationFile> preMigrationFileQueue;
+  private final long preMigrationCheckInterval;
   private CountDownLatch preMigrationLatch;
   // Initialize ZoneMover Metrics.
   protected static ZoneMoverMetrics zoneMoverMetrics = ZoneMoverMetrics.create();
@@ -96,7 +97,8 @@ public class ZoneMoverWithDR extends ZoneMover {
       "ZoneMoverWithDR-PreMigrationChecker");
 
   public ZoneMoverWithDR(NameNodeConnector nnc, Configuration conf, AtomicInteger retryCount,
-      RunMode runMode, boolean useAccessTime, boolean skipReplica, boolean skipEC)
+      RunMode runMode, boolean useAccessTime, boolean skipReplica, boolean skipEC,
+      boolean skipCheckCold)
       throws IOException {
     super(nnc, conf, retryCount);
     this.runMode = runMode;
@@ -113,6 +115,7 @@ public class ZoneMoverWithDR extends ZoneMover {
     this.useAccessTime = useAccessTime;
     this.skipReplica = skipReplica;
     this.skipEC = skipEC;
+    this.skipCheckCold = skipCheckCold;
     preMigrationCheckInterval = conf.getLong(
         DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_KEY,
         DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_DEFAULT);
@@ -311,7 +314,8 @@ public class ZoneMoverWithDR extends ZoneMover {
         + "\n\t-useAccessTime\the definition of cold data determines whether to use " +
         "accesstime or modifiedtime"
         + "\n\t-skipEC\twhether to skip EC files"
-        + "\n\t-skipReplica\twhether to skip replication files";
+        + "\n\t-skipReplica\twhether to skip replication files"
+        + "\n\t-skipCheckCold\twhether to check the file is cold data";
 
     private static Options buildCliOptions() {
       Options options = new Options();
@@ -340,12 +344,16 @@ public class ZoneMoverWithDR extends ZoneMover {
           "definition of cold data determines whether to use accesstime or modifiedtime");
       options.addOption(option);
 
-      option = new Option(null, "skipEC", false, "the " +
+      option = new Option(null, "skipEC", false,
           "Whether to skip EC files");
       options.addOption(option);
 
-      option = new Option(null, "skipReplica", false, "the " +
+      option = new Option(null, "skipReplica", false,
           "Whether to skip replication files");
+      options.addOption(option);
+
+      option = new Option(null, "skipCheckCold", false,
+          "Whether to check the file is cold data");
       options.addOption(option);
       return options;
     }
@@ -385,9 +393,10 @@ public class ZoneMoverWithDR extends ZoneMover {
         boolean useAccessTime = commandLine.hasOption("-useAccessTime");
         boolean skipReplica = commandLine.hasOption("-skipReplica");
         boolean skipEC = commandLine.hasOption("-skipEC");
+        boolean skipCheckCold = commandLine.hasOption("-skipCheckCold");
         List<Path> paths = ZoneMover.Cli.getPaths(commandLine);
         if (commandLine.hasOption("cold")) {
-          return run(conf, namenode, paths, useAccessTime, skipReplica, skipEC);
+          return run(conf, namenode, paths, useAccessTime, skipReplica, skipEC, skipCheckCold);
         } else if (commandLine.hasOption("monitorByTrigger")) {
           ZoneMoverTrigger zoneMoverTrigger =
               new ZoneMoverKafkaTrigger(conf, paths, namenode, true);
@@ -414,10 +423,10 @@ public class ZoneMoverWithDR extends ZoneMover {
      * Run with ZoneMoverTrigger for cold mode.
      */
     int run(Configuration conf, URI namenode, List<Path> paths, boolean useAccessTime,
-        boolean skipReplica, boolean skipEC)
+        boolean skipReplica, boolean skipEC, boolean skipCheckCold)
         throws IOException, InterruptedException {
       return ZoneMoverWithDR.runWithColdDataReplication(conf, namenode, paths, useAccessTime,
-          skipReplica, skipEC);
+          skipReplica, skipEC, skipCheckCold);
     }
 
     /**
@@ -431,12 +440,14 @@ public class ZoneMoverWithDR extends ZoneMover {
   }
 
   public static int runWithColdDataReplication(Configuration conf, URI namenode,
-      List<Path> paths, boolean useAccessTime, boolean skipReplica, boolean skipEC)
+      List<Path> paths, boolean useAccessTime, boolean skipReplica, boolean skipEC,
+      boolean skipCheckCold)
       throws IOException, InterruptedException {
     ZoneProgressTracker.startCountingInitTime();
 
     LOG.info("Start to apply dr cold data rule to namenode: {}, path: {}, useAccessTime: {}, " +
-            "skipReplica: {}, skipEC: {}", namenode, paths, useAccessTime, skipReplica, skipEC);
+            "skipReplica: {}, skipEC: {}, skipCheckCold: {}", namenode, paths, useAccessTime,
+        skipReplica, skipEC, skipCheckCold);
     if (paths.isEmpty()) {
       ZoneProgressTracker.finishCountingInitTimeAndLog();
       return ExitStatus.SUCCESS.getExitCode();
@@ -458,7 +469,7 @@ public class ZoneMoverWithDR extends ZoneMover {
       nnc.getKeyManager().startBlockKeyUpdater();
 
       zm = new ZoneMoverWithDR(nnc, conf, retryCount, RunMode.COLD, useAccessTime,
-          skipReplica, skipEC);
+          skipReplica, skipEC, skipCheckCold);
       zm.init(conf);
       int round = 0;
 
@@ -526,7 +537,7 @@ public class ZoneMoverWithDR extends ZoneMover {
 
       DefaultMetricsSystem.initialize("ZoneMover");
       zm = new ZoneMoverWithDR(nnc, conf, new AtomicInteger(0), RunMode.MONITOR,
-          false, skipReplica, skipEC);
+          false, skipReplica, skipEC, false);
       zm.init(conf);
 
       while (zoneMoverTrigger.hasNext()) {
@@ -676,12 +687,14 @@ public class ZoneMoverWithDR extends ZoneMover {
       }
 
       if (runMode.equals(RunMode.COLD)) {
-        long time = useAccessTime ? status.getAccessTime() : status.getModificationTime();
-        boolean isColdData = now() > time + drColdDataThresholdMS;
-        if (!isColdData) {
-          LOG.debug("No need to process file: {} that are not cold data.", fullPath);
-          ZoneProgressTracker.incrFileCount();
-          return;
+        if (!skipCheckCold) {
+          long time = useAccessTime ? status.getAccessTime() : status.getModificationTime();
+          boolean isColdData = now() > time + drColdDataThresholdMS;
+          if (!isColdData) {
+            LOG.debug("No need to process file: {} that are not cold data.", fullPath);
+            ZoneProgressTracker.incrFileCount();
+            return;
+          }
         }
         // The strategy for configuring cold data, such as:
         // 3 replicas (/YTL:2,/AT:1).
@@ -794,7 +807,7 @@ public class ZoneMoverWithDR extends ZoneMover {
       final LocatedBlocks locatedBlocks = status.getLocatedBlocks();
       int n = locatedBlocks.locatedBlockCount();
       ZoneProgressTracker.queueFile(fullPath);
-      for (int i = 0; i< n; i++) {
+      for (int i = 0; i < n; i++) {
         LocatedBlock block = locatedBlocks.get(i);
 
         // Retrieve rule based on the total number of blocks in the striped block.

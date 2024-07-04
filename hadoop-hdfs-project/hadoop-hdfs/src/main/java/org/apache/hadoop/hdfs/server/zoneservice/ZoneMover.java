@@ -1237,7 +1237,7 @@ public class ZoneMover {
       } else {
         db = new Dispatcher.DBlock(blk);
       }
-      for(Mover.MLocation ml : locations) {
+      for (Mover.MLocation ml : locations) {
         Dispatcher.DDatanode.StorageGroup source = storages.getSource(ml);
         if (source != null) {
           db.addLocation(source);

@@ -131,6 +131,7 @@ public class TestZoneMoverWithDR {
           Mockito.anyListOf(Path.class),
           Mockito.any(Boolean.class),
           Mockito.any(Boolean.class),
+          Mockito.any(Boolean.class),
           Mockito.any(Boolean.class));
 
       tool.setConf(conf);
@@ -217,7 +218,7 @@ public class TestZoneMoverWithDR {
       inputWriter.close();
 
       String[] args4 = {"-namespace", "dev1", "-pathFile", inputPath.getAbsolutePath(), "-cold",
-          "-skipEC"};
+          "-skipEC", "-skipCheckCold"};
       assertEquals(ExitStatus.SUCCESS.getExitCode(), tool1.run(args4));
 
       // Validate replica rule.
@@ -304,7 +305,7 @@ public class TestZoneMoverWithDR {
       cluster.triggerBlockReports();
 
       ZoneMoverWithDR.runWithColdDataReplication(conf, cluster.getURI(), pathList,
-          false, false, false);
+          false, false, false, false);
 
       Map<Short, ReplicationRule> expectedRule = new HashMap<>();
       expectedRule.put((short) 2, ReplicationRule.parseFromString("/datacenter0:1,/datacenter1:1"));
@@ -377,7 +378,7 @@ public class TestZoneMoverWithDR {
       cluster.triggerBlockReports();
       List<Path> pathList = new ArrayList<>(map.values());
       ZoneMoverWithDR.runWithColdDataReplication(conf, cluster.getURI(), pathList,
-          false, true, false);
+          false, true, false, false);
 
       Map<Integer, ReplicationRule> expectedRule = new HashMap<>();
       expectedRule.put(3 + parityBlocks,
