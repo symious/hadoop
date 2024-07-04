@@ -822,6 +822,14 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTP_BIND_HOST_KEY = "dfs.zoneservice.auto.balancer.http-bind-host";
   public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTPS_BIND_HOST_KEY = "dfs.zoneservice.auto.balancer.https-bind-host";
 
+  public static final String  DFS_ZONEMOVER_HTTP_ADDRESS_KEY = "dfs.zonemover.http-address";
+  public static final String  DFS_ZONEMOVER_HTTP_ADDRESS_DEFAULT = "0.0.0.0:50060";
+  public static final String  DFS_ZONEMOVER_HTTPS_ADDRESS_KEY = "dfs.zonemover.https-address";
+  public static final String  DFS_ZONEMOVER_HTTPS_ADDRESS_DEFAULT = "0.0.0.0:50061";
+  public static final String  DFS_ZONEMOVER_HTTP_BIND_HOST_KEY = "dfs.zonemover.http-bind-host";
+  public static final String  DFS_ZONEMOVER_HTTPS_BIND_HOST_KEY = "dfs.zonemover.https-bind-host";
+  public static final String  DFS_ZONEMOVER_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY = "dfs.zonemover.kerberos.internal.spnego.principal";
+  public static final String  DFS_ZONEMOVER_KEYTAB_FILE_KEY = "dfs.zonemover.keytab.file";
   public static final String  DFS_ZONESERVICE_KERBEROS_INTERNAL_SPNEGO_PRINCIPAL_KEY = "dfs.zoneservice.kerberos.internal.spnego.principal";
   public static final String  DFS_ZONESERVICE_KEYTAB_FILE_KEY = "dfs.zoneservice.keytab.file";
   public static final String  DFS_ZONESERVICE_THREADS_KEY = "dfs.zoneservice.threads";
@@ -1042,8 +1050,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONEMOVER_KAFKA_PASSWORD = "dfs.zonemover.kafka.password";
   public static final String  DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_KEY = "dfs.zonemover.trigger.queue.size";
   public static final int     DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_DEFAULT = 100000;
-  public static final String  DFS_ZONEMOVER_TRIGGER_KAFKA_CONSUMER_THREADS_KEY = "dfs.zonemover.trigger.kafka.consumer.threads";
-  public static final int     DFS_ZONEMOVER_TRIGGER_KAFKA_CONSUMER_THREADS_DEFAULT = 5;
+  public static final String  DFS_ZONEMOVER_TRIGGER_ZK_UPDATE_OFFSET_INTERVAL_KEY = "dfs.zonemover.trigger.zk.update.offset.interval";
+  public static final int     DFS_ZONEMOVER_TRIGGER_ZK_UPDATE_OFFSET_INTERVAL_DEFAULT = 100000;
   public static final String  DFS_ZONEMOVER_TRIGGER_SKIP_RENAME_KEYWORDS_KEY = "dfs.zonemover.trigger.skip.rename.keywords";
   public static final String  DFS_ZONEMOVER_TRIGGER_SKIP_COMPLETE_KEYWORDS_KEY = "dfs.zonemover.trigger.skip.complete.keywords";
   // datacenter values separated by comma

@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -38,8 +39,10 @@ import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
 import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.junit.BeforeClass;
@@ -54,6 +57,7 @@ import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -228,7 +232,8 @@ public class TestZoneMoverWithDR {
       }, 500, 30000);
 
       // Since -skipEC is specified, the ec file will be skipped.
-      assertTrue(logs.getOutput().contains("No need to process cold data of ec file: " + ecFile));
+      assertTrue(logs.getOutput().contains(String.format("No need to process data for ec " +
+          "file: %s.", ecFile)));
 
       // Validate param '-skipReplica' and '-skipEC' cannot be specified together,
       // can either specify one or leave both unspecified.
@@ -396,6 +401,119 @@ public class TestZoneMoverWithDR {
           }
         }, 500, 60000);
       }
+    }
+  }
+
+  @Test
+  public void testZoneMoverWithDRMonitorMode() throws Exception {
+    Configuration conf = new HdfsConfiguration();
+    final String[] racks = {"/datacenter0/rack0", "/datacenter0/rack0", "/datacenter0/rack2",
+        "/datacenter0/rack2", "/datacenter0/rack1", "/datacenter0/rack1"};
+    final String[] hosts = {"host0", "host1", "host2", "host3", "host4", "host5"};
+    initConfForDr(conf, "/datacenter0", 0);
+
+    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).
+        numDataNodes(hosts.length).hosts(hosts).racks(racks).build()) {
+      cluster.waitActive();
+      DistributedFileSystem fs = cluster.getFileSystem();
+      fs.mkdir(new Path("/test"), new FsPermission("777"));
+
+      final int[] listTest = {2, 3, 4, 5, 6};
+      List<Path> paths = new ArrayList<>(Collections.singletonList(new Path("/test")));
+      List<Pair<ConsumerRecord<String, String>, String>> records = new ArrayList<>();
+      ConsumerRecord<String, String> record =
+          new ConsumerRecord<>("test-topic", 0, 0, "key1", "value1");
+      // Prepare the files with different distribution.
+      for (int disNum: listTest) {
+        short replication = (short) disNum;
+        Path path = new Path("/test/File." + disNum);
+        DFSTestUtil.createFile(fs, path, FILE_LEN, replication, 0L);
+        DFSTestUtil.waitReplication(fs, path, replication);
+        records.add(Pair.of(record, path.toString()));
+      }
+
+      // Adding 6 new hosts about '/datacenter1'.
+      cluster.startDataNodes(conf, 6, true, null,
+          new String[]{"/datacenter1/rack0", "/datacenter1/rack0", "/datacenter1/rack2",
+              "/datacenter1/rack2", "/datacenter1/rack1", "/datacenter1/rack1"},
+          new String[]{"host6", "host7", "host8", "host9", "host10", "host11"},
+          null);
+      cluster.triggerBlockReports();
+
+      ZoneMoverMetrics zoneMoverMetric = ZoneMoverWithDR.zoneMoverMetrics;
+      assertEquals(zoneMoverMetric.getSuccessTotalMove().lastStat().numSamples(), 0);
+
+      ZoneMoverTrigger zoneMoverTrigger = new TestZoneMoverKafkaTrigger(records);
+      ZoneMoverWithDR.runWithNewDataReplication(zoneMoverTrigger, conf, cluster.getURI(), paths,
+          false, false);
+
+      Map<Short, ReplicationRule> expectedRule = new HashMap<>();
+      expectedRule.put((short) 2, ReplicationRule.parseFromString("/datacenter0:1,/datacenter1:1"));
+      expectedRule.put((short) 3, ReplicationRule.parseFromString("/datacenter0:2,/datacenter1:1"));
+      expectedRule.put((short) 4, ReplicationRule.parseFromString("/datacenter0:2,/datacenter1:2"));
+      expectedRule.put((short) 5, ReplicationRule.parseFromString("/datacenter0:3,/datacenter1:2"));
+      expectedRule.put((short) 6, ReplicationRule.parseFromString("/datacenter0:3,/datacenter1:3"));
+
+      // Validate replica rule.
+      for (Pair<ConsumerRecord<String, String>, String> pair : records) {
+        String path = pair.getRight();
+        GenericTestUtils.waitFor(() -> {
+          try {
+
+            return expectedRule.get(fs.getFileStatus(new Path(path)).getReplication()).equals(
+                ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
+                    DFSTestUtil.getAllBlocks(fs, new Path(path)).get(0))));
+          } catch (IOException e) {
+            return false;
+          }
+        }, 500, 50000);
+      }
+      assertEquals(zoneMoverMetric.getSuccessTotalMove().lastStat().numSamples(), 5);
+    }
+  }
+
+  static class TestZoneMoverKafkaTrigger extends ZoneMoverTrigger {
+    List<Pair<ConsumerRecord<String, String>, String>> pathList;
+
+    public TestZoneMoverKafkaTrigger(List<Pair<ConsumerRecord<String, String>, String>> pathList) {
+      this.pathList = pathList;
+    }
+
+    @Override
+    public boolean hasNext() {
+      return pathList.size() > 0;
+    }
+
+    @Override
+    public String getNext() throws InterruptedException {
+      return null;
+    }
+
+    @Override
+    public Pair<ConsumerRecord<String, String>, String> getNextRecord()
+        throws InterruptedException {
+      return pathList.remove(0);
+    }
+
+    @Override
+    public void updatePaths(List<Path> paths) {
+      //nothing;
+    }
+
+    @Override
+    public void shutdown() {
+      //nothing;
+    }
+
+    @Override
+    public String getGroupId() {
+      return "test";
+    }
+
+    @Override
+    public void saveOffsetToZookeeper(ConsumerRecord<String, String> record, String ns,
+        String groupId, ZoneMoverMetrics zoneMoverMetrics) {
+      //nothing;
     }
   }
 }

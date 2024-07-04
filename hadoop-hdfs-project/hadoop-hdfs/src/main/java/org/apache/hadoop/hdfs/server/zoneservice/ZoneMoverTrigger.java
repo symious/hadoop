@@ -18,7 +18,10 @@
 
 package org.apache.hadoop.hdfs.server.zoneservice;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.util.List;
 
@@ -29,11 +32,19 @@ public abstract class ZoneMoverTrigger {
    *         false if we need to stop ZoneMover current thread
    */
   public abstract boolean hasNext();
+
   /**
    * Get next elements from trigger
    * @return String contain the content trigger need feed back to ZoneMover
    */
   public abstract String getNext() throws InterruptedException;
+
+  /**
+   * Get next kafka record from trigger
+   * @return String contain the content trigger need feed back to ZoneMover
+   */
+  public abstract Pair<ConsumerRecord<String, String>, String> getNextRecord()
+      throws InterruptedException;
 
   /**
    * Update the care paths
@@ -44,4 +55,9 @@ public abstract class ZoneMoverTrigger {
    * Close the thread and recycle the resources
    */
   public abstract void shutdown();
+
+  public abstract String getGroupId();
+
+  public abstract void saveOffsetToZookeeper(ConsumerRecord<String, String> record, String ns,
+      String groupId, ZoneMoverMetrics zoneMoverMetrics);
 }

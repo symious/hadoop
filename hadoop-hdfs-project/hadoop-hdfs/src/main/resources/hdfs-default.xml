@@ -6641,4 +6641,55 @@
       The batched number that namenode processes the pendingScanDN.
     </description>
   </property>
+
+  <property>
+    <name>dfs.zonemover.http-address</name>
+    <value>0.0.0.0:50060</value>
+    <description>
+      The address and port the ZoneMover HTTP server listens on.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.zonemover.https-address</name>
+    <value>0.0.0.0:50061</value>
+    <description>
+      The address and port the ZoneMover HTTPS server listens on.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.zonemover.http-bind-host</name>
+    <description>
+      The actual address the HTTP server will bind to. If this optional address
+      is set, it overrides only the hostname portion of
+      dfs.zonemover.http-address. This is useful for making the ZoneMover
+      HTTP server listen on allinterfaces by setting it to 0.0.0.0.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.zonemover.https-bind-host</name>
+    <description>
+      The actual address the HTTPS server will bind to. If this optional address
+      is set, it overrides only the hostname portion of
+      dfs.zonemover.https-address. This is useful for making the ZoneMover
+      HTTPS server listen on allinterfaces by setting it to 0.0.0.0.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.zonemover.kerberos.internal.spnego.principal</name>
+    <description>
+      Kerberos SPNEGO principal name used by the zonemover.
+    </description>
+  </property>
+
+  <property>
+    <name>dfs.zonemover.keytab.file</name>
+    <description>
+      Kerberos keytab file for the zonemover.
+    </description>
+  </property>
+
 </configuration>

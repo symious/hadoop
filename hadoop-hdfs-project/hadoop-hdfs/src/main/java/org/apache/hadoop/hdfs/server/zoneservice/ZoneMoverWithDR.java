@@ -24,6 +24,7 @@ import org.apache.commons.cli.Option;
 import org.apache.commons.cli.OptionGroup;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
@@ -39,20 +40,24 @@ import org.apache.hadoop.hdfs.protocol.LocatedStripedBlock;
 import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
 import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
 import org.apache.hadoop.hdfs.server.mover.Mover;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
 import org.apache.hadoop.hdfs.server.zoneservice.utils.MigrationDataCenters;
 import org.apache.hadoop.hdfs.server.zoneservice.utils.RunMode;
 import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -83,6 +88,9 @@ public class ZoneMoverWithDR extends ZoneMover {
   private BlockingQueue<PreMigrationFile> preMigrationFileQueue;
   private long preMigrationCheckInterval;
   private CountDownLatch preMigrationLatch;
+  // Initialize ZoneMover Metrics.
+  protected static ZoneMoverMetrics zoneMoverMetrics = ZoneMoverMetrics.create();
+  protected ZoneMoverHttpServer httpServer;
   protected final Thread
       preMigrationChecker = new Thread(new PreMigrationChecker(),
       "ZoneMoverWithDR-PreMigrationChecker");
@@ -115,6 +123,42 @@ public class ZoneMoverWithDR extends ZoneMover {
         new LinkedBlockingQueue<>(preMigrationQueueSize);
     preMigrationLatch = new CountDownLatch(2);
     preMigrationChecker.start();
+    startHttpServer(conf);
+  }
+
+  private void startHttpServer(final Configuration conf) throws IOException {
+    httpServer = new ZoneMoverHttpServer(conf, getHttpServerBindAddress(conf));
+    httpServer.start();
+  }
+
+  /**
+   * HTTP server address for binding the endpoint. This method is
+   * for use by the ZoneMover and its derivatives. It may return
+   * a different address than the one that should be used by clients to
+   * connect to the ZoneMover. See
+   * {@link DFSConfigKeys#DFS_ZONEMOVER_HTTP_BIND_HOST_KEY}
+   *
+   * @param conf configuration of zone mover
+   * @return return the http bind address of zone mover
+   */
+  protected InetSocketAddress getHttpServerBindAddress(Configuration conf) {
+    InetSocketAddress bindAddress = getHttpAddress(conf);
+
+    // If DFS_ZONEMOVER_HTTP_BIND_HOST_KEY exists then it overrides the
+    // host name portion of DFS_ZONEMOVER_HTTP_ADDRESS_KEY.
+    final String bindHost = conf.getTrimmed(DFSConfigKeys.DFS_ZONEMOVER_HTTP_BIND_HOST_KEY);
+    if (bindHost != null && !bindHost.isEmpty()) {
+      bindAddress = new InetSocketAddress(bindHost, bindAddress.getPort());
+    }
+
+    return bindAddress;
+  }
+
+  /** @return the ZoneMover HTTP address. */
+  public static InetSocketAddress getHttpAddress(Configuration conf) {
+    return  NetUtils.createSocketAddr(
+        conf.getTrimmed(DFSConfigKeys.DFS_ZONEMOVER_HTTP_ADDRESS_KEY,
+            DFSConfigKeys.DFS_ZONEMOVER_HTTP_ADDRESS_DEFAULT));
   }
 
   private void setDrDataCenters(Set<String> drDataCenters) {
@@ -344,6 +388,10 @@ public class ZoneMoverWithDR extends ZoneMover {
         List<Path> paths = ZoneMover.Cli.getPaths(commandLine);
         if (commandLine.hasOption("cold")) {
           return run(conf, namenode, paths, useAccessTime, skipReplica, skipEC);
+        } else if (commandLine.hasOption("monitorByTrigger")) {
+          ZoneMoverTrigger zoneMoverTrigger =
+              new ZoneMoverKafkaTrigger(conf, paths, namenode, true);
+          return run(zoneMoverTrigger, conf, namenode, paths, skipReplica, skipEC);
         }
       } catch (IOException e) {
         System.out.println(e + ".  Exiting ...");
@@ -369,6 +417,15 @@ public class ZoneMoverWithDR extends ZoneMover {
         boolean skipReplica, boolean skipEC)
         throws IOException, InterruptedException {
       return ZoneMoverWithDR.runWithColdDataReplication(conf, namenode, paths, useAccessTime,
+          skipReplica, skipEC);
+    }
+
+    /**
+     * Run with ZoneMoverTrigger for monitorByTrigger mode.
+     */
+    int run(ZoneMoverTrigger zoneMoverTrigger, Configuration conf, URI namenode,
+        List<Path> paths, boolean skipReplica, boolean skipEC) throws IOException {
+      return ZoneMoverWithDR.runWithNewDataReplication(zoneMoverTrigger, conf, namenode, paths,
           skipReplica, skipEC);
     }
   }
@@ -451,6 +508,76 @@ public class ZoneMoverWithDR extends ZoneMover {
     return ExitStatus.SUCCESS.getExitCode();
   }
 
+  public static int runWithNewDataReplication(ZoneMoverTrigger zoneMoverTrigger,
+      Configuration conf, URI namenode, List<Path> paths, boolean skipReplica, boolean skipEC)
+      throws IOException {
+    if (paths.isEmpty()) {
+      return ExitStatus.SUCCESS.getExitCode();
+    }
+
+    NameNodeConnector nnc = null;
+    ZoneMoverWithDR zm = null;
+    String ns = namenode.getAuthority();
+    try {
+      LOG.info("Initializing NameNodeConnector");
+      nnc = new NameNodeConnector(ZoneMoverWithSetReplication.class.getSimpleName(),
+          namenode, getIdPath(RunMode.MONITOR), paths, conf, 1);
+      nnc.getKeyManager().startBlockKeyUpdater();
+
+      DefaultMetricsSystem.initialize("ZoneMover");
+      zm = new ZoneMoverWithDR(nnc, conf, new AtomicInteger(0), RunMode.MONITOR,
+          false, skipReplica, skipEC);
+      zm.init(conf);
+
+      while (zoneMoverTrigger.hasNext()) {
+        try {
+          Pair<ConsumerRecord<String, String>, String> curRecord = zoneMoverTrigger.getNextRecord();
+          // process the path
+          String curPath = curRecord.getRight();
+          LOG.debug("Start to monitor process path: {}", curPath);
+          long start = Time.now();
+          ExitStatus exitStatus = zm.run(curPath);
+          if (exitStatus != ExitStatus.SUCCESS) {
+            zoneMoverMetrics.addFailTotalMove(Time.now() - start);
+            LOG.warn("Failed to monitor process path fail: {}", curPath);
+          } else {
+            zoneMoverMetrics.addSuccessTotalMove(Time.now() - start);
+            ConsumerRecord<String, String> record = curRecord.getLeft();
+            zoneMoverTrigger.saveOffsetToZookeeper(record, ns, zoneMoverTrigger.getGroupId(),
+                zoneMoverMetrics);
+          }
+        } catch (IllegalArgumentException e) {
+          LOG.warn("Failed to monitor process path fail: {}", e.toString());
+        } catch (InterruptedException e) {
+          return ExitStatus.INTERRUPTED.getExitCode();
+        }
+      }
+    } finally {
+      if (nnc != null) {
+        IOUtils.cleanupWithLogger(LOG, nnc);
+      }
+      if (zm != null) {
+        zm.shutdown();
+      }
+      if (zoneMoverTrigger != null) {
+        zoneMoverTrigger.shutdown();
+      }
+    }
+    return ExitStatus.SUCCESS.getExitCode();
+  }
+
+  void shutdown() {
+    super.shutdown();
+    zoneMoverMetrics.shutdown();
+    if (httpServer != null) {
+      try {
+        httpServer.stop();
+      } catch (Exception e) {
+        LOG.error("Exception while stopping httpserver", e);
+      }
+    }
+  }
+
   static Path getIdPath(RunMode mode) {
     return new Path(String.format("%s.%s.%s.%s",
         ID_PATH_PREFIX,
@@ -476,7 +603,6 @@ public class ZoneMoverWithDR extends ZoneMover {
       LOG.debug("Processing path: {}, mode: {}", fullPath, runMode);
       processPath(fullPath, rule, result, dc, true);
     }
-
 
     @Override
     protected void processRecursively(String parent, HdfsFileStatus status, ReplicationRule rule,
@@ -532,23 +658,24 @@ public class ZoneMoverWithDR extends ZoneMover {
       short repl = status.getReplication();
       ReplicationRule appliedRule = null;
 
-      if (runMode.equals(RunMode.COLD)) {
-        if (status.getErasureCodingPolicy() != null) {
-          // if set ec.
-          if (skipEC) {
-            LOG.debug("No need to process cold data of ec file: {}", fullPath);
-            ZoneProgressTracker.incrFileCount();
-          } else {
-            LOG.debug("Process cold data of ec file: {}", fullPath);
-            processECFile(fullPath, firstBlock, status, result);
-          }
-          return;
-        }
-        if (skipReplica) {
-          LOG.debug("No need to process cold data of replication file: {}", fullPath);
+      if (status.getErasureCodingPolicy() != null) {
+        if (skipEC) {
+          LOG.debug("No need to process data for ec file: {}.", fullPath);
           ZoneProgressTracker.incrFileCount();
-          return;
+        } else {
+          LOG.debug("Process data for ec file: {}.", fullPath);
+          processECFile(fullPath, firstBlock, status, result);
         }
+        return;
+      }
+
+      if (skipReplica) {
+        LOG.debug("No need to process data for replication file: {}.", fullPath);
+        ZoneProgressTracker.incrFileCount();
+        return;
+      }
+
+      if (runMode.equals(RunMode.COLD)) {
         long time = useAccessTime ? status.getAccessTime() : status.getModificationTime();
         boolean isColdData = now() > time + drColdDataThresholdMS;
         if (!isColdData) {
@@ -569,14 +696,16 @@ public class ZoneMoverWithDR extends ZoneMover {
         }
         appliedRule = ReplicationRuleUtil.generateRuleForDR(dcMap, repl);
         if (appliedRule == null) {
-          LOG.debug("No need to process file: {} that are invalid rule.", fullPath);
+          LOG.debug("No need to process file: {} that are invalid rule by {}.", fullPath,
+              runMode.getName());
           ZoneProgressTracker.incrFileCount();
           return;
         }
       }
 
       ReplicationRule oldRule = ReplicationRule.parseFromMap(blockDistribution);
-      LOG.info("Will apply the rule from {} to {} for file: {}", oldRule, appliedRule, fullPath);
+      LOG.info("Will apply the data rule from {} to {} for file: {} by {}.", oldRule,
+          appliedRule, fullPath, runMode.getName());
 
       // If two replicas are required to migrate, the tool will migrate one replica first
       // then the rest replica can copy from the migrated replica directly.
@@ -588,14 +717,14 @@ public class ZoneMoverWithDR extends ZoneMover {
           blockDistribution.put(singleDc, (short) (blockDistribution.get(singleDc) - 1));
           blockDistribution.put(tmpDataCenters.get(0), (short) 1);
           ReplicationRule preRule = ReplicationRule.parseFromMap(blockDistribution);
-          LOG.info("Will pre-migrate 1 replica from {} to {} using preRule {} for {}",
-              singleDc, tmpDataCenters.get(0), preRule, fullPath);
+          LOG.info("Will pre-migrate 1 replica from {} to {} using preRule {} for {} by {}.",
+              singleDc, tmpDataCenters.get(0), preRule, fullPath, runMode.getName());
           try {
             processFileBlocks(fullPath, status, preRule, result, true);
             preMigrationFileQueue.put(new PreMigrationFile(fullPath, preRule, appliedRule));
           } catch (InterruptedException e) {
             processFile(fullPath, status, appliedRule, result);
-            LOG.warn("Adding pre-migration file {} to the pre-migration queue is interrupted",
+            LOG.warn("Adding pre-migration file {} to the pre-migration queue is interrupted.",
                 fullPath);
           }
         } else {
@@ -648,7 +777,7 @@ public class ZoneMoverWithDR extends ZoneMover {
     private void processECFile(String fullPath, LocatedBlock locatedBlock,
         HdfsLocatedFileStatus status, Mover.Result result) {
       if (!locatedBlock.isStriped()) {
-        LOG.debug("No need to process cold data of non ec file: {}", fullPath);
+        LOG.debug("No need to process data for non ec file: {}", fullPath);
         ZoneProgressTracker.incrFileCount();
         return;
       }
@@ -657,6 +786,8 @@ public class ZoneMoverWithDR extends ZoneMover {
       int totalBlockNum = ecPolicy.getNumParityUnits() + ecPolicy.getNumDataUnits();
       ReplicationRule rule = drStripedBlockRule.get((short) totalBlockNum);
       if (rule == null) {
+        LOG.info("No need to process data for ec file: {}, because codec name: {} is not set.",
+            fullPath, ecPolicy.getName());
         ZoneProgressTracker.incrFileCount();
         return;
       }
@@ -681,14 +812,14 @@ public class ZoneMoverWithDR extends ZoneMover {
         Map<String, Short> distribution = getBlockDistribution(block);
 
         if (!drDataCenters.containsAll(distribution.keySet())) {
-          LOG.debug("Block: {} cannot generate valid striped rule for file: {}",
+          LOG.debug("Block: {} cannot generate valid striped rule for ec file: {}",
               block.getBlock(), fullPath);
           continue;
         }
 
         ReplicationRule dis = ReplicationRule.parseFromMap(distribution);
         if (rule.equals(dis)) {
-          LOG.debug("Block: {} rule: {} is expected will skip for file: {}", block.getBlock(),
+          LOG.debug("Block: {} rule: {} is expected will skip for ec file: {}", block.getBlock(),
               dis, fullPath);
           continue;
         }

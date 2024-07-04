@@ -18,13 +18,22 @@
 
 package org.apache.hadoop.hdfs.server.zoneservice;
 
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.store.KafkaTopicRecord;
+import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
+import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
+import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.util.Time;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.common.TopicPartition;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 import org.apache.hadoop.conf.Configuration;
@@ -34,6 +43,7 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -41,8 +51,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -52,16 +62,18 @@ import java.util.concurrent.ThreadFactory;
 public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   private static final Logger LOG = LoggerFactory.getLogger(ZoneMover.class);
 
-  private final String nameSpace;
+  protected final String nameSpace;
+  protected String groupId;
+  protected List<Path> monitorPaths;
+  private long lastZkUpdateTime;
+  private final long zkUpdateIntervalMs;
+  protected ExecutorService executorService;
+  private StoreDriver driver;
 
-  private List<Path> monitorPaths;
-  private final int consumerThreadsNum;
-  private ExecutorService executorService;
+  protected final BlockingQueue<Pair<ConsumerRecord<String, String>, String>> recordQueue;
 
-  private final BlockingQueue<String> pathQueue;
-
-  private final Collection<String> skipRenameKeywords;
-  private final Collection<String> skipCompleteKeywords;
+  protected final Collection<String> skipRenameKeywords;
+  protected final Collection<String> skipCompleteKeywords;
 
   static final List<String> CARE_LOG_SYMBOL = new ArrayList() {{
     add("allowed=");
@@ -69,9 +81,14 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
     add("dst=");
   }};
 
-  //Init HDFS audit log kafka consumer
   public ZoneMoverKafkaTrigger(Configuration conf,
       List<Path> paths, URI namenode) {
+    this(conf, paths, namenode, false);
+  }
+
+  //Init HDFS audit log kafka consumer
+  public ZoneMoverKafkaTrigger(Configuration conf,
+      List<Path> paths, URI namenode, boolean useZK) {
     nameSpace = namenode.getAuthority();
     final String username =
         conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_USERNAME);
@@ -83,8 +100,7 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
         conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_TOPIC_WITH_NAMESPACE_PREFIX + nameSpace);
     final String topic = nsTopic != null ? nsTopic :
         conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_TOPIC);
-
-    final String groupId =
+    groupId =
         conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_GROUP_ID);
 
     Properties properties = new Properties();
@@ -94,27 +110,51 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
         StringDeserializer.class.getName());
     properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
         StringDeserializer.class.getName());
-    properties.put("group.id", groupId + "_" + nameSpace);
+    properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+
+    groupId = groupId + "_" + nameSpace;
+    properties.put("group.id", groupId);
 
     properties.setProperty("security.protocol", "SASL_PLAINTEXT");
     properties.setProperty("sasl.mechanism", "PLAIN");
     properties.setProperty("sasl.jaas.config",
         "org.apache.kafka.common.security.plain.PlainLoginModule " +
             "required username=\""+username+"\" password=\""+password+"\";");
+    Consumer<String, String> consumer = new KafkaConsumer<>(properties);
+    consumer.subscribe(Collections.singletonList(topic));
+    // Get partition information.
+    consumer.poll(0);
+    Set<TopicPartition> partitions = consumer.assignment();
+    consumer.close();
+    assert partitions != null && partitions.size() > 0 :
+        "The partition of Kafka topic: " + topic + " cannot be empty.";
+
     final int queueSize =
         conf.getInt(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_KEY,
             DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_DEFAULT);
-    pathQueue = new LinkedBlockingQueue<>(queueSize);
 
+    if (useZK) {
+      Class<? extends StoreDriver> driverClass = conf.getClass(
+          DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS,
+          DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT,
+          StoreDriver.class);
+      driver = ReflectionUtils.newInstance(driverClass, conf);
+      driver.init(conf, "ZoneMoverKafkaTrigger");
+    }
+    zkUpdateIntervalMs = conf.getLong(
+        DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_ZK_UPDATE_OFFSET_INTERVAL_KEY,
+        DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_ZK_UPDATE_OFFSET_INTERVAL_DEFAULT);
+    lastZkUpdateTime = Time.monotonicNow();
+
+    recordQueue = new LinkedBlockingQueue<>(queueSize);
     skipCompleteKeywords =
         conf.getStringCollection(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_SKIP_COMPLETE_KEYWORDS_KEY);
     skipRenameKeywords =
         conf.getStringCollection(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_SKIP_RENAME_KEYWORDS_KEY);
 
-    consumerThreadsNum =
-        conf.getInt(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_KAFKA_CONSUMER_THREADS_KEY,
-            DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_KAFKA_CONSUMER_THREADS_DEFAULT);
-    executorService = Executors.newFixedThreadPool(consumerThreadsNum,
+    LOG.info("Starting {} KafkaConsumerPool threads for namespace '{}'.", partitions.size(),
+        nameSpace);
+    executorService = Executors.newFixedThreadPool(partitions.size(),
         new ThreadFactory() {
           @Override
           public Thread newThread(Runnable r) {
@@ -123,13 +163,15 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
             return thread;
           }
         });
-    for (int i = 0; i < consumerThreadsNum; ++i) {
-      executorService.submit(new MonitorTask(properties, topic));
+
+    // Start one thread per partition.
+    for (TopicPartition partition : partitions) {
+      executorService.submit(new MonitorTask(properties, partition, driver, nameSpace, groupId));
     }
 
     monitorPaths = paths;
     LOG.info("ZoneMover trigger for {} has been started!", nameSpace);
-    LOG.info("{}:{}, {}:{}",
+    LOG.info("monitorPaths:{}, {}:{}, {}:{}", monitorPaths,
         DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_SKIP_COMPLETE_KEYWORDS_KEY,skipCompleteKeywords,
         DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_SKIP_RENAME_KEYWORDS_KEY, skipRenameKeywords);
   }
@@ -141,7 +183,45 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
 
   @Override
   public String getNext() throws InterruptedException {
-    return pathQueue.take();
+    return recordQueue.take().getRight();
+  }
+
+  @Override
+  public Pair<ConsumerRecord<String, String>, String> getNextRecord()
+      throws InterruptedException {
+    return recordQueue.take();
+  }
+
+  @Override
+  public String getGroupId() {
+    return groupId;
+  }
+
+  @Override
+  public void saveOffsetToZookeeper(ConsumerRecord<String, String> record, String ns,
+      String groupId, ZoneMoverMetrics zoneMoverMetrics) {
+    long now = Time.monotonicNow();
+    if (driver == null || now - lastZkUpdateTime < zkUpdateIntervalMs) {
+      return;
+    }
+    KafkaTopicRecord kafkaTopicRecord = new KafkaTopicRecord(ns, record.topic(), groupId,
+        record.partition(), record.offset());
+    try {
+      KafkaTopicRecord existingKafkaTopicRecord = driver.get(new Query<>(kafkaTopicRecord),
+          KafkaTopicRecord.class);
+      if (existingKafkaTopicRecord != null) {
+        if (kafkaTopicRecord.getOffset() < existingKafkaTopicRecord.getOffset()) {
+          return;
+        }
+      }
+      driver.put(kafkaTopicRecord, true, false);
+      lastZkUpdateTime = now;
+      LOG.info("SaveOffsetToZookeeper with {} taken: {} ms", kafkaTopicRecord,
+          Time.monotonicNow() - now);
+      zoneMoverMetrics.addKafkaOffsetZk(Time.monotonicNow() - now);
+    } catch (IOException e) {
+      LOG.error("Failed to saveOffsetToZookeeper {}.", kafkaTopicRecord, e);
+    }
   }
 
   /**
@@ -242,11 +322,19 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
 
   class MonitorTask implements Runnable {
     private Consumer<String, String> consumer;
-    private String topic;
-    public MonitorTask(Properties properties, String topic) {
-      consumer = new KafkaConsumer<>(properties);
-      this.topic = topic;
-      consumer.subscribe(Collections.singletonList(this.topic));
+    private TopicPartition topicPartition;
+    private StoreDriver driver;
+    private String ns;
+    private String groupId;
+    public MonitorTask(Properties properties, TopicPartition topicPartition,
+        StoreDriver driver, String ns, String groupId) {
+      properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
+      this.consumer = new KafkaConsumer<>(properties);
+      this.topicPartition = topicPartition;
+      this.driver = driver;
+      this.ns = ns;
+      this.groupId = groupId;
+      consumer.assign(Collections.singletonList(topicPartition));
     }
     @Override
     public void run() {
@@ -254,6 +342,7 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
     }
 
     public void monitorPaths() {
+      setInitialOffsetFromZookeeper();
       while (true) {
         ConsumerRecords<String, String> records = consumer.poll(100);
         try {
@@ -266,7 +355,10 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
             }
             String message = jsonObject.get("message").toString();
 
-            processMessage(message);
+            String path = processMessage(message);
+            if (path != null) {
+              recordQueue.put(new ImmutablePair<>(record, path));
+            }
           }
         } catch (JSONException e) {
           LOG.warn("processMessage encountered exception.", e);
@@ -280,14 +372,14 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
     /**
      * Choose new files from HDFS audit log
      */
-    private void processMessage(String message) throws JSONException, InterruptedException {
+    private String processMessage(String message) throws JSONException, InterruptedException {
       if (message.contains("cmd=complete")) {
         JSONObject jsonMessage = message2json(message);
         if (jsonMessage.get("allowed").equals("true")) {
           String src = jsonMessage.get("src").toString();
           if (!containKeyWords(src, skipCompleteKeywords) && checkPaths(src)) {
-            pathQueue.put(src);
             LOG.debug("New create file: {}", src);
+            return src;
           }
         }
       } else if (message.contains("cmd=rename")) {
@@ -296,10 +388,31 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
           String src = jsonMessage.get("src").toString();
           String dst = jsonMessage.get("dst").toString();
           if (!containKeyWords(dst, skipRenameKeywords) && checkPaths(dst)) {
-            pathQueue.put(dst);
             LOG.debug("New rename file, source: {}, destination: {}", src, dst);
+            return dst;
           }
         }
+      }
+      return null;
+    }
+
+    private void setInitialOffsetFromZookeeper() {
+      if (driver == null) {
+        return;
+      }
+      KafkaTopicRecord kafkaTopicRecord = new KafkaTopicRecord(ns, topicPartition.topic(),
+          groupId, topicPartition.partition(), 0);
+      try {
+        KafkaTopicRecord existingKafkaTopicRecord = driver.get(new Query<>(kafkaTopicRecord),
+            KafkaTopicRecord.class);
+        if (existingKafkaTopicRecord != null) {
+          long newOffset = existingKafkaTopicRecord.getOffset() + 1;
+          consumer.seek(topicPartition, newOffset);
+          LOG.info("Init set new offset: {} by existingKafkaTopicRecord: {}.", newOffset,
+              existingKafkaTopicRecord);
+        }
+      } catch (IOException e) {
+        LOG.error("Failed to setInitialOffsetFromZookeeper {}.", kafkaTopicRecord, e);
       }
     }
   }
