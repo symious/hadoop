@@ -152,5 +152,5 @@ abstract class BlockReconstructionWork {
    *
    * @param numberReplicas replica details
    */
-  abstract void addTaskToDatanode(NumberReplicas numberReplicas);
+  abstract boolean addTaskToDatanode(NumberReplicas numberReplicas);
 }
