@@ -25,6 +25,7 @@ import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.store.KafkaTopicRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
+import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
@@ -75,6 +76,8 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   protected final Collection<String> skipRenameKeywords;
   protected final Collection<String> skipCompleteKeywords;
 
+  private static boolean shouldSkipCreateKafkaConsumerForTests = false;
+
   static final List<String> CARE_LOG_SYMBOL = new ArrayList() {{
     add("allowed=");
     add("src=");
@@ -90,45 +93,6 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   public ZoneMoverKafkaTrigger(Configuration conf,
       List<Path> paths, URI namenode, boolean useZK) {
     nameSpace = namenode.getAuthority();
-    final String username =
-        conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_USERNAME);
-    final String password =
-        conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_PASSWORD);
-    final String bootstrapServers =
-        conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_BOOTSTRAP_SERVERS);
-    final String nsTopic =
-        conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_TOPIC_WITH_NAMESPACE_PREFIX + nameSpace);
-    final String topic = nsTopic != null ? nsTopic :
-        conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_TOPIC);
-    groupId =
-        conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_GROUP_ID);
-
-    Properties properties = new Properties();
-    properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
-        bootstrapServers);
-    properties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
-        StringDeserializer.class.getName());
-    properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
-        StringDeserializer.class.getName());
-    properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
-
-    groupId = groupId + "_" + nameSpace;
-    properties.put("group.id", groupId);
-
-    properties.setProperty("security.protocol", "SASL_PLAINTEXT");
-    properties.setProperty("sasl.mechanism", "PLAIN");
-    properties.setProperty("sasl.jaas.config",
-        "org.apache.kafka.common.security.plain.PlainLoginModule " +
-            "required username=\""+username+"\" password=\""+password+"\";");
-    Consumer<String, String> consumer = new KafkaConsumer<>(properties);
-    consumer.subscribe(Collections.singletonList(topic));
-    // Get partition information.
-    consumer.poll(0);
-    Set<TopicPartition> partitions = consumer.assignment();
-    consumer.close();
-    assert partitions != null && partitions.size() > 0 :
-        "The partition of Kafka topic: " + topic + " cannot be empty.";
-
     final int queueSize =
         conf.getInt(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_KEY,
             DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_QUEUE_SIZE_DEFAULT);
@@ -152,21 +116,61 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
     skipRenameKeywords =
         conf.getStringCollection(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_SKIP_RENAME_KEYWORDS_KEY);
 
-    LOG.info("Starting {} KafkaConsumerPool threads for namespace '{}'.", partitions.size(),
-        nameSpace);
-    executorService = Executors.newFixedThreadPool(partitions.size(),
-        new ThreadFactory() {
-          @Override
-          public Thread newThread(Runnable r) {
-            Thread thread = new Thread(r);
-            thread.setName("KafkaConsumerPool-Thread-" + nameSpace + "-" + thread.getId());
-            return thread;
-          }
-        });
+    if (!shouldSkipCreateKafkaConsumerForTests) {
+      final String username =
+          conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_USERNAME);
+      final String password =
+          conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_PASSWORD);
+      final String bootstrapServers =
+          conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_BOOTSTRAP_SERVERS);
+      final String nsTopic =
+          conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_TOPIC_WITH_NAMESPACE_PREFIX + nameSpace);
+      final String topic = nsTopic != null ? nsTopic :
+          conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_TOPIC);
+      groupId =
+          conf.get(DFSConfigKeys.DFS_ZONEMOVER_KAFKA_GROUP_ID);
 
-    // Start one thread per partition.
-    for (TopicPartition partition : partitions) {
-      executorService.submit(new MonitorTask(properties, partition, driver, nameSpace, groupId));
+      Properties properties = new Properties();
+      properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG,
+          bootstrapServers);
+      properties.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG,
+          StringDeserializer.class.getName());
+      properties.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG,
+          StringDeserializer.class.getName());
+      properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
+
+      groupId = groupId + "_" + nameSpace;
+      properties.put("group.id", groupId);
+
+      properties.setProperty("security.protocol", "SASL_PLAINTEXT");
+      properties.setProperty("sasl.mechanism", "PLAIN");
+      properties.setProperty("sasl.jaas.config",
+          "org.apache.kafka.common.security.plain.PlainLoginModule " +
+              "required username=\""+username+"\" password=\""+password+"\";");
+      Consumer<String, String> consumer = new KafkaConsumer<>(properties);
+      consumer.subscribe(Collections.singletonList(topic));
+      // Get partition information.
+      consumer.poll(0);
+      Set<TopicPartition> partitions = consumer.assignment();
+      consumer.close();
+      assert partitions != null && partitions.size() > 0 :
+          "The partition of Kafka topic: " + topic + " cannot be empty.";
+      LOG.info("Starting {} KafkaConsumerPool threads for namespace '{}'.", partitions.size(),
+          nameSpace);
+      executorService = Executors.newFixedThreadPool(partitions.size(),
+          new ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+              Thread thread = new Thread(r);
+              thread.setName("KafkaConsumerPool-Thread-" + nameSpace + "-" + thread.getId());
+              return thread;
+            }
+          });
+
+      // Start one thread per partition.
+      for (TopicPartition partition : partitions) {
+        executorService.submit(new MonitorTask(properties, partition, driver, nameSpace, groupId));
+      }
     }
 
     monitorPaths = paths;
@@ -317,7 +321,18 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
 
   @Override
   public void shutdown() {
-    executorService.shutdown();
+    if (executorService != null) {
+      executorService.shutdown();
+    }
+  }
+
+  /**
+   * For the purposes of unit tests, we don't need to create kafka consumer.
+   * @param skip whether to skip create kafka consumer.
+   */
+  @VisibleForTesting
+  public static void setShouldSkipCreateKafkaConsumerForTests(boolean skip) {
+    shouldSkipCreateKafkaConsumerForTests = skip;
   }
 
   class MonitorTask implements Runnable {

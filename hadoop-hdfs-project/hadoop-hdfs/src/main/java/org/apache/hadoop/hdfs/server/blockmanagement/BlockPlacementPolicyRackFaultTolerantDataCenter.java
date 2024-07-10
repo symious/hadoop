@@ -159,22 +159,20 @@ public class BlockPlacementPolicyRackFaultTolerantDataCenter extends
       List<DatanodeStorageInfo> storages = dcMap.getOrDefault(dc, new ArrayList<>());
       if (section.getReplica() > storages.size()) {
         int n = Math.min(numOfReplicas, section.getReplica() - storages.size());
-        Node base = (writer != null && NetworkTopologyUtil.getDataCenter(writer)
-            .equals(dc)) ? writer : new NodeBase(VIRTUAL_HOST, dc + VIRTUAL_RACK);
-        DatanodeStorageInfo[] result =  super.chooseTarget(srcPath, n, base,
-            NetworkTopologyUtil.getStoragesInDataCenter(chosenNodes,
-                section.getDataCenter()), returnChosenNodes,
-            excludedNodes, blocksize, storagePolicy, flags);
-        Collections.addAll(targetNodes, result);
-        if (result.length == numOfReplicas) {
-          return targetNodes.toArray(DatanodeStorageInfo.EMPTY_ARRAY);
+        if (n > 0) {
+          Node base = (writer != null && NetworkTopologyUtil.getDataCenter(writer)
+              .equals(dc)) ? writer : new NodeBase(VIRTUAL_HOST, dc + VIRTUAL_RACK);
+          DatanodeStorageInfo[] result =  super.chooseTarget(srcPath, n, base,
+              NetworkTopologyUtil.getStoragesInDataCenter(chosenNodes,
+                  section.getDataCenter()), returnChosenNodes,
+              excludedNodes, blocksize, storagePolicy, flags);
+          Collections.addAll(targetNodes, result);
+          numOfReplicas = Math.max(numOfReplicas - result.length, 0);
         }
-        Collections.addAll(storages, result);
-        numOfReplicas = Math.max(numOfReplicas - result.length, 0);
       }
     }
 
-    return DatanodeStorageInfo.EMPTY_ARRAY;
+    return targetNodes.toArray(DatanodeStorageInfo.EMPTY_ARRAY);
   }
 
   /**
@@ -456,9 +454,8 @@ public class BlockPlacementPolicyRackFaultTolerantDataCenter extends
     for (DatanodeInfo dn : locs) {
       racks.add(dn.getNetworkLocation());
     }
-    String dataCenter = NetworkTopologyUtil.getDataCenter(locs[0].getNetworkLocation());
     return new BlockPlacementStatusDefault(racks.size(), numberOfReplicas,
-        clusterMap.getNumOfNonEmptyRacks(dataCenter));
+        clusterMap.getNumOfNonEmptyRacks());
   }
 
   /**
@@ -485,7 +482,7 @@ public class BlockPlacementPolicyRackFaultTolerantDataCenter extends
       Collection<DatanodeStorageInfo> delCandidates,
       int expectedNumOfReplicas, ReplicationRule rule,
       List<StorageType> excessTypes, DatanodeDescriptor addedNode,
-      DatanodeDescriptor delNodeHint) {
+      DatanodeDescriptor delNodeHint, Map<DatanodeStorageInfo, Integer> storage2index) {
 
     List<DatanodeStorageInfo> excessReplicas = new ArrayList<>();
     Map<String, List<DatanodeStorageInfo>> delDCMap = new HashMap<>();
@@ -515,18 +512,25 @@ public class BlockPlacementPolicyRackFaultTolerantDataCenter extends
       for (DatanodeStorageInfo datanodeStorageInfo : delCandidates) {
         String dcName = NetworkTopologyUtil.getDataCenter(
             datanodeStorageInfo.getDatanodeDescriptor());
+        if (!rule.getDatacenters().contains(dcName)) {
+          continue;
+        }
+
         List<DatanodeStorageInfo> availableDCStorageInfos = availableDCMap.get(dcName);
-        List<DatanodeStorageInfo> delDCStorageInfos = delDCMap.get(dcName);
-        if (availableDCStorageInfos.size() > rule.getReplica(dcName)) {
-          List<DatanodeStorageInfo> replicasToDelete = (delDCStorageInfos.size() == 1) ?
-              Stream.of(datanodeStorageInfo).collect(Collectors.toList()) :
+        Set<Integer> indexes = availableDCStorageInfos.stream()
+            .map(storage2index::get).collect(Collectors.toSet());
+        if (indexes.size() > rule.getReplica(dcName) || delDCMap.get(dcName).size() > 1) {
+          List<DatanodeStorageInfo> replicasToDelete =
               super.chooseReplicasToDelete(availableDCStorageInfos,
                   Stream.of(datanodeStorageInfo).collect(Collectors.toList()),
-                  0, excessTypes, addedNode,
-                  datanodeStorageInfo.getDatanodeDescriptor());
-          if (addExcessReplicas(delCandidates, expectedNumOfReplicas,
-              replicasToDelete, excessReplicas, delNodeHint)) {
-            break;
+                  0, excessTypes, addedNode, delNodeHint);
+          if (!replicasToDelete.isEmpty()) {
+            availableDCMap.get(dcName).removeAll(replicasToDelete);
+            delDCMap.get(dcName).removeAll(replicasToDelete);
+            if (addExcessReplicas(delCandidates, expectedNumOfReplicas,
+                replicasToDelete, excessReplicas, delNodeHint)) {
+              break;
+            }
           }
         }
       }

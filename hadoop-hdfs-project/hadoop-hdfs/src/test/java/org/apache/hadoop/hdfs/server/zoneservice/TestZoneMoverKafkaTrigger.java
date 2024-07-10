@@ -88,6 +88,7 @@ public class TestZoneMoverKafkaTrigger {
         cluster.getNameNode().getNameNodeAddress());
     List<Path> pathList = Arrays.asList(new Path("/test1"),
         new Path("/test2"), new Path("/test3"));
+    ZoneMoverKafkaTrigger.setShouldSkipCreateKafkaConsumerForTests(true);
     ZoneMoverKafkaTrigger zoneMoverTrigger =
         new ZoneMoverKafkaTrigger(getConf(), pathList, namenode);
     String pathLoc1 = "/test2/test.file";
@@ -102,7 +103,7 @@ public class TestZoneMoverKafkaTrigger {
     Configuration conf = new Configuration();
     conf.set(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_SKIP_COMPLETE_KEYWORDS_KEY,
         "spark-staging, _temporary, .hoodie");
-
+    ZoneMoverKafkaTrigger.setShouldSkipCreateKafkaConsumerForTests(true);
     ZoneMoverKafkaTrigger zoneMoverTrigger =
         new ZoneMoverKafkaTrigger(getConf(), null, URI.create("hdfs://test/"));
 

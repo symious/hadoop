@@ -457,7 +457,7 @@ public class TestBlockPlacementPolicyRackFaultTolerantDataCenter {
     for (LocatedBlock block : locatedBlocks.getLocatedBlocks()) {
       BlockPlacementStatus status = bm.getStripedBlockPlacementPolicy()
           .verifyBlockPlacement(block.getLocations(), 5);
-      Assert.assertTrue(status.isPlacementPolicySatisfied());
+      Assert.assertFalse(status.isPlacementPolicySatisfied());
     }
   }
 

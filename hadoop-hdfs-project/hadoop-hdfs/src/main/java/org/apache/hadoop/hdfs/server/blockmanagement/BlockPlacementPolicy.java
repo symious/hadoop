@@ -229,6 +229,39 @@ public abstract class BlockPlacementPolicy {
   }
 
   /**
+   * Select the excess replica storages for deletion based on either
+   * replicationRule/delNodehint/Excess storage types.
+   *
+   * @param availableReplicas
+   *          available replicas
+   * @param candidates
+   *          candidates replicas
+   * @param expectedNumOfReplicas
+   *          The required number of replicas for this block
+   * @param rule
+   *          The rule for replicas to follow
+   * @param excessTypes
+   *          type of the storagepolicy
+   * @param addedNode
+   *          New replica reported
+   * @param delNodeHint
+   *          Hint for excess storage selection
+   * @param storage2index
+   *          Maps each DatanodeStorageInfo to corresponding index
+   * @return Returns the list of excess replicas chosen for deletion
+   */
+  public List<DatanodeStorageInfo> chooseReplicasToDelete(
+      Collection<DatanodeStorageInfo> availableReplicas,
+      Collection<DatanodeStorageInfo> candidates,
+      int expectedNumOfReplicas, ReplicationRule rule,
+      List<StorageType> excessTypes,
+      DatanodeDescriptor addedNode,
+      DatanodeDescriptor delNodeHint, Map<DatanodeStorageInfo, Integer> storage2index) {
+    return chooseReplicasToDelete(availableReplicas, candidates,
+        expectedNumOfReplicas, excessTypes, addedNode, delNodeHint);
+  }
+
+  /**
    * Select the excess replica storages for deletion based on:
    *  first, priority select the datanode node belonging to the delRedundantDataCenters for
    *  to delete.

@@ -26,7 +26,6 @@ import org.apache.hadoop.net.Node;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Deque;
 import java.util.HashMap;
@@ -180,8 +179,11 @@ class ErasureCodingWork extends BlockReconstructionWork {
         hasAllInternalBlocks()) {
       List<Integer> leavingServiceSources = findLeavingServiceSources();
       if (adjustTargetNodes) {
-        List<DatanodeDescriptor> sourceNodes = new ArrayList<>(
-            Arrays.asList(getSrcNodes()).subList(0, leavingServiceSources.size()));
+        List<DatanodeDescriptor> sourceNodes = new ArrayList<>();
+        for (int i = 0; i < leavingServiceSources.size(); i++) {
+          DatanodeDescriptor source = getSrcNodes()[i];
+          sourceNodes.add(source);
+        }
         targets = adjustTargetNodes(sourceNodes);
       }
       // decommissioningSources.size() should be >= targets.length
@@ -252,8 +254,8 @@ class ErasureCodingWork extends BlockReconstructionWork {
    */
   private DatanodeStorageInfo[] adjustTargetNodes(List<DatanodeDescriptor> sourceNodes) {
     DatanodeStorageInfo[] originalTargets = getTargets();
-    if (sourceNodes.isEmpty() || originalTargets.length == 0) {
-      return DatanodeStorageInfo.EMPTY_ARRAY;
+    if (sourceNodes.isEmpty()) {
+      return originalTargets;
     }
     int targetsLength = originalTargets.length;
     DatanodeStorageInfo[] targets = new DatanodeStorageInfo[targetsLength];
@@ -266,28 +268,27 @@ class ErasureCodingWork extends BlockReconstructionWork {
     int i = 0;
     for (DatanodeDescriptor datanodeDescriptor : sourceNodes) {
       if (i >= targetsLength) {
-        break;
+        return targets;
       }
       String idc = NetworkTopologyUtil.getDataCenter(datanodeDescriptor);
       Deque<DatanodeStorageInfo> storageDeque = idcToStorageMap.get(idc);
-
       if (storageDeque != null && !storageDeque.isEmpty()) {
         targets[i] = storageDeque.poll();
         if (storageDeque.isEmpty()) {
           idcToStorageMap.remove(idc);
         }
-      } else if (!idcToStorageMap.isEmpty()) {
-        // If no matching IDC found, assign the first available element from any IDC.
-        Map.Entry<String, Deque<DatanodeStorageInfo>> entry =
-            idcToStorageMap.entrySet().iterator().next();
-        targets[i] = entry.getValue().pollLast();
-        if (entry.getValue().isEmpty()) {
-          idcToStorageMap.remove(entry.getKey());
-        }
+        i++;
       }
-      i++;
+    }
+
+    if (!idcToStorageMap.isEmpty()) {
+      Map.Entry<String, Deque<DatanodeStorageInfo>> entry =
+          idcToStorageMap.entrySet().iterator().next();
+      targets[i] = entry.getValue().pollLast();
+      if (entry.getValue().isEmpty()) {
+        idcToStorageMap.remove(entry.getKey());
+      }
     }
     return targets;
   }
-
 }
