@@ -4544,10 +4544,10 @@ public class YarnConfiguration extends Configuration {
   public static final String DEFAULT_GPG_QUERY_TIMELINE_WEBAPP_ADDRESS =
       "http://0.0.0.0:8188";
 
-  // The expiration time for app Home to clean by GPG, default is 5 minutes
+  // The expiration time for not found apps to clean by GPG, default is 15 minutes
   public static final String GPG_APP_MIN_EXPIRATION_MS =
-      FEDERATION_GPG_PREFIX + ".app-home.min.expiration-ms";
-  public static final long DEFAULT_GPG_APP_MIN_EXPIRATION_MS = 300000;
+      FEDERATION_GPG_PREFIX + "app-home.min.expiration-ms";
+  public static final long DEFAULT_GPG_APP_MIN_EXPIRATION_MS = 900000;
 
   //GPG query http connection timeout, default is 30 s
   public static final String GPG_QUERY_CONNECTION_TIMEOUT_MS =

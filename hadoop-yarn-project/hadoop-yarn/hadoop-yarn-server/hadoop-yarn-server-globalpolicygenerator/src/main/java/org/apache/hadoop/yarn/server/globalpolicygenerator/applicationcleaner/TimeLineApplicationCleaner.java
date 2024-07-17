@@ -132,7 +132,7 @@ public class TimeLineApplicationCleaner extends ApplicationCleaner {
             toDelete.add(applicationId);
           }
         }catch (Exception e){
-          gpgMetrics.incrFailedQueryAppsFromTimeline();
+          gpgMetrics.incrFailedQueryApps();
           LOG.error("Query app: " + app.getApplicationId() + " from timeline " +
               "failed!",e);
         } finally {

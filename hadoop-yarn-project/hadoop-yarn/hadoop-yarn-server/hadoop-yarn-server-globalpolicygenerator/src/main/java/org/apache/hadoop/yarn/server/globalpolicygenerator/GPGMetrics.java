@@ -49,8 +49,8 @@ public final class GPGMetrics {
   @Metric("# recent deleted app meta numbers")
   private MutableGaugeLong deletedAppStateStores;
 
-  @Metric("# recent failed query app numbers from timelineService")
-  private MutableGaugeLong failedQueryAppsFromTimeline;
+  @Metric("# recent failed query app numbers from external")
+  private MutableGaugeLong failedQueryApps;
 
   private static volatile GPGMetrics INSTANCE = null;
   private static MetricsRegistry registry;
@@ -97,8 +97,8 @@ public final class GPGMetrics {
     deletedAppStateStores.incr(deletedAppStates);
   }
 
-  public void incrFailedQueryAppsFromTimeline() {
-    failedQueryAppsFromTimeline.incr();
+  public void incrFailedQueryApps() {
+    failedQueryApps.incr();
   }
 
 }
