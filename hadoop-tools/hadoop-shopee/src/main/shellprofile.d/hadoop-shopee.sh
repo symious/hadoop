@@ -140,3 +140,44 @@ function mapred_subcommand_nsmigrate
 }
 
 fi
+
+
+if ! declare -f hadoop_subcommand_datacleanup >/dev/null 2>/dev/null; then
+  if [[ "${HADOOP_SHELL_EXECNAME}" = hadoop ]]; then
+    hadoop_add_subcommand "datacleanup" client "clean up old data"
+  fi
+
+## @description  datacleanup
+## @audience     public
+## @stability    stable
+## @replaceable  yes
+function hadoop_subcommand_datacleanup
+{
+  # shellcheck disable=SC2034
+  HADOOP_CLASSNAME=org.apache.hadoop.tools.DataCleanup
+  hadoop_add_to_classpath_tools hadoop-shopee
+}
+
+fi
+
+
+if ! declare -f mapred_subcommand_datacleanup >/dev/null 2>/dev/null; then
+
+  if [[ "${HADOOP_SHELL_EXECNAME}" = mapred ]]; then
+    hadoop_add_subcommand "datacleanup" client "clean up old data"
+  fi
+
+  # this can't be indented otherwise shelldocs won't get it
+
+## @description  datacleanup
+## @audience     public
+## @stability    stable
+## @replaceable  yes
+function mapred_subcommand_datacleanup
+{
+  # shellcheck disable=SC2034
+  HADOOP_CLASSNAME=org.apache.hadoop.tools.DataCleanup
+  hadoop_add_to_classpath_tools hadoop-shopee
+}
+
+fi
