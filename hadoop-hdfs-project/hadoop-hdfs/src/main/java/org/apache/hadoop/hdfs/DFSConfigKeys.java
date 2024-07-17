@@ -1600,6 +1600,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
 
   public static final String  DFS_QUOTA_BY_STORAGETYPE_ENABLED_KEY = "dfs.quota.by.storage.type.enabled";
   public static final boolean DFS_QUOTA_BY_STORAGETYPE_ENABLED_DEFAULT = true;
+  public static final String  DFS_QUOTA_IGNORE_SYMLINKS_ENABLED_KEY = "dfs.quota.ignore.symlinks.enabled";
+  public static final boolean DFS_QUOTA_IGNORE_SYMLINKS_ENABLED_DEFAULT = false;
 
   // HA related configuration
   public static final String DFS_HA_NAMENODES_KEY_PREFIX =

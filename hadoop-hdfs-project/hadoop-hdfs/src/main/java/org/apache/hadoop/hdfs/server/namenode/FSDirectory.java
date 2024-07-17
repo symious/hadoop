@@ -1572,6 +1572,11 @@ public class FSDirectory implements Closeable {
     return yieldCount;
   }
 
+  @VisibleForTesting
+  public void resetYieldCount() {
+    yieldCount = 0;
+  }
+
   void addYieldCount(long value) {
     yieldCount += value;
   }

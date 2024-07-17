@@ -6692,4 +6692,17 @@
     </description>
   </property>
 
+  <property>
+    <name>dfs.quota.ignore.symlinks.enabled</name>
+    <value>false</value>
+    <description>
+      Whether to ignore symlinks when calculating quotas or not.
+      Once this config is enabled, user quota can grow above the normal quota
+      calculation due to symlinks not being included into quota. Hence, if
+      this config is reverted afterward, either knowingly or unknowingly,
+      there is a high possibility that RPCs will fail due to quota exceed failure
+      from a sudden growth in quota usage
+      caused by symlinks being included in quota calculation again.
+    </description>
+  </property>
 </configuration>

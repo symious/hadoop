@@ -44,6 +44,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CO
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_SYMLINKS_RESOLVES_DEPTH;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MAX_SYMLINKS_RESOLVES_DEPTH_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_QUOTA_IGNORE_SYMLINKS_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_QUOTA_IGNORE_SYMLINKS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_PERMISSIONS_SUPERUSER_ONLY_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_PERMISSIONS_SUPERUSER_ONLY_KEY;
@@ -707,6 +709,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
   private final MessageDigest digest;
 
+  public static volatile int SYMLINK_QUOTA_WEIGHT = 1;
+
   /**
    * Notify that loading of this FSDirectory is complete, and
    * it is imageLoaded for use
@@ -1102,6 +1106,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
       this.throttlerCalibrationPolicy =
           ThrottlerCalibrationMasterPolicy.newThrottlerCalibrationPolicy(conf, this);
+      SYMLINK_QUOTA_WEIGHT = conf.getBoolean(DFS_QUOTA_IGNORE_SYMLINKS_ENABLED_KEY,
+          DFS_QUOTA_IGNORE_SYMLINKS_ENABLED_DEFAULT) ? 0 : 1;
     } catch(IOException e) {
       LOG.error(getClass().getSimpleName() + " initialization failed.", e);
       close();

@@ -49,6 +49,8 @@ import java.io.StringWriter;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.hadoop.hdfs.server.namenode.FSNamesystem.SYMLINK_QUOTA_WEIGHT;
+
 /**
  * We keep an in-memory representation of the file/block hierarchy.
  * This is a base INode class containing common fields for file and 
@@ -469,7 +471,7 @@ public abstract class INode implements INodeAttributes, Diff.Element<byte[]> {
     final QuotaCounts q = getQuotaCounts();
     return new ContentSummary.Builder().
         length(counts.getLength()).
-        fileCount(counts.getFileCount() + counts.getSymlinkCount()).
+        fileCount(counts.getFileCount() + counts.getSymlinkCount() * SYMLINK_QUOTA_WEIGHT).
         directoryCount(counts.getDirectoryCount()).
         quota(q.getNameSpace()).
         spaceConsumed(counts.getStoragespace()).

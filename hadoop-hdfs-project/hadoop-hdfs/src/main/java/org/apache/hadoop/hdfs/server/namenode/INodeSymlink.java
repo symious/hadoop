@@ -25,6 +25,8 @@ import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockStoragePolicySuite;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
 
+import static org.apache.hadoop.hdfs.server.namenode.FSNamesystem.SYMLINK_QUOTA_WEIGHT;
+
 /**
  * An {@link INode} representing a symbolic link.
  */
@@ -90,7 +92,7 @@ public class INodeSymlink extends INodeWithAdditionalFields {
   @Override
   public QuotaCounts computeQuotaUsage(BlockStoragePolicySuite bsps,
       byte blockStoragePolicyId, boolean useCache, int lastSnapshotId) {
-    return new QuotaCounts.Builder().nameSpace(1).build();
+    return new QuotaCounts.Builder().nameSpace(SYMLINK_QUOTA_WEIGHT).build();
   }
 
   @Override
