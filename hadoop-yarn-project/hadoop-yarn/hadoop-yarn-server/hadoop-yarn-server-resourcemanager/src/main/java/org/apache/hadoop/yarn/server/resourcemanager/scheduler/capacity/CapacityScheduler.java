@@ -1605,12 +1605,6 @@ public class CapacityScheduler extends
       return EMPTY_ALLOCATION;
     }
 
-    if (application.getCSLeafQueue()
-        .getFeatureEnabled(CapacitySchedulerConfiguration.DYNAMIC_ADJUSTMENT)) {
-      // Handle all container updates
-      handleContainerUpdates(application, updateRequests);
-    }
-
     // Release containers
     releaseContainers(release, application);
 
@@ -1630,6 +1624,12 @@ public class CapacityScheduler extends
     try {
       if (application.isStopped()) {
         return EMPTY_ALLOCATION;
+      }
+
+      if (application.getCSLeafQueue()
+          .getFeatureEnabled(CapacitySchedulerConfiguration.DYNAMIC_ADJUSTMENT)) {
+        // Handle all container updates
+        handleContainerUpdates(application, updateRequests);
       }
 
       // Process resource requests

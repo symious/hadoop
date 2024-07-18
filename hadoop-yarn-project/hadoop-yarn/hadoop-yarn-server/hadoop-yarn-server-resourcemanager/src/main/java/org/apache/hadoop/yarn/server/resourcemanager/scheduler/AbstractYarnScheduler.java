@@ -1421,38 +1421,30 @@ public abstract class AbstractYarnScheduler
   private void handleIncreaseRequests(
       SchedulerApplicationAttempt applicationAttempt,
       List<UpdateContainerRequest> updateContainerRequests) {
-    applicationAttempt.writeLock.lock();
-    try {
-      if (applicationAttempt.isStopped) {
-          return;
-      }
-      for (UpdateContainerRequest uReq : updateContainerRequests) {
-          RMContainer rmContainer =
-                  rmContext.getScheduler().getRMContainer(uReq.getContainerId());
-        // Check if this is a container update
-        // And not in the middle of a Demotion
-        if (rmContainer!=null) {
-          // Check if this is an executionType change request
-          // If so, fix the rr to make it look like a normal rr
-          // with relaxLocality=false and numContainers=1
-          SchedulerNode schedulerNode = rmContext.getScheduler()
-                  .getSchedulerNode(rmContainer.getContainer().getNodeId());
+    for (UpdateContainerRequest uReq : updateContainerRequests) {
+        RMContainer rmContainer =
+                rmContext.getScheduler().getRMContainer(uReq.getContainerId());
+      // Check if this is a container update
+      // And not in the middle of a Demotion
+      if (rmContainer!=null) {
+        // Check if this is an executionType change request
+        // If so, fix the rr to make it look like a normal rr
+        // with relaxLocality=false and numContainers=1
+        SchedulerNode schedulerNode = rmContext.getScheduler()
+                .getSchedulerNode(rmContainer.getContainer().getNodeId());
 
-          // Add only if no outstanding promote requests exist.
-          if (!applicationAttempt.getUpdateContext()
-                  .checkAndAddToOutstandingIncreases(
-                          rmContainer, schedulerNode, uReq)) {
-            applicationAttempt.addToUpdateContainerErrors(
-                    UpdateContainerError.newInstance(
-                            RMServerUtils.UPDATE_OUTSTANDING_ERROR, uReq));
-          }
-        } else {
-            LOG.warn("Cannot promote non-existent (or completed) Container ["
-                    + uReq.getContainerId() + "]");
+        // Add only if no outstanding promote requests exist.
+        if (!applicationAttempt.getUpdateContext()
+                .checkAndAddToOutstandingIncreases(
+                        rmContainer, schedulerNode, uReq)) {
+          applicationAttempt.addToUpdateContainerErrors(
+                  UpdateContainerError.newInstance(
+                          RMServerUtils.UPDATE_OUTSTANDING_ERROR, uReq));
         }
+      } else {
+          LOG.warn("Cannot promote non-existent (or completed) Container ["
+                  + uReq.getContainerId() + "]");
       }
-    } finally {
-      applicationAttempt.writeLock.unlock();
     }
   }
 
