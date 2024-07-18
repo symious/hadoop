@@ -106,6 +106,9 @@ public class NodeManagerMetrics {
   @Metric("Current slow node")
   MutableGaugeInt slowNode;
 
+  @Metric("Node is unhealthy")
+  MutableGaugeInt unhealthy;
+
   @Metric("Missed localization requests in bytes")
       MutableCounterLong localizedCacheMissBytes;
   @Metric("Cached localization requests in bytes")
@@ -541,6 +544,14 @@ public class NodeManagerMetrics {
 
   public void setSlowNode(int slowNode) {
     this.slowNode.set(slowNode);
+  }
+
+  public int getUnhealthy() {
+    return this.unhealthy.value();
+  }
+
+  public void setUnhealthy(int unhealthy) {
+    this.unhealthy.set(unhealthy);
   }
 
   public int getTotalMemoryInGB() {

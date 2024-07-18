@@ -35,21 +35,25 @@ public class NodeManagerLabelTracker {
       "  - pattern: 'Hadoop<service=NodeManager, name=(.*)><>(.*): (\\d+)'\n" +
       "    name: 'Hadoop_NodeManager_$2'\n" +
       "    labels:\n" +
+      "      yarn_cluster_id: '%s'\n" +
       "      nmlabel: '%s'\n" +
       "      name: '$1'\n" +
       "      process: '%s'\n" +
       "  - pattern: 'java.lang<type=OperatingSystem><>(.*): (\\d+)'\n" +
       "    name: 'java_lang_OperatingSystem_$1'\n" +
       "    labels:\n" +
+      "      yarn_cluster_id: '%s'\n" +
       "      nmlabel: '%s'\n" +
       "      name: '$1'\n" +
       "      process: '%s'\n" +
       "  - pattern: '.*'";
 
   private String jmxPrometheusConfig;
+  private String clusterId;
 
-  public NodeManagerLabelTracker(String jmxPrometheusConfig) {
+  public NodeManagerLabelTracker(String jmxPrometheusConfig, String clusterId) {
     this.jmxPrometheusConfig = jmxPrometheusConfig;
+    this.clusterId =  clusterId;
   }
 
 
@@ -69,8 +73,9 @@ public class NodeManagerLabelTracker {
       if (file.exists()) {
         FileWriter fileWritter = new FileWriter(file, false);
         bufferWritter = new BufferedWriter(fileWritter);
-        bufferWritter.write(String.format(jmxPrometheusConfigContent, this.nodeLabel,
-            this.processLabels, this.nodeLabel, this.processLabels));
+        bufferWritter.write(
+            String.format(jmxPrometheusConfigContent, this.clusterId, this.nodeLabel,
+                this.processLabels, this.clusterId, this.nodeLabel, this.processLabels));
       }
     } catch (Exception e) {
       LOG.error("Write error. ", e);

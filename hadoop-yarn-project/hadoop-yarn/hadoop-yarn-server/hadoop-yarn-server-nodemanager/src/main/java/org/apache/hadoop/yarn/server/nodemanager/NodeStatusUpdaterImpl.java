@@ -196,7 +196,8 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     this.metrics = metrics;
     String jmxPrometheusConfig = context.getConf().get(YarnConfiguration.NM_JMX_PROMETHEUS_CONFIG_FILE,
         YarnConfiguration.DEFAULT_NM_JMX_PROMETHEUS_CONFIG_FILE);
-    this.labelTracker = new NodeManagerLabelTracker(jmxPrometheusConfig);
+    String clusterId = YarnConfiguration.getClusterId(this.context.getConf());
+    this.labelTracker = new NodeManagerLabelTracker(jmxPrometheusConfig, clusterId);
     this.recentlyStoppedContainers = new LinkedHashMap<ContainerId, Long>();
     this.pendingCompletedContainers =
         new HashMap<ContainerId, ContainerStatus>();
@@ -591,7 +592,9 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
 
     NodeHealthStatus nodeHealthStatus = this.context.getNodeHealthStatus();
     nodeHealthStatus.setHealthReport(healthChecker.getHealthReport());
-    nodeHealthStatus.setIsNodeHealthy(healthChecker.isHealthy());
+    boolean health = healthChecker.isHealthy();
+    nodeHealthStatus.setIsNodeHealthy(health);
+    this.metrics.setUnhealthy(health ? 0 : 1);
     nodeHealthStatus.setLastHealthReportTime(healthChecker
       .getLastHealthReportTime());
     LOG.debug("Node's health-status : {}, {}",
