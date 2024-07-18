@@ -37,20 +37,17 @@ import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.HdfsBlockLocation;
@@ -666,7 +663,7 @@ public class DebugAdmin extends Configured implements Tool {
     }
 
     private int handleArgs(String pathStr, String inputStr, String outputStr,
-        String concurrencyStr) throws IOException, ExecutionException, InterruptedException {
+        String concurrencyStr) throws IOException, InterruptedException {
       BufferedWriter writer = null;
       try {
         if (outputStr != null) {
@@ -686,20 +683,8 @@ public class DebugAdmin extends Configured implements Tool {
           return result;
         }
 
-        // -input must be defined by this point
-        File input = new File(inputStr);
-        if (!input.exists()) {
-          return 1;
-        }
-        BufferedReader reader =
-            new BufferedReader(new InputStreamReader(Files.newInputStream(input.toPath())));
-        Set<Path> paths = new HashSet<>();
-        String line;
-        while ((line = reader.readLine()) != null) {
-          paths.add(new Path(line.trim()));
-        }
         int concurrency = concurrencyStr == null ? 1 : Integer.parseInt(concurrencyStr);
-        return handlePaths(paths, writer, concurrency);
+        return handlePaths(inputStr, writer, concurrency);
       } finally {
         if (writer != null) {
           writer.flush();
@@ -719,32 +704,74 @@ public class DebugAdmin extends Configured implements Tool {
       writer.flush();
     }
 
-    private int handlePaths(Set<Path> paths, BufferedWriter writer, int concurrency)
-        throws ExecutionException, InterruptedException, IOException {
-      int total = paths.size();
-      long start = Time.monotonicNow();
-      ExecutorService threadPool = Executors.newFixedThreadPool(concurrency);
-      List<Callable<Pair<Path, Integer>>> tasks = new ArrayList<>();
-      for (Path path: paths) {
-        tasks.add(() -> Pair.of(path, handlePath(path)));
+    private int handlePaths(String inputStr, BufferedWriter writer, int concurrency)
+        throws InterruptedException, IOException {
+      File input = new File(inputStr);
+      if (!input.exists()) {
+        return 1;
       }
-      List<Future<Pair<Path, Integer>>> futures =
-          tasks.stream().map(threadPool::submit).collect(Collectors.toList());
 
-      boolean failed = false;
-      int done = 0;
-      for (Future<Pair<Path, Integer>> future: futures) {
-        done++;
-        if (done % 1000 == 0) {
-          long elapsed = Time.monotonicNow() - start;
-          double rate = (double) done / elapsed * 1000;
-          String msg = "Progress: %d/%d, elapsed: %d ms, rate: %5.2f files/s%n";
-          System.out.printf(msg, done, total, elapsed, rate);
+      // Line count
+      BufferedReader reader =
+          new BufferedReader(new InputStreamReader(Files.newInputStream(input.toPath())));
+      int total = 0;
+      String line;
+      while ((line = reader.readLine()) != null) {
+        if (line.trim().isEmpty()) {
+          continue;
         }
-        writeToOutput(writer, future.get().getLeft().toString(), future.get().getRight());
-        failed |= future.get().getRight() != 0;
+        total++;
       }
-      return failed ? 1 : 0;
+      int finalTotal = total;
+
+      reader = new BufferedReader(new InputStreamReader(Files.newInputStream(input.toPath())));
+
+      ExecutorService threadPool = Executors.newFixedThreadPool(concurrency);
+      final AtomicInteger done = new AtomicInteger(0);
+      final AtomicBoolean failed = new AtomicBoolean(false);
+      final Semaphore lock = new Semaphore(concurrency);
+
+      long start = Time.monotonicNow();
+
+      while ((line = reader.readLine()) != null) {
+        final String trimmedLine = line.trim();
+        if (trimmedLine.isEmpty()) {
+          continue;
+        }
+        lock.acquire();
+        threadPool.submit(
+            () -> handlePathConcurrently(new Path(trimmedLine), lock, done, failed, start,
+                finalTotal, writer));
+      }
+      reader.close();
+      while (done.get() < total) {
+        Thread.sleep(1000);
+      }
+      return failed.get() ? 1 : 0;
+    }
+
+    private void handlePathConcurrently(Path path, Semaphore lock, AtomicInteger done,
+        AtomicBoolean failed, long start, int total, BufferedWriter writer) {
+      try {
+        int result = handlePath(path);
+        if (result != 0) {
+          failed.set(true);
+        }
+        int doneSnapshot = done.incrementAndGet();
+        if (doneSnapshot % 1000 == 0) {
+          long elapsed = Time.monotonicNow() - start;
+          double rate = (double) doneSnapshot / elapsed * 1000;
+          String msg = "Progress: %d/%d, elapsed: %d ms, rate: %5.2f files/s%n";
+          System.out.printf(msg, doneSnapshot, total, elapsed, rate);
+        }
+        synchronized (writer) {
+          writeToOutput(writer, path.toString(), result);
+        }
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      } finally {
+        lock.release();
+      }
     }
 
     private int handlePath(Path path) {
