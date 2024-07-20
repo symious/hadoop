@@ -642,6 +642,13 @@ public class Mover {
     }
   }
 
+  static Path getIdPath() {
+    return new Path(String.format("%s.%s.%s",
+        HdfsServerConstants.MOVER_ID_PATH,
+        NetUtils.getLocalHostname(),
+        Time.now()));
+  }
+
   static int run(Map<URI, List<Path>> namenodes, Configuration conf)
       throws IOException, InterruptedException {
     final long sleeptime =
@@ -661,7 +668,7 @@ public class Mover {
     List<NameNodeConnector> connectors = Collections.emptyList();
     try {
       connectors = NameNodeConnector.newNameNodeConnectors(namenodes,
-          Mover.class.getSimpleName(), HdfsServerConstants.MOVER_ID_PATH, conf,
+          Mover.class.getSimpleName(), getIdPath(), conf,
           NameNodeConnector.DEFAULT_MAX_IDLE_ITERATIONS);
 
       while (connectors.size() > 0) {

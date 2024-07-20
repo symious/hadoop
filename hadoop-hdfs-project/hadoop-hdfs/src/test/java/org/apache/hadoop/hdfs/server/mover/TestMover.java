@@ -700,7 +700,8 @@ public class TestMover {
       dfs.setStoragePolicy(new Path(file), "COLD");
       int rc = ToolRunner.run(conf, new Mover.Cli(),
           new String[] {"-p", file.toString()});
-      int exitcode = ExitStatus.IO_EXCEPTION.getExitCode();
+      // Current need multiple instances run hdfs mover, so update UT.
+      int exitcode = ExitStatus.NO_MOVE_BLOCK.getExitCode();
       Assert.assertEquals("Exit code should be " + exitcode, exitcode, rc);
     } finally {
       cluster.shutdown();
