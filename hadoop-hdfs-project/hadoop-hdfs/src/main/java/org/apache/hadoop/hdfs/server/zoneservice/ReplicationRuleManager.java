@@ -79,14 +79,15 @@ public class ReplicationRuleManager {
    * @param nameSpace URI of the NameNode
    * @param path      the path to be checked
    * @param ratio     the ratio of path will be checked
+   * @param threads   the number of threads to do this check operation
    * @return check result: replication-path map
    */
   public Map<ReplicationRule, Set<String>> checkPath(
-      String nameSpace, String path, String ratio) {
+      String nameSpace, String path, String ratio, String threads) {
     Configuration conf = new Configuration();
     URI namenode = ZoneServiceUtil.getNamespaceUri(nameSpace, conf);
     return ZoneChecker.getReplicaRule(conf, namenode, path,
-        Float.parseFloat(ratio));
+        Float.parseFloat(ratio), Integer.parseInt(threads));
   }
 
   /**
@@ -95,17 +96,17 @@ public class ReplicationRuleManager {
    * @param path      the path to be checked
    * @return block summary of the given path
    */
-  public Map<String, List<Long>> summaryBlocks(String nameSpace, String path) {
+  public Map<String, List<Long>> summaryBlocks(String nameSpace, String path, String threads) {
     Configuration conf = new Configuration();
     URI namenode = ZoneServiceUtil.getNamespaceUri(nameSpace, conf);
-    return ZoneChecker.getBlockSummary(conf, namenode, path);
+    return ZoneChecker.getBlockSummary(conf, namenode, path, Integer.parseInt(threads));
   }
 
   public Map<String, List<Long>> countBlocksByDistribution(String nameSpace,
-      String path) {
+      String path, String threads) {
     Configuration conf = new Configuration();
     URI namenode = ZoneServiceUtil.getNamespaceUri(nameSpace, conf);
-    return ZoneChecker.getCountSummary(conf, namenode, path);
+    return ZoneChecker.getCountSummary(conf, namenode, path, Integer.parseInt(threads));
   }
 
   /**

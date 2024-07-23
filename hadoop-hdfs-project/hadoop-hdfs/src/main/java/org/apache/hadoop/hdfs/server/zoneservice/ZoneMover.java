@@ -617,11 +617,8 @@ public class ZoneMover {
     for (DatanodeInfo info: infos) {
       String dc = DFSNetworkTopologyWithDataCenter.getDataCenter(
           info.getNetworkLocation());
-      if (distribution.containsKey(dc)) {
-        distribution.put(dc, (short) (distribution.get(dc) + 1));
-      } else {
-        distribution.put(dc, (short) 1);
-      }
+      short value = distribution.getOrDefault(dc, (short) 0);
+      distribution.put(dc, (short) (value + 1));
     }
     return distribution;
   }

@@ -39,6 +39,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
@@ -59,15 +60,15 @@ public class TestZoneChecker {
         .numDataNodes(hosts1.length).hosts(hosts1).racks(racks1).build();
     cluster.waitActive();
     DistributedFileSystem fs = cluster.getFileSystem();
-    String dirName = "/test_zch/";
-    String pathName = dirName + "testGetReplicaInfo1.txt";
+    String dirName = "/test_zch";
+    String pathName = dirName + "/testGetReplicaInfo1.txt";
     fs.mkdir(new Path(dirName), new FsPermission("777"));
 
     // write two files
     Path path1 = new Path(pathName);
     // client(127.0.0.1) will be mapped to a random node in (host0, host1, host2)
     DFSTestUtil.createFile(fs, path1, FILE_LEN, REPLICATION, 0L);
-    DFSTestUtil.createFile(fs, new Path(dirName + "testGetReplicaInfo2.txt"),
+    DFSTestUtil.createFile(fs, new Path(dirName + "/testGetReplicaInfo2.txt"),
         FILE_LEN, REPLICATION, 0L);
 
     NameNodeConnector nnc;
@@ -87,17 +88,25 @@ public class TestZoneChecker {
     replicationRuleListMap.put(replicationRule, new HashSet<>(
         Collections.singletonList(pathName)));
 
-    Map<ReplicationRule, Set<String>> rulePathMap = new HashMap<>();
+    ConcurrentHashMap<ReplicationRule, Set<String>> rulePathMap = new ConcurrentHashMap<>();
     Map<String, List<Long>> dcStatMap = new HashMap<>();
-    zch.getReplicaInfo(pathName, rulePathMap, dcStatMap, null, false, false);
+    zch.check(pathName, rulePathMap, dcStatMap, null, false, false);
+    assertEquals(replicationRuleListMap, rulePathMap);
+    rulePathMap.clear();
+    dcStatMap.clear();
+    zch.concurrentlyCheck(pathName, rulePathMap, dcStatMap, null, false, false, 10);
     assertEquals(replicationRuleListMap, rulePathMap);
 
     //Check the zone check for dir
     replicationRuleListMap.clear();
     replicationRuleListMap.put(replicationRule, new HashSet<>(
         Collections.singletonList(dirName)));
-    Map<ReplicationRule, Set<String>> rulePathMap1 = new HashMap<>();
-    zch.getReplicaInfo(dirName, rulePathMap1, dcStatMap, null, false, false);
+    ConcurrentHashMap<ReplicationRule, Set<String>> rulePathMap1 = new ConcurrentHashMap<>();
+    zch.check(dirName, rulePathMap1, dcStatMap, null, false, false);
+    assertEquals(replicationRuleListMap, rulePathMap1);
+    rulePathMap1.clear();
+    dcStatMap.clear();
+    zch.concurrentlyCheck(dirName, rulePathMap1, dcStatMap, null, false, false, 10);
     assertEquals(replicationRuleListMap, rulePathMap1);
 
     //Check the block summary
@@ -105,7 +114,11 @@ public class TestZoneChecker {
     blockSummaryResult.put("/dc0", Arrays.asList(4L, 4096L));
     blockSummaryResult.put("/dc1", Arrays.asList(2L, 2048L));
     Map<String, List<Long>> blockSummary = new HashMap<>();
-    zch.getReplicaInfo(dirName, rulePathMap1, blockSummary, null, true, false);
+    zch.check(dirName, rulePathMap1, blockSummary, null, true, false);
+    assertEquals(blockSummaryResult, blockSummary);
+    rulePathMap1.clear();
+    blockSummary.clear();
+    zch.concurrentlyCheck(dirName, rulePathMap1, blockSummary, null, true, false, 10);
     assertEquals(blockSummaryResult, blockSummary);
 
     //Check the block number summary
@@ -114,7 +127,11 @@ public class TestZoneChecker {
     Map<String, List<Long>> countSummary = new HashMap<>();
     ZoneChecker.ZoneCheckerCountTree zcct =
         new ZoneChecker.ZoneCheckerCountTree(dirName, 0);
-    zch.getReplicaInfo(dirName, rulePathMap1, countSummary, zcct, false, true);
+    zch.check(dirName, rulePathMap1, countSummary, zcct, false, true);
+    assertEquals(countResult, zcct.getMap());
+    countSummary.clear();
+    zcct = new ZoneChecker.ZoneCheckerCountTree(dirName, 0);
+    zch.concurrentlyCheck(dirName, rulePathMap1, countSummary, zcct, false, true, 10);
     assertEquals(countResult, zcct.getMap());
   }
 
@@ -143,26 +160,38 @@ public class TestZoneChecker {
             conf, 1);
     ZoneChecker zc = new ZoneChecker(nnc, conf);
 
-    Map<ReplicationRule, Set<String>> rulePathMap;
+    ConcurrentHashMap<ReplicationRule, Set<String>> rulePathMap;
     Map<String, List<Long>> dcStatMap;
     for (int trackedDepth = 1; trackedDepth < MAX_DEPTH; trackedDepth++) {
-      rulePathMap = new HashMap<>();
+      rulePathMap = new ConcurrentHashMap<>();
       dcStatMap = new HashMap<>();
       ZoneChecker.ZoneCheckerCountTree zcct =
           new ZoneChecker.ZoneCheckerCountTree(basePath.toString(), trackedDepth);
-      zc.getReplicaInfo(basePath.toString(), rulePathMap, dcStatMap, zcct, false, true);
-      checkCountTree(zcct.root);
+      zc.check(basePath.toString(), rulePathMap, dcStatMap, zcct, false, true);
+      checkCountTree(zcct.getRoot());
+      ZoneChecker.printFileCount(zcct);
+
+      rulePathMap.clear();
+      dcStatMap.clear();
+      zcct = new ZoneChecker.ZoneCheckerCountTree(basePath.toString(), trackedDepth);
+      zc.concurrentlyCheck(basePath.toString(), rulePathMap, dcStatMap, zcct, false, true, 10);
+      checkCountTree(zcct.getRoot());
       ZoneChecker.printFileCount(zcct);
     }
 
-    rulePathMap = new HashMap<>();
+    rulePathMap = new ConcurrentHashMap<>();
     dcStatMap = new HashMap<>();
-    zc.getReplicaInfo(basePath.toString(), rulePathMap, dcStatMap, null, true, false);
+    zc.check(basePath.toString(), rulePathMap, dcStatMap, null, true, false);
     Map<String, List<Long>> blockSummaryResult = new HashMap<>();
     blockSummaryResult.put("/dc0", Arrays.asList((long) (1 << MAX_DEPTH + 1) - 2,
         (long) FILE_LEN * ((1 << MAX_DEPTH + 1) - 2)));
     blockSummaryResult.put("/dc1",
         Arrays.asList((long) (1 << MAX_DEPTH) - 1, (long) FILE_LEN * ((1 << MAX_DEPTH) - 1)));
+    assertEquals(blockSummaryResult, dcStatMap);
+
+    rulePathMap.clear();
+    dcStatMap.clear();
+    zc.concurrentlyCheck(basePath.toString(), rulePathMap, dcStatMap, null, true, false, 10);
     assertEquals(blockSummaryResult, dcStatMap);
   }
 
@@ -186,18 +215,18 @@ public class TestZoneChecker {
     if (node != null && node.children.size() != 0) {
       long currentNodeBlockCounts = 0;
       long currentNodeByteCounts = 0;
-      for (String rule: node.blockCounts.keySet()) {
-        currentNodeBlockCounts += node.blockCounts.get(rule);
-        currentNodeByteCounts += node.byteCounts.get(rule);
+      for (String rule: node.getBlockCounts().keySet()) {
+        currentNodeBlockCounts += node.getBlockCounts().get(rule);
+        currentNodeByteCounts += node.getByteCounts().get(rule);
       }
 
       long childBlockCounts = 0;
       long childByteCounts = 0;
       for (String child: node.children.keySet()) {
         ZoneChecker.ZoneCheckerCountTreeNode childNode = node.children.get(child);
-        for (String rule: childNode.blockCounts.keySet()) {
-          childBlockCounts += childNode.blockCounts.get(rule);
-          childByteCounts += childNode.byteCounts.get(rule);
+        for (String rule: childNode.getBlockCounts().keySet()) {
+          childBlockCounts += childNode.getBlockCounts().get(rule);
+          childByteCounts += childNode.getByteCounts().get(rule);
         }
       }
       assertEquals(childBlockCounts, currentNodeBlockCounts);
@@ -213,7 +242,7 @@ public class TestZoneChecker {
 
     int currentDepth = 0;
     ZoneChecker.ZoneCheckerCountTreeNode parent = null;
-    ZoneChecker.ZoneCheckerCountTreeNode cursor = zcct.root;
+    ZoneChecker.ZoneCheckerCountTreeNode cursor = zcct.getRoot();
     while (currentDepth < DEPTH) {
       assertEquals(1, cursor.children.size());
       assertSame(cursor.parent, parent);

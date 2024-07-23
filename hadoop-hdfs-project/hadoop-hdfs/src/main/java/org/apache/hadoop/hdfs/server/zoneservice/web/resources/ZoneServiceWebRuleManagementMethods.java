@@ -55,6 +55,7 @@ public class ZoneServiceWebRuleManagementMethods {
       LoggerFactory.getLogger(ZoneMoverWebMigrationRecordMethods.class);
   private static final String defaultRatio = "-1";
   private static final String defaultNull = "N/A";
+  private static final String defaultThread = "1";
   private final Semaphore semaphore;
   private final ReplicationRuleManager replicationRuleManager;
 
@@ -106,8 +107,9 @@ public class ZoneServiceWebRuleManagementMethods {
   @Consumes()
   @Produces()
   public String blockSummary(@Context HttpServletRequest hsr,
-                             @QueryParam("namespace") String nameSpace,
-                             @PathParam("path") String path) {
+      @QueryParam("namespace") String nameSpace,
+      @PathParam("path") String path,
+      @QueryParam("threads") @DefaultValue(defaultThread) String threads) {
     Date startTime = new Date();
     //Check if there is any available thread
     if (semaphore.availablePermits() == 0) {
@@ -120,7 +122,8 @@ public class ZoneServiceWebRuleManagementMethods {
 
     try {
       semaphore.acquire();
-      Map<String, List<Long>> hashMap = replicationRuleManager.summaryBlocks(nameSpace, path);
+      Map<String, List<Long>> hashMap = replicationRuleManager.summaryBlocks(
+          nameSpace, path, threads);
       semaphore.release();
       AuditLogger.logRuleProcess(
           Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
@@ -159,7 +162,8 @@ public class ZoneServiceWebRuleManagementMethods {
   @Produces()
   public String countSummary(@Context HttpServletRequest hsr,
       @QueryParam("namespace") String nameSpace,
-      @PathParam("path") String path) {
+      @PathParam("path") String path,
+      @QueryParam("threads") @DefaultValue(defaultThread) String threads) {
     Date startTime = new Date();
     //Check if there is any available thread
     if (semaphore.availablePermits() == 0) {
@@ -173,7 +177,7 @@ public class ZoneServiceWebRuleManagementMethods {
     try {
       semaphore.acquire();
       Map<String, List<Long>> hashMap =
-          replicationRuleManager.countBlocksByDistribution(nameSpace, path);
+          replicationRuleManager.countBlocksByDistribution(nameSpace, path, threads);
       semaphore.release();
       AuditLogger.logRuleProcess(
           Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
@@ -215,7 +219,8 @@ public class ZoneServiceWebRuleManagementMethods {
   public String getReplicaRule(@Context HttpServletRequest hsr,
       @QueryParam("namespace") String nameSpace,
       @QueryParam("ratio") @DefaultValue(defaultRatio) String ratio,
-      @PathParam("path") String path) {
+      @PathParam("path") String path,
+      @QueryParam("threads") @DefaultValue(defaultThread) String threads) {
     Date startTime = new Date();
     if (semaphore.availablePermits() == 0) {
       AuditLogger.logRuleProcess(
@@ -227,7 +232,7 @@ public class ZoneServiceWebRuleManagementMethods {
     try {
       semaphore.acquire();
       Map<ReplicationRule, Set<String>> hashMap =
-          replicationRuleManager.checkPath(nameSpace, path, ratio);
+          replicationRuleManager.checkPath(nameSpace, path, ratio, threads);
       semaphore.release();
       AuditLogger.logRuleProcess(
           Thread.currentThread().getStackTrace()[1].getMethodName(), nameSpace,
