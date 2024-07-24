@@ -44,6 +44,30 @@ COMMON_SCRIPTS_PARALLEL_TESTS="- export _JAVA_OPTIONS=\"\$_JAVA_OPTIONS -Djava.n
     - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
     - cd target/surefire-reports"
 
+FLAKY_HDFS_TESTS=(
+"org.apache.hadoop.fs.viewfs.TestViewFileSystemLinkFallback"
+"org.apache.hadoop.hdfs.FileAppendTest4"
+"org.apache.hadoop.hdfs.ParameterizedTestDFSStripedOutputStreamWithFailureWithRandomECPolicy"
+"org.apache.hadoop.hdfs.TestAvoidSlowDatanode"
+"org.apache.hadoop.hdfs.TestDataTransferKeepalive"
+"org.apache.hadoop.hdfs.TestDFSStripedInputStreamWithTimeout"
+"org.apache.hadoop.hdfs.TestMultipleNNPortQOP"
+"org.apache.hadoop.hdfs.TestRollingUpgrade"
+"org.apache.hadoop.hdfs.server.datanode.TestBlockScanner"
+"org.apache.hadoop.hdfs.server.datanode.TestDataNodeLifeline"
+"org.apache.hadoop.hdfs.server.datanode.TestDataSetLockManager"
+"org.apache.hadoop.hdfs.server.namenode.snapshot.TestRandomOpsWithSnapshots"
+"org/apache/hadoop/hdfs/server/zoneservice/*"
+"org/apache/hadoop/hdfs/server/namenode/ha/*"
+)
+
+TEST_INCLUDE_PARAM=""
+TEST_EXCLUDE_PARAM=""
+for t in ${FLAKY_HDFS_TESTS[@]}; do
+  TEST_INCLUDE_PARAM+="$t,"
+  TEST_EXCLUDE_PARAM+="!$t,"
+done
+
 # To make stuff run in MR pipelines
 SUFFIX="rules:
     - when: always"
@@ -371,13 +395,36 @@ EOF
      hadoop-hdfs)
      EMPTY=false
      cat <<EOF >> "${CI_CONFIG_FILE}"
-hadoop-hdfs:
+hadoop-hdfs-1:
   stage: test
   $TAGS
   $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs
-    $COMMON_SCRIPTS_PARALLEL_TESTS
+    - export _JAVA_OPTIONS="$_JAVA_OPTIONS -Djava.net.preferIPv4Stack=true"
+    - mvn test -P parallel-tests -Dtest=$TEST_EXCLUDE_PARAM
+    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    - cd target/surefire-reports
+  after_script:
+      - |
+        [ -e ./hadoop-hdfs-project/hadoop-hdfs/target/surefire-reports/ ] && for FILE in ./hadoop-hdfs-project/hadoop-hdfs/target/surefire-reports/TEST-*.xml; do sed -i -e '/<system-out>.*<\/system-out>/d' \$FILE; sed -i -e '/<system-out>/,/<\/system-out>/d' \$FILE; done
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - hadoop-hdfs-project/hadoop-hdfs/target/surefire-reports/TEST-*.xml
+  $SUFFIX
+hadoop-hdfs-2:
+  stage: test
+  $TAGS
+  $REBUILD_BEFORE_SCRIPT
+  script:
+    - cd hadoop-hdfs-project/hadoop-hdfs
+    - export _JAVA_OPTIONS="$_JAVA_OPTIONS -Djava.net.preferIPv4Stack=true"
+    - mvn test -P parallel-tests -DforkCount=6 -Dtest=$TEST_INCLUDE_PARAM
+    - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
+    - cd target/surefire-reports
   after_script:
       - |
         [ -e ./hadoop-hdfs-project/hadoop-hdfs/target/surefire-reports/ ] && for FILE in ./hadoop-hdfs-project/hadoop-hdfs/target/surefire-reports/TEST-*.xml; do sed -i -e '/<system-out>.*<\/system-out>/d' \$FILE; sed -i -e '/<system-out>/,/<\/system-out>/d' \$FILE; done
