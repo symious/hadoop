@@ -26,13 +26,12 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
-public class BlockPlacementPolicyWithUpgradeDomainForRackFaultTolerant
-    extends BlockPlacementPolicyRackFaultTolerant {
+public class BlockPlacementPolicyWithUpgradeDomainForRackFaultTolerantDataCenter
+    extends BlockPlacementPolicyRackFaultTolerantDataCenter {
 
   @Override
-  protected boolean isGoodDatanode(DatanodeDescriptor node,
-      int maxTargetPerRack, boolean considerLoad,
-      List<DatanodeStorageInfo> results, boolean avoidStaleNodes) {
+  protected boolean isGoodDatanode(DatanodeDescriptor node, int maxTargetPerRack,
+      boolean considerLoad, List<DatanodeStorageInfo> results, boolean avoidStaleNodes) {
     boolean isGoodTarget = super.isGoodDatanode(node,
         maxTargetPerRack, considerLoad, results, avoidStaleNodes);
     // Here just ensure all dataNodes are belongs to different UD.
@@ -78,7 +77,7 @@ public class BlockPlacementPolicyWithUpgradeDomainForRackFaultTolerant
     } else { // This means that there are some DNs don't satisfy rack distribution.
       if (shareUDSet.isEmpty()) {
         return moreThanOne;
-      } else { // Pick up DNs that don't satisfy both Rack and UpgradeDomain distribution.
+      } else {
         List<DatanodeStorageInfo> shareRackAndUDSet = new ArrayList<>();
         for (DatanodeStorageInfo storage : shareUDSet) {
           if (moreThanOne.contains(storage)) {
