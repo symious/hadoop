@@ -32,10 +32,16 @@ import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.server.balancer.Dispatcher;
 import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
 import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyDefault;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyRackFaultTolerant;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyRackFaultTolerantDataCenter;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithUpgradeDomain;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithUpgradeDomainForRackFaultTolerant;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
 import org.apache.hadoop.net.StaticMapping;
@@ -58,6 +64,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class TestZoneMover {
 
@@ -448,6 +455,42 @@ public class TestZoneMover {
 
     } finally {
       cluster.shutdown();
+    }
+  }
+
+  @Test
+  public void testWrongBlockPlacementPolicy() {
+    Configuration conf = new HdfsConfiguration();
+    conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+        BlockPlacementPolicyDefault.class, BlockPlacementPolicy.class);
+    conf.setClass(DFSConfigKeys.DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY,
+        BlockPlacementPolicyRackFaultTolerant.class, BlockPlacementPolicy.class);
+    Dispatcher.checkPlacementPolicy(conf);
+
+    conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+        BlockPlacementPolicyWithUpgradeDomain.class, BlockPlacementPolicy.class);
+    conf.setClass(DFSConfigKeys.DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY,
+        BlockPlacementPolicyWithUpgradeDomainForRackFaultTolerant.class, BlockPlacementPolicy.class);
+    Dispatcher.checkPlacementPolicy(conf);
+
+    Configuration newConf1 = new HdfsConfiguration(conf);
+    newConf1.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+        BlockPlacementPolicyWithDataCenter.class, BlockPlacementPolicy.class);
+    try {
+      Dispatcher.checkPlacementPolicy(newConf1);
+      fail();
+    } catch (IllegalArgumentException e) {
+      // ignore
+    }
+
+    Configuration newConf2 = new HdfsConfiguration(conf);
+    newConf2.setClass(DFSConfigKeys.DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY,
+        BlockPlacementPolicyRackFaultTolerantDataCenter.class, BlockPlacementPolicy.class);
+    try {
+      Dispatcher.checkPlacementPolicy(newConf2);
+      fail();
+    } catch (IllegalArgumentException e) {
+      // ignore
     }
   }
 

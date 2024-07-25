@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.balancer;
 import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.server.blockmanagement.utils.UpgradeDomainUtil;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.net.Node;
 import org.slf4j.Logger;
@@ -31,6 +32,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * A BlockPlacementPolicy to choose target datanode simply for DecommissionTool.
@@ -42,12 +44,15 @@ public class BlockPlacementPolicyForDecommissionTool {
   private final Logger LOG = LoggerFactory.getLogger(BlockPlacementPolicyForDecommissionTool.class);
   private final NetworkTopology clusterMap;
   private final String nsId;
+  private final boolean enableUpgradeDomain;
   private final Map<String, DatanodeInfo> dataNodes = new HashMap<>();
   private final Map<String, HashSet<String>> dcRacks = new HashMap<>();
 
-  public BlockPlacementPolicyForDecommissionTool(NetworkTopology clusterMap, String nsId) {
+  public BlockPlacementPolicyForDecommissionTool(NetworkTopology clusterMap,
+       String nsId, boolean enableUpgradeDomain) {
     this.clusterMap = clusterMap;
     this.nsId = nsId;
+    this.enableUpgradeDomain = enableUpgradeDomain;
   }
 
   public DatanodeInfo getDataNode(String uuid) {
@@ -83,6 +88,9 @@ public class BlockPlacementPolicyForDecommissionTool {
       excludeNode.add(target);
     }
 
+    List<DatanodeInfo> existingNodesExcludeSrc = new ArrayList<>(locations);
+    existingNodesExcludeSrc.remove(source);
+
     String expectedDC = targetDC;
     if (expectedDC == null || expectedDC.isEmpty()) {
       expectedDC = NetworkTopologyUtil.getDataCenter(source);
@@ -97,18 +105,19 @@ public class BlockPlacementPolicyForDecommissionTool {
     racks.remove(sourceRack);
 
     List<String> preferRacks = new ArrayList<>(locationRacks.keySet());
-    if (preferRacks.size() > 0) {
+    if (!preferRacks.isEmpty()) {
       Collections.shuffle(preferRacks);
     }
 
-    // Choose one datanode from the rack which stores one replica of this block first
+    // Choose one datanode from the rack which stores one replica first
     for (String expectedRack : preferRacks) {
       if (expectedRack.startsWith(expectedDC)) {
         int value = locationRacks.get(expectedRack);
+        // It means that the current rack already stores one replica.
+        // We can choose a new DN from this Rack to store another replica.
         if (value == 1) {
-          DatanodeInfo node = (DatanodeInfo) this.clusterMap.chooseRandom(expectedRack, excludeNode);
-          if (node != null && !excludeNode.contains(node)) {
-            LOG.debug("Choose {} as target node for {} with source is {}.", node, block, source);
+          DatanodeInfo node = chooseDNFromRack(expectedRack, excludeNode, existingNodesExcludeSrc);
+          if (node != null) {
             return node;
           }
         }
@@ -119,18 +128,16 @@ public class BlockPlacementPolicyForDecommissionTool {
     for (String rack : racks) {
       int rackCount = locationRacks.getOrDefault(rack, 0);
       if (rackCount != 2) {
-        DatanodeInfo node = (DatanodeInfo) this.clusterMap.chooseRandom(rack, excludeNode);
-        if (node != null && !excludeNode.contains(node)) {
-          LOG.debug("Choose {} as target node for {} with source is {}.", node, block, source);
+        DatanodeInfo node = chooseDNFromRack(rack, excludeNode, existingNodesExcludeSrc);
+        if (node != null) {
           return node;
         }
       }
     }
 
     // Fallback to the source rack.
-    DatanodeInfo node = (DatanodeInfo) this.clusterMap.chooseRandom(sourceRack, excludeNode);
-    if (node != null && !excludeNode.contains(node)) {
-      LOG.debug("Choose {} as target node for {} with source is {}.", node, block, source);
+    DatanodeInfo node = chooseDNFromRack(sourceRack, excludeNode, existingNodesExcludeSrc);
+    if (node != null) {
       return node;
     }
 
@@ -138,7 +145,29 @@ public class BlockPlacementPolicyForDecommissionTool {
     return null;
   }
 
-  // Case1: S(DC1-R1), Replica2(DC1-R2), Replica3(DC1-R3) => Randomly Choose Replica4(DC1-RX(X != R2 & X != R3))
+  /**
+   * Choose a DN from the input Rack.
+   */
+  private DatanodeInfo chooseDNFromRack(String rack, List<Node> excludeNode,
+      List<DatanodeInfo> existingNodesExcludeSrc) {
+    while (true) {
+      DatanodeInfo node = (DatanodeInfo) this.clusterMap.chooseRandom(rack, excludeNode);
+      // No available node in this rack.
+      if (node == null) {
+        LOG.debug("Cannot choose a new DN from {} with excludeNodes {}" +
+                " and existingNodesExcludeSrc {}.", rack, excludeNode, existingNodesExcludeSrc);
+        return null;
+      } else if (isGoodDatanode(node, existingNodesExcludeSrc)) {
+        return node;
+      } else {
+        // The chosen node is not a good node.
+        excludeNode.add(node);
+      }
+    }
+  }
+
+  // Case1: Replica1(DC1-R1), Replica2(DC1-R2), Replica3(DC1-R3)
+  //        => Randomly Choose Replica4(DC1-RX(X != R2 & X != R3))
   public DatanodeInfo chooseTargetForStripeBlock(
       Block block, DatanodeInfo source, DatanodeInfo target,
       List<DatanodeInfo> locations, String targetDC) {
@@ -146,6 +175,8 @@ public class BlockPlacementPolicyForDecommissionTool {
     if (target != null) {
       excludeNode.add(target);
     }
+    List<DatanodeInfo> existingNodesExcludeSrc = new ArrayList<>(locations);
+    existingNodesExcludeSrc.remove(source);
 
     Map<String, Integer> locationRacks = getLocationRacks(locations, block);
     String expectedDC = targetDC;
@@ -155,18 +186,18 @@ public class BlockPlacementPolicyForDecommissionTool {
     List<String> racks = getRacks(expectedDC);
 
     for (String rack : racks) {
+      // Skip used racks first
       if (!locationRacks.containsKey(rack)) {
-        DatanodeInfo node = (DatanodeInfo) this.clusterMap.chooseRandom(rack, excludeNode);
-        if (node != null && node != source) {
-          LOG.debug("Choose {} as target node for {} with source is {}.", node, block, source);
+        DatanodeInfo node = chooseDNFromRack(rack, excludeNode, existingNodesExcludeSrc);
+        if (node != null) {
           return node;
         }
       }
     }
 
     // Fallback to the source rack
-    DatanodeInfo node = (DatanodeInfo) this.clusterMap.chooseRandom(
-        source.getNetworkLocation(), excludeNode);
+    DatanodeInfo node = chooseDNFromRack(source.getNetworkLocation(),
+        excludeNode, existingNodesExcludeSrc);
     if (node != null && node != source) {
       LOG.debug("Choose {} as target node for {} with source is {}.", node, block, source);
       return node;
@@ -174,6 +205,17 @@ public class BlockPlacementPolicyForDecommissionTool {
 
     LOG.error("Cannot choose any target node for {} with locations {}.", block, locations);
     return null;
+  }
+
+  private boolean isGoodDatanode(DatanodeInfo targetNode, List<DatanodeInfo> results) {
+    if (!enableUpgradeDomain) {
+      return true;
+    } else {
+      // Just consider that the new DN exists in a new UpgradeDomain.
+      Set<String> upgradeDomains = UpgradeDomainUtil.getUpgradeDomainsForDNs(results);
+      return !upgradeDomains.contains(
+          UpgradeDomainUtil.getUpgradeDomainWithDefaultValue(targetNode));
+    }
   }
 
   private Map<String, Integer> getLocationRacks(List<DatanodeInfo> locations, Block block) {

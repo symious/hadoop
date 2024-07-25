@@ -39,6 +39,7 @@ import org.apache.hadoop.hdfs.protocol.datatransfer.sasl.SaslDataTransferClient;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.BlockOpResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos.Status;
 import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
 import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations;
 import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations.BlockWithLocations;
 import org.apache.hadoop.hdfs.server.protocol.BlocksWithLocations.StripedBlockWithLocations;
@@ -134,7 +135,11 @@ public class DecommissionTool {
     this.targetDC = conf.get(DFSConfigKeys.DFS_DECOMMISSION_TARGET_DC_KEY, null);
 
     NetworkTopology clusterMap = NetworkTopology.getInstance(conf);
-    this.blockPlacement = new BlockPlacementPolicyForDecommissionTool(clusterMap, this.nsId);
+    boolean enableUpgradeDomain = conf.getClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+        DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_DEFAULT,
+        BlockPlacementPolicy.class).getSimpleName().contains("UpgradeDomain");
+    this.blockPlacement = new BlockPlacementPolicyForDecommissionTool(
+        clusterMap, this.nsId, enableUpgradeDomain);
 
     this.saslClient = new SaslDataTransferClient(conf,
         DataTransferSaslUtil.getSaslPropertiesResolver(conf),
@@ -318,11 +323,10 @@ public class DecommissionTool {
         blk.setBlockId(blkId);
         blk.setNumBytes(numBytes);
         this.block = blk;
-        this.locations.clear();
-        this.locations.add(this.source);
       } else {
         this.block = this.blockWithLocations.getBlock();
       }
+      this.locations.add(this.source);
       state = State.PENDING;
     }
 

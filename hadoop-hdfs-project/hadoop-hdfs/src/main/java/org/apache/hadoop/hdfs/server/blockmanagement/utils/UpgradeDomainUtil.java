@@ -72,6 +72,17 @@ public class UpgradeDomainUtil {
     return upgradeDomains;
   }
 
+  public static Set<String> getUpgradeDomainsForDNs(List<DatanodeInfo> results) {
+    Set<String> upgradeDomains = new HashSet<>();
+    if (results == null) {
+      return upgradeDomains;
+    }
+    for (DatanodeInfo datanodeInfo : results) {
+      upgradeDomains.add(getUpgradeDomainWithDefaultValue(datanodeInfo));
+    }
+    return upgradeDomains;
+  }
+
   public static Set<String> getUpgradeDomainsFromNodes(DatanodeInfo[] nodes) {
     Set<String> upgradeDomains = new HashSet<>();
     if (nodes == null) {
@@ -128,9 +139,14 @@ public class UpgradeDomainUtil {
     // check if removing source reduces the number of upgrade domains
     if (BlockPlacementCommonUtil.notReduceNumOfGroups(shareUDSet, source, target)) {
       return true;
-    } else return udMap.size() > upgradeDomainFactor;
+    } else {
+      return udMap.size() > upgradeDomainFactor;
+    }
   }
 
+  /**
+   * This method assumes that DNs in results already satisfied UpgradeDomain.
+   */
   public static boolean isGoodDataNodeWithUD(boolean isGoodTarget, DatanodeDescriptor node,
       List<DatanodeStorageInfo> results, int upgradeDomainFactor) {
     if (isGoodTarget) {

@@ -53,6 +53,10 @@ import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyDefault;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyRackFaultTolerant;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithUpgradeDomain;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithUpgradeDomainForRackFaultTolerant;
 import org.apache.hadoop.hdfs.util.DataTransferThrottler;
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.slf4j.Logger;
@@ -1276,14 +1280,9 @@ public class Dispatcher {
     this.connectToDnViaHostname = conf.getBoolean(
         HdfsClientConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME,
         HdfsClientConfigKeys.DFS_CLIENT_USE_DN_HOSTNAME_DEFAULT);
-    Configuration newConf = new Configuration(conf);
-    newConf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
-        DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_DEFAULT,
-        BlockPlacementPolicy.class);
-    newConf.setClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_IMPL_KEY,
-        NetworkTopology.class, NetworkTopology.class);
-    this.cluster = NetworkTopology.getInstance(newConf);
-    placementPolicies = new BlockPlacementPolicies(newConf, null, cluster, null);
+    checkPlacementPolicy(conf);
+    this.cluster = NetworkTopology.getInstance(conf);
+    placementPolicies = new BlockPlacementPolicies(conf, null, cluster, null);
     this.maxIterationTime = maxIterationTime;
     this.preferSourcePercent = conf.getInt(DFSConfigKeys.DFS_DISPATCHER_PRE_SOURCE_PERCENT_KEY,
         DFSConfigKeys.DFS_DISPATCHER_PRE_SOURCE_PERCENT_DEFAULT);
@@ -1295,6 +1294,39 @@ public class Dispatcher {
     this.skipAllTimeoutTasks = conf.getBoolean(DFSConfigKeys.DFS_BALANCER_SKIP_ALL_TIMEOUT_TASKS_KEY,
         DFSConfigKeys.DFS_BALANCER_SKIP_ALL_TIMEOUT_TASKS_DEFAULT);
     this.metrics = metrics;
+  }
+
+  /**
+   * Checking input BlockReplacementPolicy, so that Dispatcher can use different isMovable.
+   */
+  public static void checkPlacementPolicy(Configuration conf) {
+    Class<? extends BlockPlacementPolicy> contiguousPolicy =
+        conf.getClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+            DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_DEFAULT,
+            BlockPlacementPolicy.class);
+    if (!contiguousPolicy.equals(BlockPlacementPolicyDefault.class) && !contiguousPolicy.equals(
+        BlockPlacementPolicyWithUpgradeDomain.class)) {
+      throw new IllegalArgumentException("dfs.block.replicator.classname must be" +
+          " BlockPlacementPolicyDefault or BlockPlacementPolicyWithUpgradeDomain");
+    }
+
+    Class<? extends BlockPlacementPolicy> stripePolicy = conf.getClass(
+        DFSConfigKeys.DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY,
+        DFSConfigKeys.DFS_BLOCK_PLACEMENT_EC_CLASSNAME_DEFAULT, BlockPlacementPolicy.class);
+    if (!stripePolicy.equals(BlockPlacementPolicyRackFaultTolerant.class) && !stripePolicy.equals(
+        BlockPlacementPolicyWithUpgradeDomainForRackFaultTolerant.class)) {
+      throw new IllegalArgumentException("dfs.block.placement.ec.classname must be" +
+          " BlockPlacementPolicyRackFaultTolerant or " +
+          " BlockPlacementPolicyWithUpgradeDomainForRackFaultTolerant");
+    }
+
+    Class<? extends NetworkTopology> topologyClass = conf.getClass(
+        CommonConfigurationKeysPublic.NET_TOPOLOGY_IMPL_KEY,
+        NetworkTopology.class, NetworkTopology.class);
+    if (!topologyClass.equals(NetworkTopology.class)) {
+      throw new IllegalArgumentException(
+          "dfs.block.placement.ec.classname must be NetworkTopology");
+    }
   }
 
   public DistributedFileSystem getDistributedFileSystem() {
@@ -1633,14 +1665,8 @@ public class Dispatcher {
 
   /** Reset all fields in order to prepare for the next iteration */
   void reset(Configuration conf) {
-    Configuration newConf = new Configuration(conf);
-    newConf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
-        DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_DEFAULT,
-        BlockPlacementPolicy.class);
-    newConf.setClass(CommonConfigurationKeysPublic.NET_TOPOLOGY_IMPL_KEY,
-        NetworkTopology.class, NetworkTopology.class);
-    cluster = NetworkTopology.getInstance(newConf);
-    placementPolicies = new BlockPlacementPolicies(newConf, null, cluster, null);
+    cluster = NetworkTopology.getInstance(conf);
+    placementPolicies = new BlockPlacementPolicies(conf, null, cluster, null);
     storageGroupMap.clear();
     sources.clear();
 
