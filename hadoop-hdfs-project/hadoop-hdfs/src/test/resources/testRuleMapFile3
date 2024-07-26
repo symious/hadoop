@@ -1,0 +1,8 @@
+/STT:1           /YTL:1
+/STT:1,/AirTrunk:1           /AirTrunk:1,/STT:1,/YTL:1
+/STT:2           /YTL:1,/STT:1
+/STT:3           /YTL:2,/STT:1
+/STT:2,/AirTrunk:1           /STT:1,/YTL:2,/AirTrunk:1
+/STT:1,/AirTrunk:2           /STT:1,/YTL:1,/AirTrunk:2
+/AirTrunk:1,/YTL:1,/STT:1          /AirTrunk:1,/YTL:1,/STT:1
+/AirTrunk:1,/YTL:2,/STT:1          /AirTrunk:1,/YTL:2,/STT:1

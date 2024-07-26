@@ -66,9 +66,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.hadoop.util.Time.now;
@@ -86,21 +83,15 @@ public class ZoneMoverWithDR extends ZoneMover {
   private Set<String> drDataCenters;
   private Map<Short, ReplicationRule> drReplicationRuleForColdData;
   private Map<Short, ReplicationRule> drStripedBlockRule;
-  private final BlockingQueue<PreMigrationFile> preMigrationFileQueue;
-  private final long preMigrationCheckInterval;
-  private CountDownLatch preMigrationLatch;
   // Initialize ZoneMover Metrics.
   protected static ZoneMoverMetrics zoneMoverMetrics = ZoneMoverMetrics.create();
   protected ZoneMoverHttpServer httpServer;
-  protected final Thread
-      preMigrationChecker = new Thread(new PreMigrationChecker(),
-      "ZoneMoverWithDR-PreMigrationChecker");
 
   public ZoneMoverWithDR(NameNodeConnector nnc, Configuration conf, AtomicInteger retryCount,
       RunMode runMode, boolean useAccessTime, boolean skipReplica, boolean skipEC,
       boolean skipCheckCold)
       throws IOException {
-    super(nnc, conf, retryCount);
+    super(nnc, conf, retryCount, true);
     this.runMode = runMode;
     drColdDataThresholdMS = conf.getLong(
         DFSConfigKeys.DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY,
@@ -116,16 +107,6 @@ public class ZoneMoverWithDR extends ZoneMover {
     this.skipReplica = skipReplica;
     this.skipEC = skipEC;
     this.skipCheckCold = skipCheckCold;
-    preMigrationCheckInterval = conf.getLong(
-        DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_KEY,
-        DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_DEFAULT);
-    int preMigrationQueueSize = conf.getInt(
-        DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_QUEUE_SIZE_KEY,
-        DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_QUEUE_SIZE_DEFAULT);
-    preMigrationFileQueue =
-        new LinkedBlockingQueue<>(preMigrationQueueSize);
-    preMigrationLatch = new CountDownLatch(2);
-    preMigrationChecker.start();
     startHttpServer(conf);
   }
 
@@ -230,79 +211,6 @@ public class ZoneMoverWithDR extends ZoneMover {
   @Override
   protected Processor initProcessor() {
     return new ProcessorWithDR();
-  }
-
-  /**
-   * A structure used to record the path-rule pair.
-   */
-  static class PreMigrationFile {
-    private final String filePath;
-    private final long recordTime;
-    private final ReplicationRule preRule;
-    private final ReplicationRule rule;
-
-    PreMigrationFile(String filePath, ReplicationRule preRule, ReplicationRule rule) {
-      this.filePath = filePath;
-      this.preRule = preRule;
-      this.rule = rule;
-      recordTime = Time.monotonicNow();
-    }
-
-    public String getFilePath() {
-      return filePath;
-    }
-
-    public long getRecordTime() {
-      return recordTime;
-    }
-
-    public ReplicationRule getRule() {
-      return rule;
-    }
-
-    public ReplicationRule getPreRule() {
-      return preRule;
-    }
-  }
-
-  /**
-   * Check if the pre-migration file has waited for enough time to proceed to the next step
-   * */
-  class PreMigrationChecker implements Runnable {
-    @Override
-    public void run() {
-      LOG.info("Pre-process checker is started.");
-      PreMigrationFile preMigrationFile;
-      while (true) {
-        try {
-          if (preMigrationLatch.getCount() == 1 && preMigrationFileQueue.isEmpty()) {
-            preMigrationLatch.countDown();
-            return;
-          }
-
-          preMigrationFile = preMigrationFileQueue.poll();
-          if (preMigrationFile == null) {
-            continue;
-          }
-          if ((Time.monotonicNow() - preMigrationFile.getRecordTime()) >
-              preMigrationCheckInterval) {
-            HdfsLocatedFileStatus status = (HdfsLocatedFileStatus) dfs.listPaths(
-                    preMigrationFile.getFilePath(), HdfsFileStatus.EMPTY_NAME, true)
-                .getPartialListing()[0];
-            LOG.info("Will apply the rule from {} to {} for file: {}",
-                preMigrationFile.getPreRule(), preMigrationFile.getRule(),
-                preMigrationFile.getFilePath());
-            processor.processFile(preMigrationFile.getFilePath(), status,
-                preMigrationFile.getRule(), result);
-            ZoneProgressTracker.dequeueFile(preMigrationFile.getFilePath());
-          } else {
-            preMigrationFileQueue.put(preMigrationFile);
-          }
-        } catch (Exception e) {
-          LOG.warn("Pre-migration checker encountered the exception!", e);
-        }
-      }
-    }
   }
 
   static class Cli extends Configured implements Tool {
@@ -531,7 +439,7 @@ public class ZoneMoverWithDR extends ZoneMover {
     String ns = namenode.getAuthority();
     try {
       LOG.info("Initializing NameNodeConnector");
-      nnc = new NameNodeConnector(ZoneMoverWithSetReplication.class.getSimpleName(),
+      nnc = new NameNodeConnector(ZoneMoverWithDR.class.getSimpleName(),
           namenode, getIdPath(RunMode.MONITOR), paths, conf, 1);
       nnc.getKeyManager().startBlockKeyUpdater();
 
@@ -724,7 +632,7 @@ public class ZoneMoverWithDR extends ZoneMover {
       // then the rest replica can copy from the migrated replica directly.
       if (oldRule.getDatacenters().size() == 1) {
         String singleDc = oldRule.getDatacenters().iterator().next();
-        if (repl - appliedRule.getReplica(singleDc) > 1) {
+        if (repl - appliedRule.getReplica(singleDc) > 1 && enablePreMigration) {
           List<String> tmpDataCenters = new ArrayList<>(drDataCenters);
           tmpDataCenters.remove(singleDc);
           blockDistribution.put(singleDc, (short) (blockDistribution.get(singleDc) - 1));

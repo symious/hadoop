@@ -88,6 +88,9 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -127,9 +130,20 @@ public class ZoneMover {
   protected static int checkUpdateInterval = 0;
   protected static final String DC_SEPARATOR = ",";
   protected boolean enableDR = false;
+  protected boolean enableMigrationDC = false;
+  protected boolean enablePreMigration;
+  protected BlockingQueue<PreMigrationFile> preMigrationFileQueue;
+  protected long preMigrationCheckInterval;
+  protected CountDownLatch preMigrationLatch;
+  protected Thread preMigrationChecker;
 
   public ZoneMover(NameNodeConnector nnc,
       Configuration conf, AtomicInteger retryCount) {
+    this(nnc, conf, retryCount, false);
+  }
+
+  public ZoneMover(NameNodeConnector nnc,
+      Configuration conf, AtomicInteger retryCount, boolean enablePreMigration) {
     final long movedWinWidth = conf.getLong(
         DFSConfigKeys.DFS_ZONEMOVER_MOVEDWINWIDTH_KEY,
         DFSConfigKeys.DFS_ZONEMOVER_MOVEDWINWIDTH_DEFAULT);
@@ -176,6 +190,21 @@ public class ZoneMover {
         DFSConfigKeys.DFS_ZONEMOVER_STORAGE_MINIMUM_REQ_KEY,
         DFSConfigKeys.DFS_ZONEMOVER_STORAGE_MINIMUM_REQ_DEFAULT
     );
+    this.enablePreMigration = enablePreMigration;
+    this.preMigrationCheckInterval = conf.getLong(
+        DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_KEY,
+        DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_DEFAULT);
+    if (enablePreMigration) {
+      int preMigrationQueueSize = conf.getInt(
+          DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_QUEUE_SIZE_KEY,
+          DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_QUEUE_SIZE_DEFAULT);
+      this.preMigrationFileQueue =
+          new LinkedBlockingQueue<>(preMigrationQueueSize);
+      this.preMigrationLatch = new CountDownLatch(2);
+      this.preMigrationChecker = new Thread(new PreMigrationChecker(),
+          "ZoneMover-PreMigrationChecker");
+      preMigrationChecker.start();
+    }
     processor = initProcessor();
     fetcher = initFetcher(processor);
     fetcher.start();
@@ -185,12 +214,22 @@ public class ZoneMover {
     this.enableDR = enableDR;
   }
 
+  public void setEnableMigrationCluster(boolean enableMigrationDC) {
+    this.enableMigrationDC = enableMigrationDC;
+  }
+
   protected Processor initProcessor() {
     return new Processor();
   }
 
   protected Fetcher initFetcher(Processor processor) {
     return new Fetcher(processor);
+  }
+
+  public ZoneMover(NameNodeConnector nnc, Configuration conf,
+      ReplicationRule rule, AtomicInteger retryCount, boolean enablePreMigration) {
+    this(nnc, conf, retryCount, enablePreMigration);
+    this.globalRule = rule;
   }
 
   public ZoneMover(NameNodeConnector nnc, Configuration conf,
@@ -269,7 +308,7 @@ public class ZoneMover {
    * @return the corresponding rule
    */
   ReplicationRule getPathRule(String path) throws IllegalArgumentException {
-    if (enableDR) {
+    if (enableDR || (pathRuleMap.isEmpty() && enableMigrationDC)) {
       return null;
     }
     String matchPath = "";
@@ -319,6 +358,9 @@ public class ZoneMover {
   /* release resources */
   void shutdown() {
     dispatcher.shutdownNow();
+    if (preMigrationChecker != null) {
+      preMigrationChecker.interrupt();
+    }
   }
 
   /* reset success and failure states of targets */
@@ -902,7 +944,16 @@ public class ZoneMover {
       return result;
     }
 
+    // stop coordinator after pre-process queue is empty
     protected void stopCoordinator() {
+      if (preMigrationLatch != null) {
+        preMigrationLatch.countDown();
+        try {
+          preMigrationLatch.await();
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+      }
       coordinator.waitForCheckCompletion();
     }
 
@@ -1337,6 +1388,39 @@ public class ZoneMover {
     }
   }
 
+  /**
+   * A structure used to record the path-rule pair.
+   */
+  static class PreMigrationFile {
+    private final String filePath;
+    private final long recordTime;
+    private final ReplicationRule preRule;
+    private final ReplicationRule rule;
+
+    PreMigrationFile(String filePath, ReplicationRule preRule, ReplicationRule rule) {
+      this.filePath = filePath;
+      this.preRule = preRule;
+      this.rule = rule;
+      recordTime = Time.monotonicNow();
+    }
+
+    public String getFilePath() {
+      return filePath;
+    }
+
+    public long getRecordTime() {
+      return recordTime;
+    }
+
+    public ReplicationRule getRule() {
+      return rule;
+    }
+
+    public ReplicationRule getPreRule() {
+      return preRule;
+    }
+  }
+
   /* Monitor records in zookeeper and sync the records */
   public class MapUpdater implements Runnable {
     private final URI namenode;
@@ -1417,6 +1501,42 @@ public class ZoneMover {
         "Cannot find the NameNode for namespace: " + namespace);
   }
 
+  /**
+   * Check if the pre-migration file has waited for enough time to proceed to the next step
+   * */
+  class PreMigrationChecker implements Runnable {
+    @Override
+    public void run() {
+      LOG.info("Pre-process checker is started.");
+      PreMigrationFile preMigrationFile;
+      while (true) {
+        try {
+          if (preMigrationLatch.getCount() == 1 && preMigrationFileQueue.isEmpty()) {
+            preMigrationLatch.countDown();
+            return;
+          }
+
+          preMigrationFile = preMigrationFileQueue.poll();
+          if (preMigrationFile == null) {
+            continue;
+          }
+          if ((Time.monotonicNow() - preMigrationFile.getRecordTime()) >
+              preMigrationCheckInterval) {
+            HdfsLocatedFileStatus status = (HdfsLocatedFileStatus) dfs.listPaths(
+                    preMigrationFile.getFilePath(), HdfsFileStatus.EMPTY_NAME, true)
+                .getPartialListing()[0];
+            processor.processFile(preMigrationFile.getFilePath(), status,
+                preMigrationFile.getRule(), result);
+          } else {
+            preMigrationFileQueue.put(preMigrationFile);
+          }
+        } catch (Exception e) {
+          LOG.warn("Pre-migration checker encountered the exception!", e);
+        }
+      }
+    }
+  }
+
   static class Cli extends Configured implements Tool {
     private static final String USAGE = "Usage: hdfs zonemover"
         + "\n\t[-namespace <namespace>]\tthe namespace to apply the rule"
@@ -1475,7 +1595,7 @@ public class ZoneMover {
     /**
      * Get {@link ReplicationRule} from command line
      */
-    private static ReplicationRule getRule(CommandLine line)
+    public static ReplicationRule getRule(CommandLine line)
         throws IllegalArgumentException {
       return ReplicationRule.parseFromString(line.getOptionValue("rule"));
     }

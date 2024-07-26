@@ -6747,4 +6747,14 @@
       caused by symlinks being included in quota calculation again.
     </description>
   </property>
+
+  <property>
+    <name>dfs.zonemover.distribution.rule.map.file</name>
+    <description>
+      Configuration for replication rules.
+      Format: Source -> Target
+      Examples:
+      /AirTrunk:1,/STT:1    /AirTrunk:1,/STT:1,/YTL:1
+    </description>
+  </property>
 </configuration>

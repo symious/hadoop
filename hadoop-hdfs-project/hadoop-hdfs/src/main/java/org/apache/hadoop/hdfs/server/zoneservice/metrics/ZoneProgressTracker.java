@@ -204,7 +204,7 @@ public class ZoneProgressTracker {
   }
 
   /**
-   * Prints the current progress of a zoneservice procedure.
+   * Prints the current progress of a zonemover procedure.
    */
   public static void printProgress() {
     int fileCountSnapshot = fileCount.get();
@@ -236,7 +236,7 @@ public class ZoneProgressTracker {
     long byteCountSinceLastPrint = byteCountSnapshot - byteCountLastPrint;
     long blockCountSinceLastPrint = blockCountSnapshot - blockCountLastPrint;
 
-    String msg = "Zoneservice progress\n"
+    String msg = "Zonemover progress\n"
         + "Elapsed time: %f ms; Since last report: %d ms\n"
         + "Files: %d/%d (%5.2f%%), rate: %f files/s\n"
         + "Blocks: %d, rate: %f blocks/s\n"
