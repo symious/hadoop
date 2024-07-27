@@ -18,6 +18,7 @@
 package org.apache.hadoop.tools.federation;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -108,12 +109,12 @@ public class TestNSMigrationTool {
     String testPath = "/" + GenericTestUtils.getMethodName() + "0";
     NSMigrationTool.MigrationJob jobW =
         new NSMigrationTool.MigrationJob(new Path(testPath), "ns0", "ns1", routerContext.getConf(),
-            routerAdminAddress, false);
+            routerAdminAddress, false, false);
     jobW.writeContext();
 
     NSMigrationTool.MigrationJob jobR =
         new NSMigrationTool.MigrationJob(new Path(testPath), "ns0", "ns1", routerContext.getConf(),
-            routerAdminAddress, false);
+            routerAdminAddress, false, false);
     assertEquals(routerContext.getConf().toString(), jobR.getContext().conf.toString());
     assertEquals(jobR.getContext(), jobW.getContext());
   }
@@ -123,7 +124,7 @@ public class TestNSMigrationTool {
     routerClient.mkdirs(path.toString());
     NSMigrationTool.MigrationJob job =
         new NSMigrationTool.MigrationJob(path, "ns0", "ns1", routerContext.getConf(),
-            routerAdminAddress, false);
+            routerAdminAddress, false, false);
     if (createFile) {
       FSDataOutputStream os = nnFs0.create(new Path(path, "tempFile"), true);
       os.writeUTF("TEST DATA");
@@ -142,7 +143,7 @@ public class TestNSMigrationTool {
         NSMigrationTool.toggleInterruptForTesting(false);
         // Interrupt stage and retry stage again to ensure no issue would happen when stage is rerun
         job = new NSMigrationTool.MigrationJob(path, "ns0", "ns1", routerContext.getConf(),
-            routerAdminAddress, false);
+            routerAdminAddress, false, false);
       }
       job.handleStage();
       if (!job.proceedToNextStage()) {
@@ -210,6 +211,9 @@ public class TestNSMigrationTool {
   }
 
   public void testJobStage2Mount(boolean continueJob) throws Exception {
+    GenericTestUtils.LogCapturer logs =
+        GenericTestUtils.LogCapturer.captureLogs(LoggerFactory.getLogger(NSMigrationTool.class));
+
     String basePathStr;
     if (continueJob) {
       basePathStr = "/testStage2R";
@@ -220,7 +224,28 @@ public class TestNSMigrationTool {
     routerClient.mkdirs(basePath.toString());
 
     Path testPath = new Path(basePath, "NewMountPoint");
+    // Test that job will delay until listOpenFiles returns empty
+    Thread closeStream = new Thread(() -> {
+      try {
+        GenericTestUtils.waitFor(() -> {
+          try {
+            return routerClient.exists(testPath.toString());
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        }, 200, 5000);
+        String filePath = new Path(testPath, "createtemp").toString();
+        OutputStream stream = routerClient.create(filePath, true);
+        GenericTestUtils.waitFor(() -> logs.getOutput().contains("There is at least one open file"),
+            100, 5000);
+        stream.close();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    });
+    closeStream.start();
     NSMigrationTool.MigrationJob job = setupTest(continueJob, testPath, COPY, true);
+    closeStream.join();
     assertEquals(COPY, job.getStage());
     MountTable mountTable = getMountTableEntry(testPath.toString());
     assertTrue(mountTable.isReadOnly());

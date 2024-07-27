@@ -17,17 +17,24 @@
  */
 package org.apache.hadoop.tools.federation;
 
+import java.io.BufferedReader;
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.nio.file.Files;
 import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -36,9 +43,12 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.Trash;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
+import org.apache.hadoop.hdfs.protocol.OpenFilesIterator;
 import org.apache.hadoop.hdfs.server.federation.resolver.order.DestinationOrder;
 import org.apache.hadoop.hdfs.server.federation.router.RouterClient;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.AddMountTableEntryRequest;
@@ -77,8 +87,7 @@ public class NSMigrationTool extends Configured implements Tool {
 
   /**
    * Settings pertained to the job. Will be stored on the destination namespace, under
-   * the destination path with filename prefix {@value FILE_PREFIX} and an integer suffix
-   * indicating which stage a job is at.
+   * {@value BASE_PATH} and have an integer suffix indicating which stage a job is at.
    * <br>
    * Context files won't participate in migration since they are already on the
    * destination namespace.
@@ -178,6 +187,8 @@ public class NSMigrationTool extends Configured implements Tool {
     private JobContext context;
     /** Resuming an aborted job */
     private boolean isContinueJob;
+    /** Skip listOpenFiles before disabling writes? */
+    private boolean skipOpenFiles;
 
     @VisibleForTesting
     public JobStage getStage() {
@@ -190,7 +201,7 @@ public class NSMigrationTool extends Configured implements Tool {
     }
 
     MigrationJob(Path path, String srcNs, String dstNs, Configuration conf, String routerAddress,
-        boolean dirLock) throws IOException {
+        boolean dirLock, boolean skipOpenFiles) throws IOException {
       this.conf = conf;
       this.dstFs = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + dstNs), conf);
       this.srcFs = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + srcNs), conf);
@@ -201,6 +212,7 @@ public class NSMigrationTool extends Configured implements Tool {
       this.context.srcNs = srcNs;
       this.context.dstNs = dstNs;
       this.context.dirLock = dirLock;
+      this.skipOpenFiles = skipOpenFiles;
     }
 
     private void tryToLoadContext(Path path) throws IOException {
@@ -342,7 +354,21 @@ public class NSMigrationTool extends Configured implements Tool {
       return true;
     }
 
-    private boolean disableWrite() throws IOException {
+    private boolean disableWrite() throws IOException, InterruptedException {
+      if (!skipOpenFiles) {
+        while (true) {
+          RemoteIterator<OpenFileEntry> openFiles =
+              srcFs.listOpenFiles(EnumSet.of(OpenFilesIterator.OpenFilesType.ALL_OPEN_FILES),
+                  context.pathStr);
+          if (openFiles.hasNext()) {
+            LOG.info("There is at least one open file {}, waiting until there is none...",
+                openFiles.next().getFilePath());
+            Thread.sleep(2000);
+          } else {
+            break;
+          }
+        }
+      }
       if (context.dirLock) {
         // Lock with dir permission instead of mount points, for testing only
         srcFs.setPermission(context.path, FsPermission.createImmutable((short) 0555));
@@ -490,6 +516,49 @@ public class NSMigrationTool extends Configured implements Tool {
     super(conf);
   }
 
+  class CreateTopDirJob {
+    private final DistributedFileSystem dstFs;
+    private final DistributedFileSystem srcFs;
+    private final Set<Path> paths;
+
+    CreateTopDirJob(String path, String inputFile, String srcNs, String dstNs, Configuration conf)
+        throws IOException {
+      this.dstFs = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + dstNs), conf);
+      this.srcFs = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + srcNs), conf);
+      this.paths = loadPaths(path, inputFile);
+    }
+
+    private Set<Path> loadPaths(String path, String inputFile) throws IOException {
+      Set<Path> paths = new HashSet<>();
+      if (inputFile == null) {
+        paths.add(new Path(path));
+      } else {
+        File input = new File(inputFile);
+        if (!input.exists()) {
+          throw new FileNotFoundException("Input file " + inputFile + " does not exist.");
+        } BufferedReader reader =
+            new BufferedReader(new InputStreamReader(Files.newInputStream(input.toPath())));
+        String line;
+        while ((line = reader.readLine()) != null) {
+          paths.add(new Path(line.trim()));
+        }
+      }
+      return paths;
+    }
+
+    public int execute() throws IOException {
+      int resultCode = 0;
+      for (Path path : paths) {
+        FileStatus fileStatus = srcFs.getFileStatus(path);
+        if (!dstFs.mkdir(path, fileStatus.getPermission())) {
+          resultCode = 1;
+        }
+        dstFs.setOwner(path, fileStatus.getOwner(), fileStatus.getGroup());
+      }
+      return resultCode;
+    }
+  }
+
   public static void main(String[] argv) {
     Configuration conf = new Configuration();
     NSMigrationTool tool = new NSMigrationTool(conf);
@@ -506,29 +575,52 @@ public class NSMigrationTool extends Configured implements Tool {
   @Override
   public int run(String[] args) throws Exception {
     List<String> argsList = new LinkedList<>(Arrays.asList(args));
-    String path = StringUtils.popOptionWithArgument("-path", argsList);
-    if (path == null) {
-      System.err.println("-path option is required.");
+    String command = argsList.remove(0);
+    if (command.equals("migrate")) {
+      String path = StringUtils.popOptionWithArgument("-path", argsList);
+      if (path == null) {
+        System.err.println("-path option is required.");
+        return -1;
+      }
+      String src = StringUtils.popOptionWithArgument("-src", argsList);
+      String dst = StringUtils.popOptionWithArgument("-dst", argsList);
+      if (src == null || dst == null) {
+        System.err.println("-src and -dst options are required for a new job.");
+        return -1;
+      }
+      String routerAddress = StringUtils.popOptionWithArgument("-router", argsList);
+      if (routerAddress == null) {
+        System.err.println("A router must be used via option -router.");
+        return -1;
+      }
+      // This option is used for client testing without needing to deploy new routers.
+      boolean dirLock = StringUtils.popOption("-dirLock", argsList);
+      boolean skipOpenFiles = StringUtils.popOption("-skipOpenFiles", argsList);
+      MigrationJob job =
+          new MigrationJob(new Path(path), src, dst, getConf(), routerAddress, dirLock,
+              skipOpenFiles);
+      while (job.continueJob()) {
+        System.out.println("Stage " + job.stage + " done.");
+      }
+      return 0;
+    } else if (command.equals("createTopDir")) {
+      String path = StringUtils.popOptionWithArgument("-path", argsList);
+      String input = StringUtils.popOptionWithArgument("-input", argsList);
+      if (path == null && input == null) {
+        System.err.println("Either -path or -input option is required.");
+        return -1;
+      }
+      String src = StringUtils.popOptionWithArgument("-src", argsList);
+      String dst = StringUtils.popOptionWithArgument("-dst", argsList);
+      if (src == null || dst == null) {
+        System.err.println("-src and -dst options are required.");
+        return -1;
+      }
+      CreateTopDirJob job = new CreateTopDirJob(path, input, src, dst, getConf());
+      return job.execute();
+    } else {
+      System.err.println("Only migrate or createTopDir commands are allowed.");
       return -1;
     }
-    MigrationJob job;
-    String src = StringUtils.popOptionWithArgument("-src", argsList);
-    String dst = StringUtils.popOptionWithArgument("-dst", argsList);
-    if (src == null || dst == null) {
-      System.err.println("-src and -dst options are required for a new job.");
-      return -1;
-    }
-    String routerAddress = StringUtils.popOptionWithArgument("-router", argsList);
-    if (routerAddress == null) {
-      System.err.println("A router must be used via option -router.");
-      return -1;
-    }
-    // This option is used for client testing without needing to deploy new routers.
-    boolean dirLock = StringUtils.popOption("-dirLock", argsList);
-    job = new MigrationJob(new Path(path), src, dst, getConf(), routerAddress, dirLock);
-    while (job.continueJob()) {
-      System.out.println("Stage " + job.stage + " done.");
-    }
-    return 0;
   }
 }
