@@ -685,8 +685,8 @@ public class Listing extends AbstractStoreOperation {
         // Skip over keys that are ourselves and old S3N _$folder$ files
         if (acceptor.accept(keyPath, summary) && filter.accept(keyPath)) {
           S3AFileStatus status = createFileStatus(keyPath, summary,
-                  listingOperationCallbacks.getDefaultBlockSize(keyPath),
-                  getStoreContext().getUsername(),
+              listingOperationCallbacks.getDefaultBlockSize(keyPath),
+              S3AUtils.getUserOrDefault(summary, getStoreContext().getUsername()),
               summary.getETag(), null);
           LOG.debug("Adding: {}", status);
           stats.add(status);

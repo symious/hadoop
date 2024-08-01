@@ -558,7 +558,7 @@ public final class S3AUtils {
       long size, Date modified, long blockSize, String owner,
       String eTag, String versionId) {
     if (isDir) {
-      return new S3AFileStatus(Tristate.UNKNOWN, keyPath, owner);
+      return new S3AFileStatus(Tristate.UNKNOWN, dateToLong(modified), keyPath, owner);
     } else {
       return new S3AFileStatus(size, dateToLong(modified), keyPath, blockSize,
           owner, eTag, versionId);
@@ -1790,4 +1790,12 @@ public final class S3AUtils {
     }
   };
 
+  public static String getUserOrDefault(S3ObjectSummary obj, String defaultUser) {
+    try {
+      return obj.getOwner().getId();
+    } catch (NullPointerException npe) {
+      LOG.warn("NPE encountered while trying to get user for {}", obj);
+      return defaultUser;
+    }
+  }
 }

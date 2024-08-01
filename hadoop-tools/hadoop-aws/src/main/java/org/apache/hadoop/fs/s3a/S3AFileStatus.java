@@ -72,6 +72,28 @@ public class S3AFileStatus extends FileStatus {
   }
 
   /**
+   * Create a directory status with modificationTime
+   * @param isemptydir is this an empty directory?
+   * @param path the path
+   * @param owner the owner
+   */
+  public S3AFileStatus(Tristate isemptydir,
+      long modificationTime,
+      Path path,
+      String owner) {
+    this(path,
+        true,
+        isemptydir,
+        0,
+        modificationTime,
+        0,
+        owner,
+        null,
+        null
+    );
+  }
+
+  /**
    * A simple file.
    * @param length file length
    * @param modification_time mod time

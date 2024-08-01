@@ -131,18 +131,25 @@ public class S3ListResult {
   }
 
   /**
-   * Does this listing have prefixes or objects after entries with
+   * Does this listing have prefixes after entries with
    * tombstones have been stripped?
    * @param accessors callback for key to path mapping.
    * @param tombstones Set of tombstone markers, or null if not applicable.
    * @return true if the reconciled list is non-empty
    */
-  public boolean hasPrefixesOrObjects(
-      final ContextAccessors accessors,
-      final Set<Path> tombstones) {
+  public boolean hasPrefixes(final ContextAccessors accessors, final Set<Path> tombstones) {
+    return !isEmptyOfKeys(accessors, getCommonPrefixes(), tombstones);
+  }
 
-    return !isEmptyOfKeys(accessors, getCommonPrefixes(), tombstones)
-        || !isEmptyOfObjects(accessors, tombstones);
+  /**
+   * Does this listing have objects after entries with
+   * tombstones have been stripped?
+   * @param accessors callback for key to path mapping.
+   * @param tombstones Set of tombstone markers, or null if not applicable.
+   * @return true if the reconciled list is non-empty
+   */
+  public boolean hasObjects(final ContextAccessors accessors, final Set<Path> tombstones) {
+    return !isEmptyOfObjects(accessors, tombstones);
   }
 
   /**

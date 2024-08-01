@@ -69,6 +69,7 @@ import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3Object;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.amazonaws.services.s3.model.UploadPartRequest;
 import com.amazonaws.services.s3.model.UploadPartResult;
 import com.amazonaws.services.s3.transfer.Copy;
@@ -3652,15 +3653,24 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
         && probes.contains(StatusProbeEnum.Head)) {
       try {
         // look for the simple file
-        ObjectMetadata meta = getObjectMetadata(key);
-        LOG.debug("Found exact file: normal file {}", key);
-        return new S3AFileStatus(meta.getContentLength(),
-            dateToLong(meta.getLastModified()),
-            path,
-            getDefaultBlockSize(path),
-            username,
-            meta.getETag(),
-            meta.getVersionId());
+        // Get a single result
+        S3ListRequest request = createListObjectsRequest(key, "/", 1);
+        S3ListResult listResult = listObjects(request, getDurationTrackerFactory());
+        if (!listResult.getObjectSummaries().isEmpty()) {
+          S3ObjectSummary result = listResult.getObjectSummaries().get(0);
+          if (result.getKey().equals(key)) {
+            LOG.debug("Found exact file: normal file {}", key);
+            return new S3AFileStatus(
+                result.getSize(),
+                dateToLong(result.getLastModified()),
+                path,
+                getDefaultBlockSize(path),
+                S3AUtils.getUserOrDefault(result, username),
+                result.getETag(),
+                null);
+          }
+        }
+
       } catch (AmazonServiceException e) {
         // if the response is a 404 error, it just means that there is
         // no file at that path...the remaining checks will be needed.
@@ -3704,7 +3714,21 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
         S3ListResult listResult = listObjects(request,
             getDurationTrackerFactory());
 
-        if (listResult.hasPrefixesOrObjects(contextAccessors, tombstones)) {
+        boolean hasPrefixes = listResult.hasPrefixes(contextAccessors, tombstones);
+        boolean hasObjects = listResult.hasObjects(contextAccessors, tombstones);
+        if (hasPrefixes || hasObjects) {
+          String resultUser = username;
+          long resultLastModified = 0;
+          if (hasObjects && listResult.getObjectSummaries().get(0).getKey().equals(dirKey)) {
+            resultUser =
+                S3AUtils.getUserOrDefault(listResult.getObjectSummaries().get(0), username);
+            try {
+              resultLastModified =
+                  dateToLong(listResult.getObjectSummaries().get(0).getLastModified());
+            } catch (NullPointerException npe) {
+              LOG.warn("Unexpected NPE {}", listResult.getObjectSummaries().get(0), npe);
+            }
+          }
           if (LOG.isDebugEnabled()) {
             LOG.debug("Found path as directory (with /)");
             listResult.logAtDebug(LOG);
@@ -3716,11 +3740,11 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
           if (needEmptyDirectoryFlag
               && listResult.representsEmptyDirectory(
                   contextAccessors, dirKey, tombstones)) {
-            return new S3AFileStatus(Tristate.TRUE, path, username);
+            return new S3AFileStatus(Tristate.TRUE, resultLastModified, path, resultUser);
           }
           // either an empty directory is not needed, or the
           // listing does not meet the requirements.
-          return new S3AFileStatus(Tristate.FALSE, path, username);
+          return new S3AFileStatus(Tristate.FALSE, resultLastModified, path, resultUser);
         } else if (key.isEmpty()) {
           LOG.debug("Found root directory");
           return new S3AFileStatus(Tristate.TRUE, path, username);
