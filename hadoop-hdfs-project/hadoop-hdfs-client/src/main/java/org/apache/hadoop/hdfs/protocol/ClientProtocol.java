@@ -131,6 +131,10 @@ public interface ClientProtocol {
   LocatedBlocks getBlockLocations(String src, long offset, long length)
       throws IOException;
 
+  @Idempotent
+  LocatedBlocks getBlockLocationsWithFakeRack(String src, long offset,
+      long length, String fakeRack) throws IOException;
+
   /**
    * Get server default values for a number of configuration params.
    * @return a set of server default configuration values

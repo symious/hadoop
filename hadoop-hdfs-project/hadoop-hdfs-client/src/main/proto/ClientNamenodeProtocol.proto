@@ -49,6 +49,7 @@ message GetBlockLocationsRequestProto {
   required string src = 1;     // file name
   required uint64 offset = 2;  // range start offset
   required uint64 length = 3;  // range length
+  optional string fakeRack = 100;// fake rack
 }
 
 message GetBlockLocationsResponseProto {
@@ -841,6 +842,8 @@ message SatisfyStoragePolicyResponseProto {
 
 service ClientNamenodeProtocol {
   rpc getBlockLocations(GetBlockLocationsRequestProto)
+      returns(GetBlockLocationsResponseProto);
+  rpc getBlockLocationsWithFakeRack(GetBlockLocationsRequestProto)
       returns(GetBlockLocationsResponseProto);
   rpc getServerDefaults(GetServerDefaultsRequestProto)
       returns(GetServerDefaultsResponseProto);

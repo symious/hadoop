@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.Options.ChecksumCombineMode;
 import org.apache.hadoop.fs.Options.ChecksumOpt;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.ReplicaAccessorBuilder;
+import org.apache.hadoop.hdfs.client.HdfsUtils;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.client.HdfsClientConfigKeys;
 import org.apache.hadoop.hdfs.util.ByteArrayManager;
@@ -158,6 +159,8 @@ public class DfsClientConf {
   private final int slowNodeCacheSize;
   private final long slowNodeCacheThresholdMillis;
 
+  private final String fakeRack;
+
   public DfsClientConf(Configuration conf) {
     // The hdfsTimeout is currently the same as the ipc timeout
     hdfsTimeout = Client.getRpcTimeout(conf);
@@ -276,6 +279,10 @@ public class DfsClientConf {
     slowIoWarningThresholdMs = conf.getLong(
         DFS_CLIENT_SLOW_IO_WARNING_THRESHOLD_KEY,
         DFS_CLIENT_SLOW_IO_WARNING_THRESHOLD_DEFAULT);
+
+    fakeRack = HdfsUtils.getValidFakeRack(
+        conf.get(HdfsClientConfigKeys.DFS_CLIENT_FAKE_RACK_KEY,
+            HdfsClientConfigKeys.DFS_CLIENT_FAKE_RACK_DEFAULT));
 
     shortCircuitConf = new ShortCircuitConf(conf);
 
@@ -649,6 +656,10 @@ public class DfsClientConf {
   public List<Class<? extends ReplicaAccessorBuilder>>
         getReplicaAccessorBuilderClasses() {
     return replicaAccessorBuilderClasses;
+  }
+
+  public String getFakeRack() {
+    return fakeRack;
   }
 
   /**

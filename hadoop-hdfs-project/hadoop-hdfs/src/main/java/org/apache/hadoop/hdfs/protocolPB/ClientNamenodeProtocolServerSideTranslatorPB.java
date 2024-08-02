@@ -443,6 +443,23 @@ public class ClientNamenodeProtocolServerSideTranslatorPB implements
   }
 
   @Override
+  public GetBlockLocationsResponseProto getBlockLocationsWithFakeRack(
+      RpcController controller, GetBlockLocationsRequestProto req)
+      throws ServiceException {
+    try {
+      LocatedBlocks b = server.getBlockLocationsWithFakeRack(req.getSrc(), req.getOffset(),
+          req.getLength(), req.getFakeRack());
+      Builder builder = GetBlockLocationsResponseProto.newBuilder();
+      if (b != null) {
+        builder.setLocations(PBHelperClient.convert(b)).build();
+      }
+      return builder.build();
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
+  }
+
+  @Override
   public GetServerDefaultsResponseProto getServerDefaults(
       RpcController controller, GetServerDefaultsRequestProto req)
       throws ServiceException {

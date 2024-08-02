@@ -447,4 +447,7 @@ public interface HdfsClientConfigKeys {
       "dfs.client.slownodecache.threshold.ms";
   long DFS_CLIENT_SLOW_NODE_CACHE_THRESHOLD_MS_DEFAULT =
       HedgedRead.THRESHOLD_MILLIS_DEFAULT;
+
+  String DFS_CLIENT_FAKE_RACK_KEY = "dfs.client.fake.rack";
+  String DFS_CLIENT_FAKE_RACK_DEFAULT = null;
 }

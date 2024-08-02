@@ -180,6 +180,18 @@ public class RouterClientProtocol implements ClientProtocol {
   }
 
   @Override
+  public LocatedBlocks getBlockLocationsWithFakeRack(String src,
+      long offset, long length, String fakeRack) throws IOException {
+    rpcServer.checkOperation(NameNode.OperationCategory.READ);
+    List<RemoteLocation> locations = rpcServer.getLocationsForPath(src, false);
+    RemoteMethod remoteMethod = new RemoteMethod("getBlockLocationsWithFakeRack",
+        new Class<?>[] {String.class, long.class, long.class, String.class},
+        new RemoteParam(), offset, length, fakeRack);
+    final String operationName = "open_with_fake_rack";
+    return rpcClient.invokeSequential(locations, remoteMethod, LocatedBlocks.class, null);
+  }
+
+  @Override
   public FsServerDefaults getServerDefaults() throws IOException {
     rpcServer.checkOperation(NameNode.OperationCategory.READ);
 
