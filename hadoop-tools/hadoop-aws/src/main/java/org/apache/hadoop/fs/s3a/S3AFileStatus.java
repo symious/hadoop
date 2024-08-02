@@ -159,7 +159,7 @@ public class S3AFileStatus extends FileStatus {
   public static S3AFileStatus fromFileStatus(FileStatus source,
       Tristate isEmptyDirectory, String eTag, String versionId) {
     if (source.isDirectory()) {
-      return new S3AFileStatus(isEmptyDirectory, source.getPath(),
+      return new S3AFileStatus(isEmptyDirectory, source.getModificationTime(), source.getPath(),
           source.getOwner());
     } else {
       return new S3AFileStatus(source.getLen(), source.getModificationTime(),
@@ -240,11 +240,7 @@ public class S3AFileStatus extends FileStatus {
    */
   @Override
   public long getModificationTime(){
-    if(isDirectory()){
-      return System.currentTimeMillis();
-    } else {
-      return super.getModificationTime();
-    }
+    return super.getModificationTime();
   }
 
   @Override
