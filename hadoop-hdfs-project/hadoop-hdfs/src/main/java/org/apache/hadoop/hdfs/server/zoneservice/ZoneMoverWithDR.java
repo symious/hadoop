@@ -294,6 +294,7 @@ public class ZoneMoverWithDR extends ZoneMover {
                 preMigrationFile.getFilePath());
             processor.processFile(preMigrationFile.getFilePath(), status,
                 preMigrationFile.getRule(), result);
+            ZoneProgressTracker.dequeueFile(preMigrationFile.getFilePath());
           } else {
             preMigrationFileQueue.put(preMigrationFile);
           }
@@ -732,9 +733,11 @@ public class ZoneMoverWithDR extends ZoneMover {
           LOG.info("Will pre-migrate 1 replica from {} to {} using preRule {} for {} by {}.",
               singleDc, tmpDataCenters.get(0), preRule, fullPath, runMode.getName());
           try {
+            ZoneProgressTracker.queueFile(fullPath);
             processFileBlocks(fullPath, status, preRule, result, true);
             preMigrationFileQueue.put(new PreMigrationFile(fullPath, preRule, appliedRule));
           } catch (InterruptedException e) {
+            ZoneProgressTracker.dequeueFile(fullPath);
             processFile(fullPath, status, appliedRule, result);
             LOG.warn("Adding pre-migration file {} to the pre-migration queue is interrupted.",
                 fullPath);
@@ -756,9 +759,7 @@ public class ZoneMoverWithDR extends ZoneMover {
         ReplicationRule rule, Mover.Result result, boolean hasPreMigration) {
       LocatedBlocks locatedBlocks = status.getLocatedBlocks();
       int n = locatedBlocks.locatedBlockCount();
-      if (!hasPreMigration) {
-        ZoneProgressTracker.queueFile(fullPath);
-      }
+      ZoneProgressTracker.queueFile(fullPath);
       for (int i = 0; i < n; i++) {
         LocatedBlock block = locatedBlocks.get(i);
         Map<String, Short> distribution = getBlockDistribution(block);

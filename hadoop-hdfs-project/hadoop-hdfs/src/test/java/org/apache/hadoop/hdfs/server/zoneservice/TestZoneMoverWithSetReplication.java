@@ -24,7 +24,12 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyDefault;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
 import org.apache.hadoop.hdfs.server.zoneservice.utils.MigrationDataCenters;
 import org.apache.hadoop.net.StaticMapping;
@@ -147,10 +152,18 @@ public class TestZoneMoverWithSetReplication {
     conf.set(DFSConfigKeys.DFS_ZONEMOVER_DISTRIBUTION_RULE_MAP_FILE_KEY, TEST_CACHE_DATA_DIR + "/distribution.map");
     conf.set(DFSConfigKeys.DFS_ZONEMOVER_DEGRADE_RULE_MAP_FILE_KEY, TEST_CACHE_DATA_DIR + "/degrade.map");
     conf.set(DFSConfigKeys.DFS_ZONEMOVER_DEFAULT_RULE_MAP_FILE_KEY, TEST_CACHE_DATA_DIR + "/default.map");
+    conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+        BlockPlacementPolicyWithDataCenter.class, BlockPlacementPolicy.class);
+    conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY, DFSNetworkTopologyWithDataCenter.class,
+        DFSNetworkTopology.class);
     cluster = new MiniDFSCluster
         .Builder(conf)
         .numDataNodes(hosts1.length).hosts(hosts1).racks(racks1).build();
     cluster.waitActive();
+    conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+        BlockPlacementPolicyDefault.class, BlockPlacementPolicy.class);
+    conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY, DFSNetworkTopology.class,
+        DFSNetworkTopology.class);
     DistributedFileSystem fs = cluster.getFileSystem();
     fs.mkdir(new Path("/test"), new FsPermission("777"));
 

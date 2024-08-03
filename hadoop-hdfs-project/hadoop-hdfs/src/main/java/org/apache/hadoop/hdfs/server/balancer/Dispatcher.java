@@ -55,6 +55,7 @@ import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyDefault;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyRackFaultTolerant;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithNodeGroup;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithUpgradeDomain;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithUpgradeDomainForRackFaultTolerant;
 import org.apache.hadoop.hdfs.util.DataTransferThrottler;
@@ -1304,28 +1305,22 @@ public class Dispatcher {
         conf.getClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
             DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_DEFAULT,
             BlockPlacementPolicy.class);
-    if (!contiguousPolicy.equals(BlockPlacementPolicyDefault.class) && !contiguousPolicy.equals(
-        BlockPlacementPolicyWithUpgradeDomain.class)) {
+    if (!contiguousPolicy.equals(BlockPlacementPolicyDefault.class) &&
+        !contiguousPolicy.equals(BlockPlacementPolicyWithUpgradeDomain.class) &&
+        !contiguousPolicy.equals(BlockPlacementPolicyWithNodeGroup.class)) {
       throw new IllegalArgumentException("dfs.block.replicator.classname must be" +
-          " BlockPlacementPolicyDefault or BlockPlacementPolicyWithUpgradeDomain");
+          " BlockPlacementPolicyDefault or BlockPlacementPolicyWithUpgradeDomain" +
+          " or BlockPlacementPolicyWithNodeGroup");
     }
 
     Class<? extends BlockPlacementPolicy> stripePolicy = conf.getClass(
         DFSConfigKeys.DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY,
         DFSConfigKeys.DFS_BLOCK_PLACEMENT_EC_CLASSNAME_DEFAULT, BlockPlacementPolicy.class);
-    if (!stripePolicy.equals(BlockPlacementPolicyRackFaultTolerant.class) && !stripePolicy.equals(
-        BlockPlacementPolicyWithUpgradeDomainForRackFaultTolerant.class)) {
+    if (!stripePolicy.equals(BlockPlacementPolicyRackFaultTolerant.class) &&
+        !stripePolicy.equals(BlockPlacementPolicyWithUpgradeDomainForRackFaultTolerant.class)) {
       throw new IllegalArgumentException("dfs.block.placement.ec.classname must be" +
           " BlockPlacementPolicyRackFaultTolerant or " +
           " BlockPlacementPolicyWithUpgradeDomainForRackFaultTolerant");
-    }
-
-    Class<? extends NetworkTopology> topologyClass = conf.getClass(
-        CommonConfigurationKeysPublic.NET_TOPOLOGY_IMPL_KEY,
-        NetworkTopology.class, NetworkTopology.class);
-    if (!topologyClass.equals(NetworkTopology.class)) {
-      throw new IllegalArgumentException(
-          "dfs.block.placement.ec.classname must be NetworkTopology");
     }
   }
 

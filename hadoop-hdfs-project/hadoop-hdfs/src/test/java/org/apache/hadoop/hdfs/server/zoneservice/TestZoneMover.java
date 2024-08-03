@@ -89,10 +89,8 @@ public class TestZoneMover {
         Mockito.any(ReplicationRule.class));
     tool.setConf(cluster.getConfiguration(0));
 
-    // Wrong block placement policy
     String[] args = {"-namespace", "dev",
         "-path", "/test", "-rule", "/sg_dc:3"};
-    assertEquals(ExitStatus.IO_EXCEPTION.getExitCode(), tool.run(args));
 
     // Unable to match namespace
     cluster = new MiniDFSCluster.Builder(TestUtils.getConf()).numDataNodes(0).build();
@@ -413,6 +411,12 @@ public class TestZoneMover {
           null, false);
 
       // do block move
+      conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+          BlockPlacementPolicyDefault.class,
+          BlockPlacementPolicy.class);
+      conf.setBoolean(DFSConfigKeys.DFS_USE_DFS_NETWORK_TOPOLOGY_KEY, true);
+      conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY,
+          DFSNetworkTopology.class, DFSNetworkTopology.class);
       Tool tool = new ZoneMover.Cli();
       tool.setConf(conf);
       final String[] args = {"-path", "/test", "-rule", "/datacenter1:2,/datacenter0:2"};

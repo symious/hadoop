@@ -24,6 +24,7 @@ import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyDefault;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter;
 
 public class TestUtils {
@@ -36,9 +37,9 @@ public class TestUtils {
   public static Configuration getConf(String dcs) {
     Configuration conf = new HdfsConfiguration();
     conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
-        BlockPlacementPolicyWithDataCenter.class, BlockPlacementPolicy.class);
+        BlockPlacementPolicyDefault.class, BlockPlacementPolicy.class);
     conf.setBoolean(DFSConfigKeys.DFS_USE_DFS_NETWORK_TOPOLOGY_KEY, true);
-    conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY, DFSNetworkTopologyWithDataCenter.class,
+    conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY, DFSNetworkTopology.class,
         DFSNetworkTopology.class);
     conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, DFS_HEARTBEAT_INTERVAL);
     conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY, true);
