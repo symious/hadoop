@@ -176,6 +176,11 @@ public class TimelineReaderWebServices {
         ctxt.getAttribute(TimelineReaderServer.TIMELINE_READER_MANAGER_ATTR);
   }
 
+  private TimelineAppStateChecker getTimelineAppStateChecker() {
+    return (TimelineAppStateChecker)
+        ctxt.getAttribute(TimelineReaderServer.TIMELINE_APP_STATE_CHECKER_ATTR);
+  }
+
   private static void handleException(Exception e, String url, long startTime,
       String invalidNumMsg) throws BadRequestException,
       WebApplicationException {
@@ -1820,6 +1825,8 @@ public class TimelineReaderWebServices {
           metricsTimeStart, metricsTimeEnd));
       checkAccessForAppEntity(entity, callerUGI);
       succeeded = true;
+      TimelineAppStateChecker appStateChecker = getTimelineAppStateChecker();
+      appStateChecker.record(entity);
     } catch (Exception e) {
       handleException(e, url, startTime, "Either flowrunid or metricslimit or"
           + " metricstime start/end");

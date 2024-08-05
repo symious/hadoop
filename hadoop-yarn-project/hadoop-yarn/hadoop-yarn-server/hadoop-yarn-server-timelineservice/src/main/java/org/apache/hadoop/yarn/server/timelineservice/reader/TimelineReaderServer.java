@@ -63,10 +63,13 @@ public class TimelineReaderServer extends CompositeService {
   private static final int SHUTDOWN_HOOK_PRIORITY = 30;
   static final String TIMELINE_READER_MANAGER_ATTR =
       "timeline.reader.manager";
+  static final String TIMELINE_APP_STATE_CHECKER_ATTR =
+      "timeline.app.state.checker";
 
   private HttpServer2 readerWebServer;
   private HttpServerMetrics metrics;
   private TimelineReaderManager timelineReaderManager;
+  private TimelineAppStateChecker timelineAppStateChecker;
   private String webAppURLWithoutScheme;
 
 
@@ -96,6 +99,8 @@ public class TimelineReaderServer extends CompositeService {
     addService(timelineReaderStore);
     timelineReaderManager = createTimelineReaderManager(timelineReaderStore);
     addService(timelineReaderManager);
+    timelineAppStateChecker = new TimelineAppStateChecker();
+    addService(timelineAppStateChecker);
     super.serviceInit(conf);
   }
 
@@ -219,6 +224,8 @@ public class TimelineReaderServer extends CompositeService {
           "/*");
       readerWebServer.setAttribute(TIMELINE_READER_MANAGER_ATTR,
           timelineReaderManager);
+      readerWebServer.setAttribute(TIMELINE_APP_STATE_CHECKER_ATTR,
+          timelineAppStateChecker);
       readerWebServer.start();
       metrics = HttpServerMetrics.create(readerWebServer);
     } catch (Exception e) {

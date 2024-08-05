@@ -3439,6 +3439,11 @@ public class YarnConfiguration extends Configuration {
   public static final long
       TIMELINE_SERVICE_SYNC_APP_INTERVAL_SECONDS_DEFAULT = 300;
 
+  public static final String TIMELINE_SERVICE_CHECK_APP_STATE_INTERVAL_SECONDS =
+      TIMELINE_SERVICE_PREFIX + "check-app-state-interval-seconds";
+  public static final long
+      DEFAULT_TIMELINE_SERVICE_CHECK_APP_STATE_INTERVAL_SECONDS = 300;
+
   /**
    * Comma separated list of names for UIs hosted in the timeline server
    * (For pluggable UIs).

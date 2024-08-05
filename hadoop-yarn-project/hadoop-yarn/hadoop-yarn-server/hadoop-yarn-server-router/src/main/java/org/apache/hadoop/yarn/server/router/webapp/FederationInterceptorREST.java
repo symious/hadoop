@@ -1107,7 +1107,7 @@ public class FederationInterceptorREST extends AbstractRESTRequestInterceptor {
       subClusterId =
           federationFacade.getApplicationHomeSubCluster(applicationId);
       if (subClusterId == null) {
-        return null;
+        throw new NotFoundException("The subcluster of app with id: " + appId + " not found");
       }
       subClusterInfo = federationFacade.getSubCluster(subClusterId);
     } catch (YarnException e) {
