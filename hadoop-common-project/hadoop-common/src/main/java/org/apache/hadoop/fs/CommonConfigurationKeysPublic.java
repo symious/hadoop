@@ -816,6 +816,22 @@ public class CommonConfigurationKeysPublic {
    * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
    * core-default.xml</a>
    */
+  public static final String
+      HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CHECKSUM_MAX_ATTEMPTS =
+      "hadoop.security.rpc-password.shadow.file.checksum.max.attempts";
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final int
+      HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CHECKSUM_MAX_ATTEMPTS_DEFAULT =
+      3;
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
   public static final String  HADOOP_SECURITY_AUTHENTICATION =
     "hadoop.security.authentication";
   /**
@@ -1301,6 +1317,17 @@ public class CommonConfigurationKeysPublic {
       "hadoop.security.groups.in-memory.checksum";
   public static final boolean
       HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_CHECKSUM_DEFAULT = false;
+
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String
+      HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_CHECKSUM_MAX_ATTEMPTS_KEY =
+      "hadoop.security.groups.in-memory.checksum.max.attempts";
+  public static final int
+      HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_CHECKSUM_MAX_ATTEMPTS_DEFAULT = 3;
 
   /**
    * @see

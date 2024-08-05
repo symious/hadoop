@@ -102,6 +102,8 @@ public class TestShadowFilePasswordMapping {
     Configuration conf = new Configuration();
     conf.setBoolean(CommonConfigurationKeys.
         HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CHECKSUM_ENABLED, true);
+    conf.setInt(CommonConfigurationKeys.
+        HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CHECKSUM_MAX_ATTEMPTS, 1);
     conf.set(CommonConfigurationKeys.
         HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, shadowFile1.getAbsolutePath());
     // Test using manual refreshing
@@ -161,5 +163,42 @@ public class TestShadowFilePasswordMapping {
     conf.set(CommonConfigurationKeys.
         HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE, shadowFile1.getAbsolutePath());
     new ShadowFileRpcPasswordMapping().setConf(conf);
+  }
+
+  @Test
+  public void testSlowChecksum() throws IOException, InterruptedException, TimeoutException {
+    GenericTestUtils.LogCapturer mappingLog =
+        GenericTestUtils.LogCapturer.captureLogs(ShadowFileRpcPasswordMapping.LOG);
+
+    ClassLoader classLoader = getClass().getClassLoader();
+    File tempFile = File.createTempFile(GenericTestUtils.getMethodName(), null);
+    File shadowFile1 = new File(classLoader.getResource(TEST_SHADOW_FILE_1).getFile());
+    overwriteTestFileContent(shadowFile1, tempFile);
+    MD5Hash md5Hash = MD5FileUtils.computeMd5ForFile(tempFile);
+    MD5FileUtils.saveMD5File(tempFile, md5Hash);
+
+    Configuration conf = new Configuration();
+    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE,
+        tempFile.getAbsolutePath());
+    conf.setLong(
+        CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CACHE_REFRESH_INTERVAL, 1);
+    conf.setBoolean(
+        CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CHECKSUM_ENABLED, true);
+    ShadowFileRpcPasswordMapping mapping = new ShadowFileRpcPasswordMapping();
+    mapping.setConf(conf);
+    mapping.cacheRefresh(true);
+
+    assertEquals(mapping.getRpcPassword("a"), "aaaShadow1");
+
+    File shadowFile2 = new File(classLoader.getResource(TEST_SHADOW_FILE_2).getFile());
+    overwriteTestFileContent(shadowFile2, tempFile);
+    tempFile.setLastModified(Time.now() + 10000);
+
+    GenericTestUtils.waitFor(() -> mappingLog.getOutput().contains("Checksum failed on attempt"),
+        100, 2000);
+    md5Hash = MD5FileUtils.computeMd5ForFile(tempFile);
+    MD5FileUtils.saveMD5File(tempFile, md5Hash);
+
+    GenericTestUtils.waitFor(() -> mapping.getRpcPassword("a").equals("aaaShadow2"), 100, 2000);
   }
 }

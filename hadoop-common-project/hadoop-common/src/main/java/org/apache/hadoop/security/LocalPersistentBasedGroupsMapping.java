@@ -65,6 +65,7 @@ public class LocalPersistentBasedGroupsMapping extends PollingBasedFileWatcher
       LoggerFactory.getLogger(LocalPersistentBasedGroupsMapping.class);
 
   private boolean useChecksum;
+  private int maxChecksumAttempts;
   private static final List<String> EMPTY_GROUPS = new LinkedList<>();
 
   private final AtomicReference<ConcurrentHashMap<String, List<String>>>
@@ -134,6 +135,19 @@ public class LocalPersistentBasedGroupsMapping extends PollingBasedFileWatcher
 
     MD5Hash md5Hash = null;
     if (useChecksum && !isStartup) {
+      // Try to match checksum up to 3 times, 1 second between each attempt
+      for (int attempt = 0; attempt < maxChecksumAttempts; attempt++) {
+        md5Hash = checksum();
+        if (md5Hash != null || attempt == maxChecksumAttempts - 1) {
+          break;
+        }
+        LOG.info("Checksum failed on attempt {}/3, retrying...", attempt + 1);
+        try {
+          Thread.sleep(1000);
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+      }
       md5Hash = checksum();
       if (md5Hash == null) {
         refreshFailure("First round checksum failed.", start);
@@ -270,6 +284,13 @@ public class LocalPersistentBasedGroupsMapping extends PollingBasedFileWatcher
       useChecksum = conf.getBoolean(
           CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_CHECKSUM_KEY,
           CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_CHECKSUM_DEFAULT);
+      maxChecksumAttempts = conf.getInt(
+          CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_CHECKSUM_MAX_ATTEMPTS_KEY,
+          CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_CHECKSUM_MAX_ATTEMPTS_DEFAULT);
+      if (maxChecksumAttempts < 1) {
+        LOG.info("Non negative max checksum attempts {}, checksum disabled.", maxChecksumAttempts);
+        useChecksum = false;
+      }
     }
   }
 

@@ -4118,6 +4118,14 @@
   </property>
 
   <property>
+    <name>hadoop.security.groups.in-memory.checksum.max.attempts</name>
+    <value>3</value>
+    <description>
+      How many times to retry if a checksum check fails before failing a mapping reload.
+    </description>
+  </property>
+
+  <property>
     <name>ipc.client.failover.logging.threshold</name>
     <value>2</value>
     <description>

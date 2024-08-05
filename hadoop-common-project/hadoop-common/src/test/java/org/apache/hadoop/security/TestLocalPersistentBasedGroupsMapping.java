@@ -69,11 +69,13 @@ public class TestLocalPersistentBasedGroupsMapping {
    * Initializes Mapping object, deletes checksum file if existed, executes
    * refreshMapping once to set isStartup to false
    *
-   * @param localFile     File object of the local mapping file
-   * @param cleanChecksum true to clean checksum before returning
+   * @param localFile           File object of the local mapping file
+   * @param cleanChecksum       true to clean checksum before returning
+   * @param maxChecksumAttempts max checksum attempts
    * @return a (true or spy copy of) Mapping object
    */
-  private LocalPersistentBasedGroupsMapping getMapping(File localFile, boolean cleanChecksum) {
+  private LocalPersistentBasedGroupsMapping getMapping(File localFile, boolean cleanChecksum,
+      int maxChecksumAttempts) {
 
     Configuration conf = new Configuration();
     conf.set(
@@ -85,6 +87,9 @@ public class TestLocalPersistentBasedGroupsMapping {
     conf.setTimeDuration(
         CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_REFRESH_INTERVAL_KEY, 250,
         TimeUnit.MILLISECONDS);
+    conf.setInt(
+        CommonConfigurationKeys.HADOOP_SECURITY_GROUPS_IN_MEMORY_MAPPING_CHECKSUM_MAX_ATTEMPTS_KEY,
+        maxChecksumAttempts);
 
     LocalPersistentBasedGroupsMapping mapping = new LocalPersistentBasedGroupsMapping();
     mapping.setConf(conf);
@@ -110,7 +115,7 @@ public class TestLocalPersistentBasedGroupsMapping {
     ClassLoader classLoader = getClass().getClassLoader();
     final File testFile =
         new File(Objects.requireNonNull(classLoader.getResource(TEST_FILE)).getFile());
-    LocalPersistentBasedGroupsMapping mapping = getMapping(testFile, true);
+    LocalPersistentBasedGroupsMapping mapping = getMapping(testFile, true, 1);
 
     // Second run should fail
     try {
@@ -132,7 +137,7 @@ public class TestLocalPersistentBasedGroupsMapping {
         new File(Objects.requireNonNull(classLoader.getResource(TEST_FILE)).getFile());
     final File testFile2 =
         new File(Objects.requireNonNull(classLoader.getResource(TEST_FILE2)).getFile());
-    LocalPersistentBasedGroupsMapping mapping = getMapping(testFile, true);
+    LocalPersistentBasedGroupsMapping mapping = getMapping(testFile, true, 1);
 
     // Save hash of testFile2 for testFile
     MD5Hash md5Hash = MD5FileUtils.computeMd5ForFile(testFile2);
@@ -156,7 +161,7 @@ public class TestLocalPersistentBasedGroupsMapping {
     final File testFileInvalid =
         new File(
             Objects.requireNonNull(classLoader.getResource(TEST_FILE_INVALID)).getFile());
-    LocalPersistentBasedGroupsMapping mapping = getMapping(testFileInvalid, true);
+    LocalPersistentBasedGroupsMapping mapping = getMapping(testFileInvalid, true, 1);
 
     assertTrue("Expected the exception message to be about invalid"
             + " mapping format but was: " + mappingLog.getOutput(),
@@ -168,7 +173,7 @@ public class TestLocalPersistentBasedGroupsMapping {
   public void testEmptyMappingFormat() {
     ClassLoader classLoader = getClass().getClassLoader();
     final File testFileEmpty = new File(classLoader.getResource(TEST_FILE_EMPTY).getFile());
-    LocalPersistentBasedGroupsMapping mapping = getMapping(testFileEmpty, true);
+    LocalPersistentBasedGroupsMapping mapping = getMapping(testFileEmpty, true, 1);
 
     assertTrue("Expected the exception message to be about empty"
             + " mappings but was: " + mappingLog.getOutput(),
@@ -186,7 +191,7 @@ public class TestLocalPersistentBasedGroupsMapping {
     ClassLoader classLoader = getClass().getClassLoader();
     final File testFile =
         new File(Objects.requireNonNull(classLoader.getResource(TEST_FILE)).getFile());
-    LocalPersistentBasedGroupsMapping mapping = getMapping(testFile, true);
+    LocalPersistentBasedGroupsMapping mapping = getMapping(testFile, true, 1);
 
     MD5Hash md5Hash = MD5FileUtils.computeMd5ForFile(testFile);
     MD5FileUtils.saveMD5File(testFile, md5Hash);
@@ -214,7 +219,7 @@ public class TestLocalPersistentBasedGroupsMapping {
     final File testFileTemp =
         new File(
             Objects.requireNonNull(classLoader.getResource(TEST_FILE_TEMP)).getFile());
-    LocalPersistentBasedGroupsMapping mapping = getMapping(testFileTemp, false);
+    LocalPersistentBasedGroupsMapping mapping = getMapping(testFileTemp, false, 1);
 
     // Use TEST_FILE content first
     overwriteTestFileContent(testFile, testFileTemp, true);
@@ -282,7 +287,7 @@ public class TestLocalPersistentBasedGroupsMapping {
 
     overwriteTestFileContent(testFile, testFileTemp, true);
 
-    LocalPersistentBasedGroupsMapping mapping = getMapping(testFileTemp, false);
+    LocalPersistentBasedGroupsMapping mapping = getMapping(testFileTemp, false, 1);
     LocalPersistentBasedGroupsMapping.resetMetrics();
     mapping.refreshMapping(true);
     LocalPersistentBasedGroupsMapping.LocalGroupsMappingMetrics metrics =
@@ -324,6 +329,46 @@ public class TestLocalPersistentBasedGroupsMapping {
     Assert.assertEquals(4, metrics.groupCount.value());
     Assert.assertEquals(1, metrics.refreshFailuresTotal.value());
     Assert.assertEquals(2, metrics.mappingLineFailuresTotal.value());
+  }
+
+  @Test
+  public void testSlowChecksum() throws IOException, InterruptedException, TimeoutException {
+    ClassLoader classLoader = getClass().getClassLoader();
+    final File testFile =
+        new File(Objects.requireNonNull(classLoader.getResource(TEST_FILE)).getFile());
+    final File testFile2 =
+        new File(Objects.requireNonNull(classLoader.getResource(TEST_FILE2)).getFile());
+    final File testFileTemp = File.createTempFile(GenericTestUtils.getMethodName(), null);
+
+    // Use TEST_FILE content first
+    overwriteTestFileContent(testFile, testFileTemp, true);
+    testFileTemp.setLastModified(Time.now() + 10000);
+    LocalPersistentBasedGroupsMapping mapping = getMapping(testFileTemp, false, 3);
+
+    GenericTestUtils.waitFor(() -> {
+      try {
+        return mapping.getGroups("userA").size() == 3;
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }, 100, 2000);
+
+    // Use TEST_FILE2 content
+    overwriteTestFileContent(testFile2, testFileTemp, false);
+    testFileTemp.setLastModified(Time.now() + 30000);
+
+    GenericTestUtils.waitFor(() -> mappingLog.getOutput().contains("Checksum failed on attempt"),
+        100, 2000);
+    MD5Hash md5Hash = MD5FileUtils.computeMd5ForFile(testFileTemp);
+    MD5FileUtils.saveMD5File(testFileTemp, md5Hash);
+
+    GenericTestUtils.waitFor(() -> {
+      try {
+        return mapping.getGroups("userA").size() == 2;
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }, 100, 2000);
   }
 
   private void overwriteTestFileContent(File src, File dst,

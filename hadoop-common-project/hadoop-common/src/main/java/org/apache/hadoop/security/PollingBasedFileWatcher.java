@@ -105,7 +105,7 @@ public abstract class PollingBasedFileWatcher extends Configured implements Clos
         "Starting FileWatcher for {} with params file={} pollingMs={} forceMs={}(enabled={})",
         this.getClass().getName(), trackFile, pollingMs, forceMs, isForceRefreshEnabled);
     initialized = true;
-    triggerOnModified();
+    triggerOnModified(true);
     task = scheduledExecutor.scheduleWithFixedDelay(new WatcherService(), pollingMs, pollingMs,
         TimeUnit.MILLISECONDS);
   }
@@ -122,7 +122,19 @@ public abstract class PollingBasedFileWatcher extends Configured implements Clos
 
   public abstract boolean onModified();
 
-  private void triggerOnModified() {
+  /**
+   * Polls every {@link PollingBasedFileWatcher#pollingMs} interval,
+   * calls {@link PollingBasedFileWatcher#onModified()} if the file is updated or last refresh was
+   * more than a force refresh interval ago.
+   * <p>
+   * {@link PollingBasedFileWatcher#lastRefreshed} is updated if
+   * <ol>
+   *   <li>{@link PollingBasedFileWatcher#onModified()} successfully runs and returns true</li>
+   *   <li>it's the first run of the watcher service</li>
+   * </ol>
+   * @param startup true if this is the first time the service runs this method.
+   */
+  private void triggerOnModified(boolean startup) {
     long now = Time.monotonicNow();
     long forceDelta = now - lastForceRefreshed.get();
     long lastModified = file.lastModified();
@@ -130,20 +142,22 @@ public abstract class PollingBasedFileWatcher extends Configured implements Clos
     long delta = lastModified - lastRefreshedSnapshot;
     if (isForceRefreshEnabled && forceDelta > forceMs) {
       LOG.info("Last force refresh was {}ms ago, initiating another", forceDelta);
-      onModified();
-      lastRefreshed.set(lastModified);
+      if (onModified() || startup) {
+        lastRefreshed.set(lastModified);
+      }
       lastForceRefreshed.set(now);
     } else if (delta != 0) {
       LOG.info("Change detected in {}", trackFile);
-      onModified();
-      lastRefreshed.set(lastModified);
+      if (onModified() || startup) {
+        lastRefreshed.set(lastModified);
+      }
     }
   }
 
   class WatcherService implements Runnable {
     @Override
     public void run() {
-      triggerOnModified();
+      triggerOnModified(false);
     }
   }
 

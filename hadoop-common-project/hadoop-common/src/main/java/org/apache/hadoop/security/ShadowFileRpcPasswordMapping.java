@@ -59,6 +59,7 @@ public class ShadowFileRpcPasswordMapping extends PollingBasedFileWatcher
   /** Metrics to track shadow file activity */
   static ShadowFileMetrics metrics = ShadowFileMetrics.create();
   private boolean checksumEnabled;
+  private int maxChecksumAttempts;
 
   private volatile boolean isStartup = true;
 
@@ -113,6 +114,13 @@ public class ShadowFileRpcPasswordMapping extends PollingBasedFileWatcher
       checksumEnabled = conf.getBoolean(
           CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CHECKSUM_ENABLED,
           CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CHECKSUM_ENABLED_DEFAULT);
+      maxChecksumAttempts = conf.getInt(
+          CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CHECKSUM_MAX_ATTEMPTS,
+          CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_CHECKSUM_MAX_ATTEMPTS_DEFAULT);
+      if (maxChecksumAttempts < 1) {
+        LOG.info("Non negative max checksum attempts {}, checksum disabled.", maxChecksumAttempts);
+        checksumEnabled = false;
+      }
       updateParams(conf.get(CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE,
               CommonConfigurationKeys.HADOOP_SECURITY_RPC_PASSWORD_SHADOW_FILE_DEFAULT),
           conf.getLong(
@@ -174,7 +182,19 @@ public class ShadowFileRpcPasswordMapping extends PollingBasedFileWatcher
 
     MD5Hash md5Hash = null;
     if (checksumEnabled && !isStartup) {
-      md5Hash = checksum();
+      // Try to match checksum up to 3 times, 1 second between each attempt
+      for (int attempt = 0; attempt < maxChecksumAttempts; attempt++) {
+        md5Hash = checksum();
+        if (md5Hash != null || attempt == maxChecksumAttempts - 1) {
+          break;
+        }
+        LOG.info("Checksum failed on attempt {}/3, retrying...", attempt + 1);
+        try {
+          Thread.sleep(1000);
+        } catch (InterruptedException e) {
+          throw new RuntimeException(e);
+        }
+      }
       if (md5Hash == null) {
         refreshFailure("First round checksum not match.", start);
       }
