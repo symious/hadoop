@@ -111,6 +111,8 @@ public class NSMigrationTool extends Configured implements Tool {
     String jobID = "";
     /** Use dir permission instead of router mount. Only use this option for testing. */
     public boolean dirLock;
+    /** Failed on prepare stage? */
+    public boolean prepareStageFailed = false;
 
     JobContext(Path path) {
       this.path = path;
@@ -125,6 +127,7 @@ public class NSMigrationTool extends Configured implements Tool {
       Text.writeString(out, dstNs);
       Text.writeString(out, jobID);
       out.writeBoolean(dirLock);
+      out.writeBoolean(prepareStageFailed);
     }
 
     @Override
@@ -135,6 +138,7 @@ public class NSMigrationTool extends Configured implements Tool {
       dstNs = Text.readString(in);
       jobID = Text.readString(in);
       dirLock = in.readBoolean();
+      prepareStageFailed = in.readBoolean();
     }
     
     @Override
@@ -331,6 +335,7 @@ public class NSMigrationTool extends Configured implements Tool {
           LOG.info("Nothing to migrate from {} on the source namespace {}. Skipping migration.",
               context.path, context.srcNs);
           // Progress directly to after COPY, before FINISH stage
+          context.prepareStageFailed = true;
           stage = JobStage.POST_COPY;
           return true;
         }
@@ -338,6 +343,7 @@ public class NSMigrationTool extends Configured implements Tool {
         LOG.info("{} does not exist on the source namespace {}. Skipping migration.",
             context.path, context.srcNs);
         // Progress directly to after COPY, before FINISH stage
+        context.prepareStageFailed = true;
         stage = JobStage.POST_COPY;
         return true;
       }
@@ -350,6 +356,7 @@ public class NSMigrationTool extends Configured implements Tool {
         return true;
       }
       LOG.error("Cannot initiate migration on existing mount point {}.", context.path);
+      context.prepareStageFailed = true;
       stage = JobStage.POST_COPY;
       return true;
     }
@@ -480,7 +487,7 @@ public class NSMigrationTool extends Configured implements Tool {
     private boolean removeMountAndCleanContext() throws IOException {
       if (context.dirLock) {
         dstFs.setPermission(context.path, FsPermission.createImmutable((short) 0700));
-      } else {
+      } else if (!context.prepareStageFailed) {
         RemoveMountTableEntryRequest request =
             RemoveMountTableEntryRequest.newInstance(context.pathStr);
         RemoveMountTableEntryResponse response =

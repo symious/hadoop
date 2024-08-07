@@ -54,6 +54,7 @@ import static org.apache.hadoop.tools.federation.NSMigrationTool.JobStage.POST_C
 import static org.apache.hadoop.tools.federation.NSMigrationTool.JobStage.POST_FINISH;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -69,7 +70,6 @@ public class TestNSMigrationTool {
   private static MiniRouterDFSCluster.NamenodeContext nnContext1;
   private static FileSystem nnFs0;
   private static FileSystem nnFs1;
-  private static FileSystem routerFS;
 
   @BeforeClass
   public static void setup() throws Exception {
@@ -89,7 +89,6 @@ public class TestNSMigrationTool {
     routerAdminAddress = routerContext.getRouter().getAdminServerAddress().toString().split("/")[1];
     routerClient = routerContext.getClient();
     routerAdmin = getAdminClient(routerContext.getRouter());
-    routerFS = routerContext.getFileSystem();
     nnContext0 = cluster.getNamenode("ns0", null);
     nnContext1 = cluster.getNamenode("ns1", null);
     nnFs0 = nnContext0.getFileSystem();
@@ -181,6 +180,8 @@ public class TestNSMigrationTool {
         true);
     assertTrue(logs.getOutput().contains("Cannot initiate migration on existing mount point"));
     assertEquals(FINISH, job2.getStage());
+    job2.handleStage();
+    assertNotNull(getMountTableEntry(testPath.toString()));
     logs.clearOutput();
 
     // Existing mount points
@@ -191,6 +192,8 @@ public class TestNSMigrationTool {
         setupTest(false, testPath, NSMigrationTool.JobStage.MOUNT, true);
     assertTrue(logs.getOutput().contains("Cannot initiate migration on existing mount point"));
     assertEquals(FINISH, job3.getStage());
+    job3.handleStage();
+    assertNotNull(getMountTableEntry(new Path(testPath, "inner").toString()));
     logs.clearOutput();
 
     // New mount point
