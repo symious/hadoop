@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.RemoteIterator;
@@ -47,6 +48,7 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.hadoop.util.concurrent.HadoopThreadPoolExecutor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,11 +63,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RecursiveAction;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 public class ZoneChecker {
@@ -77,6 +80,9 @@ public class ZoneChecker {
   private static final String BLOCK_SUMMARY_FORMAT = "DC:%-15sBlocks Number:%-20d" +
       "Data Size:%-20d";
   private static final String SUMMARY_FORMAT = "Distribution:%-30sBlocks Number:%9d (%5.2f%%)    Total Size:%d";
+
+  private static HadoopThreadPoolExecutor EXECUTOR = null;
+  private static int EXECUTOR_REFERENCE = 0;
 
   public ZoneChecker(DistributedFileSystem dfs, Configuration conf) {
     ratio = conf.getFloat(DFSConfigKeys.DFS_ZONECHECKER_DEFAULT_RATIO,
@@ -90,6 +96,34 @@ public class ZoneChecker {
     this.dfs = (DistributedFileSystem) FileSystem.get(conf);
   }
 
+  private synchronized static HadoopThreadPoolExecutor createExecutor(int numThreads) {
+     if (EXECUTOR == null) {
+       ThreadFactory tf = new ThreadFactoryBuilder()
+           .setNameFormat("ZoneChecker Executor #%d")
+           .build();
+       EXECUTOR = new HadoopThreadPoolExecutor(numThreads, numThreads,
+           0L, TimeUnit.MILLISECONDS,
+           new LinkedBlockingQueue<>(), tf);
+     } else {
+       if (numThreads != EXECUTOR.getCorePoolSize()) {
+         EXECUTOR.setCorePoolSize(numThreads);
+         EXECUTOR.setMaximumPoolSize(numThreads);
+       }
+     }
+     EXECUTOR_REFERENCE += 1;
+     return EXECUTOR;
+  }
+
+  private synchronized static void closeExecutor() {
+    assert EXECUTOR != null;
+    EXECUTOR_REFERENCE -= 1;
+    if (EXECUTOR_REFERENCE == 0) {
+      EXECUTOR.shutdown();
+      EXECUTOR.shutdownNow();
+      EXECUTOR = null;
+    }
+  }
+
   /**
    * Get block distribution for paths.
    * @param paths input path
@@ -101,16 +135,19 @@ public class ZoneChecker {
       List<String> paths, int threads) throws Exception {
     Map<String, Set<ReplicationRule>> blockDistribution = new ConcurrentHashMap<>();
     if (threads > 1) {
-      ThreadPoolExecutor executor = new ThreadPoolExecutor(
-          threads, threads, 0, TimeUnit.SECONDS,
-          new LinkedBlockingQueue<>());
-      List<Future<?>> futures = new ArrayList<>();
-      for (String path : paths) {
-        futures.add(executor.submit(() ->  collectBlockDistribution(path, blockDistribution)));
-      }
+      ExecutorService executor = createExecutor(threads);
+      try {
+        List<Future<?>> futures = new ArrayList<>();
+        for (String path : paths) {
+          futures.add(executor.submit(() ->
+              collectBlockDistribution(path, blockDistribution)));
+        }
 
-      for(Future<?> f : futures) {
-        f.get();
+        for (Future<?> f : futures) {
+          f.get();
+        }
+      } finally {
+        closeExecutor();
       }
     } else {
       for (String path : paths) {
