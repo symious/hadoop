@@ -526,6 +526,7 @@ public class RequestFactoryImpl implements RequestFactory {
       final String delimiter,
       final int maxKeys) {
     final ListObjectsV2Request request = new ListObjectsV2Request()
+        .withFetchOwner(true)
         .withBucketName(bucket)
         .withMaxKeys(maxKeys)
         .withPrefix(key);
