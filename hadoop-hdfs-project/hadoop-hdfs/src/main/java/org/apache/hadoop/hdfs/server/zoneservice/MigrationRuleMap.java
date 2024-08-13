@@ -18,6 +18,8 @@
 package org.apache.hadoop.hdfs.server.zoneservice;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +29,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -37,8 +40,20 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONEMOVER_DISTRIBUTION_RU
 public class MigrationRuleMap {
   private static final Logger LOG = LoggerFactory.getLogger(MigrationRuleMap.class);
   private static final Map<ReplicationRule, ReplicationRule> ruleMap = new HashMap<>();
+  private static final Map<Short, ReplicationRule> ruleMapWithZS = new HashMap<>();
 
   public MigrationRuleMap(Configuration conf) throws IOException {
+   loadRuleMap(conf);
+   loadRuleMapWithZS(conf);
+   LOG.info("ZoneMover migration will follow the following rule map:\n " +
+       "Distribution and rule map:\n {} \n " +
+       "Used by zone service rule map:\n {}", ruleMap, ruleMapWithZS);
+  }
+
+  /**
+   * Load rule map from the given config file.
+   */
+  private void loadRuleMap(Configuration conf) throws IOException {
     String mapPath = conf.get(DFS_ZONEMOVER_DISTRIBUTION_RULE_MAP_FILE_KEY);
     if (mapPath == null || mapPath.isEmpty()) {
       LOG.warn("Empty rule map for config: {}", DFS_ZONEMOVER_DISTRIBUTION_RULE_MAP_FILE_KEY);
@@ -51,15 +66,6 @@ public class MigrationRuleMap {
       return;
     }
 
-    load(mapPath);
-    LOG.info("ZoneMover migration will follow the following rule map:\n" +
-        "Distribution and rule map:\n {}", ruleMap);
-  }
-
-  /**
-   * Load rule map from the given config file.
-   */
-  private void load(String mapPath) throws IOException {
     try (BufferedReader reader = new BufferedReader(new InputStreamReader(
         Files.newInputStream(new File(mapPath).toPath()), StandardCharsets.UTF_8))) {
       String line;
@@ -75,6 +81,21 @@ public class MigrationRuleMap {
     } catch (IOException e) {
       LOG.warn("Unable to process file: {}", mapPath, e);
       throw e;
+    }
+  }
+
+  /**
+   * Load rule map from the given config file, used by zone service monitor.
+   */
+  private void loadRuleMapWithZS(Configuration conf) {
+    Collection<String> replicaRuleCollections = StringUtils.getTrimmedStringCollection(
+        conf.get(DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_RULES_KEY), ";");
+    for (String replica : replicaRuleCollections) {
+      String[] keyValue = replica.split("=");
+      if (keyValue.length == 2) {
+        Short factor = Short.valueOf(keyValue[0].trim());
+        ruleMapWithZS.put(factor, ReplicationRule.parseFromString(keyValue[1].trim()));
+      }
     }
   }
 
@@ -227,6 +248,67 @@ public class MigrationRuleMap {
           distribution.getReplica(targetDC)));
       newDistribution.put(remainingDC, distribution.getReplica(remainingDC));
       return ReplicationRule.parseFromMap(newDistribution);
+    }
+    return null;
+  }
+
+  /**
+   * This method determines the replication rules based on the distribution of data centers
+   * and the specified replication factor, used by zone service monitor.
+   *
+   * @param distribution Current replication rule distribution
+   * @param replication Desired replication factor
+   * @param validDataCenters   The set of data centers that are considered valid for replication.
+   */
+  protected ReplicationRule getRuleFromDistributionWithZS(ReplicationRule distribution,
+      short replication, Set<String> validDataCenters) {
+    // Here validDataCenters will set 3 IDC [/AirTrunk,/YTL,/STT], if not will skip.
+    if (validDataCenters.size() != 3) {
+      return null;
+    }
+
+    Set<String> datacenters = distribution.getDatacenters();
+    // Check if datacenters is a subset of validDataCenters or
+    // if datacenters and validDataCenters are the same will return null.
+    if (!validDataCenters.containsAll(datacenters) || datacenters.equals(validDataCenters)) {
+      return null;
+    }
+
+    // Here if file is 2/3 replication will get rule from replicationRuleMap.
+    // 2 replica =/AirTrunk:1,/YTL1:/STT:1 and the number of replicas will increase.
+    // 3 replica =/AirTrunk:1,/YTL:2,/STT:1 and the number of replicas will increase.
+    ReplicationRule rule = ruleMapWithZS.get(replication);
+    if (rule != null) {
+      return rule;
+    }
+
+    // > 3 replica = the replicas are randomly distributed among three IDC.
+    if (replication > 3) {
+      Map<String, Short> newDistribution = new HashMap<>();
+      Set<String> needCenters = new HashSet<>(validDataCenters);
+      needCenters.removeAll(datacenters);
+      // Here the number of needCenters should be 1 or 2, each DC is set 1 replica.
+      for (String dc : needCenters) {
+        newDistribution.put(dc, (short) 1);
+      }
+      if (datacenters.size() == 1) {
+        // The number of needCenters should be 2.
+        String dc = datacenters.iterator().next();
+        newDistribution.put(dc, (short) (replication - needCenters.size()));
+        return ReplicationRule.parseFromMap(newDistribution);
+      }
+      if (datacenters.size() == 2) {
+        // The number of needCenters should be 1.
+        String primaryDC = distribution.getMainDataCenter();
+        String secondaryDC = datacenters.stream()
+            .filter(dc -> !dc.equals(primaryDC))
+            .findFirst()
+            .orElse(null);
+        newDistribution.put(primaryDC, (short) (distribution.getReplica(primaryDC)
+            - needCenters.size()));
+        newDistribution.put(secondaryDC, distribution.getReplica(secondaryDC));
+        return ReplicationRule.parseFromMap(newDistribution);
+      }
     }
     return null;
   }

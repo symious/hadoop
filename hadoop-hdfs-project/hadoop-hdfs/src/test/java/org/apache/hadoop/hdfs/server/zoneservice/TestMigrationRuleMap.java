@@ -22,9 +22,13 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONEMOVER_DISTRIBUTION_RULE_MAP_FILE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_RULES_KEY;
 import static org.junit.Assert.assertNull;
 
 public class TestMigrationRuleMap {
@@ -332,5 +336,63 @@ public class TestMigrationRuleMap {
     expectDistribution = migrationRuleMap.getRuleFromDistribution(
         distribution, replication, sourceDC, targetDC, isDecrease);
     Assert.assertEquals(ReplicationRule.parseFromString("/YTL:6"), expectDistribution);
+
+
+    // Test getRuleFromDistributionWithZS then the replicas are distributed among three IDC.
+    conf.set(DFS_ZONE_SUPPORT_MIGRATE_REPLICA_RULES_KEY,
+        "2=/AirTrunk:1,/YTL:1,/STT:1;3=/AirTrunk:1,/YTL:2,/STT:1");
+    Set<String> validDataCenters = new HashSet<>(Arrays.asList("/AirTrunk", "/YTL", "/STT"));
+    migrationRuleMap = new MigrationRuleMap(conf);
+    replication = 2;
+    distribution = ReplicationRule.parseFromString("/STT:2");
+    expectDistribution = migrationRuleMap.getRuleFromDistributionWithZS(distribution, replication,
+        validDataCenters);
+    Assert.assertEquals(ReplicationRule.parseFromString("/AirTrunk:1,/YTL:1,/STT:1"),
+        expectDistribution);
+
+    distribution = ReplicationRule.parseFromString("/STT:1,/AirTrunk:1");
+    expectDistribution = migrationRuleMap.getRuleFromDistributionWithZS(distribution, replication,
+        validDataCenters);
+    Assert.assertEquals(ReplicationRule.parseFromString("/AirTrunk:1,/YTL:1,/STT:1"),
+        expectDistribution);
+
+    replication = 3;
+    distribution = ReplicationRule.parseFromString("/STT:3");
+    expectDistribution = migrationRuleMap.getRuleFromDistributionWithZS(distribution, replication,
+        validDataCenters);
+    Assert.assertEquals(ReplicationRule.parseFromString("/AirTrunk:1,/YTL:2,/STT:1"),
+        expectDistribution);
+
+    distribution = ReplicationRule.parseFromString("/STT:2,/AirTrunk:1");
+    expectDistribution = migrationRuleMap.getRuleFromDistributionWithZS(distribution, replication,
+        validDataCenters);
+    Assert.assertEquals(ReplicationRule.parseFromString("/AirTrunk:1,/YTL:2,/STT:1"),
+        expectDistribution);
+
+    replication = 5;
+    distribution = ReplicationRule.parseFromString("/STT:5");
+    expectDistribution = migrationRuleMap.getRuleFromDistributionWithZS(distribution, replication,
+        validDataCenters);
+    Assert.assertEquals(ReplicationRule.parseFromString("/AirTrunk:1,/YTL:1,/STT:3"),
+        expectDistribution);
+
+    distribution = ReplicationRule.parseFromString("/STT:3,/AirTrunk:2");
+    expectDistribution = migrationRuleMap.getRuleFromDistributionWithZS(distribution, replication,
+        validDataCenters);
+    Assert.assertEquals(ReplicationRule.parseFromString("/AirTrunk:2,/YTL:1,/STT:2"),
+        expectDistribution);
+
+    replication = 6;
+    distribution = ReplicationRule.parseFromString("/STT:6");
+    expectDistribution = migrationRuleMap.getRuleFromDistributionWithZS(distribution, replication,
+        validDataCenters);
+    Assert.assertEquals(ReplicationRule.parseFromString("/AirTrunk:1,/YTL:1,/STT:4"),
+        expectDistribution);
+
+    distribution = ReplicationRule.parseFromString("/STT:4,/AirTrunk:2");
+    expectDistribution=  migrationRuleMap.getRuleFromDistributionWithZS(distribution, replication,
+        validDataCenters);
+    Assert.assertEquals(ReplicationRule.parseFromString("/AirTrunk:2,/YTL:1,/STT:3"),
+        expectDistribution);
   }
 }

@@ -85,10 +85,10 @@ public class MonitorThread extends Thread {
     try {
       if (supportMigrateReplica) {
         LOG.info("start run monitor thread for {} use zone enhanced mover.", this.getName());
-        ZoneMoverWithSetReplication.run(conf, nameSpace, driver, replicationRuleMap);
+        ZoneMigration.run(conf, nameSpace, replicationRuleMap);
       } else {
         LOG.info("start run monitor thread for {} use zone mover.", this.getName());
-        ZoneMover.run(conf, nameSpace, true);
+        ZoneMover.run(conf, nameSpace, true, true);
       }
     } catch (Exception e) {
       LOG.error("failed to run monitor thread {}", nameSpace, e);

@@ -22,6 +22,7 @@ import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.store.KafkaTopicRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
@@ -181,6 +182,11 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   }
 
   @Override
+  public StoreDriver getStoreDriver() {
+    return driver;
+  }
+
+  @Override
   public boolean hasNext() {
     return true;
   }
@@ -204,9 +210,28 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   @Override
   public void saveOffsetToZookeeper(ConsumerRecord<String, String> record, String ns,
       String groupId, ZoneMoverMetrics zoneMoverMetrics) {
+    long duration = saveOffsetToZookeeperCommon(record, ns, groupId);
+    if (duration == -1) {
+      return;
+    }
+    zoneMoverMetrics.addKafkaOffsetZk(duration);
+  }
+
+  @Override
+  public void saveOffsetToZookeeperForZS(ConsumerRecord<String, String> record, String ns,
+      String groupId, ZoneServiceMetrics zoneServiceMetrics) {
+    long duration = saveOffsetToZookeeperCommon(record, ns, groupId);
+    if (duration == -1) {
+      return;
+    }
+    zoneServiceMetrics.incrNSKafkaOffsetZk(ns, "NSKafkaOffsetZk", duration);
+  }
+
+  private long saveOffsetToZookeeperCommon(ConsumerRecord<String, String> record, String ns,
+      String groupId) {
     long now = Time.monotonicNow();
     if (driver == null || now - lastZkUpdateTime < zkUpdateIntervalMs) {
-      return;
+      return -1;
     }
     KafkaTopicRecord kafkaTopicRecord = new KafkaTopicRecord(ns, record.topic(), groupId,
         record.partition(), record.offset());
@@ -215,16 +240,17 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
           KafkaTopicRecord.class);
       if (existingKafkaTopicRecord != null) {
         if (kafkaTopicRecord.getOffset() < existingKafkaTopicRecord.getOffset()) {
-          return;
+          return -1;
         }
       }
       driver.put(kafkaTopicRecord, true, false);
       lastZkUpdateTime = now;
-      LOG.info("SaveOffsetToZookeeper with {} taken: {} ms", kafkaTopicRecord,
-          Time.monotonicNow() - now);
-      zoneMoverMetrics.addKafkaOffsetZk(Time.monotonicNow() - now);
+      long duration = Time.monotonicNow() - now;
+      LOG.info("SaveOffsetToZookeeper with {} taken: {} ms", kafkaTopicRecord, duration);
+      return duration;
     } catch (IOException e) {
       LOG.error("Failed to saveOffsetToZookeeper {}.", kafkaTopicRecord, e);
+      return -1;
     }
   }
 

@@ -21,6 +21,8 @@ package org.apache.hadoop.hdfs.server.zoneservice;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
 import java.util.List;
@@ -60,4 +62,9 @@ public abstract class ZoneMoverTrigger {
 
   public abstract void saveOffsetToZookeeper(ConsumerRecord<String, String> record, String ns,
       String groupId, ZoneMoverMetrics zoneMoverMetrics);
+
+  public abstract void saveOffsetToZookeeperForZS(ConsumerRecord<String, String> record,
+      String ns, String groupId, ZoneServiceMetrics zoneServiceMetrics);
+
+  public abstract StoreDriver getStoreDriver();
 }

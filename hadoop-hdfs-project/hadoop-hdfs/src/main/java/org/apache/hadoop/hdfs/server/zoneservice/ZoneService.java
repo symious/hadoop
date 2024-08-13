@@ -252,8 +252,8 @@ public class ZoneService extends ReconfigurableBase  {
           if (!nsRuleMap.containsKey(record.getNs())) {
             nsRuleMap.put(record.getNs(), new HashMap<>());
           }
-          nsRuleMap.get(record.getNs()).put(record.getPath(),
-              ReplicationRule.parseFromString(record.getRule()));
+          nsRuleMap.get(record.getNs()).put(record.getPath(), supportMigrateReplica ?
+              new ReplicationRule() : ReplicationRule.parseFromString(record.getRule()));
         }
       } catch (IllegalArgumentException e) {
         LOG.error("Record is illegal: " + record);
@@ -310,10 +310,7 @@ public class ZoneService extends ReconfigurableBase  {
         LOG.warn("Invalid mode in migration record: {}", record);
         return false;
       }
-      // If supportMigrateReplica as true will process CHECK record,
-      // otherwise process BATCH record.
-      return (mode == RunMode.CHECK && supportMigrateReplica) || (mode == RunMode.BATCH
-          && !supportMigrateReplica);
+      return mode == RunMode.BATCH;
     }
 
     private void processRecord(MigrationRecord record) throws InterruptedException {
@@ -330,28 +327,13 @@ public class ZoneService extends ReconfigurableBase  {
 
         // Use check thread to update historical file replication rules
         // during the migration process of replicas within zone service.
-        Runnable thread = supportMigrateReplica ?
-            new CheckThread(path, record.getRule(), ns, getConf(), driver, nsSemaphore.get(ns),
-                inProcessPaths.get(ns), record.getClientIDC()) :
-            new BatchThread(path, record.getRule(), ns, getConf(), driver, nsSemaphore.get(ns),
-                inProcessPaths.get(ns));
+        Runnable thread = new BatchThread(path, record.getRule(), ns,
+            getConf(), driver, nsSemaphore.get(ns), inProcessPaths.get(ns), supportMigrateReplica);
         new Thread(thread).start();
       }
       // The same timestamp will cause that the ZoneMover cannot work
       Thread.sleep(SLEEP_INTERVAL);
     }
-  }
-
-  private URI getNamespaceUri(String namespace, Configuration conf)
-      throws IllegalArgumentException {
-    Collection<URI> namenodes = DFSUtil.getInternalNsRpcUris(conf);
-    for (URI namenode: namenodes) {
-      if (namenode.getAuthority().equals(namespace)) {
-        return namenode;
-      }
-    }
-    throw new IllegalArgumentException(
-        "Cannot find the NameNode for namespace: " + namespace);
   }
 
   private void initReplicationRuleGenerateKafkaTrigger(Configuration conf) throws IOException {

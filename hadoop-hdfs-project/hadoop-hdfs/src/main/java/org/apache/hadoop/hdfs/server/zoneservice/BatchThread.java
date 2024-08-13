@@ -47,9 +47,11 @@ public class BatchThread extends Thread {
   private final StoreDriver driver;
   private final Semaphore semaphore;
   private final List<String> inProcessPaths;
+  private final boolean supportMigrateReplica;
 
   public BatchThread(String path, String replicationRule, String ns, Configuration conf,
-      StoreDriver driver, Semaphore semaphore, List<String> inProcessPaths) {
+      StoreDriver driver, Semaphore semaphore, List<String> inProcessPaths,
+      boolean supportMigrateReplica) {
     super("batch_" + ns + "_" + path);
     this.path = path;
     this.replicationRule = replicationRule;
@@ -59,6 +61,7 @@ public class BatchThread extends Thread {
     this.driver = driver;
     this.semaphore = semaphore;
     this.inProcessPaths = inProcessPaths;
+    this.supportMigrateReplica = supportMigrateReplica;
   }
 
   @Override
@@ -69,7 +72,6 @@ public class BatchThread extends Thread {
       LOG.info("Batch move process for {} has been started.", this.path);
       metrics.startBatchThread();
       ResultCode resultCode = movePath(conf, nameSpace, path, replicationRule);
-
       AuditLogger.logRuleProcess(
           "Batch", nameSpace, path, replicationRule, startTime,
           new Date(), resultCode.getMsg(), "batch");
@@ -119,12 +121,15 @@ public class BatchThread extends Thread {
   private ResultCode movePath(Configuration conf, String nameSpace, String path,
       String replicaRule) throws InterruptedException, IOException {
     final URI namenode = ZoneServiceUtil.getNamespaceUri(nameSpace, conf);
-    final ReplicationRule replicationRule =
-        ReplicationRule.parseFromString(replicaRule);
     final List<Path> paths = new ArrayList<>();
     paths.add(new org.apache.hadoop.fs.Path(path));
-
-    return ZoneServiceUtil.convertExitStatus2ResultCode(ExitStatus.getExitStatusByCode(
-        ZoneMover.run(conf, namenode, paths, replicationRule)));
+    int result;
+    if (supportMigrateReplica) {
+      result = ZoneMigration.run(conf, namenode, paths);
+    } else {
+      final ReplicationRule replicationRule = ReplicationRule.parseFromString(replicaRule);
+      result = ZoneMover.run(conf, namenode, paths, replicationRule);
+    }
+    return ZoneServiceUtil.convertExitStatus2ResultCode(ExitStatus.getExitStatusByCode(result));
   }
 }

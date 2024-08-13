@@ -136,14 +136,16 @@ public class ZoneMover {
   protected long preMigrationCheckInterval;
   protected CountDownLatch preMigrationLatch;
   protected Thread preMigrationChecker;
+  private boolean fromZS;
+  private Set<String> validDataCenters;
 
   public ZoneMover(NameNodeConnector nnc,
       Configuration conf, AtomicInteger retryCount) {
-    this(nnc, conf, retryCount, false);
+    this(nnc, conf, retryCount, false, false);
   }
 
   public ZoneMover(NameNodeConnector nnc,
-      Configuration conf, AtomicInteger retryCount, boolean enablePreMigration) {
+      Configuration conf, AtomicInteger retryCount, boolean enablePreMigration, boolean fromZS) {
     final long movedWinWidth = conf.getLong(
         DFSConfigKeys.DFS_ZONEMOVER_MOVEDWINWIDTH_KEY,
         DFSConfigKeys.DFS_ZONEMOVER_MOVEDWINWIDTH_DEFAULT);
@@ -190,6 +192,9 @@ public class ZoneMover {
         DFSConfigKeys.DFS_ZONEMOVER_STORAGE_MINIMUM_REQ_KEY,
         DFSConfigKeys.DFS_ZONEMOVER_STORAGE_MINIMUM_REQ_DEFAULT
     );
+    this.fromZS = fromZS;
+    this.validDataCenters = new HashSet<>(
+        conf.getTrimmedStringCollection(DFSConfigKeys.DFS_ZONEMOVER_VALID_DATACENTERS_KEY));
     this.enablePreMigration = enablePreMigration;
     this.preMigrationCheckInterval = conf.getLong(
         DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_CHECK_INTERVAL_KEY,
@@ -218,18 +223,16 @@ public class ZoneMover {
     this.enableMigrationDC = enableMigrationDC;
   }
 
+  protected Set<String> getValidDataCenters() {
+    return validDataCenters;
+  }
+
   protected Processor initProcessor() {
     return new Processor();
   }
 
   protected Fetcher initFetcher(Processor processor) {
     return new Fetcher(processor);
-  }
-
-  public ZoneMover(NameNodeConnector nnc, Configuration conf,
-      ReplicationRule rule, AtomicInteger retryCount, boolean enablePreMigration) {
-    this(nnc, conf, retryCount, enablePreMigration);
-    this.globalRule = rule;
   }
 
   public ZoneMover(NameNodeConnector nnc, Configuration conf,
@@ -242,6 +245,37 @@ public class ZoneMover {
       Map<String, ReplicationRule> pathRuleMap, AtomicInteger retryCount) {
     this(nnc, conf, retryCount);
     this.pathRuleMap = pathRuleMap;
+  }
+
+  public ZoneMover(NameNodeConnector nnc, Configuration conf,
+      ReplicationRule rule, AtomicInteger retryCount, boolean enablePreMigration, boolean fromZS) {
+    this(nnc, conf, retryCount, enablePreMigration, fromZS);
+    this.globalRule = rule;
+  }
+
+  public ZoneMover(NameNodeConnector nnc, Configuration conf,
+      Map<String, ReplicationRule> pathRuleMap, AtomicInteger retryCount,
+      boolean enablePreMigration, boolean fromZS) {
+    this(nnc, conf, retryCount, enablePreMigration, fromZS);
+    this.pathRuleMap = pathRuleMap;
+  }
+
+  public boolean isFromZS() {
+    return fromZS;
+  }
+
+  /**
+   * Check if zonemover is compatible with the block placement policy
+   * used by the NameNode.
+   */
+  protected static void checkReplicationPolicyCompatibility(Configuration conf)
+      throws UnsupportedActionException {
+    String clazz = conf.get(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY);
+    if (clazz == null || !clazz.equals(
+        BlockPlacementPolicyWithDataCenter.class.getName())) {
+      throw new UnsupportedActionException(
+          "ZoneMover must work with BlockPlacementPolicyWithDataCenter");
+    }
   }
 
   void init(Configuration conf) throws IOException {
@@ -280,6 +314,13 @@ public class ZoneMover {
   ExitStatus run(String path) throws IllegalArgumentException {
     Result result = new Result();
     this.result = result;
+
+    // Filters path rules from "ZoneService" for ZoneMover.
+    if (!fromZS && getFilteredPathRulesFromZS(path) != null) {
+      LOG.info("ZoneMigration will filter the monitor path {} from zone service.", path);
+      return result.getExitStatus();
+    }
+
     if (this.globalRule != null) {
       processor.processPath(path, this.globalRule, result, null);
     } else {
@@ -494,11 +535,11 @@ public class ZoneMover {
    * @param namenode URI of the NameNode
    * @return a ExitStatus code
    */
-  public static int run(Configuration conf, URI namenode, boolean loadMapFromStore)
+  public static int run(Configuration conf, URI namenode, boolean loadMapFromStore, boolean fromZS)
       throws IOException {
     List<Path> paths = new ArrayList<>();
     return run(new ZoneMoverKafkaTrigger(conf, paths, namenode),
-        conf, namenode, paths, null, new HashMap<>(), loadMapFromStore);
+        conf, namenode, paths, null, new HashMap<>(), loadMapFromStore, fromZS);
   }
 
   /**
@@ -531,6 +572,14 @@ public class ZoneMover {
     return run(zoneMoverTrigger, conf, namenode, paths, null, pathRuleMap, loadMapFromStore);
   }
 
+  private static int run(ZoneMoverTrigger zoneMoverTrigger,
+      Configuration conf, URI namenode, List<Path> paths,
+      ReplicationRule rule, Map<String, ReplicationRule> pathRuleMap,
+      boolean loadMapFromStore) throws IOException {
+    return run(zoneMoverTrigger, conf, namenode, paths, rule, pathRuleMap,
+        loadMapFromStore, false);
+  }
+
   /**
    * Run with prepared arguments for monitorByTrigger mode.
    * @param zoneMoverTrigger trigger for ZoneMover monitor
@@ -539,12 +588,14 @@ public class ZoneMover {
    * @param paths paths to apply the rule
    * @param rule the rule to apply
    * @param pathRuleMap map of paths and rules
+   * @param loadMapFromStore whether to load the map from the store
+   * @param fromZS whether the request is from ZoneService
    * @return a ExitStatus code
    */
   private static int run(ZoneMoverTrigger zoneMoverTrigger,
       Configuration conf, URI namenode, List<Path> paths,
       ReplicationRule rule, Map<String, ReplicationRule> pathRuleMap,
-      boolean loadMapFromStore) throws IOException {
+      boolean loadMapFromStore, boolean fromZS) throws IOException {
     if (!loadMapFromStore) {
       try {
         if (ExitStatus.SUCCESS.getExitCode() != run(conf, namenode, paths, rule, pathRuleMap)) {
@@ -581,9 +632,11 @@ public class ZoneMover {
           namenode, getIdPath(RunMode.MONITOR), paths, conf, 1);
       nnc.getKeyManager().startBlockKeyUpdater();
       if (rule != null) {
-        zs = new ZoneMover(nnc, conf, rule, new AtomicInteger(0));
+        zs = new ZoneMover(nnc, conf, rule, new AtomicInteger(0),
+            false, fromZS);
       } else {
-        zs = new ZoneMover(nnc, conf, pathRuleMap, new AtomicInteger(0));
+        zs = new ZoneMover(nnc, conf, pathRuleMap, new AtomicInteger(0),
+            false, fromZS);
       }
       zs.init(conf);
       // Monitor if the path rule map is update or not when zk enable
@@ -1436,18 +1489,18 @@ public class ZoneMover {
 
     @Override
     public void run() {
+      LOG.info("Monitor path rule map process start and fromZS: {}", fromZS);
       while(true) {
         try {
-          SignalRecord signalRecord = new SignalRecord(namenode.getAuthority());
-          if (driver.get(new Query<>(signalRecord), SignalRecord.class)
-              .isNeedUpdate()) {
-            updatePathRuleMap(driver, namenode.getAuthority(),
-                zoneMoverTrigger);
-            signalRecord.finishUpdate();
-            driver.put(signalRecord, true, false);
-            //noinspection BusyWait
-            Thread.sleep(checkUpdateInterval * 1000L);
+          if (fromZS) {
+            // For Zone Service: Update records to the pathRuleMap.
+            updatePathRuleForZoneService();
+          } else {
+            // For Zone Migration: Update records to the filteredPathRuleMap.
+            updatePathRuleForZoneMover();
           }
+          // Wait for the specified interval before continuing execution.
+          Thread.sleep(checkUpdateInterval * 1000L);
         } catch (IOException e) {
           LOG.error("There are some errors happen when ZoneMover updates path-rule pairs.", e);
         } catch (InterruptedException e) {
@@ -1457,21 +1510,63 @@ public class ZoneMover {
       }
     }
 
+    private void updatePathRuleForZoneService() throws IOException {
+      if (driver == null) {
+        return;
+      }
+      SignalRecord signalRecord = new SignalRecord(namenode.getAuthority());
+      SignalRecord existingSignalRecord = driver.get(new Query<>(signalRecord), SignalRecord.class);
+      if (existingSignalRecord != null && existingSignalRecord.isNeedUpdate()) {
+        updatePathRuleMap(driver, namenode.getAuthority(), zoneMoverTrigger);
+        existingSignalRecord.finishUpdate();
+        driver.put(existingSignalRecord, true, false);
+      }
+    }
+
+    private void updatePathRuleForZoneMover() throws IOException {
+      if (driver == null) {
+        return;
+      }
+      updatePathRuleMap(driver, namenode.getAuthority(), zoneMoverTrigger);
+    }
+
     private void updatePathRuleMap(StoreDriver driver, String nameSpace,
         ZoneMoverTrigger zoneMoverTrigger) throws IOException {
       Map<String, ReplicationRule> pathRuleMapTmp = new HashMap<>();
+      Map<String, ReplicationRule> filterPathRuleMapTmp = new HashMap<>();
+
       List<MigrationRecord> records =
           driver.getAll(MigrationRecord.class).getRecords();
       for (MigrationRecord record : records) {
-        if (record.getMode().equals("monitor")) {
-          if (record.getNs().equals(nameSpace)) {
-            pathRuleMapTmp.put(record.getPath(),
-                ReplicationRule.parseFromString(record.getRule()));
+        // Process only records in "monitor" mode and the specified name space.
+        if (record.getMode().equals(RunMode.MONITOR.getName()) &&
+            record.getNs().equals(nameSpace)) {
+          String rule = record.getRule();
+          if (StringUtils.isNullOrEmpty(rule)) {
+            LOG.warn("Failed adding record: {} , due replication rule as null will skip.", record);
+            continue;
+          }
+          ReplicationRule parsedRule = ReplicationRule.parseFromString(record.getRule());
+          if (fromZS) {
+            // For Zone Service: Add records to the pathRuleMap.
+            LOG.debug("Adding record: {} to the pathRuleMap for Zone Service.", record);
+            pathRuleMapTmp.put(record.getPath(), parsedRule);
+          } else {
+            // For Zone Mover: Add records to the filteredPathRuleMap.
+            LOG.debug("Adding record: {} to the filteredPathRuleMap for Zone Mover.", record);
+            filterPathRuleMapTmp.put(record.getPath(), parsedRule);
           }
         }
       }
-      pathRuleMap = pathRuleMapTmp;
-      zoneMoverTrigger.updatePaths(Cli.getPaths(pathRuleMap));
+
+      if (fromZS) {
+        // Update the pathRuleMap and monitorPaths for Zone Service.
+        pathRuleMap = pathRuleMapTmp;
+        zoneMoverTrigger.updatePaths(ZoneMover.Cli.getPaths(pathRuleMap));
+      } else {
+        // Update the filteredPathRulesFromZS for Zone Mover.
+        filteredPathRulesFromZS = filterPathRuleMapTmp;
+      }
     }
   }
 

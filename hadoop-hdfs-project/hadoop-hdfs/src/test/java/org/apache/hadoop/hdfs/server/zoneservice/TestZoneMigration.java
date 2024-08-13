@@ -42,7 +42,8 @@ import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
-import org.apache.hadoop.hdfs.server.zoneservice.utils.RunMode;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.log4j.Level;
@@ -62,6 +63,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONEMOVER_DISTRIBUTION_RULE_MAP_FILE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_RULES_KEY;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -93,6 +95,8 @@ public class TestZoneMigration {
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY, 10);
     conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, 1L);
     conf.set(DFSConfigKeys.DFS_ZONEMOVER_VALID_DATACENTERS_KEY, "/AirTrunk,/STT,/YTL");
+    conf.set(DFS_ZONE_SUPPORT_MIGRATE_REPLICA_RULES_KEY,
+        "2=/AirTrunk:1,/YTL:1,/STT:1;3=/AirTrunk:1,/YTL:2,/STT:1");
   }
 
   @Test
@@ -355,7 +359,6 @@ public class TestZoneMigration {
       assertEquals(zoneMoverMetric.getSuccessTotalMove().lastStat().numSamples(), 0);
 
       ZoneMoverTrigger zoneMoverTrigger = new TestZoneMigration.TestZoneMoverKafkaTrigger(records);
-      ZoneMigration.setRunMode(RunMode.MONITOR);
       String ruleMapFile = Objects.requireNonNull(TestMigrationRuleMap.class.getClassLoader()
           .getResource(TEST_RULE_MAP_FILE1)).getPath();
       conf.set(DFS_ZONEMOVER_DISTRIBUTION_RULE_MAP_FILE_KEY, ruleMapFile);
@@ -383,6 +386,117 @@ public class TestZoneMigration {
         }, 500, 50000);
       }
       assertEquals(zoneMoverMetric.getSuccessTotalMove().lastStat().numSamples(), 5);
+    }
+  }
+
+  @Test
+  public void testZonMigrationFromZoneService() throws Exception {
+    Configuration conf = new HdfsConfiguration();
+    final String[] racks = {"/AirTrunk/rack0", "/AirTrunk/rack1", "/AirTrunk/rack2",
+        "/AirTrunk/rack3", "/AirTrunk/rack4", "/AirTrunk/rack5"};
+    final String[] hosts = {"host0", "host1", "host2", "host10", "host11", "host12"};
+    initConf(conf);
+    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).
+        numDataNodes(hosts.length).hosts(hosts).racks(racks).build()) {
+      cluster.waitActive();
+      DistributedFileSystem fs = cluster.getFileSystem();
+      fs.mkdir(new Path("/test"), new FsPermission("777"));
+      fs.mkdir(new Path("/test1"), new FsPermission("777"));
+
+      final int[] listTest = {2, 3, 4, 5, 6};
+      List<Path> batchPaths = new ArrayList<>(Collections.singletonList(new Path("/test")));
+      List<Path> monitorPaths = new ArrayList<>(Collections.singletonList(
+          new Path("/test1")));
+      List<Pair<ConsumerRecord<String, String>, String>> records = new ArrayList<>();
+      ConsumerRecord<String, String> record =
+          new ConsumerRecord<>("test-topic", 0, 0, "key1", "value1");
+      List<Path> pathList = new ArrayList<>();
+      // Prepare the files with different distribution.
+      for (int disNum: listTest) {
+        short replication = (short) disNum;
+        Path path = new Path("/test/File." + disNum);
+        DFSTestUtil.createFile(fs, path, FILE_LEN, replication, 0L);
+        DFSTestUtil.waitReplication(fs, path, replication);
+        pathList.add(path);
+
+        path = new Path("/test1/File." + disNum);
+        DFSTestUtil.createFile(fs, path, FILE_LEN, replication, 0L);
+        DFSTestUtil.waitReplication(fs, path, replication);
+        records.add(Pair.of(record, path.toString()));
+      }
+
+      // Adding 3 new hosts about '/YTL'.
+      cluster.startDataNodes(conf, 3, true, null,
+          new String[]{"/YTL/rack0", "/YTL/rack1", "/YTL/rack2"},
+          new String[]{"host6", "host7", "host8"},
+          null);
+
+      // Adding 3 new hosts about '/STT'.
+      cluster.startDataNodes(conf, 3, true, null,
+          new String[]{"/STT/rack0", "/STT/rack1", "/STT/rack2"},
+          new String[]{"host20", "host21", "host22"},
+          null);
+      cluster.triggerBlockReports();
+
+      // Test batch mode.
+      ZoneMigration.run(conf, cluster.getURI(), batchPaths);
+
+      Map<Path, ReplicationRule> expectedRule = new HashMap<>();
+      expectedRule.put(new Path("/test/File." + 2),
+          ReplicationRule.parseFromString("/AirTrunk:1,/YTL:1,/STT:1"));
+      expectedRule.put(new Path("/test/File." + 3),
+          ReplicationRule.parseFromString("/AirTrunk:1,/YTL:2,/STT:1"));
+      expectedRule.put(new Path("/test/File." + 4),
+          ReplicationRule.parseFromString("/AirTrunk:2,/YTL:1,/STT:1"));
+      expectedRule.put(new Path("/test/File." + 5),
+          ReplicationRule.parseFromString("/AirTrunk:3,/YTL:1,/STT:1"));
+      expectedRule.put(new Path("/test/File." + 6),
+          ReplicationRule.parseFromString("/AirTrunk:4,/YTL:1,/STT:1"));
+
+      expectedRule.put(new Path("/test1/File." + 2),
+          ReplicationRule.parseFromString("/AirTrunk:1,/YTL:1,/STT:1"));
+      expectedRule.put(new Path("/test1/File." + 3),
+          ReplicationRule.parseFromString("/AirTrunk:1,/YTL:2,/STT:1"));
+      expectedRule.put(new Path("/test1/File." + 4),
+          ReplicationRule.parseFromString("/AirTrunk:2,/YTL:1,/STT:1"));
+      expectedRule.put(new Path("/test1/File." + 5),
+          ReplicationRule.parseFromString("/AirTrunk:3,/YTL:1,/STT:1"));
+      expectedRule.put(new Path("/test1/File." + 6),
+          ReplicationRule.parseFromString("/AirTrunk:4,/YTL:1,/STT:1"));
+
+      // Validate replica rule.
+      for (Path path: pathList) {
+        GenericTestUtils.waitFor(() -> {
+          try {
+            return expectedRule.get(path).equals(ReplicationRule.parseFromMap(
+                ZoneMover.getBlockDistribution(DFSTestUtil.getAllBlocks(fs, path).get(0))));
+          } catch (IOException e) {
+            return false;
+          }
+        }, 500, 50000);
+      }
+
+      // Test monitor mode.
+      ZoneServiceMetrics zoneServiceMetrics = ZoneService.getMetrics();
+      assertEquals(zoneServiceMetrics.getSuccessTotalMoveCount().value(), 0);
+
+      ZoneMoverTrigger zoneMoverTrigger = new TestZoneMigration.TestZoneMoverKafkaTrigger(records);
+      ZoneMigration.runWithMonitorFromZoneService(zoneMoverTrigger, conf, cluster.getURI(),
+          monitorPaths, null);
+
+      // Validate replica rule.
+      for (Pair<ConsumerRecord<String, String>, String> pair : records) {
+        Path path = new Path(pair.getRight());
+        GenericTestUtils.waitFor(() -> {
+          try {
+            return expectedRule.get(path).equals(ReplicationRule.parseFromMap(
+                ZoneMover.getBlockDistribution(DFSTestUtil.getAllBlocks(fs, path).get(0))));
+          } catch (IOException e) {
+            return false;
+          }
+        }, 500, 50000);
+      }
+      assertEquals(zoneServiceMetrics.getSuccessTotalMoveCount().value(), 5);
     }
   }
 
@@ -428,6 +542,17 @@ public class TestZoneMigration {
     public void saveOffsetToZookeeper(ConsumerRecord<String, String> record, String ns,
         String groupId, ZoneMoverMetrics zoneMoverMetrics) {
       //nothing;
+    }
+
+    @Override
+    public void saveOffsetToZookeeperForZS(ConsumerRecord<String, String> record, String ns,
+        String groupId, ZoneServiceMetrics zoneServiceMetrics) {
+      //nothing;
+    }
+
+    @Override
+    public StoreDriver getStoreDriver() {
+      return null;
     }
   }
 }

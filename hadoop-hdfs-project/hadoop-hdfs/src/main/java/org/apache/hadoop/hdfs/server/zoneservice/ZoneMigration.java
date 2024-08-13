@@ -41,12 +41,12 @@ import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
 import org.apache.hadoop.hdfs.server.mover.Mover;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.utils.MigrationDataCenters;
 import org.apache.hadoop.hdfs.server.zoneservice.utils.RunMode;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.net.NetUtils;
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Tool;
@@ -71,7 +71,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class ZoneMigration extends ZoneMover {
   public static final Logger LOG = LoggerFactory.getLogger(ZoneMigration.class);
   private static final String ID_PATH_PREFIX = "/system/zonemigration.id";
-  protected static RunMode runMode;
+  protected RunMode runMode;
   private boolean allowChangeReplication;
   private MigrationRuleMap migrationRuleMap;
   private String sourceDC;
@@ -84,20 +84,52 @@ public class ZoneMigration extends ZoneMover {
   public ZoneMigration(NameNodeConnector nnc,
       Configuration conf, ReplicationRule rule,
       AtomicInteger retryCount, boolean changeReplica,
-      String sourceDC, String targetDC, boolean isDecrease) throws IOException {
-    super(nnc, conf, rule, retryCount, true);
-    initZoneMigration(conf, changeReplica, sourceDC, targetDC, isDecrease);
+      String sourceDC, String targetDC, boolean isDecrease, RunMode runMode,
+      boolean fromZS) throws IOException {
+    super(nnc, conf, rule, retryCount, true, fromZS);
+    initZoneMigration(conf, changeReplica, sourceDC, targetDC, isDecrease, runMode,
+        null, null,fromZS);
+  }
+
+  public ZoneMigration(NameNodeConnector nnc,
+      Configuration conf, ReplicationRule rule,
+      AtomicInteger retryCount, boolean changeReplica,
+      String sourceDC, String targetDC, boolean isDecrease, RunMode runMode,
+      ZoneMoverTrigger zoneMoverTrigger) throws IOException {
+    super(nnc, conf, rule, retryCount, true, false);
+    initZoneMigration(conf, changeReplica, sourceDC, targetDC, isDecrease, runMode,
+        zoneMoverTrigger, nnc.getNameNodeUri(), false);
+  }
+
+  public ZoneMigration(NameNodeConnector nnc,
+      Configuration conf, ReplicationRule rule, AtomicInteger retryCount,
+      boolean changeReplica, RunMode runMode, ZoneMoverTrigger zoneMoverTrigger,
+      boolean fromZS) throws IOException {
+    super(nnc, conf, rule, retryCount, true, fromZS);
+    initZoneMigration(conf, changeReplica, "", "", false, runMode,
+        zoneMoverTrigger, nnc.getNameNodeUri(), fromZS);
   }
 
   void initZoneMigration(Configuration conf, boolean changeReplica,
-      String sourceDC, String targetDC, boolean isDecrease) throws IOException {
+      String sourceDC, String targetDC, boolean isDecrease, RunMode runMode,
+      ZoneMoverTrigger zoneMoverTrigger, URI namenode, boolean fromZS)
+      throws IOException {
+    super.init(conf);
     this.allowChangeReplication = changeReplica;
     this.sourceDC = sourceDC;
     this.targetDC = targetDC;
     this.isDecrease = isDecrease;
     this.migrationRuleMap = new MigrationRuleMap(conf);
+    this.runMode = runMode;
     setEnableMigrationCluster(true);
-    startHttpServer(conf);
+
+    if (this.runMode.equals(RunMode.MONITOR)) {
+      createTriggerRuleMapUpdater(namenode, zoneMoverTrigger);
+      if (!fromZS) {
+        // Metrics only enable in monitor mode and not from zone service called.
+        startHttpServer(conf);
+      }
+    }
   }
 
   private void startHttpServer(final Configuration conf) throws IOException {
@@ -135,11 +167,6 @@ public class ZoneMigration extends ZoneMover {
             DFSConfigKeys.DFS_ZONEMOVER_HTTP_ADDRESS_DEFAULT));
   }
 
-  @VisibleForTesting
-  public static void setRunMode(RunMode runMode) {
-    ZoneMigration.runMode = runMode;
-  }
-
   @Override
   protected Processor initProcessor() {
     return new ProcessorWithMigration();
@@ -152,7 +179,7 @@ public class ZoneMigration extends ZoneMover {
 
   public static int runWithBatch(Configuration conf, URI namenode,
       List<Path> paths, ReplicationRule rule, String sourceDC,
-      String targetDC, boolean isDecrease, boolean changeReplica)
+      String targetDC, boolean isDecrease, boolean changeReplica, boolean fromZS)
       throws IOException, InterruptedException {
     ZoneProgressTracker.startCountingInitTime();
     if (rule != null) {
@@ -182,8 +209,7 @@ public class ZoneMigration extends ZoneMover {
       nnc.getKeyManager().startBlockKeyUpdater();
 
       zm = new ZoneMigration(nnc, conf, rule, retryCount, changeReplica,
-          sourceDC, targetDC, isDecrease);
-      zm.init(conf);
+          sourceDC, targetDC, isDecrease, RunMode.BATCH, fromZS);
       int round = 0;
 
       ZoneProgressTracker.finishCountingInitTimeAndLog();
@@ -257,8 +283,7 @@ public class ZoneMigration extends ZoneMover {
 
       DefaultMetricsSystem.initialize("ZoneMover");
       zm = new ZoneMigration(nnc, conf, rule, new AtomicInteger(0), changeReplica,
-          sourceDC, targetDC, isDecrease);
-      zm.init(conf);
+          sourceDC, targetDC, isDecrease, RunMode.MONITOR, zoneMoverTrigger);
 
       while (zoneMoverTrigger.hasNext()) {
         try {
@@ -295,6 +320,106 @@ public class ZoneMigration extends ZoneMover {
       }
     }
     return ExitStatus.SUCCESS.getExitCode();
+  }
+
+  public static int run(Configuration conf, URI namenode,
+      Map<String, ReplicationRule> replicationRuleMap) throws IOException {
+    List<Path> paths = ZoneMover.Cli.getPaths(replicationRuleMap);
+    ZoneMoverTrigger zoneMoverTrigger =
+        new ZoneMoverKafkaTrigger(conf, paths, namenode);
+    return ZoneMigration.runWithMonitorFromZoneService(zoneMoverTrigger, conf, namenode,
+        paths, null);
+  }
+
+  /**
+   * Run batch mode from ZoneService.
+   */
+  public static int run(Configuration conf, URI namenode, List<Path> paths)
+      throws IOException, InterruptedException {
+    return ZoneMigration.runWithBatch(conf, namenode, paths, null, "",
+        "", false, true, true);
+  }
+
+  /**
+   * Run monitorByTrigger mode from ZoneService.
+   */
+  public static int runWithMonitorFromZoneService(ZoneMoverTrigger zoneMoverTrigger,
+      Configuration conf, URI namenode, List<Path> paths, ReplicationRule rule)
+      throws IOException {
+
+    if (rule != null) {
+      checkDataCenterValues(conf, rule, null);
+      LOG.info("Will apply rule: {} to namenode: {} for path: {} from zone service", rule,
+          namenode, paths);
+    }
+
+    NameNodeConnector nnc = null;
+    ZoneMigration zm = null;
+    String ns = namenode.getAuthority();
+    try {
+      LOG.info("Initializing NameNodeConnector from zone service");
+      nnc = new NameNodeConnector(ZoneMigration.class.getSimpleName(),
+          namenode, getIdPath(RunMode.MONITOR), paths, conf, 1);
+      nnc.getKeyManager().startBlockKeyUpdater();
+
+      zm = new ZoneMigration(nnc, conf, rule, new AtomicInteger(0),
+          true, RunMode.MONITOR, zoneMoverTrigger, true);
+
+      // Initialize ZoneService Metrics.
+      ZoneServiceMetrics zoneServiceMetrics = ZoneService.getMetrics();
+
+      while (zoneMoverTrigger.hasNext()) {
+        try {
+          Pair<ConsumerRecord<String, String>, String> curRecord = zoneMoverTrigger.getNextRecord();
+          // process the path
+          String curPath = curRecord.getRight();
+          LOG.debug("Start to monitor process path: {}", curPath);
+          ExitStatus exitStatus = zm.run(curPath);
+          if (exitStatus != ExitStatus.SUCCESS) {
+            zoneServiceMetrics.incrFailMoveCount();
+            zoneServiceMetrics.incrNSMonitorFailMoveCount(ns);
+            LOG.warn("Failed to monitor process path fail: {}", curPath);
+          } else {
+            zoneServiceMetrics.incrNSMonitorSuccessMoveCount(ns);
+            zoneServiceMetrics.incrSuccessMoveCount();
+            ConsumerRecord<String, String> record = curRecord.getLeft();
+            zoneMoverTrigger.saveOffsetToZookeeperForZS(record, ns, zoneMoverTrigger.getGroupId(),
+                zoneServiceMetrics);
+
+          }
+        } catch (IllegalArgumentException e) {
+          LOG.warn("Failed to monitor process path fail: {}", e.toString());
+        } catch (InterruptedException e) {
+          return ExitStatus.INTERRUPTED.getExitCode();
+        }
+      }
+    } finally {
+      if (nnc != null) {
+        IOUtils.cleanupWithLogger(LOG, nnc);
+      }
+      if (zm != null) {
+        zm.shutdown();
+      }
+      if (zoneMoverTrigger != null) {
+        zoneMoverTrigger.shutdown();
+      }
+    }
+    return ExitStatus.SUCCESS.getExitCode();
+  }
+
+  void createTriggerRuleMapUpdater(URI namenode, ZoneMoverTrigger zoneMoverTrigger)
+      throws IOException {
+    // Create MapUpdater thread to sync the Monitor records in zookeeper.
+    String threadName = "ZoneMigration-MapUpdater" + namenode.getAuthority();
+    try {
+      MapUpdater mapUpdater = new MapUpdater(namenode, zoneMoverTrigger.getStoreDriver(),
+          zoneMoverTrigger);
+      Thread mapUpdaterThread = new Thread(mapUpdater, threadName);
+      mapUpdaterThread.start();
+      LOG.info("{} created.", threadName);
+    } catch (Exception e) {
+      throw new IOException("Failed to create " + threadName, e);
+    }
   }
 
   @Override
@@ -345,9 +470,8 @@ public class ZoneMigration extends ZoneMover {
     private void preMigrationFile(String fullPath,
         HdfsLocatedFileStatus status, ReplicationRule rule,
         Mover.Result result) {
-
-      LOG.debug("Processing file: {}, mode: {} from {} to {}", fullPath, runMode,
-          sourceDC, targetDC);
+      LOG.debug("Processing file: {}, mode: {} {}", fullPath, runMode, isFromZS() ?
+          "from zs." : String.format("from %s to %s", sourceDC, targetDC));
 
       final LocatedBlocks locatedBlocks = status.getLocatedBlocks();
       if (status.getLen() == 0) {
@@ -372,6 +496,11 @@ public class ZoneMigration extends ZoneMover {
       }
 
       if (status.getErasureCodingPolicy() != null) {
+        if (isFromZS()) {
+          LOG.debug("No need to process data for ec file: {} from zs", fullPath);
+          ZoneProgressTracker.incrFileCount();
+          return;
+        }
         LOG.debug("Process data for ec file: {}", fullPath);
         if (!firstBlock.isStriped()) {
           LOG.debug("No need to process data for non ec file: {}", fullPath);
@@ -386,8 +515,13 @@ public class ZoneMigration extends ZoneMover {
       ReplicationRule dis = ReplicationRule.parseFromMap(blockDistribution);
       if (appliedRule == null) {
         // If not set rule, it is generated from migrationRuleMap.
-        appliedRule = migrationRuleMap.getRuleFromDistribution(dis, status.getReplication(),
-            sourceDC, targetDC, isDecrease);
+        if (isFromZS()) {
+          appliedRule = migrationRuleMap.getRuleFromDistributionWithZS(dis, status.getReplication(),
+              getValidDataCenters());
+        } else {
+          appliedRule = migrationRuleMap.getRuleFromDistribution(dis, status.getReplication(),
+              sourceDC, targetDC, isDecrease);
+        }
       }
       if (appliedRule == null) {
         LOG.debug("No need to process file: {} that are invalid rule by {}.", fullPath,
@@ -416,7 +550,7 @@ public class ZoneMigration extends ZoneMover {
           && !dataCenters.contains(targetDC)
           && dis.getReplica() == status.getReplication()
           && dis.getReplica(sourceDC) > 1
-          && enablePreMigration) {
+          && enablePreMigration && !isFromZS()) {
         blockDistribution.put(sourceDC, (short) (blockDistribution.get(sourceDC) - 1));
         blockDistribution.put(targetDC, (short) 1);
         ReplicationRule preRule = ReplicationRule.parseFromMap(blockDistribution);
@@ -639,16 +773,14 @@ public class ZoneMigration extends ZoneMover {
         String targetDC = commandLine.getOptionValue("targetDC");
         boolean isDecrease = commandLine.hasOption("isDecrease");
         boolean changeReplica = commandLine.hasOption("changeReplica");
-        if (commandLine.hasOption("monitorByTrigger")) {
-          runMode = RunMode.MONITOR;
-        } else {
-          runMode = RunMode.BATCH;
-        }
-        // Default is batch mode.
-        LOG.info("ZoneMigration start by mode: {}, rule:{}, sourceDC: {}, targetDC: {}, " +
-            "isDecrease: {}, changeReplica: {}", runMode, rule, sourceDC, targetDC,
+        boolean isMonitor = commandLine.hasOption("monitorByTrigger");
+        LOG.info("ZoneMigration start with mode: {}, rule:{}, sourceDC: {}, targetDC: {}, " +
+            "isDecrease: {}, changeReplica: {}", isMonitor ?
+                RunMode.MONITOR.getName() : RunMode.BATCH.getName(),rule, sourceDC, targetDC,
             isDecrease, changeReplica);
-        if (runMode.equals(RunMode.MONITOR)) {
+
+        // Default is batch mode.
+        if (isMonitor) {
           ZoneMoverTrigger zoneMoverTrigger = new ZoneMoverKafkaTrigger(conf,
               paths, namenode, true);
           return run(zoneMoverTrigger, conf, namenode, paths, rule, sourceDC, targetDC,
@@ -679,7 +811,7 @@ public class ZoneMigration extends ZoneMover {
         String sourceDC, String targetDC, boolean isDecrease, boolean changeReplica)
         throws IOException, InterruptedException {
       return ZoneMigration.runWithBatch(conf, namenode, paths, rule, sourceDC,
-          targetDC, isDecrease, changeReplica);
+          targetDC, isDecrease, changeReplica, false);
     }
 
     /**

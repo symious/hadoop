@@ -308,6 +308,74 @@ public class ReplicationRuleManager {
     }
   }
 
+  /**
+   * Create path rule map in zk and let ZoneMover/ZoneService process know for ZoneMigration.
+   * @param nameSpace    name of the namespace
+   * @param path         the path will be updated
+   * @param replicaRule  the rule will be applied
+   * @param allowCreate  allow create new map by this method or not
+   * @return the status of the result
+   */
+  public ResultCode createReplicaRulesByMigration(String nameSpace, String path,
+      String replicaRule, boolean allowCreate) {
+
+    Date startTime = new Date();
+    final String methodName = "createReplicaRulesByMigration";
+    String threadName = "monitor_" + nameSpace;
+
+    try {
+      SignalRecord signalRecord = new SignalRecord(nameSpace, true);
+      SignalRecord existedSignalRecord =
+          driver.get(new Query<>(signalRecord), SignalRecord.class);
+
+      if (existedSignalRecord == null) {
+        if (!allowCreate) {
+          // There is no monitor for this namespace and will not create it
+          // because allowCreate is false.
+          LOG.warn("Monitor thread for {} not exist and not allow to create.", nameSpace);
+          AuditLogger.logRuleProcess(
+              methodName, nameSpace,
+              path, replicaRule, startTime, new Date(),
+              ResultCode.METHOD_ERROR.getMsg(), RunMode.MONITOR.getName());
+          return ResultCode.METHOD_ERROR;
+        }
+
+        // If there is no monitor thread for this namespace, it will create a new one
+        LOG.info("Monitor thread for {} not exist and need to create.", nameSpace);
+        createMonitorThread(nameSpace, threadName, driver, signalRecord, path, replicaRule,
+            startTime);
+      }
+
+      // Check monitor record.
+      MigrationRecord monitorMigrationRecord = new MigrationRecord(nameSpace, path,
+          replicaRule, RunMode.MONITOR.getName());
+      MigrationRecord existedRecord =
+          driver.get(new Query<>(monitorMigrationRecord), MigrationRecord.class);
+      if (existedRecord != null) {
+        // If exist will return.
+        LOG.info("The path: {} already has the replication rule: {} with monitor mode.",
+            path, existedRecord);
+        return ResultCode.REJECT;
+      }
+
+      ResultCode resultCode = ResultCode.CREATE_SUCCESS;
+      MigrationRecord batchMigrationRecord = new MigrationRecord(nameSpace, path,
+          replicaRule, RunMode.BATCH.getName());
+      driver.put(monitorMigrationRecord, true, false);
+      driver.put(signalRecord, true, false);
+      driver.put(batchMigrationRecord, false, true);
+      AuditLogger.logRuleProcess(methodName, nameSpace, path, replicaRule, startTime, new Date(),
+          resultCode.getMsg(), RunMode.MONITOR.getName());
+      return resultCode;
+    } catch (IOException e) {
+      LOG.error("Failed to create replication for path: {}, the replication rule: {}.",
+          path, replicaRule, e);
+      AuditLogger.logRuleProcess(methodName, nameSpace, path, replicaRule, startTime, new Date(),
+          ResultCode.IO_EXCEPTION.getMsg(), RunMode.MONITOR.getName());
+      return ResultCode.IO_EXCEPTION;
+    }
+  }
+
   /** Interface for ZoneService */
   public int checkReplicaInDC(Configuration conf, URI namenode, List<Path> paths,
       MigrationDataCenters dc) throws IOException, InterruptedException {

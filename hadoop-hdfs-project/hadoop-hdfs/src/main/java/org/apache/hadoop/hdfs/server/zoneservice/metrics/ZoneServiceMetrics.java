@@ -52,6 +52,8 @@ public class ZoneServiceMetrics {
       = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<String, MutableCounterLong> nsCheckFailMoveCount
       = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String, MutableRate> nsKafkaOffsetZk
+      = new ConcurrentHashMap<>();
 
   public static ZoneServiceMetrics create() {
     return DefaultMetricsSystem.instance().register(new ZoneServiceMetrics());
@@ -107,6 +109,26 @@ public class ZoneServiceMetrics {
       }
     }
     counterLongMap.get(ns).incr();
+  }
+
+  public void incrNSKafkaOffsetZk(String ns, String name, long duration) {
+    if (ns == null) {
+      return;
+    }
+
+    if (!nsKafkaOffsetZk.containsKey(ns)) {
+      synchronized (this) {
+        if (!nsKafkaOffsetZk.containsKey(ns)) {
+          String metricName = StringUtils.capitalize(ns + name);
+          nsKafkaOffsetZk.put(metricName, this.registry.newRate(metricName));
+        }
+      }
+    }
+    nsKafkaOffsetZk.get(ns).add(duration);
+  }
+
+  public MutableCounterLong getSuccessTotalMoveCount() {
+    return successTotalMoveCount;
   }
 
   public void shutdown() { DefaultMetricsSystem.shutdown(); }

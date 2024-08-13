@@ -91,7 +91,7 @@ public class ZoneMoverWithDR extends ZoneMover {
       RunMode runMode, boolean useAccessTime, boolean skipReplica, boolean skipEC,
       boolean skipCheckCold)
       throws IOException {
-    super(nnc, conf, retryCount, true);
+    super(nnc, conf, retryCount, true, false);
     this.runMode = runMode;
     drColdDataThresholdMS = conf.getLong(
         DFSConfigKeys.DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY,
