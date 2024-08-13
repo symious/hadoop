@@ -27,6 +27,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import org.apache.hadoop.yarn.server.utils.LockUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -1129,7 +1130,9 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
    */
   @Override
   public ApplicationResourceUsageReport getResourceUsageReport() {
-    readLock.lock();
+
+    LockUtils.tryLockUntilLocked(readLock);
+
     try {
       // Use write lock here because
       // SchedulerApplicationAttempt#getResourceUsageReport updated fields
