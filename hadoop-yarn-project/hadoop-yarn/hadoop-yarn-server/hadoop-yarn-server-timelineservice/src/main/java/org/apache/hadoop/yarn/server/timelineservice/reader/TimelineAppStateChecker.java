@@ -26,7 +26,9 @@ import java.io.IOException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -49,6 +51,7 @@ public class TimelineAppStateChecker extends AbstractService {
   private ConcurrentHashMap<String, Object> inFlight;
   private String[] routerAddress;
   private UserGroupInformation ugi;
+  private ScheduledExecutorService writerFlusher;
 
   public TimelineAppStateChecker() {
     super(TimelineAppStateChecker.class.getName());
@@ -63,6 +66,7 @@ public class TimelineAppStateChecker extends AbstractService {
     this.executorService = HadoopExecutors.newFixedThreadPool(10);
     this.timelineWriter = createTimelineWriter(conf);
     this.timelineWriter.init(conf);
+    this.writerFlusher = Executors.newSingleThreadScheduledExecutor();
     this.queue = new LinkedBlockingQueue();
     this.inFlight = new ConcurrentHashMap();
     this.routerAddress =
@@ -72,8 +76,14 @@ public class TimelineAppStateChecker extends AbstractService {
 
   protected void serviceStart() throws Exception {
     super.serviceStart();
-    this.thread = new Thread(createThread());
-    this.thread.start();
+    if (timelineWriter != null) {
+      timelineWriter.start();
+    }
+    thread = new Thread(createThread());
+    thread.start();
+    writerFlusher
+        .scheduleAtFixedRate(new WriterFlushTask(timelineWriter), 30, 30,
+            TimeUnit.SECONDS);
   }
 
   Runnable createThread() {
@@ -212,6 +222,24 @@ public class TimelineAppStateChecker extends AbstractService {
           .path("/apps/" + appId + "/state").type(MediaType.APPLICATION_JSON)
           .get(ClientResponse.class);
       return response;
+    }
+  }
+
+  private static class WriterFlushTask implements Runnable {
+    private final TimelineWriter writer;
+
+    public WriterFlushTask(TimelineWriter writer) {
+      this.writer = writer;
+    }
+
+    public void run() {
+      try {
+        writer.flush();
+      } catch (Throwable th) {
+        // we need to handle all exceptions or subsequent execution may be
+        // suppressed
+        LOG.error("exception during timeline writer flush!", th);
+      }
     }
   }
 }
