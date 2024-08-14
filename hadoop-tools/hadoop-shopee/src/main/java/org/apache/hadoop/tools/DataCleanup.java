@@ -25,7 +25,6 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.nio.file.Files;
 import java.text.DateFormat;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -45,7 +44,6 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileAlreadyExistsException;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.Trash;
@@ -166,13 +164,14 @@ public class DataCleanup extends Configured implements Tool {
   private boolean handlePath(Path path)
       throws IOException {
     boolean result;
+    Path destination = null;
     if (action == CleanupAction.DELETE) {
       result = fs.delete(path);
     } else if (action == CleanupAction.TRASH) {
       result = Trash.moveToAppropriateTrash(fs, path, getConf());
     } else {
       // action == CleanupAction.TEMP
-      Path destination = Path.mergePaths(datePath, path);
+      destination = Path.mergePaths(datePath, path);
       try {
         fs.mkdirs(destination.getParent(),
             new FsPermission(FsAction.ALL, FsAction.NONE, FsAction.NONE));
@@ -182,16 +181,24 @@ public class DataCleanup extends Configured implements Tool {
       // further processing.
       result = fs.rename(path, destination);
     }
-    logAction(path, result);
+    String res = "done";
+    if (!result) {
+      if (fs.exists(path)) {
+        res = "failed";
+      } else {
+        res = "no exist";
+      }
+    }
+    logAction(path, res, destination);
     return result;
   }
 
-  private void logAction(Path path, boolean result) {
+  private void logAction(Path path, String result, Path dstPath) {
     if (!verbose) {
       return;
     }
     synchronized (LOG) {
-      LOG.info("action={},path={},result={}", action, path, result);
+      LOG.info("action={},path={},result={},dstPath={}", action, path, result, dstPath);
     }
   }
 
