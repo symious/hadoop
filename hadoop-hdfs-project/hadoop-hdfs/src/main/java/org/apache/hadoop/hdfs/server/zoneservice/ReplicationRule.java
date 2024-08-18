@@ -168,7 +168,9 @@ public class ReplicationRule {
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
     ReplicationRule that = (ReplicationRule) o;
     return Objects.equals(sections, that.sections);
   }

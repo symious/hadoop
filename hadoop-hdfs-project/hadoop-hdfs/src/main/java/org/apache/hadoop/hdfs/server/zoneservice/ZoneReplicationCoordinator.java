@@ -172,15 +172,14 @@ public class ZoneReplicationCoordinator {
    * @throws NoSuchElementException if no more files
    */
   public FileState getNextFinishedFile(long timeout) throws NoSuchElementException {
-    if (finishedFiles.size() > 0) {
+    if (!finishedFiles.isEmpty()) {
       FileState fileState = finishedFiles.poll();
       ZoneProgressTracker.addTimeSpentInFinishFilesQueue(
           Time.monotonicNow() - fileState.lastStepStartTime);
       return fileState;
     }
     long endTime = Time.monotonicNow() + timeout;
-    while (!isWaitingCompletion.get() ||
-        runningReplications.get() > 0 ||
+    while (!isWaitingCompletion.get() || runningReplications.get() > 0 ||
         runningDeletions.get() > 0) {
       try {
         //noinspection BusyWait
@@ -188,7 +187,7 @@ public class ZoneReplicationCoordinator {
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
       }
-      if (finishedFiles.size() > 0) {
+      if (!finishedFiles.isEmpty()) {
         FileState fileState = finishedFiles.poll();
         ZoneProgressTracker.addTimeSpentInFinishFilesQueue(
             Time.monotonicNow() - fileState.lastStepStartTime);
@@ -359,7 +358,7 @@ public class ZoneReplicationCoordinator {
   /**
    * A structure used to track the state of a file.
    */
-  static class FileState {
+  public static class FileState {
 
     private final String filePath;
     private final long fileId;

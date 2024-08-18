@@ -869,7 +869,9 @@ public class ZoneMover {
     @Override
     public boolean equals(Object o) {
       if (this == o) return true;
-      if (o == null || getClass() != o.getClass()) return false;
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
       ZoneMoveItem that = (ZoneMoveItem) o;
       return num == that.num && sourceDataCenter.equals(
           that.sourceDataCenter) && targetDataCenter.equals(that.targetDataCenter);
@@ -1622,6 +1624,7 @@ public class ZoneMover {
                 .getPartialListing()[0];
             processor.processFile(preMigrationFile.getFilePath(), status,
                 preMigrationFile.getRule(), result);
+            ZoneProgressTracker.dequeueFile(preMigrationFile.getFilePath());
           } else {
             preMigrationFileQueue.put(preMigrationFile);
           }

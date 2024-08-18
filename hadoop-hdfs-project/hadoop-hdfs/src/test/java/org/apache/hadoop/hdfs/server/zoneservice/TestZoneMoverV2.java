@@ -1,0 +1,437 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.hadoop.hdfs.server.zoneservice;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.hadoop.hdfs.DFSTestUtil;
+import org.apache.hadoop.hdfs.DFSUtil;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.MiniDFSNNTopology;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
+import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
+import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.hdfs.protocol.LocatedBlock;
+import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter;
+import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
+import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
+import org.apache.hadoop.hdfs.server.zoneservice.utils.RunMode;
+import org.apache.hadoop.net.StaticMapping;
+import org.apache.hadoop.util.Tool;
+import org.junit.After;
+import org.junit.Test;
+import org.mockito.Mockito;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+public class TestZoneMoverV2 {
+
+  private MiniDFSCluster cluster = null;
+  private static final long FILE_LEN = 1024;
+  private static final short REPLICATION = 3;
+  private static final Logger LOG = LoggerFactory.getLogger(TestZoneMoverV2.class);
+
+  @Test
+  public void testZoneMoverCli() throws Exception {
+    Configuration conf = new HdfsConfiguration();
+    conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY, true);
+    cluster = new MiniDFSCluster.Builder(conf).numDataNodes(0).build();
+
+    // Spy tool
+    ZoneMoverV2.Cli tool = Mockito.spy(new ZoneMoverV2.Cli());
+    tool.setConf(cluster.getConfiguration(0));
+
+    String[] args = {"-namespace", "dev",
+        "-path", "/test", "-rule", "/sg_dc:3"};
+
+    // Unable to match namespace
+    cluster = new MiniDFSCluster.Builder(TestUtils.getConf()).numDataNodes(0).build();
+    tool.setConf(cluster.getConfiguration(0));
+    assertEquals(ExitStatus.ILLEGAL_ARGUMENTS.getExitCode(), tool.run(args));
+
+    // Use the default namespace
+    String[] args2 = {"-path", "/test", "-rule", "/sg_dc:3"};
+    assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args2));
+
+    // Invalid path
+    String[] args3 = {"-path", "test", "-rule", "/sg_dc:3"};
+    assertEquals(ExitStatus.ILLEGAL_ARGUMENTS.getExitCode(), tool.run(args3));
+  }
+
+  @Test
+  public void testZoneMoverCliWithHAConf() throws Exception {
+    Configuration conf = TestUtils.getConf();
+    cluster = new MiniDFSCluster
+        .Builder(conf)
+        .nnTopology(MiniDFSNNTopology.simpleHATopology())
+        .numDataNodes(0).build();
+    cluster.waitActive();
+    HATestUtil.setFailoverConfigurations(cluster, conf, "dev");
+
+    // Spy tool
+    ZoneMoverV2.Cli tool = Mockito.spy(new ZoneMoverV2.Cli());
+    tool.setConf(conf);
+
+    String[] args = {"-namespace", "dev",
+        "-path", "/test", "-rule", "/sg_dc:3"};
+    assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args));
+
+    // Unable to match namespace
+    String[] args2 = {"-namespace", "dev2",
+        "-path", "/test", "-rule", "/sg_dc:3"};
+    assertEquals(ExitStatus.ILLEGAL_ARGUMENTS.getExitCode(), tool.run(args2));
+
+    // Use the default namespace
+    String[] args3 = {"-path", "/test", "-rule", "/sg_dc:3"};
+    assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args3));
+  }
+
+  @Test
+  public void testZoneMover() throws Exception {
+    Configuration conf = TestUtils.getConf();
+    conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, REPLICATION);
+    cluster = new MiniDFSCluster
+        .Builder(conf)
+        .nnTopology(MiniDFSNNTopology.simpleHATopology())
+        .numDataNodes(1).build();
+    cluster.waitActive();
+    cluster.transitionToActive(0);
+    HATestUtil.setFailoverConfigurations(cluster, conf, "dev");
+    DistributedFileSystem fs = cluster.getFileSystem(0);
+    fs.mkdir(new Path("/test"), new FsPermission("777"));
+    fs.mkdir(new Path("/test/foo"), new FsPermission("777"));
+    DFSTestUtil.createFile(fs, new Path("/test/test.txt"),
+        FILE_LEN, REPLICATION, 0L);
+
+    Tool tool = new ZoneMoverV2.Cli();
+    tool.setConf(conf);
+
+    // No block moved as the file is empty
+    String[] args = {"-namespace", "dev",
+        "-path", "/test", "-rule", "/sg_dc:3"};
+    assertEquals(ExitStatus.NO_MOVE_BLOCK.getExitCode(), tool.run(args));
+  }
+
+  @Test
+  public void testGetBlockDistribution() throws IOException {
+    final String[] racks = {"/dc0/rack0", "/dc1/rack1", "/dc1/rack2"};
+    Map<String, Short> distribution = new HashMap<>();
+    distribution.put("/dc0", (short) 1);
+    distribution.put("/dc1", (short) 2);
+
+    Configuration conf = new HdfsConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, REPLICATION);
+    conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY, true);
+    cluster = new MiniDFSCluster
+        .Builder(conf)
+        .numDataNodes(racks.length).racks(racks).build();
+    cluster.waitActive();
+    DistributedFileSystem fs = cluster.getFileSystem();
+    Path path = new Path("/test.txt");
+    DFSTestUtil.createFile(fs, path, FILE_LEN, REPLICATION, 0L);
+    List<LocatedBlock> blocks = DFSTestUtil.getAllBlocks(fs, path);
+    assertEquals(1, blocks.size());
+    assertEquals(distribution, ZoneUtil.getBlockDistribution(blocks.get(0)));
+  }
+
+  @Test
+  public void testIsBlockSatisfyRule() throws IOException {
+    final String[] racks = {"/dc0/rack0", "/dc1/rack1", "/dc1/rack2"};
+    Map<String, Short> distribution = new HashMap<>();
+    distribution.put("/dc0", (short) 1);
+    distribution.put("/dc1", (short) 2);
+    ReplicationRule rule = ReplicationRule.parseFromMap(distribution);
+
+    Configuration conf = new HdfsConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, REPLICATION);
+    conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY, true);
+    cluster = new MiniDFSCluster
+        .Builder(conf)
+        .numDataNodes(racks.length).racks(racks).build();
+    cluster.waitActive();
+
+    URI namenode = DFSUtil.createUri(HdfsConstants.HDFS_URI_SCHEME,
+        cluster.getNameNode().getNameNodeAddress());
+    ZoneMoverV2 zoneMover = new ZoneMoverV2(conf, namenode, new ArrayList<>(),
+        RunMode.BATCH, null, rule);
+
+    DistributedFileSystem fs = cluster.getFileSystem();
+    Path path1 = new Path("/test.txt");
+    DFSTestUtil.createFile(fs, path1, FILE_LEN, REPLICATION, 0L);
+    List<LocatedBlock> blocks1 = DFSTestUtil.getAllBlocks(fs, path1);
+    assertEquals(1, blocks1.size());
+    assertTrue(zoneMover.isBlockSatisfyRule(blocks1.get(0), rule));
+
+    Path path2 = new Path("/test.txt");
+    DFSTestUtil.createFile(fs, path2, FILE_LEN, (short) (REPLICATION - 1), 0L);
+    List<LocatedBlock> blocks2 = DFSTestUtil.getAllBlocks(fs, path2);
+    assertEquals(1, blocks2.size());
+    assertFalse(zoneMover.isBlockSatisfyRule(blocks2.get(0), rule));
+  }
+
+  @Test
+  public void testGetZoneMoveItems() throws IOException {
+    // block distribution is "/dc1:3"
+    final String[] racks = {"/dc1/rack0", "/dc1/rack1", "/dc1/rack2"};
+    Map<String, Short> ruleMap = new HashMap<>();
+    ruleMap.put("/dc0", (short) 1);
+    ruleMap.put("/dc1", (short) 2);
+    ReplicationRule rule = ReplicationRule.parseFromMap(ruleMap);
+
+    Configuration conf = new HdfsConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, REPLICATION);
+    conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY, true);
+    cluster = new MiniDFSCluster
+        .Builder(conf)
+        .numDataNodes(racks.length).racks(racks).build();
+    cluster.waitActive();
+
+    // construct NameNodeConnector and ZoneMover
+    URI namenode = DFSUtil.createUri(HdfsConstants.HDFS_URI_SCHEME,
+        cluster.getNameNode().getNameNodeAddress());
+    ZoneMoverV2 zoneMover = new ZoneMoverV2(conf, namenode, new ArrayList<>(), RunMode.BATCH, null, rule);
+
+    DistributedFileSystem fs = cluster.getFileSystem();
+    Path path1 = new Path("/test.txt");
+    DFSTestUtil.createFile(fs, path1, FILE_LEN, REPLICATION, 0L);
+    List<LocatedBlock> allBlocks = DFSTestUtil.getAllBlocks(fs, path1);
+    assertEquals(1, allBlocks.size());
+    LocatedBlock block = allBlocks.get(0);
+    ZoneMoveItem moveItem =
+        new ZoneMoveItem("/dc1", "/dc0", (short) 1);
+    checkRuleAndItem(zoneMover, rule, block, moveItem);
+
+    // works well even rule has more replicas than block
+    // rule becomes "/dc0:2,/dc1:2"
+    ruleMap.put("/dc0", (short) 2);
+    rule = ReplicationRule.parseFromMap(ruleMap);
+    checkRuleAndItem(zoneMover, rule, block, moveItem);
+
+    // works well even block has more replicas than rule
+    // rule becomes "/dc0:1,/dc1:1"
+    ruleMap.put("/dc0", (short) 1);
+    ruleMap.put("/dc1", (short) 1);
+    rule = ReplicationRule.parseFromMap(ruleMap);
+    checkRuleAndItem(zoneMover, rule, block, moveItem);
+  }
+
+  private void checkRuleAndItem(ZoneMoverV2 zoneMover,
+      ReplicationRule rule, LocatedBlock block, ZoneMoveItem moveItem) {
+    assertFalse(zoneMover.isBlockSatisfyRule(block, rule));
+    List<ZoneMoveItem> items = ZoneUtil.getZoneMoveItems(block, rule);
+    assertEquals(1, items.size());
+    assertEquals(moveItem, items.get(0));
+  }
+
+  @Test
+  public void testAreBlocksDistributionConsistent() throws IOException {
+    final String[] racks = {"/dc0/rack0", "/dc1/rack1", "/dc1/rack2"};
+    Configuration conf = new HdfsConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, REPLICATION);
+    conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY, true);
+    cluster = new MiniDFSCluster
+        .Builder(conf)
+        .numDataNodes(racks.length).racks(racks).build();
+    cluster.waitActive();
+    DistributedFileSystem fs = cluster.getFileSystem();
+
+    Path path1 = new Path("/test1.txt");
+    DFSTestUtil.createFile(fs, path1, FILE_LEN, REPLICATION, 0L);
+    List<LocatedBlock> blocks1 = DFSTestUtil.getAllBlocks(fs, path1);
+    Path path2 = new Path("/test2.txt");
+    DFSTestUtil.createFile(fs, path2, FILE_LEN, REPLICATION, 0L);
+    List<LocatedBlock> blocks2 = DFSTestUtil.getAllBlocks(fs, path2);
+    assertTrue(ZoneUtil.areBlocksDistributionConsistent(
+        Arrays.asList(blocks1.get(0), blocks2.get(0))));
+
+    Path path3 = new Path("/test3.txt");
+    DFSTestUtil.createFile(fs, path3, FILE_LEN, (short) (REPLICATION - 1), 0L);
+    List<LocatedBlock> blocks3 = DFSTestUtil.getAllBlocks(fs, path3);
+    assertFalse(ZoneUtil.areBlocksDistributionConsistent(
+        Arrays.asList(blocks1.get(0), blocks3.get(0))));
+  }
+
+  @Test
+  public void testBlockMove() throws Exception {
+    // construct a cluster with two datacenters
+    StaticMapping.resetMap();
+    final String[] hosts1 = {"host0", "host1", "host2"};
+    final String[] racks1 = {"/dc0/rack0", "/dc0/rack0", "/dc0/rack1"};
+    Configuration conf = TestUtils.getConf();
+    conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, REPLICATION);
+    cluster = new MiniDFSCluster
+        .Builder(conf)
+        .numDataNodes(hosts1.length).hosts(hosts1).racks(racks1).build();
+    cluster.waitActive();
+    DistributedFileSystem fs = cluster.getFileSystem();
+    fs.mkdir(new Path("/test"), new FsPermission("777"));
+
+    // write a file
+    Path path = new Path("/test/testBlockMove.txt");
+    // client(127.0.0.1) will be mapped to a random node in (host0, host1, host2)
+    DFSTestUtil.createFile(fs, path, FILE_LEN, REPLICATION, 0L);
+
+    // validate replica distribution before moving
+    Map<String, Short> distribution = new HashMap<>();
+    distribution.put("/dc0", (short) 3);
+    List<LocatedBlock> blocks1 = DFSTestUtil.getAllBlocks(fs, path);
+    assertFalse(blocks1.isEmpty());
+    assertEquals(distribution, ZoneUtil.getBlockDistribution(blocks1.get(0)));
+
+    // start datanodes in dc1
+    final String[] hosts2 = {"host3", "host4", "host5"};
+    final String[] racks2 = {"/dc1/rack0", "/dc1/rack1", "/dc1/rack2"};
+    cluster.startDataNodes(conf, hosts2.length, true, null, racks2, hosts2, null, false);
+    assertEquals(hosts1.length + hosts2.length, cluster.getDataNodes().size());
+
+    // do block move
+    Tool tool = new ZoneMoverV2.Cli();
+    tool.setConf(conf);
+    final String[] args = {"-path", "/test", "-rule", "/dc1:3"};
+    LOG.info("Try to do block move for path: /test ...");
+    assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args));
+    // sleep some time to wait datanode delete replicas
+    Thread.sleep(TestUtils.DFS_HEARTBEAT_INTERVAL * 10 * 1000);
+
+    // validate replica distribution after moving
+    Map<String, Short> mapRule = new HashMap<>();
+    mapRule.put("/dc1", (short) 3);
+    List<LocatedBlock> blocks2 = DFSTestUtil.getAllBlocks(fs, path);
+    assertFalse(blocks1.isEmpty());
+    assertEquals(mapRule, ZoneUtil.getBlockDistribution(blocks2.get(0)));
+  }
+
+  @Test(timeout = 60000)
+  public void testSetReplicationWithDeleteRedundantDatacenters() throws Exception {
+    Configuration conf = new HdfsConfiguration();
+    final long DFS_HEARTBEAT_INTERVAL = 2;
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, 500);
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY, 10);
+    conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, DFS_HEARTBEAT_INTERVAL);
+    conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+        BlockPlacementPolicyWithDataCenter.class,
+        BlockPlacementPolicy.class);
+    conf.setBoolean(DFSConfigKeys.DFS_USE_DFS_NETWORK_TOPOLOGY_KEY, true);
+    conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY,
+        DFSNetworkTopologyWithDataCenter.class, DFSNetworkTopology.class);
+    conf.set(DFSConfigKeys.DFS_ZONEMOVER_VALID_DATACENTERS_KEY, "/datacenter0,/datacenter1");
+    conf.setBoolean(CommonConfigurationKeys.IGNORE_SDI_AUTHENTICATE_KEY, true);
+    conf.set(DFSConfigKeys.DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS, "/datacenter1");
+    final String[] racks = {"/datacenter0/rack0", "/datacenter0/rack0", "/datacenter0/rack0",
+        "/datacenter0/rack0"};
+    final String[] hosts = {"host0", "host1", "host2", "host3"};
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).numDataNodes(4).racks(racks)
+        .hosts(hosts).build();
+    cluster.waitActive();
+    DistributedFileSystem fs = cluster.getFileSystem();
+    final FSNamesystem namesystem = cluster.getNamesystem();
+
+    try {
+      fs.mkdir(new Path("/test"), new FsPermission("777"));
+
+      // write a file
+      Path path = new Path("/test/testBlockMove.txt");
+      // client(127.0.0.1) will be mapped to a random node in (host0, host1, host2, host3)
+      DFSTestUtil.createFile(fs, path, 1, (short) 4, 0L);
+
+      // validate replica distribution before moving
+      Map<String, Short> distribution = new HashMap<>();
+      distribution.put("/datacenter0", (short) 4);
+      List<LocatedBlock> blocks = DFSTestUtil.getAllBlocks(fs, path);
+      assertFalse(blocks.isEmpty());
+      assertEquals(distribution, ZoneUtil.getBlockDistribution(blocks.get(0)));
+
+      // start datanodes in dc1
+      final String[] hosts2 = {"host4", "host5", "host6"};
+      final String[] racks2 = {"/datacenter1/rack0", "/datacenter1/rack1", "/datacenter1/rack2"};
+      cluster.startDataNodes(conf, hosts2.length, true, null, racks2, hosts2,
+          null, false);
+
+      // do block move
+      Tool tool = new ZoneMoverV2.Cli();
+      tool.setConf(conf);
+      final String[] args = {"-path", "/test", "-rule", "/datacenter1:2,/datacenter0:2"};
+      LOG.info("Try to do block move for path: /test ...");
+      assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args));
+      // sleep some time to wait datanode delete replicas
+      Thread.sleep(DFS_HEARTBEAT_INTERVAL * 10 * 1000);
+
+      // validate replica distribution after moving
+      Map<String, Short> mapRule = new HashMap<>();
+      mapRule.put("/datacenter0", (short) 2);
+      mapRule.put("/datacenter1", (short) 2);
+      blocks = DFSTestUtil.getAllBlocks(fs, path);
+      assertFalse(blocks.isEmpty());
+      assertEquals(mapRule, ZoneUtil.getBlockDistribution(blocks.get(0)));
+
+      // set dfs.namenode.delete.redundant.datacenters is "/datacenter1",
+      // so it will set the selection of one of the nodes in /datacenter1 to be deleted.
+      fs.setReplication(path, (short) 3);
+      DFSTestUtil.waitReplication(fs, path, (short) 3);
+      mapRule = new HashMap<>();
+      mapRule.put("/datacenter0", (short) 2);
+      mapRule.put("/datacenter1", (short) 1);
+      blocks = DFSTestUtil.getAllBlocks(fs, path);
+      assertFalse(blocks.isEmpty());
+      assertEquals(mapRule, ZoneUtil.getBlockDistribution(blocks.get(0)));
+
+      // set dfs.namenode.delete.redundant.datacenters is "",
+      // since the need for 2 racks will be considered here,
+      // so it will set the selection of one of the nodes /datacenter0 to delete.
+      namesystem.getBlockManager().setDelRedundantDataCenters("");
+      fs.setReplication(path, (short) 2);
+      DFSTestUtil.waitReplication(fs, path, (short) 2);
+      mapRule = new HashMap<>();
+      mapRule.put("/datacenter0", (short) 1);
+      mapRule.put("/datacenter1", (short) 1);
+      blocks = DFSTestUtil.getAllBlocks(fs, path);
+      assertFalse(blocks.isEmpty());
+      assertEquals(mapRule, ZoneUtil.getBlockDistribution(blocks.get(0)));
+
+    } finally {
+      cluster.shutdown();
+    }
+  }
+
+  @After
+  public void teardown() {
+    if (cluster != null) {
+      cluster.shutdown();
+      cluster = null;
+    }
+  }
+}

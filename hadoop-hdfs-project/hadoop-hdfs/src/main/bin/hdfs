@@ -115,6 +115,9 @@ function hdfscmd_case
     decommissiontool)
       HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.balancer.DecommissionTool
     ;;
+    decommissiontoolv2)
+        HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.balancer.DecommissionToolV2
+    ;;
     debug)
       HADOOP_CLASSNAME='org.apache.hadoop.hdfs.tools.DebugAdmin'
     ;;
@@ -234,14 +237,23 @@ function hdfscmd_case
     zonemover)
       HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneMover
     ;;
+    zonemoverv2)
+        HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneMoverV2
+    ;;
     zoneenhancedmover)
       HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneMoverWithSetReplication
     ;;
     zonemoverwithdr)
       HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneMoverWithDR
     ;;
+    zonemoverwithdrv2)
+        HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneMoverWithDRV2
+    ;;
     zonemigration)
       HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneMigration
+    ;;
+    zonemigrationv2)
+        HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneMigrationV2
     ;;
     zonechecker)
       HADOOP_CLASSNAME=org.apache.hadoop.hdfs.server.zoneservice.ZoneChecker

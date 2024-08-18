@@ -99,7 +99,9 @@ public class ReplicationRuleSection {
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
     ReplicationRuleSection that = (ReplicationRuleSection) o;
     return replica == that.replica
         && dataCenter.equals(that.dataCenter);
