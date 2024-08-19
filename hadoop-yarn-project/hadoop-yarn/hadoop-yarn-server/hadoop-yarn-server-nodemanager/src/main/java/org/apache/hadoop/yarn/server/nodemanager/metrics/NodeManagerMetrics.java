@@ -398,6 +398,10 @@ public class NodeManagerMetrics {
     return allocatedOpportunisticGB.value();
   }
 
+  public int getAllocatedVCores() {
+    return allocatedVCores.value();
+  }
+
   public int getAllocatedOpportunisticVCores() {
     return allocatedOpportunisticVCores.value();
   }

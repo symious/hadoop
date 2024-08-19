@@ -101,7 +101,7 @@ public class ContainerScheduler extends AbstractService implements
 
   private ReentrantReadWriteLock.ReadLock readLock;
   private ReentrantReadWriteLock.WriteLock writeLock;
-
+  private boolean highLoad = false;
   private final ContainerQueuingLimit queuingLimit =
       ContainerQueuingLimit.newInstance();
 
@@ -267,6 +267,8 @@ public class ContainerScheduler extends AbstractService implements
         Iterator<Container> containerIterator = runningContainers.values().iterator();
         while (containerIterator.hasNext()) {
           Container container = containerIterator.next();
+          // OverWrite if under vcore over commit
+          isHighLoad = highLoad ? highLoad : isHighLoad;
           container.setHighLoad(isHighLoad);
           resourceHandlerChain.updateContainer(container);
           if (LOG.isDebugEnabled()) {
@@ -789,5 +791,9 @@ public class ContainerScheduler extends AbstractService implements
     } catch (Exception e) {
       LOG.error("Update CGroups Resource: ", e);
     }
+  }
+
+  public void setNodeHighLoad(boolean isHighLoad) {
+    this.highLoad = isHighLoad;
   }
 }

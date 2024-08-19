@@ -755,6 +755,27 @@ public class NMWebServices {
           coreNumber = minVcores;
           vcoreNumber = coreNumber;
         }
+
+        float vcoreOverCommitFactor =
+            nmContext.getConf().getFloat(YarnConfiguration.COLOCATION_NM_VCORES_OVERCOMMIT_FACTOR,
+                YarnConfiguration.DEFAULT_COLOCATION_NM_VCORES_OVERCOMMIT_FACTOR);
+        int maxOverCommitVcore = Double.valueOf(coreNumber * vcoreOverCommitFactor).intValue();
+        int allocatedVCores = this.nmContext.getNodeManagerMetrics().getAllocatedVCores();
+        boolean isHighLoad = false;
+        // If allocated > vcoreNumber from Colocation
+        // It means overcommit
+        if (allocatedVCores > vcoreNumber) {
+          // First let vcore reduce to allocated vcores
+          vcoreNumber = allocatedVCores;
+          // If allocated > max admit overCommit core
+          // It means needs to do preemption to release part of containers
+          // Reduce vcore to max over commit vcores
+          if (allocatedVCores > maxOverCommitVcore) {
+            vcoreNumber = maxOverCommitVcore;
+          }
+          isHighLoad = true;
+        }
+        this.nmContext.getContainerManager().getContainerScheduler().setNodeHighLoad(isHighLoad);
         this.nmContext.getNodeResourceMonitor().updateNodeResource(coreNumber, memory, vcoreNumber);
         result.put("status", "200");
         result.put("msg", "SUCCESS");
