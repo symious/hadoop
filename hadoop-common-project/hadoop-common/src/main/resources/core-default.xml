@@ -672,6 +672,15 @@
 </property>
 
 <property>
+  <name>hadoop.service.shutdown.timeout.print.thread.dump</name>
+  <value>false</value>
+  <description>
+    Print a full thread dump or not if a shutdown hook times out?
+    See hadoop.service.shutdown.timeout.
+  </description>
+</property>
+
+<property>
   <name>hadoop.rpc.protection</name>
   <value>authentication</value>
   <description>A comma-separated list of protection values for secured sasl

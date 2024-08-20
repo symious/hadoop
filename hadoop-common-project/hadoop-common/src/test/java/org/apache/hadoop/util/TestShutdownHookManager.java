@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.hadoop.test.GenericTestUtils;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -85,14 +86,14 @@ public class TestShutdownHookManager {
     assertEquals(hook1, mgr.getShutdownHooksInOrder().get(1).getHook());
 
     // Test hook finish without timeout
-    mgr.addShutdownHook(hook3, 2, 4, TimeUnit.SECONDS);
+    mgr.addShutdownHook(hook3, 2, 4, TimeUnit.SECONDS, false);
     assertTrue(mgr.hasShutdownHook(hook3));
     assertEquals(hook3, mgr.getShutdownHooksInOrder().get(0).getHook());
     assertEquals(4, mgr.getShutdownHooksInOrder().get(0).getTimeout());
 
     // Test hook finish with timeout; highest priority
     int hook4timeout = 2;
-    mgr.addShutdownHook(hook4, 3, hook4timeout, TimeUnit.SECONDS);
+    mgr.addShutdownHook(hook4, 3, hook4timeout, TimeUnit.SECONDS, true);
     assertTrue(mgr.hasShutdownHook(hook4));
     assertEquals(hook4, mgr.getShutdownHooksInOrder().get(0).getHook());
     assertEquals(2, mgr.getShutdownHooksInOrder().get(0).getTimeout());
@@ -114,7 +115,10 @@ public class TestShutdownHookManager {
     // now execute the hook shutdown sequence
     INVOCATION_COUNT.set(0);
     LOG.info("invoking executeShutdown()");
+    GenericTestUtils.LogCapturer logs = GenericTestUtils.LogCapturer.captureLogs(
+        LoggerFactory.getLogger(ShutdownHookManager.class));
     int timeouts = mgr.executeShutdown();
+    assertTrue(logs.getOutput().contains("shutdown-hook-0"));
     LOG.info("Shutdown completed");
     assertEquals("Number of timed out hooks", 1, timeouts);
 
@@ -191,7 +195,7 @@ public class TestShutdownHookManager {
     Hook hook = new Hook("hook1", 0, false);
 
     // add the hook
-    mgr.addShutdownHook(hook, 2, 1, TimeUnit.SECONDS);
+    mgr.addShutdownHook(hook, 2, 1, TimeUnit.SECONDS, false);
 
     // add it at a higher priority. This will be ignored.
     mgr.addShutdownHook(hook, 5);

@@ -42,6 +42,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.SERVICE_SHUTDOWN_TIMEOUT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.SERVICE_SHUTDOWN_TIMEOUT_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.SERVICE_SHUTDOWN_TIMEOUT_THREAD_DUMP;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.SERVICE_SHUTDOWN_TIMEOUT_THREAD_DUMP_DEFAULT;
+import static org.apache.hadoop.util.ThreadUtil.buildThreadDump;
 
 /**
  * The <code>ShutdownHookManager</code> enables running shutdownHook
@@ -53,7 +56,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.SERVICE_SHUTDOW
  * priority.
  *
  * Unless a hook was registered with a shutdown explicitly set through
- * {@link #addShutdownHook(Runnable, int, long, TimeUnit)},
+ * {@link #addShutdownHook(Runnable, int, long, TimeUnit, boolean)},
  * the shutdown time allocated to it is set by the configuration option
  * {@link CommonConfigurationKeysPublic#SERVICE_SHUTDOWN_TIMEOUT} in
  * {@code core-site.xml}, with a default value of
@@ -124,6 +127,9 @@ public final class ShutdownHookManager {
         future.get(entry.getTimeout(), entry.getTimeUnit());
       } catch (TimeoutException ex) {
         timeouts++;
+        if (entry.doesDump()) {
+          LOG.warn(buildThreadDump());
+        }
         future.cancel(true);
         LOG.warn("ShutdownHook '" + entry.getHook().getClass().
             getSimpleName() + "' timeout, " + ex.toString(), ex);
@@ -201,18 +207,21 @@ public final class ShutdownHookManager {
     private final int priority;
     private final long timeout;
     private final TimeUnit unit;
+    private final boolean dump;
 
-    HookEntry(Runnable hook, int priority) {
+    HookEntry(Runnable hook, int priority, Configuration conf) {
       this(hook, priority,
-          getShutdownTimeout(new Configuration()),
-          TIME_UNIT_DEFAULT);
+          getShutdownTimeout(conf),
+          TIME_UNIT_DEFAULT, conf.getBoolean(SERVICE_SHUTDOWN_TIMEOUT_THREAD_DUMP,
+              SERVICE_SHUTDOWN_TIMEOUT_THREAD_DUMP_DEFAULT));
     }
 
-    HookEntry(Runnable hook, int priority, long timeout, TimeUnit unit) {
+    HookEntry(Runnable hook, int priority, long timeout, TimeUnit unit, boolean dump) {
       this.hook = hook;
       this.priority = priority;
       this.timeout = timeout;
       this.unit = unit;
+      this.dump = dump;
     }
 
     @Override
@@ -245,6 +254,10 @@ public final class ShutdownHookManager {
 
     TimeUnit getTimeUnit() {
       return unit;
+    }
+
+    boolean doesDump() {
+      return dump;
     }
   }
 
@@ -301,25 +314,25 @@ public final class ShutdownHookManager {
       throw new IllegalStateException("Shutdown in progress, cannot add a " +
           "shutdownHook");
     }
-    hooks.add(new HookEntry(shutdownHook, priority));
+    hooks.add(new HookEntry(shutdownHook, priority, new Configuration()));
   }
 
   /**
-   *
    * Adds a shutdownHook with a priority and timeout the higher the priority
    * the earlier will run. ShutdownHooks with same priority run
    * in a non-deterministic order. The shutdown hook will be terminated if it
    * has not been finished in the specified period of time.
    *
    * @param shutdownHook shutdownHook <code>Runnable</code>
-   * @param priority priority of the shutdownHook
-   * @param timeout timeout of the shutdownHook
-   * @param unit unit of the timeout <code>TimeUnit</code>
+   * @param priority     priority of the shutdownHook
+   * @param timeout      timeout of the shutdownHook
+   * @param unit         unit of the timeout <code>TimeUnit</code>
+   * @param dump         dump all threads or not if hook times out
    */
   @InterfaceAudience.Public
   @InterfaceStability.Stable
   public void addShutdownHook(Runnable shutdownHook, int priority, long timeout,
-      TimeUnit unit) {
+      TimeUnit unit, boolean dump) {
     if (shutdownHook == null) {
       throw new IllegalArgumentException("shutdownHook cannot be NULL");
     }
@@ -327,7 +340,7 @@ public final class ShutdownHookManager {
       throw new IllegalStateException("Shutdown in progress, cannot add a " +
           "shutdownHook");
     }
-    hooks.add(new HookEntry(shutdownHook, priority, timeout, unit));
+    hooks.add(new HookEntry(shutdownHook, priority, timeout, unit, dump));
   }
 
   /**
@@ -346,7 +359,7 @@ public final class ShutdownHookManager {
     }
     // hooks are only == by runnable
     return hooks.remove(new HookEntry(shutdownHook, 0, TIMEOUT_MINIMUM,
-      TIME_UNIT_DEFAULT));
+      TIME_UNIT_DEFAULT, false));
   }
 
   /**
@@ -359,7 +372,7 @@ public final class ShutdownHookManager {
   @InterfaceStability.Stable
   public boolean hasShutdownHook(Runnable shutdownHook) {
     return hooks.contains(new HookEntry(shutdownHook, 0, TIMEOUT_MINIMUM,
-      TIME_UNIT_DEFAULT));
+      TIME_UNIT_DEFAULT, false));
   }
   
   /**

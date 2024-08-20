@@ -3654,6 +3654,8 @@ public abstract class FileSystem extends Configured
         final long timeout = conf.getTimeDuration(SERVICE_SHUTDOWN_TIMEOUT,
             SERVICE_SHUTDOWN_TIMEOUT_DEFAULT,
             ShutdownHookManager.TIME_UNIT_DEFAULT);
+        final boolean dumpThreads = conf.getBoolean(SERVICE_SHUTDOWN_TIMEOUT_THREAD_DUMP,
+            SERVICE_SHUTDOWN_TIMEOUT_THREAD_DUMP_DEFAULT);
         // any FS to close outside of the synchronized section
         synchronized (this) { // lock on the Cache object
 
@@ -3673,7 +3675,7 @@ public abstract class FileSystem extends Configured
                 && !ShutdownHookManager.get().isShutdownInProgress()) {
               ShutdownHookManager.get().addShutdownHook(clientFinalizer,
                   SHUTDOWN_HOOK_PRIORITY, timeout,
-                  ShutdownHookManager.TIME_UNIT_DEFAULT);
+                  ShutdownHookManager.TIME_UNIT_DEFAULT, dumpThreads);
             }
             // insert the new file system into the map
             fs.key = key;

@@ -30,6 +30,7 @@ import java.util.Date;
 import java.util.Map;
 
 import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.util.ThreadUtil;
 import org.junit.runner.notification.Failure;
 import org.junit.runner.notification.RunListener;
 
@@ -70,7 +71,7 @@ public class TimedOutTestsListener extends RunListener {
     DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd hh:mm:ss,SSS");
     output.println(String.format("Timestamp: %s", dateFormat.format(new Date())));
     output.println();
-    output.println(buildThreadDump());
+    output.println(ThreadUtil.buildThreadDump());
     
     String deadlocksInfo = buildDeadlockInfo();
     if (deadlocksInfo != null) {
@@ -82,31 +83,6 @@ public class TimedOutTestsListener extends RunListener {
     return sw.toString();
   }
 
-  static String buildThreadDump() {
-    StringBuilder dump = new StringBuilder();
-    Map<Thread, StackTraceElement[]> stackTraces = Thread.getAllStackTraces();
-    for (Map.Entry<Thread, StackTraceElement[]> e : stackTraces.entrySet()) {
-      Thread thread = e.getKey();
-      dump.append(String.format(
-          "\"%s\" %s prio=%d tid=%d %s\njava.lang.Thread.State: %s",
-          thread.getName(),
-          (thread.isDaemon() ? "daemon" : ""),
-          thread.getPriority(),
-          thread.getId(),
-          Thread.State.WAITING.equals(thread.getState()) ? 
-              "in Object.wait()" :
-              StringUtils.toLowerCase(thread.getState().name()),
-          Thread.State.WAITING.equals(thread.getState()) ?
-              "WAITING (on object monitor)" : thread.getState()));
-      for (StackTraceElement stackTraceElement : e.getValue()) {
-        dump.append("\n        at ");
-        dump.append(stackTraceElement);
-      }
-      dump.append("\n");
-    }
-    return dump.toString();
-  }
-  
   static String buildDeadlockInfo() {
     ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
     long[] threadIds = threadBean.findMonitorDeadlockedThreads();

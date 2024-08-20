@@ -1258,6 +1258,16 @@ public class CommonConfigurationKeysPublic {
    * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
    * core-default.xml</a>
    */
+  public static final String SERVICE_SHUTDOWN_TIMEOUT_THREAD_DUMP =
+      "hadoop.service.shutdown.timeout.print.thread.dump";
+
+  public static final boolean SERVICE_SHUTDOWN_TIMEOUT_THREAD_DUMP_DEFAULT = false;
+
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
   public static final String HADOOP_PROMETHEUS_ENABLED =
       "hadoop.prometheus.endpoint.enabled";
   public static final boolean HADOOP_PROMETHEUS_ENABLED_DEFAULT = false;
