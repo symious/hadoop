@@ -308,7 +308,7 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
     for (SchedulerContainer<FiCaSchedulerApp, FiCaSchedulerNode> c : request
         .getContainersToRelease()) {
       if (rmContainerInFinalState(c.getRmContainer())) {
-        LOG.debug("To-release container={} is in final state",
+        LOG.info("To-release container={} is in final state",
             c.getRmContainer());
         return true;
       }
@@ -319,7 +319,7 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
       for (SchedulerContainer<FiCaSchedulerApp, FiCaSchedulerNode> r : c
           .getToRelease()) {
         if (rmContainerInFinalState(r.getRmContainer())) {
-          LOG.debug("To-release container={}, for to a new allocated"
+          LOG.info("To-release container={}, for to a new allocated"
               + " container, is in final state", r.getRmContainer());
           return true;
         }
@@ -328,7 +328,7 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
       if (null != c.getAllocateFromReservedContainer()) {
         if (rmContainerInFinalState(
             c.getAllocateFromReservedContainer().getRmContainer())) {
-          LOG.debug("Allocate from reserved container {} is in final state",
+          LOG.info("Allocate from reserved container {} is in final state",
               c.getAllocateFromReservedContainer().getRmContainer());
           return true;
         }
@@ -340,7 +340,7 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
       for (SchedulerContainer<FiCaSchedulerApp, FiCaSchedulerNode> r : c
           .getToRelease()) {
         if (rmContainerInFinalState(r.getRmContainer())) {
-          LOG.debug("To-release container={}, for a reserved container,"
+          LOG.info("To-release container={}, for a reserved container,"
               + " is in final state", r.getRmContainer());
           return true;
         }
@@ -366,18 +366,16 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
           allocation.getAllocateFromReservedContainer().getRmContainer();
 
       if (fromReservedContainer != reservedContainerOnNode) {
-        LOG.debug("Try to allocate from a non-existed reserved container");
+        LOG.info("Try to allocate from a non-existed reserved container");
         return false;
       }
     }
     // If allocate from reserved container, make sure node is still reserved
     if (allocation.getAllocateFromReservedContainer() != null
         && reservedContainerOnNode == null) {
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Try to allocate from reserved container " + allocation
-            .getAllocateFromReservedContainer().getRmContainer()
-            .getContainerId() + ", but node is not reserved");
-      }
+      LOG.info("Try to allocate from reserved container " + allocation
+          .getAllocateFromReservedContainer().getRmContainer()
+          .getContainerId() + ", but node is not reserved");
       return false;
     }
 
@@ -397,14 +395,12 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
             == RMContainerState.RESERVED
             && releaseContainer.getRmContainer() != releaseContainer
             .getSchedulerNode().getReservedContainer()) {
-          if (LOG.isDebugEnabled()) {
-            LOG.debug("Failed to accept this proposal because "
-                + "it tries to release an outdated reserved container "
-                + releaseContainer.getRmContainer().getContainerId()
-                + " on node " + releaseContainer.getSchedulerNode().getNodeID()
-                + " whose reserved container is "
-                + releaseContainer.getSchedulerNode().getReservedContainer());
-          }
+          LOG.info("Failed to accept this proposal because "
+              + "it tries to release an outdated reserved container "
+              + releaseContainer.getRmContainer().getContainerId()
+              + " on node " + releaseContainer.getSchedulerNode().getNodeID()
+              + " whose reserved container is "
+              + releaseContainer.getSchedulerNode().getReservedContainer());
           return false;
         }
         // Only consider non-reserved container (reserved container will
@@ -420,11 +416,9 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
     }
     if (!Resources.fitsIn(rc, allocation.getAllocatedOrReservedResource(),
         availableResource)) {
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Node doesn't have enough available resource, asked="
-            + allocation.getAllocatedOrReservedResource() + " available="
-            + availableResource);
-      }
+      LOG.info("Node doesn't have enough available resource, asked="
+          + allocation.getAllocatedOrReservedResource() + " available="
+          + availableResource);
       return false;
     }
 
@@ -463,12 +457,10 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
         // Make sure node is in RUNNING state
         if (schedulerContainer.getSchedulerNode().getRMNode().getState()
             != NodeState.RUNNING) {
-          if (LOG.isDebugEnabled()) {
-            LOG.debug("Failed to accept this proposal because node "
-                + schedulerContainer.getSchedulerNode().getNodeID() + " is in "
-                + schedulerContainer.getSchedulerNode().getRMNode().getState()
-                + " state (not RUNNING)");
-          }
+          LOG.info("Failed to accept this proposal because node "
+              + schedulerContainer.getSchedulerNode().getNodeID() + " is in "
+              + schedulerContainer.getSchedulerNode().getRMNode().getState()
+              + " state (not RUNNING)");
           return false;
         }
         if (schedulerContainer.isAllocated()) {
@@ -482,14 +474,11 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
                   allocation.getAllocationLocalityType(),
                   schedulerContainer.getSchedulerNode(),
                   schedulerContainer.getSchedulerRequestKey())) {
-            if (LOG.isDebugEnabled()) {
-              LOG.debug("No pending resource for: nodeType=" + allocation
-                  .getAllocationLocalityType() + ", node=" + schedulerContainer
-                  .getSchedulerNode() + ", requestKey=" + schedulerContainer
-                  .getSchedulerRequestKey() + ", application="
-                  + getApplicationAttemptId());
-            }
-
+            LOG.info("No pending resource for: nodeType=" + allocation
+                .getAllocationLocalityType() + ", node=" + schedulerContainer
+                .getSchedulerNode() + ", requestKey=" + schedulerContainer
+                .getSchedulerRequestKey() + ", application="
+                + getApplicationAttemptId());
             return false;
           }
 
@@ -507,13 +496,11 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
             // be some outdated proposals in async-scheduling environment
             if (schedulerContainer.getRmContainer() != schedulerContainer
                 .getSchedulerNode().getReservedContainer()) {
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("Try to re-reserve a container, but node "
-                    + schedulerContainer.getSchedulerNode()
-                    + " is already reserved by another container="
-                    + schedulerContainer.getSchedulerNode()
-                    .getReservedContainer());
-              }
+              LOG.info("Try to re-reserve a container, but node "
+                  + schedulerContainer.getSchedulerNode()
+                  + " is already reserved by another container="
+                  + schedulerContainer.getSchedulerNode()
+                  .getReservedContainer());
               return false;
             }
             // Set reReservation == true
@@ -524,12 +511,10 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
             // Just check if the node is not already reserved by someone
             if (schedulerContainer.getSchedulerNode().getReservedContainer()
                 != null) {
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("Try to reserve a container, but the node is "
+                LOG.info("Try to reserve a container, but the node is "
                     + "already reserved by another container="
                     + schedulerContainer.getSchedulerNode()
                     .getReservedContainer().getContainerId());
-              }
               return false;
             }
           }
@@ -575,6 +560,8 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
         if (updatePending &&
             getOutstandingAsksCount(schedulerContainer.getSchedulerRequestKey())
                 <= 0) {
+          LOG.info(
+              "getOutstandingAsksCount SchedulerRequestKey can't small than 0!");
           return false;
         }
 
@@ -582,7 +569,7 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
             getPendingAsk(schedulerContainer.getSchedulerRequestKey(),
                 ResourceRequest.ANY).getPerAllocationResource(),
             schedulerContainer.getRmContainer().getContainer().getResource())) {
-          LOG.debug("Allocated container[" + schedulerContainer.getRmContainer()
+          LOG.info("Allocated container[" + schedulerContainer.getRmContainer()
               .getContainerId()
               + "] resource is not consistent with resource request, just reject it");
           return false;
