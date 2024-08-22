@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hdfs.server.zoneservice;
 
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.DFSClient;
@@ -65,6 +66,7 @@ public class ZoneReplicationCoordinator {
   private final Thread checker = new Thread(new Checker(), "Coordinator-Checker");
   private static final Logger LOG =
       LoggerFactory.getLogger(ZoneReplicationCoordinator.class);
+  private volatile ZoneMoverMetrics zoneMoverMetrics = null;
 
   ZoneReplicationCoordinator(Configuration conf, DistributedFileSystem fs) {
     this.dfs = fs.getClient();
@@ -82,6 +84,10 @@ public class ZoneReplicationCoordinator {
     checker.start();
   }
 
+  public void setZoneMoverMetrics(ZoneMoverMetrics zoneMoverMetrics) {
+    this.zoneMoverMetrics = zoneMoverMetrics;
+  }
+
   /**
    * Add a file to the queue.
    * @param filePath full path of the file
@@ -90,7 +96,11 @@ public class ZoneReplicationCoordinator {
    */
   public void addFile(String filePath, ReplicationRule rule,
       int blockReplicaDelta, int blockNum) {
+    long startTime = Time.monotonicNow();
     addFile(filePath, HdfsConstants.INVALIDATE_INODE_ID, rule, blockReplicaDelta, blockNum);
+    if (this.zoneMoverMetrics != null) {
+      this.zoneMoverMetrics.addFileInCoordinator((Time.monotonicNow() - startTime));
+    }
   }
 
   public void extendConcurrentReplications() {
@@ -111,6 +121,8 @@ public class ZoneReplicationCoordinator {
     }
 
     int replicaDelta = blockReplicaDelta * blockNum;
+    FileState fileState = new FileState(filePath, fileId, rule, maxCheckTimes, replicaDelta);
+
     if (replicaDelta < 0) {
       int n = runningDeletions.addAndGet(-replicaDelta);
       LOG.debug("Added {} deletions, now runningDeletions is: {}", -replicaDelta, n);
@@ -136,7 +148,6 @@ public class ZoneReplicationCoordinator {
       int n = runningReplications.addAndGet(replicaDelta);
       LOG.debug("Added {} replicas, now runningReplications is: {}", replicaDelta, n);
     }
-    FileState fileState = new FileState(filePath, fileId, rule, maxCheckTimes, replicaDelta);
     fileState.setLastStepStartTime(Time.monotonicNow());
     waitFiles.add(fileState);
   }
@@ -191,6 +202,9 @@ public class ZoneReplicationCoordinator {
         FileState fileState = finishedFiles.poll();
         ZoneProgressTracker.addTimeSpentInFinishFilesQueue(
             Time.monotonicNow() - fileState.lastStepStartTime);
+        if (zoneMoverMetrics != null) {
+          zoneMoverMetrics.decrReplicationReadyFiles();
+        }
         return fileState;
       } else if (Time.monotonicNow() > endTime) {
         return null;
@@ -245,6 +259,10 @@ public class ZoneReplicationCoordinator {
                   successPreMigrationCount, successPreMigrationCount + failPreMigrationCount);
             }
             boolean successOffered = finishedFiles.offer(fileState);
+            if (zoneMoverMetrics != null) {
+              zoneMoverMetrics.decrWaitingReplicationFiles();
+              zoneMoverMetrics.incrReplicationReadyFiles();
+            }
             if (!successOffered) {
               LOG.info("Checker failed to offer the file to finishedFiles." +
                   "the size of finishedFiles is {}.", finishedFiles.size());
@@ -360,6 +378,7 @@ public class ZoneReplicationCoordinator {
    */
   public static class FileState {
 
+    private final long creatingTime;
     private final String filePath;
     private final long fileId;
     private long lastStepStartTime;
@@ -370,14 +389,10 @@ public class ZoneReplicationCoordinator {
     private HdfsLocatedFileStatus fileStatus;
     private ReplicationRule rule;
 
-    FileState(String filePath, ReplicationRule rule,
-        int checkTimes, int replicaDelta) {
-      this(filePath, HdfsConstants.INVALIDATE_INODE_ID, rule, checkTimes, replicaDelta);
-    }
-
     FileState(String filePath, long fileId, ReplicationRule rule,
         int checkTimes, int replicaDelta) {
-      this.lastStepStartTime = Time.monotonicNow();
+      this.creatingTime = Time.monotonicNow();
+      this.lastStepStartTime = this.creatingTime;
       this.filePath = filePath;
       this.fileId = fileId;
       this.rule = rule;
@@ -427,6 +442,10 @@ public class ZoneReplicationCoordinator {
 
     public void setRule(ReplicationRule rule) {
       this.rule = rule;
+    }
+
+    public long getCreatingTime() {
+      return this.creatingTime;
     }
 
     public long getLastStepStartTime() {

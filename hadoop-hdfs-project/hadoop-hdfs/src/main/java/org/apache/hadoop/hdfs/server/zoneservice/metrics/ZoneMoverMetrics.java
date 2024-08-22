@@ -24,6 +24,9 @@ import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
+import org.apache.hadoop.metrics2.lib.MutableCounterLong;
+import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
+import org.apache.hadoop.metrics2.lib.MutableQuantiles;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 
 @Metrics(name="ZoneMoverMetrics", about="ZoneMover metrics", context="zm")
@@ -31,7 +34,8 @@ import org.apache.hadoop.metrics2.lib.MutableRate;
 @InterfaceStability.Evolving
 public class ZoneMoverMetrics {
 
-  final MetricsRegistry registry = new MetricsRegistry("ZoneMoverMetrics");
+  private final MetricsRegistry registry;
+  private final String name;
 
   @Metric("Rate of successful move and duration (ms)")
   MutableRate successTotalMove;
@@ -42,8 +46,53 @@ public class ZoneMoverMetrics {
   @Metric("Rate and duration (ms) of recording Kafka offset in Zookeeper")
   MutableRate kafkaOffsetZk;
 
+  // Time for successfully scheduled files
+  @Metric("The rate of scheduled files")
+  MutableRate scheduledFiles;
+  // The time of files that failed to be scheduled.
+  @Metric("The rate of fail schedule files")
+  MutableRate failedScheduledFiles;
+  // The number of pre-migration files
+  @Metric("The number of pre-migration files")
+  MutableCounterLong preMigrationFiles;
+  // The number of pre-migration blocks to be processed
+  @Metric("The number of pending pre-migration")
+  MutableGaugeLong pendingPreMigration;
+  // The number of files for which replication factor need to be changed.
+  @Metric("The number of replication changed files")
+  MutableCounterLong replicationChangedFiles;
+  // The time of SetReplication operation.
+  @Metric("The rate of change replication")
+  MutableRate setReplication;
+  // Time to add files to coordinator.
+  @Metric("The rate of adding file of coordinator ")
+  MutableRate addFileInCoordinator;
+  // Total time to change and wait for replication factor changes
+  @Metric("The rate of changing replication (total time)")
+  MutableRate changeReplicationTotalTime;
+  // The number of files whose replication factor is still changing
+  @Metric("The number of total files that wait for replication to be ready")
+  MutableGaugeLong waitingReplicationFiles;
+  // The number of files whose replication factor is ready.
+  @Metric("The number of total files that replication is ready")
+  MutableGaugeLong replicationReadyFiles;
+
+  MutableQuantiles successFileQuantiles;
+  @Metric("Rate of success files")
+  MutableRate successFiles;
+  @Metric("Number of failed files")
+  MutableCounterLong failedFiles;
+
+  public ZoneMoverMetrics() {
+    this.name = "ZoneMoverMetrics";
+    this.registry = new MetricsRegistry(this.name);
+    this.successFileQuantiles = this.registry.newQuantiles("successFiles60s",
+        "success files in secod", "ops", "latency", 60);
+  }
+
   public static ZoneMoverMetrics create() {
-    return DefaultMetricsSystem.instance().register(new ZoneMoverMetrics());
+    ZoneMoverMetrics zoneMoverMetrics = new ZoneMoverMetrics();
+    return DefaultMetricsSystem.instance().register(zoneMoverMetrics);
   }
 
   public void addSuccessTotalMove(long duration) {
@@ -72,5 +121,66 @@ public class ZoneMoverMetrics {
 
   public void shutdown() {
     DefaultMetricsSystem.shutdown();
+  }
+
+  public void addScheduledFiles(long duration) {
+    scheduledFiles.add(duration);
+  }
+
+  public void addFailedScheduledFiles(long duration) {
+    failedScheduledFiles.add(duration);
+  }
+
+  public void incrPreMigrationFiles() {
+    preMigrationFiles.incr();
+  }
+
+  public void incrPendingPreMigration() {
+    pendingPreMigration.incr();
+  }
+
+  public void decrPendingPreMigration() {
+    pendingPreMigration.decr();
+  }
+
+  public void incrReplicationChangedFiles() {
+    replicationChangedFiles.incr();
+  }
+
+  public void addSetReplication(long duration) {
+    setReplication.add(duration);
+  }
+
+  public void addFileInCoordinator(long duration) {
+    addFileInCoordinator.add(duration);
+  }
+
+  public void addChangeReplicationTotalTime(long duration) {
+    changeReplicationTotalTime.add(duration);
+  }
+
+  public void incrWaitingReplicationFiles() {
+    waitingReplicationFiles.incr();
+  }
+
+  public void decrWaitingReplicationFiles() {
+    waitingReplicationFiles.decr();
+  }
+
+  public void incrReplicationReadyFiles() {
+    replicationReadyFiles.incr();
+  }
+
+  public void decrReplicationReadyFiles() {
+    replicationReadyFiles.decr();
+  }
+
+  public void addSuccessFiles(long duration) {
+    successFileQuantiles.add(duration);
+    successFiles.add(duration);
+  }
+
+  public void incrFailedFiles() {
+    failedFiles.incr();
   }
 }

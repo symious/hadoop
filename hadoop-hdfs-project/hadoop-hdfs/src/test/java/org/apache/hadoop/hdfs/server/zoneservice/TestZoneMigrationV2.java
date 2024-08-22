@@ -39,6 +39,8 @@ import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter;
 import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.hdfs.server.zoneservice.utils.RunMode;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -418,6 +420,18 @@ public class TestZoneMigrationV2 {
     public void saveOffsetToZookeeper(ConsumerRecord<String, String> record, String ns,
         String groupId, ZoneMoverMetrics zoneMoverMetrics) {
       //nothing;
+    }
+
+    @Override
+    public void saveOffsetToZookeeperForZS(
+        ConsumerRecord<String, String> record, String ns, String groupId,
+        ZoneServiceMetrics zoneServiceMetrics) {
+      // do nothing
+    }
+
+    @Override
+    public StoreDriver getStoreDriver() {
+      return null;
     }
   }
 }

@@ -260,6 +260,10 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
       try {
         // Migrate a replica first.
         processFileDirectly(fullPath, status, preRule, result);
+        if (this.zoneMoverMetrics != null) {
+          zoneMoverMetrics.incrPreMigrationFiles();
+          zoneMoverMetrics.incrPendingPreMigration();
+        }
         // PreMigrationChecker will migrate the remaining replicas.
         this.preMigrationChecker.preMigrateFile(new PreMigrationFile(fullPath, targetRule));
         directlyMigrate = false;
@@ -299,6 +303,11 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
               appliedRule, fullPath);
           this.dfs.getClient().setReplication(fullPath, appliedRule.getReplica());
           ZoneProgressTracker.addSetReplicationTime((Time.monotonicNow() - startRpcTime));
+          if (zoneMoverMetrics != null) {
+            zoneMoverMetrics.addSetReplication((Time.monotonicNow() - startRpcTime));
+            zoneMoverMetrics.incrReplicationChangedFiles();
+            zoneMoverMetrics.incrWaitingReplicationFiles();
+          }
           // Add this file to Coordinator and let Fetcher migrate the remaining replicas.
           this.coordinator.addFile(fullPath, appliedRule,
               appliedRule.getReplica() - status.getReplication(),

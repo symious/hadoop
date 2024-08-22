@@ -61,7 +61,7 @@ import static org.apache.hadoop.util.Time.now;
 
 public class ZoneMoverWithDRV2 extends ZoneMoverV2 {
 
-  public static final Logger LOG = LoggerFactory.getLogger(ZoneMoverWithDR.class);
+  public static final Logger LOG = LoggerFactory.getLogger(ZoneMoverWithDRV2.class);
   private final RunMode runMode;
   private final boolean useAccessTime;
   private final boolean skipReplica;
@@ -266,6 +266,10 @@ public class ZoneMoverWithDRV2 extends ZoneMoverV2 {
           LOG.info("Will pre-migrate 1 replica from {} to {} using preRule {} for {} by {}.",
               currentDC, tmpDataCenters.get(0), preRule, fullPath, runMode.getName());
           try {
+            if (this.zoneMoverMetrics != null) {
+              zoneMoverMetrics.incrPreMigrationFiles();
+              zoneMoverMetrics.incrPendingPreMigration();
+            }
             // Migrate a replica first.
             processFileDirectly(fullPath, status, preRule, result);
             // PreMigrationChecker will migrate the remaining replicas.
@@ -327,6 +331,7 @@ public class ZoneMoverWithDRV2 extends ZoneMoverV2 {
     }
 
     ZoneProgressTracker.queueFile(fullPath);
+    long startTime = Time.monotonicNow();
     try {
       for (LocatedBlock lb : status.getLocatedBlocks().getLocatedBlocks()) {
         // Retrieve rule based on the total number of blocks in the striped block.
@@ -342,6 +347,9 @@ public class ZoneMoverWithDRV2 extends ZoneMoverV2 {
               targetRule, blockNumExpected);
         }
         processLocatedBlock(fullPath, lb, targetRule, result, ecPolicy);
+      }
+      if (this.zoneMoverMetrics != null) {
+        this.zoneMoverMetrics.addScheduledFiles((Time.monotonicNow() - startTime));
       }
     } finally {
       ZoneProgressTracker.dequeueFile(fullPath);

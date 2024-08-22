@@ -131,7 +131,7 @@ public class ZoneMoverV2 {
   private final ZoneMoverTrigger zoneMoverTrigger;
 
   // Initialize ZoneMover Metrics.
-  private ZoneMoverMetrics zoneMoverMetrics = null;
+  protected ZoneMoverMetrics zoneMoverMetrics = null;
   private ZoneMoverHttpServer httpServer = null;
 
   public ZoneMoverV2(Configuration conf, URI nameNode, List<Path> paths,
@@ -260,6 +260,7 @@ public class ZoneMoverV2 {
       DefaultMetricsSystem.initialize("ZoneMover");
       this.zoneMoverMetrics = ZoneMoverMetrics.create();
       this.httpServer = ZoneUtil.startHttpServer(this.dfs.getConf());
+      this.coordinator.setZoneMoverMetrics(this.zoneMoverMetrics);
     }
   }
 
@@ -762,8 +763,12 @@ public class ZoneMoverV2 {
    */
   protected void processFileDirectly(String fullPath, HdfsLocatedFileStatus status,
       ReplicationRule targetRule, Result result) {
+    long beginTime = Time.monotonicNow();
     for (LocatedBlock block : status.getLocatedBlocks().getLocatedBlocks()) {
       processLocatedBlock(fullPath, block, targetRule, result, null);
+    }
+    if (this.zoneMoverMetrics != null) {
+      this.zoneMoverMetrics.addScheduledFiles((Time.monotonicNow() - beginTime));
     }
   }
 
@@ -817,6 +822,10 @@ public class ZoneMoverV2 {
       while (true) {
         try {
           fileState = coordinator.getNextFinishedFile();
+          if (zoneMoverMetrics != null) {
+            zoneMoverMetrics.addChangeReplicationTotalTime(
+                (Time.monotonicNow() - fileState.getCreatingTime()));
+          }
           processFileDirectly(fileState.getFilePath(), fileState.getFileStatus(),
               fileState.getRule(), result);
         } catch (NoSuchElementException e) {
@@ -960,6 +969,9 @@ public class ZoneMoverV2 {
         try {
           preMigrationFile = this.preMigrationFileQueue.poll();
           if (preMigrationFile != null) {
+            if (zoneMoverMetrics != null) {
+              zoneMoverMetrics.decrPendingPreMigration();
+            }
             long sleepTime = this.preMigrationCheckInterval -
                 (Time.monotonicNow() - preMigrationFile.getRecordTime());
             if (sleepTime <= 0) {

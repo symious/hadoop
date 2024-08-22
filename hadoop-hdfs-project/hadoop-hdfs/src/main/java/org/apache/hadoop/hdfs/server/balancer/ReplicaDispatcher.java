@@ -89,6 +89,7 @@ public class ReplicaDispatcher {
   private final BlockPlacementPolicyForReplicaDispatcher blockPlacementPolicy;
 
   private static MoverManager MOVER_MANAGER = null;
+  private static ReplicaDispatcherMetrics METRICS = null;
 
   public ReplicaDispatcher(NameNodeConnector nnc, Configuration conf)
       throws IOException {
@@ -154,18 +155,25 @@ public class ReplicaDispatcher {
       }
     }
 
-    // For StripeBlock, the block id should be changed to internal block.
-    if (isECBlock) {
-      block = adjustIndices(block, sourceDN,
-          ((LocatedStripedBlock) locatedBlock).getBlockIndices(),
-          adjustList, locations, ecPolicy.getCellSize(), ecPolicy.getNumDataUnits());
+    try {
+      // For StripeBlock, the block id should be changed to internal block.
+      if (isECBlock) {
+        block = adjustIndices(block, sourceDN,
+            ((LocatedStripedBlock) locatedBlock).getBlockIndices(),
+            adjustList, locations, ecPolicy.getCellSize(), ecPolicy.getNumDataUnits());
+      }
+      if (excludeNodes == null || excludeNodes.isEmpty()) {
+        excludeNodes = new ArrayList<>(locations);
+      }
+      return buildMoveTask(fullPath, block, isECBlock, sourceDN, locations,
+          sourceDNStorageType, preferDC == null ? this.preferDC : preferDC,
+          excludeNodes);
+    } catch (IOException e) {
+      METRICS.incrFailedScheduledBlocks();
+      LOG.error("Failed schedule {} for {} with error, ",
+          locatedBlock, fullPath, e);
+      throw e;
     }
-    if (excludeNodes == null || excludeNodes.isEmpty()) {
-      excludeNodes = new ArrayList<>(locations);
-    }
-    return buildMoveTask(fullPath, block, isECBlock, sourceDN, locations,
-        sourceDNStorageType, preferDC == null ? this.preferDC : preferDC,
-        excludeNodes);
   }
 
   /**
@@ -202,16 +210,22 @@ public class ReplicaDispatcher {
       }
     }
 
-    // For StripeBlock, the block id should be changed to internal block.
-    if (isECBlock) {
-      StripedBlockWithLocations stripeBlkLocs = (StripedBlockWithLocations) blkLocs;
-      byte[] indices = ((StripedBlockWithLocations) blkLocs).getIndices();
+    try {
+      // For StripeBlock, the block id should be changed to internal block.
+      if (isECBlock) {
+        StripedBlockWithLocations stripeBlkLocs = (StripedBlockWithLocations) blkLocs;
+        byte[] indices = ((StripedBlockWithLocations) blkLocs).getIndices();
 
-      block = adjustIndices(block, sourceDN, indices, adjustList, locations,
-          stripeBlkLocs.getCellSize(), stripeBlkLocs.getDataBlockNum());
+        block = adjustIndices(block, sourceDN, indices, adjustList, locations,
+            stripeBlkLocs.getCellSize(), stripeBlkLocs.getDataBlockNum());
+      }
+      return buildMoveTask(null, block, isECBlock, sourceDN, locations,
+          sourceDNStorageType, this.preferDC, new ArrayList<>(locations));
+    } catch (IOException e) {
+      METRICS.incrFailedScheduledBlocks();
+      LOG.error("Failed schedule {} with error, ", blkLocs, e);
+      throw e;
     }
-    return buildMoveTask(null, block, isECBlock, sourceDN, locations,
-        sourceDNStorageType, this.preferDC, new ArrayList<>(locations));
   }
 
   /**
@@ -264,6 +278,10 @@ public class ReplicaDispatcher {
 
     // The moving task will be executed async.
     MOVER_MANAGER.addTask(movingTask);
+
+    METRICS.incrScheduledBlocks();
+    METRICS.incrPendingTasks();
+
     return movingTask;
   }
 
@@ -291,15 +309,16 @@ public class ReplicaDispatcher {
   private static synchronized void initMoverManager(Configuration conf) {
     if (MOVER_MANAGER == null) {
       MOVER_MANAGER = new MoverManager(conf);
+      METRICS = ReplicaDispatcherMetrics.create();
     }
-    MOVER_MANAGER.incrReference();
   }
 
   private static synchronized void shutdownMoverManager() {
     if (MOVER_MANAGER != null) {
-      if (MOVER_MANAGER.descReference() == 0) {
+      if (MOVER_MANAGER.decrReference() == 0) {
         MOVER_MANAGER.shutdown();
         MOVER_MANAGER = null;
+        METRICS = null;
       }
     }
   }
@@ -328,6 +347,8 @@ public class ReplicaDispatcher {
     private final String preferDC;
     private final List<Node> excludeNodes;
     private final String fullPath;
+
+    private final long creatingTime = Time.monotonicNow();
 
     public ReplicaMoveTask(String fullPath, Block block, boolean ecBlock,
         DatanodeInfo source, List<DatanodeInfo> locations, StorageType storageType,
@@ -363,7 +384,12 @@ public class ReplicaDispatcher {
       return this.fullPath;
     }
 
+    public long getCreatingTime() {
+      return this.creatingTime;
+    }
+
     public void chooseTarget() throws IOException {
+      long startTime = Time.monotonicNow();
       DatanodeInfo targetDN;
       if (this.ecBlock) {
         targetDN = blockPlacementPolicy.chooseTargetForStripeBlock(
@@ -375,6 +401,7 @@ public class ReplicaDispatcher {
             this.locations, this.preferDC, this.excludeNodes);
       }
 
+      METRICS.addChooseTarget((Time.monotonicNow() - startTime));
       if (targetDN == null) {
         LOG.warn("[{}] Cannot choose target DN for {} with locations {} and source DN is {}.",
             nnc.getNsId(), this.block, this.locations, this.source);
@@ -387,8 +414,10 @@ public class ReplicaDispatcher {
      * Choose a proxy to migrate this replica.
      */
     public void chooseProxy() {
+      long startTime = Time.monotonicNow();
       this.proxy = chooseProxy(this.ecBlock, this.source, this.target,
           this.proxy, this.locations, enableCrossDC, nnc.getNsId());
+      METRICS.addChooseProxy((Time.monotonicNow() - startTime));
     }
 
     /**
@@ -604,7 +633,7 @@ public class ReplicaDispatcher {
       this.referenceCount.incrementAndGet();
     }
 
-    int descReference() {
+    int decrReference() {
       return this.referenceCount.decrementAndGet();
     }
 
@@ -651,13 +680,23 @@ public class ReplicaDispatcher {
         try {
           replicaMoveTask = this.movingBlocks.take();
           this.runningTasks.add(replicaMoveTask);
+
+          METRICS.decrPendingTasks();
+          METRICS.incrRunningTasks();
+
+          long startTime = Time.monotonicNow();
+          METRICS.addTaskQueueTime((startTime - replicaMoveTask.getCreatingTime()));
+
           boolean shouldRetry = replicaMoveTask.dispatch(true);
           if (shouldRetry) {
             LOG.info("Will retry move {}", replicaMoveTask);
             replicaMoveTask.chooseTarget();
             replicaMoveTask.chooseProxy();
             replicaMoveTask.dispatch(false);
+            METRICS.incrSuccessBlocksAfterRetry();
           }
+          METRICS.addSuccessBlocks((Time.monotonicNow() - startTime));
+          METRICS.incrMovedBytes(replicaMoveTask.block.getNumBytes());
         } catch (InterruptedException e) {
           // ignore
         } catch (Exception e) {
@@ -665,6 +704,7 @@ public class ReplicaDispatcher {
           if (replicaMoveTask != null) {
             replicaMoveTask.callBack();
           }
+          METRICS.incrFailedBlocks();
         } finally {
           if (replicaMoveTask != null) {
             if (replicaMoveTask.getFullPath() != null) {
@@ -674,6 +714,7 @@ public class ReplicaDispatcher {
             }
           }
           this.runningTasks.remove(replicaMoveTask);
+          METRICS.decrRunningTasks();
         }
       }
     }
