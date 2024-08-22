@@ -989,7 +989,12 @@ public class CapacityScheduler extends
     public void run() {
       while (!Thread.currentThread().isInterrupted()) {
         try {
-
+          // Don't run schedule if we have some pending backlogs already
+          if (cs.getAsyncSchedulingPendingBacklogs()
+              > cs.asyncMaxPendingBacklogs) {
+            Thread.sleep(1);
+            continue;
+          }
           // choose partitions
           List<String> partitions;
           if (cs.multipleSchedulersParallelly &&
