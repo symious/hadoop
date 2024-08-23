@@ -6,13 +6,21 @@ import time
 
 HOST_KEY = "hostName"
 UPGRADE_DOMAIN_KEY = "upgradeDomain"
+RACK_KEY = "rack"
 UPGRADE_DOMAIN_PREFIX = "ud"
 
+# new data nodes
 hosts_list = []
+# current data nodes
 dfs_hosts_list = []
+# Map(DN -> Rack)
 topology_mapping = {}
+# Map(DC -> Map(Domain, List[DataNode]))
 dc_ud_host_map = {}
+# Map(DC -> Map(Domain, Number))
 upgrade_domain_stat = {}
+# Map(DN -> Domain)
+dn_domain_state = {}
 
 
 # load host list file
@@ -51,6 +59,7 @@ def load_dfs_hosts( dfs_hosts ):
                 upgrade_domain_stat[current_dc][record[UPGRADE_DOMAIN_KEY]] = 0
             dc_ud_host_map[current_dc][record[UPGRADE_DOMAIN_KEY]].append(record[HOST_KEY])
             upgrade_domain_stat[current_dc][record[UPGRADE_DOMAIN_KEY]] += 1
+            dn_domain_state[record[HOST_KEY]] = record[UPGRADE_DOMAIN_KEY]
             dfs_hosts_list.append(record[HOST_KEY])
         except:
             print("Format error for " + record[HOST_KEY])
@@ -142,6 +151,7 @@ def match():
         # update upgrade domain info
         dc_ud_host_map[current_dc][current_domain].append(host)
         upgrade_domain_stat[current_dc][current_domain] += 1
+        dn_domain_state[host] = current_domain
         dfs_hosts_list.append(host)
 
 
@@ -154,11 +164,14 @@ def output( hosts_file ):
     with open(hosts_file, 'w') as fout:
         fout.write("[\n")
         output_string = ""
-        for dc in dc_ud_host_map.keys():
-            for upgrade_domain in dc_ud_host_map[dc].keys():
-                for host in dc_ud_host_map[dc][upgrade_domain]:
-                    output_string += ("{\"" + HOST_KEY + "\": \"" + host + "\", \"" + UPGRADE_DOMAIN_KEY + "\": \""
-                                      + upgrade_domain + "\"},\n")
+        for host in hosts_list:
+            print(host + " domain:" + dn_domain_state[host] + " rack:" + topology_mapping[host])
+            output_string += """{{\"{}\":\"{}\",\"{}\":\"{}\",\"{}\":\"{}\"}},\n""".format(HOST_KEY, host, UPGRADE_DOMAIN_KEY, dn_domain_state[host], RACK_KEY, topology_mapping[host])
+        #for dc in dc_ud_host_map.keys():
+        #    for upgrade_domain in dc_ud_host_map[dc].keys():
+        #        for host in dc_ud_host_map[dc][upgrade_domain]:
+        #            output_string += ("{\"" + HOST_KEY + "\": \"" + host + "\", \"" + UPGRADE_DOMAIN_KEY + "\": \""
+        #                              + upgrade_domain + "\"},\n")
         fout.write(output_string[:-2] + "\n")
         fout.write("]")
 
@@ -174,7 +187,7 @@ def get_next_upgrade_domain( dc ):
         sys.exit()
     return "/" + dc + "/" + UPGRADE_DOMAIN_PREFIX + str(max_suffix + 1)
 
-
+## DC1:50,DC2:50
 def parse_domain_number( arg, domain_number ):
     for item in arg.strip().split(','):
         item_list = item.strip().split(':')
@@ -187,14 +200,14 @@ def get_host_dc( host ):
     return topology_mapping[host].split('/')[1]
 
 
-def main() -> object:
+def main():
     start = time.time()
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "h:m:i:t:d:n:o",
-                                   ["mode=", "inputlist=", "topology=", "dfshosts=", "number="])
+        opts, args = getopt.getopt(sys.argv[1:], "h:m:i:t:d:n:o:",
+                                   ["mode=", "inputlist=", "topology=", "dfshosts=", "number=", "outputfile="])
     except getopt.GetoptError:
         print('upgrade_domain_generator.py -m <init/add/match> '
-              '-i <inputlist> -t <topology> -d <dfshosts>')
+              '-i <inputlist> -t <topology> -d <dfshosts> -n <number> -d <outputfile>')
         sys.exit(2)
 
     mode = ""
@@ -217,25 +230,24 @@ def main() -> object:
             topology_file = arg
         elif opt in ("-d", "--dfshosts"):
             dfs_hosts_file = arg
-            output_file = dfs_hosts_file
         elif opt in ("-n", "--number"):
             parse_domain_number(arg, domain_number)
         elif opt in ("-o", "--outputfile"):
             output_file = arg
 
+    load_host_list(input_file)
+    load_topology_info(topology_file)
+
     if mode == 'init':
         print("Running in init mode!")
-        load_host_list(input_file)
-        load_topology_info(topology_file)
         if dfs_hosts_file != "":
             load_dfs_hosts(dfs_hosts_file)
         init(domain_number)
     else:
         print("Running in match mode!")
-        load_host_list(input_file)
-        load_topology_info(topology_file)
         load_dfs_hosts(dfs_hosts_file)
         match()
+
     output(output_file)
 
     print("Runtime is " + str(time.time() - start) + 's')

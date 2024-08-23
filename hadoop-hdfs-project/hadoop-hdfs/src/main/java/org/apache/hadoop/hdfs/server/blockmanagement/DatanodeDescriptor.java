@@ -1023,7 +1023,8 @@ public class DatanodeDescriptor extends DatanodeInfo {
     return sb.toString();
   }
 
-  DatanodeStorageInfo updateStorage(DatanodeStorage s) {
+  @VisibleForTesting
+  public DatanodeStorageInfo updateStorage(DatanodeStorage s) {
     synchronized (storageMap) {
       DatanodeStorageInfo storage = storageMap.get(s.getStorageID());
       DFSTopologyNodeImpl parent = null;

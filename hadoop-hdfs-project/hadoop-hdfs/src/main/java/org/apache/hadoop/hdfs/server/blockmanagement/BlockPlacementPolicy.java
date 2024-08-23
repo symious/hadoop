@@ -87,7 +87,7 @@ public abstract class BlockPlacementPolicy {
    *          is only a hint and due to cluster state, namenode may not be 
    *          able to place the blocks on these datanodes.
    */
-  DatanodeStorageInfo[] chooseTarget(String src,
+  public DatanodeStorageInfo[] chooseTarget(String src,
       int numOfReplicas, Node writer,
       Set<Node> excludedNodes,
       long blocksize,

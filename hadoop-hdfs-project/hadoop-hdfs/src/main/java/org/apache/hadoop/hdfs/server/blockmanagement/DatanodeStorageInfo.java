@@ -147,7 +147,7 @@ public class DatanodeStorageInfo {
    */
   private boolean blockContentsStale = true;
 
-  DatanodeStorageInfo(DatanodeDescriptor dn, DatanodeStorage s) {
+  public DatanodeStorageInfo(DatanodeDescriptor dn, DatanodeStorage s) {
     this(dn, s.getStorageID(), s.getStorageType(), s.getState());
   }
 
@@ -413,7 +413,7 @@ public class DatanodeStorageInfo {
   }
 
   @VisibleForTesting
-  void setRemainingForTests(int remaining) {
+  public void setRemainingForTests(int remaining) {
     this.remaining = remaining;
   }
 

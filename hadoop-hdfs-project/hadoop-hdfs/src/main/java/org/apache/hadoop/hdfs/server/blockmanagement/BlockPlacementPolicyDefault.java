@@ -189,7 +189,7 @@ public class BlockPlacementPolicyDefault extends BlockPlacementPolicy {
   }
 
   @Override
-  DatanodeStorageInfo[] chooseTarget(String src,
+  public DatanodeStorageInfo[] chooseTarget(String src,
       int numOfReplicas,
       Node writer,
       Set<Node> excludedNodes,
