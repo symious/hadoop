@@ -57,6 +57,7 @@ import javax.management.ObjectName;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.ha.HAServiceProtocol;
 import org.apache.hadoop.hdfs.AddBlockFlag;
 import org.apache.hadoop.fs.FileEncryptionInfo;
@@ -515,6 +516,11 @@ public class BlockManager implements BlockStatsMXBean {
    */
   private volatile boolean drReplicationRuleEnabled;
 
+  /**
+   * Whether to enable strict validation of DR rule.
+   */
+  private volatile boolean drRuleValidationEnabled;
+
   private volatile Set<String> drDataCenters = new HashSet<>();
 
   private volatile Map<Short, ReplicationRule> drReplicationRuleForColdData = new HashMap<>();
@@ -524,6 +530,8 @@ public class BlockManager implements BlockStatsMXBean {
   private volatile boolean generateDrRuleForTest = false;
 
   private volatile Map<Short, ReplicationRule> drStripedBlockRule = new HashMap<>();
+
+  private volatile Set<String> drBlacklistPaths = new HashSet<>();
 
   /**
    * Excess storage prioritizes specified data centers for to delete,
@@ -599,6 +607,9 @@ public class BlockManager implements BlockStatsMXBean {
     drReplicationRuleEnabled = conf.getBoolean(
         DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY,
         DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_DEFAULT);
+    drRuleValidationEnabled = conf.getBoolean(
+        DFSConfigKeys.DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY,
+        DFSConfigKeys.DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY_DEFAULT);
     setDrDataCenters(new HashSet<>(StringUtils.getTrimmedStringCollection(
         conf.get(DFSConfigKeys.DFS_NAMENODE_DR_DATACENTERS_KEY))));
     drColdDataThresholdMS = conf.getLong(
@@ -608,6 +619,7 @@ public class BlockManager implements BlockStatsMXBean {
         conf.get(DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY), ";"));
     setDrStripedBlockRule(StringUtils.getTrimmedStringCollection(
         conf.get(DFSConfigKeys.DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY), ";"));
+    setDrBlacklistPaths(conf.get(DFS_NAMENODE_DR_BLACKLIST_PATHS));
     storagePolicySuite = BlockStoragePolicySuite.createDefaultSuite();
     pendingReconstruction = new PendingReconstructionBlocks(conf.getInt(
         DFSConfigKeys.DFS_NAMENODE_RECONSTRUCTION_PENDING_TIMEOUT_SEC_KEY,
@@ -831,6 +843,10 @@ public class BlockManager implements BlockStatsMXBean {
     this.drReplicationRuleEnabled = drReplicationRuleEnabled;
   }
 
+  public void setDrRuleValidationEnabled(boolean drRuleValidationEnabled) {
+    this.drRuleValidationEnabled = drRuleValidationEnabled;
+  }
+
   public void setDrReplicationRuleForColdData(Collection<String> replicaRuleCollections)
       throws IOException {
     Map<Short, ReplicationRule> replicationRules = new HashMap<>();
@@ -853,10 +869,12 @@ public class BlockManager implements BlockStatsMXBean {
         }
       }
 
-      Preconditions.checkArgument(replicationRules.containsKey((short) 3),
-          "%s least should contain 3 replica corresponding " +
-              "replication rule for DR",
-          DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY);
+      if (drRuleValidationEnabled) {
+        Preconditions.checkArgument(replicationRules.containsKey((short) 3),
+            "%s least should contain 3 replica corresponding " +
+                "replication rule for DR",
+            DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY);
+      }
     }
     drReplicationRuleForColdData = replicationRules;
   }
@@ -864,6 +882,11 @@ public class BlockManager implements BlockStatsMXBean {
   @VisibleForTesting
   public boolean isDrReplicationRuleEnabled() {
     return drReplicationRuleEnabled;
+  }
+
+  @VisibleForTesting
+  public boolean isDrRuleValidationEnabled() {
+    return drRuleValidationEnabled;
   }
 
   @VisibleForTesting
@@ -903,10 +926,12 @@ public class BlockManager implements BlockStatsMXBean {
         }
       }
 
-      Preconditions.checkArgument(stripedBlockRules.containsKey((short) 9),
-          "%s least should contain 9 replica corresponding " +
-              "striped block rule for DR",
-          DFSConfigKeys.DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY);
+      if (drRuleValidationEnabled) {
+        Preconditions.checkArgument(stripedBlockRules.containsKey((short) 9),
+            "%s least should contain 9 replica corresponding " +
+                "striped block rule for DR",
+            DFSConfigKeys.DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY);
+      }
     }
     drStripedBlockRule = stripedBlockRules;
   }
@@ -914,6 +939,28 @@ public class BlockManager implements BlockStatsMXBean {
   @VisibleForTesting
   public Map<Short, ReplicationRule> getDrStripedBlockRule() {
     return drStripedBlockRule;
+  }
+
+  public void setDrBlacklistPaths(final String valueString) {
+    Set<String> newBlacklistPaths = new HashSet<>(StringUtils.
+        getTrimmedStringCollection(valueString));
+    Set<String> validPaths = new HashSet<>();
+    for (String src : newBlacklistPaths) {
+      final Path path = new Path(src);
+      if (!path.isAbsolute()) {
+        LOG.error("{} ignoring relative path {}", DFS_NAMENODE_DR_BLACKLIST_PATHS, src);
+      } else if (path.toUri().getScheme() != null) {
+        LOG.error("{} ignoring path {} with scheme", DFS_NAMENODE_DR_BLACKLIST_PATHS, src);
+      } else {
+        validPaths.add(path.toString());
+      }
+    }
+    drBlacklistPaths = validPaths;
+  }
+
+  @VisibleForTesting
+  public Set<String> getDrBlacklistPaths() {
+    return drBlacklistPaths;
   }
 
   private static BlockTokenSecretManager createBlockTokenSecretManager(
@@ -2500,6 +2547,11 @@ public class BlockManager implements BlockStatsMXBean {
   // Generate replica rules for DR.
   ReplicationRule generateRuleForDR(Collection<DatanodeStorageInfo> chosenNodes,
       BlockInfo blockInfo, BlockCollection bc) {
+    String file = bc.getName();
+    if (shouldExcludeBlock(file)) {
+      LOG.debug("Block = {}, file = {} will skip DR logic.", blockInfo, file);
+      return null;
+    }
     // Must be the specified valid IDC for DR.
     Set<String> copiedDRDataCenters = drDataCenters;
     if (copiedDRDataCenters == null || copiedDRDataCenters.size() <= 1) {
@@ -2565,6 +2617,25 @@ public class BlockManager implements BlockStatsMXBean {
         stripedBlock.getRealTotalBlockNum());
     blockLog.debug("BLOCK = {} generate striped block rule = {} for DR.", blockInfo, rule);
     return rule;
+  }
+
+  /**
+   * Determine whether the block skips the dr logic based on drBlacklistPaths.
+   * The drBlacklistPaths may be relatively small, so here is simple code.
+   * @param file
+   * @return
+   */
+  private boolean shouldExcludeBlock(String file) {
+    if (drBlacklistPaths == null || drBlacklistPaths.isEmpty()) {
+      return false;
+    }
+
+    for (String path : drBlacklistPaths) {
+      if (!StringUtils.isNullOrEmpty(file) && file.startsWith(path)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   // Used only for testing.

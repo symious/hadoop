@@ -51,11 +51,13 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_AL
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_CREATE_SYMLNK_CONSTRAINTS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DELETE_REDUNDANT_DATACENTERS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DISABLE_EC_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_BLACKLIST_PATHS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_DATACENTERS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_ENABLED;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_EXCESS_REDUNDANCY_TIMEOUT_CHECK_LIMIT;
@@ -978,6 +980,20 @@ public class TestNameNodeReconfigure {
         null);
     assertFalse(bm.isDrReplicationRuleEnabled());
 
+    // verify default value.
+    assertFalse(bm.isDrRuleValidationEnabled());
+
+    // try correct value.
+    nameNode.reconfigurePropertyImpl(DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY,
+        "True");
+    assertTrue(bm.isDrRuleValidationEnabled());
+
+    // revert to defaults.
+    nameNode.reconfigurePropertyImpl(DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY,
+        null);
+    assertFalse(bm.isDrRuleValidationEnabled());
+
+
     // try invalid drColdDataThresholdMS.
     try {
       nameNode.reconfigureProperty(DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY,
@@ -1015,6 +1031,10 @@ public class TestNameNodeReconfigure {
       assertEquals("Could not change property " +
           "dfs.namenode.dr.datacenters from '/DC1,/DC2' to ''", e.getMessage());
     }
+
+    nameNode.reconfigurePropertyImpl(DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY,
+        "True");
+    assertTrue(bm.isDrRuleValidationEnabled());
 
     // try correct drReplicationRuleForColdData.
     nameNode.reconfigureProperty(DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY,
@@ -1101,6 +1121,16 @@ public class TestNameNodeReconfigure {
         bm.getDrStripedBlockRule().get((short) 9));
     assertEquals(ReplicationRule.parseFromString("/DC1:10,/DC3:4"),
         bm.getDrStripedBlockRule().get((short) 14));
+
+    // Test drBlacklistPaths.
+    nameNode.reconfigureProperty(DFS_NAMENODE_DR_BLACKLIST_PATHS,
+        "/projects/path1,/projects/path2,hdfs://ns1/projects/path3,projects/path5");
+    assertEquals(2, bm.getDrBlacklistPaths().size());
+    assertTrue(bm.getDrBlacklistPaths().contains("/projects/path1"));
+    assertTrue(bm.getDrBlacklistPaths().contains("/projects/path2"));
+
+    nameNode.reconfigureProperty(DFS_NAMENODE_DR_BLACKLIST_PATHS, "");
+    assertEquals(0, bm.getDrBlacklistPaths().size());
   }
 
   @Test

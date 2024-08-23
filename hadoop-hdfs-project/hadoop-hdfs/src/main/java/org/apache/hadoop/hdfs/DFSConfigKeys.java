@@ -1348,6 +1348,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.namenode.dr.replication-rule.enable";
   public static final boolean DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_DEFAULT = false;
 
+  public static final String  DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY =
+      "dfs.namenode.dr-rule.validation.enable";
+  public static final boolean DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY_DEFAULT = false;
+
   public static final String  DFS_NAMENODE_DR_DATACENTERS_KEY = "dfs.namenode.dr.datacenters";
 
   public static final String  DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY =
@@ -1362,6 +1366,9 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   // value such as `9=/datacenter0:6,/datacenter1:3`
   public static final String DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY =
       "dfs.namenode.dr.striped.block-rule";
+
+  public static final String DFS_NAMENODE_DR_BLACKLIST_PATHS =
+      "dfs.namenode.dr.blacklist.paths";
 
   public static final String DFS_BLOCK_PLACEMENT_EC_CLASSNAME_KEY = "dfs.block.placement.ec.classname";
   public static final Class<BlockPlacementPolicyRackFaultTolerant> DFS_BLOCK_PLACEMENT_EC_CLASSNAME_DEFAULT = BlockPlacementPolicyRackFaultTolerant.class;

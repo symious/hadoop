@@ -148,6 +148,9 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_HOSTS_MAINTENANCE_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_IMAGE_PARALLEL_LOAD_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_BLACKLIST_PATHS;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_DEFAULT;
@@ -494,8 +497,10 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY,
           DFS_NAMENODE_FAULTY_DC_NUMBER_THRESHOLD_KEY,
           DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY,
+          DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY,
           DFS_NAMENODE_DR_DATACENTERS_KEY,
           DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY,
+          DFS_NAMENODE_DR_BLACKLIST_PATHS,
           DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY,
           DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY,
           DFS_BLOCK_IGNORE_MISS_REPLICA_KEY));
@@ -2598,10 +2603,12 @@ public class NameNode extends ReconfigurableBase implements
     } else if (property.equals(DFS_NAMENODE_ACCESSTIME_PRECISION_KEY)) {
       return reconfigurationAccessTimePrecision(newVal);
     } else if (property.equals(DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY) ||
+        property.equals(DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY) ||
         property.equals(DFS_NAMENODE_DR_DATACENTERS_KEY) ||
         property.equals(DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY) ||
         property.equals(DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY) ||
-        property.equals(DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY)) {
+        property.equals(DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY) ||
+        property.equals(DFS_NAMENODE_DR_BLACKLIST_PATHS)) {
       return reconfigureDRParameters(property, newVal);
     } else if (property.equals(DFS_NAMENODE_ENABLE_FAULTY_DC_MONITOR_KEY)) {
       return reconfigureEnableFaultyDCMonitor(newVal);
@@ -3407,6 +3414,14 @@ public class NameNode extends ReconfigurableBase implements
           bm.setDrReplicationRuleEnabled(enable);
           break;
         }
+        case DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY: {
+          boolean enable = (newVal == null ?
+              DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY_DEFAULT :
+              Boolean.parseBoolean(newVal));
+          result = Boolean.toString(enable);
+          bm.setDrRuleValidationEnabled(enable);
+          break;
+        }
         case DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY: {
           long value = (newVal == null ? DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_DEFAULT :
               Long.parseLong(newVal));
@@ -3427,6 +3442,11 @@ public class NameNode extends ReconfigurableBase implements
         }
         case DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY: {
           bm.setDrStripedBlockRule(StringUtils.getTrimmedStringCollection(newVal, ";"));
+          result = newVal;
+          break;
+        }
+        case DFS_NAMENODE_DR_BLACKLIST_PATHS: {
+          bm.setDrBlacklistPaths(newVal);
           result = newVal;
           break;
         }

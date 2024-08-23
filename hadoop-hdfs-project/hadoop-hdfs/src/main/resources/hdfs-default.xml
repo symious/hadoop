@@ -5703,6 +5703,31 @@
 </property>
 
 <property>
+  <name>dfs.namenode.dr.striped.block-rule</name>
+  <value></value>
+  <description>
+    Striped Block rule for configuring in DR.
+    The value should follow the format: `9=/datacenter0:6,/datacenter1:3`.
+  </description>
+</property>
+
+<property>
+  <name>dfs.namenode.dr-rule.validation.enable</name>
+  <value>false</value>
+  <description>
+    Whether to enable strict validation of DR rule, default false.
+  </description>
+</property>
+
+<property>
+  <name>dfs.namenode.dr.blacklist.paths</name>
+  <value></value>
+  <description>
+    A comma-separated list of paths, these paths will skip dr logic.
+  </description>
+</property>
+
+<property>
   <name>dfs.storage.policy.satisfier.enabled</name>
   <value>false</value>
   <name>dfs.storage.policy.satisfier.mode</name>

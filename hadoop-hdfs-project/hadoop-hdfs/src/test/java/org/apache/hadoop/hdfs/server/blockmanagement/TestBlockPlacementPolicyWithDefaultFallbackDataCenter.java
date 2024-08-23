@@ -48,6 +48,7 @@ import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.net.StaticMapping;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.util.Time;
+import org.apache.log4j.Level;
 import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.LoggerFactory;
@@ -267,6 +268,9 @@ public class TestBlockPlacementPolicyWithDefaultFallbackDataCenter
 
   @Test
   public void testChooseTargetForDR() throws IOException, InterruptedException, TimeoutException {
+    GenericTestUtils.setLogLevel(BlockManager.LOG, Level.DEBUG);
+    GenericTestUtils.LogCapturer logs =
+        GenericTestUtils.LogCapturer.captureLogs(BlockManager.LOG);
     Configuration conf = new HdfsConfiguration();
     final String[] racks = {"/datacenter0/rack0", "/datacenter0/rack0", "/datacenter0/rack1"};
     final String[] hosts = {"host0", "host1", "host2"};
@@ -277,6 +281,11 @@ public class TestBlockPlacementPolicyWithDefaultFallbackDataCenter
       cluster.waitActive();
       DistributedFileSystem fs = cluster.getFileSystem();
       BlockManager blockManager = cluster.getNamesystem().getBlockManager();
+
+      // Set dr blacklist paths.
+      blockManager.setDrBlacklistPaths("/test3");
+      assertTrue(blockManager.getDrBlacklistPaths().contains("/test3"));
+
       // Create test file.
       Path file1 = new Path("/test1");
       DFSTestUtil.createFile(fs, file1, 1024L, (short) 2, 0L);
@@ -297,6 +306,16 @@ public class TestBlockPlacementPolicyWithDefaultFallbackDataCenter
       idcMap = countDataNodeDC(loc);
       // The replication rule is /datacenter0:3.
       assertEquals(3, idcMap.get("/datacenter0").intValue());
+
+      Path file3 = new Path("/test3/file");
+      DFSTestUtil.createFile(fs, file3, 1024L, (short)2, 0L);
+      DFSTestUtil.waitReplication(fs, file3, (short) 2);
+      lb = DFSTestUtil.getAllBlocks(fs, file3).get(0);
+      loc = lb.getLocations();
+      assertEquals(2, loc.length);
+      idcMap = countDataNodeDC(loc);
+      // The replication rule is /datacenter0:2.
+      assertEquals(2, idcMap.get("/datacenter0").intValue());
 
       // Adding 3 new hosts about '/datacenter1'.
       cluster.startDataNodes(conf, 3, true, null,
@@ -377,6 +396,18 @@ public class TestBlockPlacementPolicyWithDefaultFallbackDataCenter
       assertEquals(1, idcMap.get("/datacenter1").intValue());
 
       blockManager.setGenerateDrRuleForTest(false);
+
+      // Test drBlacklistPaths.
+      fs.setReplication(file3, (short) 3);
+      DFSTestUtil.waitReplication(fs, file3, (short) 3);
+      lb = DFSTestUtil.getAllBlocks(fs, file3).get(0);
+      loc = lb.getLocations();
+      assertEquals(3, loc.length);
+      idcMap = countDataNodeDC(loc);
+      // Current path is in drBlacklistPaths, so the replication rule is /datacenter0:3.
+      assertEquals(3, idcMap.get("/datacenter0").intValue());
+      assertTrue(logs.getOutput().contains(String.format("Block = %s, file = %s " +
+          "will skip DR logic.", lb.getBlock().getLocalBlock(), file3)));
     }
   }
 
