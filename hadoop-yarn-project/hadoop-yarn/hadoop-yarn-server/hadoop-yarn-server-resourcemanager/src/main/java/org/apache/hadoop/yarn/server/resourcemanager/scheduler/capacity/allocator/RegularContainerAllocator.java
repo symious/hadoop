@@ -702,9 +702,11 @@ public class RegularContainerAllocator extends AbstractContainerAllocator {
     Resource totalResource = node.getTotalResource();
 
     if (!Resources.fitsIn(rc, capability, totalResource)) {
-      LOG.warn("Node : " + node.getNodeID()
-          + " does not have sufficient resource for ask : " + pendingAsk
-          + " node total capability : " + node.getTotalResource());
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Node : " + node.getNodeID()
+            + " does not have sufficient resource for ask : " + pendingAsk
+            + " node total capability : " + node.getTotalResource());
+      }
       // Skip this locality request
       ActivitiesLogger.APP.recordSkippedAppActivityWithoutAllocation(
           activitiesManager, node, application, schedulerKey,
