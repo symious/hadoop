@@ -1301,7 +1301,8 @@ public class NameNodeRpcServer implements NamenodeProtocols {
 
     Path trashRoot = new Path("/Trash", user);
     if (src.startsWith(trashRoot.toString())) {
-      // Already in trash
+      // Already in trash, directly delete but only if superuser
+      namesystem.checkSuperuserPrivilege();
       namesystem.delete(src, true, logRetryCache);
       return;
     }
