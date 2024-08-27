@@ -276,6 +276,13 @@ public class ZoneMoverV2 {
     }
   }
 
+  /**
+   * Return true if this path can be skipped in trigger monitor.
+   */
+  public boolean skipPath(String path) {
+    return false;
+  }
+
   public int startInTriggerMonitor() throws IOException {
     start();
     initMoverMetrics();
@@ -287,6 +294,10 @@ public class ZoneMoverV2 {
         // process the path
         String curPath = curRecord.getRight();
         LOG.debug("Start to monitor process path: {}", curPath);
+        if (skipPath(curPath)) {
+          LOG.info("{} will be skipped.", curPath);
+          continue;
+        }
         Result result = migratePath(curPath);
         if (this.checkFileTaskStatusThead != null) {
           this.checkFileTaskStatusThead.addFileTask(new FileTask(curPath, result, Time.now(),
@@ -327,7 +338,7 @@ public class ZoneMoverV2 {
   /**
    * Stop all threads.
    */
-  void shutdown() {
+  public void shutdown() {
     if (this.replicaDispatcher != null) {
       this.replicaDispatcher.shutdown();
     }
@@ -452,7 +463,7 @@ public class ZoneMoverV2 {
       if (loadMapFromStore) {
         LOG.info("Initializing MapUpdater");
         driver = ReflectionUtils.newInstance(driverClass, conf);
-        driver.init(conf, "ZoneMover_" + namenode.getAuthority());
+        driver.init(conf, "ZoneMoverV2_" + namenode.getAuthority());
         mapUpdaterThread = zs.startMapUpdater(namenode, driver);
       }
       return zs.startInZoneServiceTriggerMonitor(zoneServiceMetrics);

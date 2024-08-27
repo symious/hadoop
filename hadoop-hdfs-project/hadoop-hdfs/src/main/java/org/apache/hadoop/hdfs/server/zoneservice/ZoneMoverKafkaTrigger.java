@@ -368,6 +368,13 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
     if (executorService != null) {
       executorService.shutdown();
     }
+    if (driver != null) {
+      try {
+        driver.close();
+      } catch (Exception e) {
+        LOG.warn("Failed to close driver.", e);
+      }
+    }
   }
 
   /**

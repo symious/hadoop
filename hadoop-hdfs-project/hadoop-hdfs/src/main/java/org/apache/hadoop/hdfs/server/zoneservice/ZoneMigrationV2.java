@@ -35,11 +35,12 @@ import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
-import org.apache.hadoop.hdfs.server.mover.Mover;
-import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
+import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
+import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.hdfs.server.zoneservice.utils.RunMode;
 import org.apache.hadoop.net.NetUtils;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -49,6 +50,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -64,6 +66,8 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
   private final String sourceDC;
   private final String targetDC;
   private final boolean isDecrease;
+  private volatile Map<String, ReplicationRule> blackList = new HashMap<>();
+  private BlackListUpdater blackListUpdater = null;
 
   public ZoneMigrationV2(Configuration conf, URI nameNode, List<Path> paths,
       RunMode runMode, ZoneMoverTrigger zoneMoverTrigger,
@@ -123,6 +127,19 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
     }
   }
 
+  private void startBlackListUpdater(URI namenode, StoreDriver driver) {
+    this.blackListUpdater = new BlackListUpdater(namenode, driver);
+    blackListUpdater.start();
+  }
+
+  @Override
+  public void shutdown() {
+    super.shutdown();
+    if (this.blackListUpdater != null) {
+      this.blackListUpdater.shutdown();
+    }
+  }
+
   public static int runWithMonitorByTrigger(ZoneMoverTrigger zoneMoverTrigger,
       Configuration conf, URI namenode, List<Path> paths, ReplicationRule rule,
       String sourceDC, String targetDC, boolean isDecrease, boolean changeReplica)
@@ -141,6 +158,7 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
     try {
       zm = new ZoneMigrationV2(conf, namenode, paths, RunMode.MONITOR,
           zoneMoverTrigger, rule, changeReplica, sourceDC, targetDC, isDecrease);
+      zm.startBlackListUpdater(namenode, zoneMoverTrigger.getStoreDriver());
       zm.startInTriggerMonitor();
     } finally {
       if (zm != null) {
@@ -151,6 +169,23 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
       }
     }
     return ExitStatus.SUCCESS.getExitCode();
+  }
+
+  @Override
+  public boolean skipPath(String path) {
+    String matchPath = "";
+    for (Map.Entry<String, ReplicationRule> entry : blackList.entrySet()) {
+      String key = entry.getKey();
+      if (path.startsWith(key)) {
+        // A sub path may have different a rule with its parent path.
+        // For example, if "/test" and "/test/abc" have different rules,
+        // "/test/abc/1.txt" should use the rule of "/test/abc".
+        if (key.length() > matchPath.length()) {
+          matchPath = key;
+        }
+      }
+    }
+    return !matchPath.isEmpty();
   }
 
   protected Path getIdPath(RunMode mode) {
@@ -394,6 +429,71 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
           }
         }
       }
+    }
+  }
+
+
+  /* Monitor records in zookeeper and sync the records */
+  public class BlackListUpdater extends Thread {
+    private final URI namenode;
+    private final StoreDriver driver;
+    private volatile boolean shouldRun = true;
+
+    public BlackListUpdater(URI namenode, StoreDriver driver) {
+      this.namenode = namenode;
+      this.driver = driver;
+    }
+
+    public void shutdown() {
+      this.shouldRun = false;
+    }
+
+    @Override
+    public void run() {
+      LOG.info("BlackListUpdater is starting...");
+      while (shouldRun) {
+        try {
+          // For Zone Migration: Update records to the filteredPathRuleMap.
+          updatePathRuleForZoneMover();
+          // Wait for the specified interval before continuing execution.
+          Thread.sleep(checkUpdateInterval * 1000L);
+        } catch (IOException e) {
+          LOG.error("There are some errors happen when BlackListUpdater updates path-rule pairs.", e);
+        } catch (InterruptedException e) {
+          LOG.warn("Monitor path rule map process is interrupted!");
+          break;
+        }
+      }
+    }
+
+    private void updatePathRuleForZoneMover() throws IOException {
+      if (driver == null) {
+        return;
+      }
+      updatePathRuleMap(driver, namenode.getAuthority());
+    }
+
+    private void updatePathRuleMap(StoreDriver driver, String nameSpace) throws IOException {
+      Map<String, ReplicationRule> tmpBlackList = new HashMap<>();
+      List<MigrationRecord> records = driver.getAll(MigrationRecord.class).getRecords();
+      for (MigrationRecord record : records) {
+        // Process only records in "monitor" mode and the specified name space.
+        if (record.getMode().equals(RunMode.MONITOR.getName()) &&
+            record.getNs().equals(nameSpace)) {
+          String rule = record.getRule();
+          if (StringUtils.isNullOrEmpty(rule)) {
+            LOG.warn("Failed adding record: {} , due replication rule as null will skip.", record);
+            continue;
+          }
+          ReplicationRule parsedRule = ReplicationRule.parseFromString(record.getRule());
+          // For Zone Mover: Add records to the filteredPathRuleMap.
+          LOG.debug("Adding record: {} to the filteredPathRuleMap for Zone Mover.", record);
+          tmpBlackList.put(record.getPath(), parsedRule);
+        }
+      }
+
+      // Update the filteredPathRulesFromZS for Zone Mover.
+      blackList = tmpBlackList;
     }
   }
 
