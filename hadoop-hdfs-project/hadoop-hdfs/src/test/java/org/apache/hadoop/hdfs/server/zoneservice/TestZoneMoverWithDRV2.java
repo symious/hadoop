@@ -40,6 +40,7 @@ import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.store.KafkaTopicRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.hdfs.server.zoneservice.utils.RunMode;
 import org.apache.hadoop.test.GenericTestUtils;
@@ -49,6 +50,8 @@ import org.apache.log4j.LogManager;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -67,6 +70,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 public class TestZoneMoverWithDRV2 {
+  private static final Logger LOG = LoggerFactory.getLogger(TestZoneMoverWithDRV2.class);
   private static final long FILE_LEN = 1024;
   private static final int DEFAULT_BLOCK_SIZE = 1024 * 1024;
   private static final ErasureCodingPolicy ecPolicy = StripedFileTestUtil.getDefaultECPolicy();
@@ -94,6 +98,7 @@ public class TestZoneMoverWithDRV2 {
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY, 500);
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_INTERVAL_SECONDS_KEY, 10);
     conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY, 1L);
+    conf.setInt(DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_ZK_UPDATE_OFFSET_INTERVAL_KEY, 0);
     conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_ENABLE_KEY, true);
     conf.set(DFSConfigKeys.DFS_NAMENODE_DR_DATACENTERS_KEY, "/datacenter0,/datacenter1");
     conf.set(DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY,
@@ -414,14 +419,14 @@ public class TestZoneMoverWithDRV2 {
       final int[] listTest = {2, 3, 4, 5, 6};
       List<Path> paths = new ArrayList<>(Collections.singletonList(new Path("/test")));
       List<Pair<ConsumerRecord<String, String>, String>> records = new ArrayList<>();
-      ConsumerRecord<String, String> record =
-          new ConsumerRecord<>("test-topic", 0, 0, "key1", "value1");
+      ConsumerRecord<String, String> record;
       // Prepare the files with different distribution.
       for (int disNum: listTest) {
         short replication = (short) disNum;
         Path path = new Path("/test/File." + disNum);
         DFSTestUtil.createFile(fs, path, FILE_LEN, replication, 0L);
         DFSTestUtil.waitReplication(fs, path, replication);
+        record = new ConsumerRecord<>("test-topic", 0, disNum, "key1", "value1");
         records.add(Pair.of(record, path.toString()));
       }
 
@@ -439,7 +444,7 @@ public class TestZoneMoverWithDRV2 {
             zoneMoverTrigger, false, false, false, false);
         zm.initMoverMetrics();
         ZoneMoverMetrics zoneMoverMetric = zm.getZoneMoverMetrics();
-        assertEquals(zoneMoverMetric.getSuccessTotalMove().lastStat().numSamples(), 0);
+        assertEquals(zoneMoverMetric.getSuccessFiles().lastStat().numSamples(), 0);
         zm.startInTriggerMonitor();
 
         Map<Short, ReplicationRule> expectedRule = new HashMap<>();
@@ -454,7 +459,6 @@ public class TestZoneMoverWithDRV2 {
           String path = pair.getRight();
           GenericTestUtils.waitFor(() -> {
             try {
-
               return expectedRule.get(fs.getFileStatus(new Path(path)).getReplication()).equals(
                   ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
                       DFSTestUtil.getAllBlocks(fs, new Path(path)).get(0))));
@@ -463,7 +467,10 @@ public class TestZoneMoverWithDRV2 {
             }
           }, 500, 50000);
         }
-        assertEquals(zoneMoverMetric.getSuccessTotalMove().lastStat().numSamples(), 5);
+
+        GenericTestUtils.waitFor(()->
+                zoneMoverMetric.getSuccessFiles().lastStat().numSamples() == 5,
+            10, 50000);
       } finally {
         if (zm != null) {
           zm.shutdown();
@@ -474,7 +481,8 @@ public class TestZoneMoverWithDRV2 {
   }
 
   static class TestZoneMoverKafkaTrigger extends ZoneMoverTrigger {
-    List<Pair<ConsumerRecord<String, String>, String>> pathList;
+    private final List<Pair<ConsumerRecord<String, String>, String>> pathList;
+    private long lastRecordOffset = 0;
 
     public TestZoneMoverKafkaTrigger(List<Pair<ConsumerRecord<String, String>, String>> pathList) {
       this.pathList = pathList;
@@ -511,6 +519,16 @@ public class TestZoneMoverWithDRV2 {
     }
 
     @Override
+    public long saveOffsetToZookeeperCommon(KafkaTopicRecord kafkaTopicRecord) {
+      if (kafkaTopicRecord.getOffset() > lastRecordOffset) {
+        lastRecordOffset = kafkaTopicRecord.getOffset();
+        LOG.info("saveOffset {}", kafkaTopicRecord);
+        return 1;
+      }
+      return -1;
+    }
+
+    @Override
     public void saveOffsetToZookeeper(ConsumerRecord<String, String> record, String ns,
         String groupId, ZoneMoverMetrics zoneMoverMetrics) {
       //nothing;
@@ -521,6 +539,11 @@ public class TestZoneMoverWithDRV2 {
         ConsumerRecord<String, String> record, String ns, String groupId,
         ZoneServiceMetrics zoneServiceMetrics) {
       // do nothing
+    }
+
+    @Override
+    public void savePathRecordToZookeeper(String ns, String path) {
+      //nothing;
     }
 
     @Override

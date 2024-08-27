@@ -40,6 +40,7 @@ import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDat
 import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.store.KafkaTopicRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.hdfs.server.zoneservice.utils.RunMode;
 import org.apache.hadoop.test.GenericTestUtils;
@@ -345,7 +346,7 @@ public class TestZoneMigrationV2 {
             true, "/AirTrunk", "/YTL", false);
         zm.initMoverMetrics();
         ZoneMoverMetrics zoneMoverMetric = zm.getZoneMoverMetrics();
-        assertEquals(zoneMoverMetric.getSuccessTotalMove().lastStat().numSamples(), 0);
+        assertEquals(zoneMoverMetric.getSuccessFiles().lastStat().numSamples(), 0);
         zm.startInTriggerMonitor();
 
         Map<Short, ReplicationRule> expectedRule = new HashMap<>();
@@ -368,7 +369,9 @@ public class TestZoneMigrationV2 {
             }
           }, 500, 50000);
         }
-        assertEquals(zoneMoverMetric.getSuccessTotalMove().lastStat().numSamples(), 5);
+        GenericTestUtils.waitFor(()->
+                zoneMoverMetric.getSuccessFiles().lastStat().numSamples() == 5,
+            10, 20000);
       } finally {
         if (zm != null) {
           zm.shutdown();
@@ -417,6 +420,11 @@ public class TestZoneMigrationV2 {
     }
 
     @Override
+    public long saveOffsetToZookeeperCommon(KafkaTopicRecord kafkaTopicRecord) {
+      return -1;
+    }
+
+    @Override
     public void saveOffsetToZookeeper(ConsumerRecord<String, String> record, String ns,
         String groupId, ZoneMoverMetrics zoneMoverMetrics) {
       //nothing;
@@ -427,6 +435,11 @@ public class TestZoneMigrationV2 {
         ConsumerRecord<String, String> record, String ns, String groupId,
         ZoneServiceMetrics zoneServiceMetrics) {
       // do nothing
+    }
+
+    @Override
+    public void savePathRecordToZookeeper(String ns, String path) {
+      //nothing;
     }
 
     @Override

@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.store.KafkaTopicRecord;
+import org.apache.hadoop.hdfs.server.zoneservice.store.PathRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -210,31 +211,48 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
   @Override
   public void saveOffsetToZookeeper(ConsumerRecord<String, String> record, String ns,
       String groupId, ZoneMoverMetrics zoneMoverMetrics) {
-    long duration = saveOffsetToZookeeperCommon(record, ns, groupId);
+    KafkaTopicRecord kafkaTopicRecord = new KafkaTopicRecord(ns, record.topic(), groupId,
+        record.partition(), record.offset());
+    long duration = saveOffsetToZookeeperCommon(kafkaTopicRecord);
     if (duration == -1) {
       return;
     }
-    zoneMoverMetrics.addKafkaOffsetZk(duration);
+    if (zoneMoverMetrics != null) {
+      zoneMoverMetrics.addKafkaOffsetZk(duration);
+    }
   }
 
   @Override
   public void saveOffsetToZookeeperForZS(ConsumerRecord<String, String> record, String ns,
       String groupId, ZoneServiceMetrics zoneServiceMetrics) {
-    long duration = saveOffsetToZookeeperCommon(record, ns, groupId);
+    KafkaTopicRecord kafkaTopicRecord = new KafkaTopicRecord(ns, record.topic(), groupId,
+        record.partition(), record.offset());
+    long duration = saveOffsetToZookeeperCommon(kafkaTopicRecord);
     if (duration == -1) {
       return;
     }
-    zoneServiceMetrics.incrNSKafkaOffsetZk(ns, "NSKafkaOffsetZk", duration);
+    if (zoneServiceMetrics != null) {
+      zoneServiceMetrics.incrNSKafkaOffsetZk(ns, "NSKafkaOffsetZk", duration);
+    }
   }
 
-  private long saveOffsetToZookeeperCommon(ConsumerRecord<String, String> record, String ns,
-      String groupId) {
+  @Override
+  public void savePathRecordToZookeeper(String ns, String path) {
+    if (driver != null) {
+      try {
+        PathRecord pathRecord = new PathRecord(ns, path);
+        driver.put(pathRecord, false, true);
+      } catch (IOException e) {
+        LOG.error("Failed to savePathRecordToZookeeper {}-{}.", ns, path, e);
+      }
+    }
+  }
+
+  public long saveOffsetToZookeeperCommon(KafkaTopicRecord kafkaTopicRecord) {
     long now = Time.monotonicNow();
     if (driver == null || now - lastZkUpdateTime < zkUpdateIntervalMs) {
       return -1;
     }
-    KafkaTopicRecord kafkaTopicRecord = new KafkaTopicRecord(ns, record.topic(), groupId,
-        record.partition(), record.offset());
     try {
       KafkaTopicRecord existingKafkaTopicRecord = driver.get(new Query<>(kafkaTopicRecord),
           KafkaTopicRecord.class);

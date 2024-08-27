@@ -196,7 +196,7 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
    */
   @Override
   protected void processFileWithPreMigration(String fullPath,
-      HdfsLocatedFileStatus status, ReplicationRule rule, Mover.Result result) {
+      HdfsLocatedFileStatus status, ReplicationRule rule, Result result) {
     LOG.debug("Processing file: {}, mode: {} from {} to {}", fullPath, this.runMode,
         sourceDC, targetDC);
     if (canSkip(fullPath, status)) {
@@ -289,7 +289,7 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
   @Override
   protected boolean processFileWithSetReplication(
       String fullPath, HdfsLocatedFileStatus status,
-      ReplicationRule appliedRule, Mover.Result result) {
+      ReplicationRule appliedRule, Result result) {
     LOG.debug("Processing file: {}, appliedRule: {}", fullPath, appliedRule);
     final LocatedBlocks locatedBlocks = status.getLocatedBlocks();
     // If the actual number of replicas is inconsistent with the rule's replicas,
@@ -330,7 +330,7 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
    * Process EC file, move all the internal blocks from sourceDC to targetDC.
    */
   private void processECFileDirectly(String fullPath, HdfsLocatedFileStatus status,
-      Mover.Result result, String sourceDC, String targetDC) {
+      Result result, String sourceDC, String targetDC) {
     final ErasureCodingPolicy erasureCodingPolicy = status.getErasureCodingPolicy();
 
     ZoneProgressTracker.queueFile(fullPath);
@@ -342,7 +342,7 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
           LOG.info("Block: {} will move from {} to {} for ec file: {}", block.getBlock(),
               sourceDC, targetDC, fullPath);
           moveItems.add(new ZoneMoveItem(sourceDC, targetDC, distribution.get(sourceDC)));
-          if (scheduleMoves4Block(fullPath, block, moveItems, erasureCodingPolicy)) {
+          if (!scheduleMoves4Block(fullPath, block, moveItems, erasureCodingPolicy).isEmpty()) {
             result.setNoBlockMoved(false);
           } else {
             result.updateHasRemaining(true);

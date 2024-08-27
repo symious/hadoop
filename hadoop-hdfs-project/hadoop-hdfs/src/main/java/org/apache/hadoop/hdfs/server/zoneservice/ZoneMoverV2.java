@@ -41,12 +41,13 @@ import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.protocol.LocatedStripedBlock;
 import org.apache.hadoop.hdfs.server.balancer.ReplicaDispatcher;
-import org.apache.hadoop.hdfs.server.mover.Mover.Result;
 import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
 import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
+import org.apache.hadoop.hdfs.server.mover.Mover;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.store.KafkaTopicRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
@@ -81,8 +82,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_CLASS_DEFAULT;
@@ -120,6 +124,7 @@ public class ZoneMoverV2 {
   /** Enable PreMigration. **/
   protected boolean enablePreMigration;
   protected PreMigrationChecker preMigrationChecker;
+  protected CheckFileTaskStatusThead checkFileTaskStatusThead;
 
   /** Enable Coordinator to increase/decrease replication of files. **/
   protected final ZoneReplicationCoordinator coordinator;
@@ -161,6 +166,11 @@ public class ZoneMoverV2 {
     this.coordinator = new ZoneReplicationCoordinator(conf, this.dfs);
     this.coordinatorFetcher = initCoordinatorFetcher(conf);
     this.zoneMoverTrigger = zoneMoverTrigger;
+    if (this.runMode.equals(RunMode.MONITOR)) {
+      // Only monitor mode enable CheckFileTaskStatusThead.
+      this.checkFileTaskStatusThead = new CheckFileTaskStatusThead(conf,
+          "ZoneMover-CheckFileTaskStatus");
+    }
   }
 
   public ZoneMoverV2(Configuration conf, URI nameNode, List<Path> paths,
@@ -200,15 +210,14 @@ public class ZoneMoverV2 {
   /**
    * Migrate one path without stop the ZoneMover.
    */
-  ExitStatus migratePath(String path) {
+  Result migratePath(String path) {
     Result result = new Result();
-    this.result = result;
     if (this.globalRule != null) {
       processPathWithRule(path, this.globalRule, result, null);
     } else {
       processPathWithRule(path, getPathRule(path), result, null);
     }
-    return result.getExitStatus();
+    return result;
   }
 
   /**
@@ -253,6 +262,9 @@ public class ZoneMoverV2 {
     if (this.coordinatorFetcher != null) {
       this.coordinatorFetcher.start();
     }
+    if (this.checkFileTaskStatusThead != null) {
+      this.checkFileTaskStatusThead.start();
+    }
   }
 
   public void initMoverMetrics() throws IOException{
@@ -275,17 +287,10 @@ public class ZoneMoverV2 {
         // process the path
         String curPath = curRecord.getRight();
         LOG.debug("Start to monitor process path: {}", curPath);
-        long start = Time.now();
-        ExitStatus exitStatus = migratePath(curPath);
-        // The failed records shouldn't be skipped.
-        if (exitStatus != ExitStatus.SUCCESS) {
-          this.zoneMoverMetrics.addFailTotalMove(Time.now() - start);
-          LOG.warn("Failed to monitor process path fail: {}", curPath);
-        } else {
-          this.zoneMoverMetrics.addSuccessTotalMove(Time.now() - start);
-          ConsumerRecord<String, String> record = curRecord.getLeft();
-          this.zoneMoverTrigger.saveOffsetToZookeeper(record, this.ns,
-              this.zoneMoverTrigger.getGroupId(), this.zoneMoverMetrics);
+        Result result = migratePath(curPath);
+        if (this.checkFileTaskStatusThead != null) {
+          this.checkFileTaskStatusThead.addFileTask(new FileTask(curPath, result, Time.now(),
+              curRecord.getLeft()));
         }
       } catch (InterruptedException e) {
         return ExitStatus.INTERRUPTED.getExitCode();
@@ -294,7 +299,6 @@ public class ZoneMoverV2 {
     return ExitStatus.SUCCESS.getExitCode();
   }
 
-
   public int startInZoneServiceTriggerMonitor(ZoneServiceMetrics zoneServiceMetrics) {
     start();
     while (zoneMoverTrigger.hasNext()) {
@@ -302,8 +306,8 @@ public class ZoneMoverV2 {
         String curPath = zoneMoverTrigger.getNext();
         // process the path
         LOG.debug("Check path: {}", curPath);
-        ExitStatus exitStatus = migratePath(curPath);
-        if (exitStatus != ExitStatus.SUCCESS) {
+        Result result = migratePath(curPath);
+        if (result.getExitStatus() != ExitStatus.SUCCESS) {
           zoneServiceMetrics.incrFailMoveCount();
           zoneServiceMetrics.incrNSMonitorFailMoveCount(ns);
           LOG.warn("Monitor process file fail: {}", curPath);
@@ -332,6 +336,9 @@ public class ZoneMoverV2 {
     }
     if (this.coordinatorFetcher != null) {
       this.coordinatorFetcher.interrupt();
+    }
+    if (this.checkFileTaskStatusThead != null) {
+      this.checkFileTaskStatusThead.interrupt();
     }
     if (this.nnc != null) {
       IOUtils.cleanupWithLogger(LOG, this.nnc);
@@ -749,9 +756,16 @@ public class ZoneMoverV2 {
           lb, currentRule, fullPath);
       return;
     }
-
-    if (scheduleMoves4Block(fullPath, lb,
-        ZoneUtil.getZoneMoveItems(currentDistribution, targetRule), ecPolicy)) {
+    List<MoveItemTask> moveTasks = scheduleMoves4Block(fullPath, lb,
+        ZoneUtil.getZoneMoveItems(currentDistribution, targetRule), ecPolicy);
+    // For monitor mode result maybe as null.
+    if (result == null) {
+      return;
+    }
+    if (!moveTasks.isEmpty()) {
+      if (this.runMode.equals(RunMode.MONITOR)) {
+        result.addMoveTasks(moveTasks);
+      }
       result.setNoBlockMoved(false);
     } else {
       result.updateHasRemaining(true);
@@ -775,7 +789,7 @@ public class ZoneMoverV2 {
   /**
    * Migrate replicas of a block according to the moveItems.
    */
-  protected boolean scheduleMoves4Block(String fullPath, LocatedBlock lb,
+  protected List<MoveItemTask> scheduleMoves4Block(String fullPath, LocatedBlock lb,
       List<ZoneMoveItem> moveItems, ErasureCodingPolicy ecPolicy) {
     final Map<String, List<DatanodeInfo>> locationMap =
         ZoneUtil.getBlockDistributionDNs(lb);
@@ -783,10 +797,11 @@ public class ZoneMoverV2 {
     if (lb instanceof LocatedStripedBlock && ecPolicy == null) {
       LOG.warn("Failed to move blocks for {} since ecPolicy is null.",
           lb.getBlock());
-      return false;
+      return new ArrayList<>();
     }
 
     List<Node> excludedNodes = new ArrayList<>(Arrays.asList(lb.getLocations()));
+    List<MoveItemTask> moveTasks = new ArrayList<>();
     for (ZoneMoveItem moveItem : moveItems) {
       for (short i = 0; i < moveItem.getNum(); i++) {
         List<DatanodeInfo> sourceDNs = locationMap.get(moveItem.getSourceDataCenter());
@@ -796,17 +811,20 @@ public class ZoneMoverV2 {
           LOG.info("Migrate block {} from {} to {} dc for {} with excludeNode {}.",
               lb.getBlock(), sourceDN, moveItem.getTargetDataCenter(),
               fullPath, excludedNodes);
-          replicaDispatcher.dispatchLocatedBlock(fullPath, sourceDN, lb,
-              moveItem.getTargetDataCenter(), ecPolicy, excludedNodes);
+          ReplicaDispatcher.ReplicaMoveTask task = replicaDispatcher.dispatchLocatedBlock(
+              fullPath, sourceDN, lb, moveItem.getTargetDataCenter(), ecPolicy, excludedNodes);
+          moveTasks.add(new MoveItemTask(task, lb, fullPath));
         } catch (IOException e) {
           LOG.error("Failed to migrate replica from {} to {} for block {} in {}.",
-              sourceDN, moveItem.getTargetDataCenter(), lb.getBlock(), fullPath);
+              sourceDN, moveItem.getTargetDataCenter(), lb.getBlock(), fullPath, e);
+          // If build move task fails will create failed MoveItemTask for retrying.
+          moveTasks.add(new MoveItemTask(fullPath, lb, sourceDN,
+              moveItem.getTargetDataCenter(), excludedNodes, ecPolicy));
         }
       }
     }
-    return true;
+    return moveTasks;
   }
-
 
   /**
    * A thread that gets the replication changed files from the coordinator and migrate it.
@@ -933,6 +951,160 @@ public class ZoneMoverV2 {
   }
 
   /**
+   * A class records the hdfs path task and the kafka record,
+   * which is used to detect whether the file execution is successful or failed.
+   */
+  protected static class FileTask {
+    private final String filePath;
+    private final Result result;
+    private final long startTime;
+    private final ConsumerRecord<String, String> kafkaRecord;
+
+    FileTask(String filePath, Result result, long startTime,
+        ConsumerRecord<String, String> kafkaRecord) {
+      this.filePath = filePath;
+      this.result = result;
+      this.startTime = startTime;
+      this.kafkaRecord = kafkaRecord;
+    }
+
+    public Result getResult() {
+      return result;
+    }
+
+    public String getFilePath() {
+      return filePath;
+    }
+
+    public long getStartTime() {
+      return startTime;
+    }
+
+    public ConsumerRecord<String, String> getKafkaRecord() {
+      return kafkaRecord;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(filePath);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (!(o instanceof FileTask)) {
+        return false;
+      }
+      FileTask that = (FileTask)o;
+      return Objects.equals(this.filePath, that.filePath);
+    }
+  }
+
+  public static class MoveItemTask {
+    private final String fullPath;
+    private final LocatedBlock locatedBlock;
+    private String preferDC;
+    private DatanodeInfo source;
+    private List<Node> excludeNodes;
+    private ErasureCodingPolicy ecPolicy;
+    private ReplicaDispatcher.ReplicaMoveTask replicaMoveTask;
+    private final AtomicInteger retryCount = new AtomicInteger(0);
+    private volatile long runningTime = Time.monotonicNow();
+
+    public MoveItemTask(ReplicaDispatcher.ReplicaMoveTask replicaMoveTask,
+        LocatedBlock locatedBlock, String fullPath) {
+      this.fullPath = fullPath;
+      this.locatedBlock = locatedBlock;
+      this.replicaMoveTask = replicaMoveTask;
+    }
+
+    public MoveItemTask(String fullPath, LocatedBlock locatedBlock, DatanodeInfo source,
+        String preferDC, List<Node> excludeNodes, ErasureCodingPolicy ecPolicy) {
+      this.fullPath = fullPath;
+      this.source = source;
+      this.preferDC = preferDC;
+      this.excludeNodes = excludeNodes;
+      this.locatedBlock = locatedBlock;
+      this.ecPolicy = ecPolicy;
+    }
+
+    /**
+     * Return true if caller can retry this task again.
+     */
+    public boolean canRetry(long timeout) {
+      if (replicaMoveTask != null) {
+        return replicaMoveTask.canRetry(timeout);
+      } else {
+        return timeout > 0 && (Time.monotonicNow() - runningTime > timeout);
+      }
+    }
+
+    public void setRunningTime(long runningTime) {
+      this.runningTime = runningTime;
+    }
+
+    public void incRetryCount() {
+      retryCount.incrementAndGet();
+    }
+
+    public AtomicInteger getRetryCount() {
+      return retryCount;
+    }
+
+    public void setReplicaMoveTask(ReplicaDispatcher.ReplicaMoveTask replicaMoveTask) {
+      this.replicaMoveTask = replicaMoveTask;
+    }
+
+    public ReplicaDispatcher.ReplicaMoveTask getReplicaMoveTask() {
+      return replicaMoveTask;
+    }
+
+    public DatanodeInfo getSource() {
+      return source;
+    }
+
+    public String getFullPath() {
+      return fullPath;
+    }
+
+    public LocatedBlock getLocatedBlock() {
+      return locatedBlock;
+    }
+
+    public String getPreferDC() {
+      return preferDC;
+    }
+
+    public List<Node> getExcludeNodes() {
+      return excludeNodes;
+    }
+
+    public ErasureCodingPolicy getEcPolicy() {
+      return ecPolicy;
+    }
+  }
+
+  public static class Result extends Mover.Result {
+
+    private final List<MoveItemTask> moveTasks;
+
+    public Result() {
+      super();
+      moveTasks = new ArrayList<>();
+    }
+
+    public List<MoveItemTask> getMoveTasks() {
+      return moveTasks;
+    }
+
+    public void addMoveTasks(List<MoveItemTask> tasks) {
+      this.moveTasks.addAll(tasks);
+    }
+  }
+
+  /**
    * Check if the pre-migration file has waited for enough time to proceed to the next step
    */
   protected class PreMigrationChecker extends Thread {
@@ -997,6 +1169,187 @@ public class ZoneMoverV2 {
           }
         }
       }
+    }
+  }
+
+  /**
+   * The class will to check if the migration file task succeeded or failed for trigger mode.
+   */
+  protected class CheckFileTaskStatusThead extends Thread {
+    private static final long RECHECK_INTERVAL = 10000;
+    private final ConcurrentLinkedDeque<FileTask> fileTasks;
+    private final int checkLimit;
+    private final long retryTimeout;
+    private final int maxRetryCount;
+
+    public CheckFileTaskStatusThead(Configuration conf, String name) {
+      super(name);
+      this.fileTasks = new ConcurrentLinkedDeque<>();
+      this.checkLimit = conf.getInt(DFSConfigKeys.DFS_ZONEMOVER_CHECK_PATH_LIMIT_KEY,
+          DFSConfigKeys.DFS_ZONEMOVER_CHECK_PATH_LIMIT_DEFAULT);
+      this.retryTimeout = conf.getLong(DFSConfigKeys.DFS_ZONEMOVER_TASK_RETRY_TIMEOUT_MS,
+          DFSConfigKeys.DFS_ZONEMOVER_TASK_RETRY_TIMEOUT_MS_DEFAULT);
+      this.maxRetryCount = conf.getInt(DFSConfigKeys.DFS_ZONEMOVER_TASK_RETRY_COUNT,
+          DFSConfigKeys.DFS_ZONEMOVER_TASK_RETRY_COUNT_DEFAULT);
+    }
+
+    public void addFileTask(FileTask fileTask) {
+      this.fileTasks.addLast(fileTask);
+    }
+
+    @Override
+    public void run() {
+      LOG.info("CheckFileTaskStatusThead is starting....");
+      while (!Thread.currentThread().isInterrupted()) {
+        try {
+          processCheckFiles();
+          Thread.sleep(RECHECK_INTERVAL);
+        } catch (InterruptedException ie) {
+          LOG.warn("CheckFileTaskStatusThead interrupted will stop", ie);
+          Thread.currentThread().interrupt();
+        } catch (Exception e) {
+          LOG.warn("CheckFileTaskStatusThead encountered the exception!", e);
+        }
+      }
+    }
+
+    private void processCheckFiles() {
+      int loopCount = 0;
+      List<FileTask> toRemove = new ArrayList<>();
+      FileTask lastCompletedCheckFile = null;
+      for (FileTask fileTask : fileTasks) {
+        if (loopCount >= checkLimit) {
+          break;
+        }
+        if (fileTask.getResult().isNoBlockMoved()) {
+          LOG.debug("No need to process path: {}", fileTask.getFilePath());
+          toRemove.add(fileTask);
+          if (zoneMoverMetrics != null) {
+            zoneMoverMetrics.incrSkippedFiles();
+          }
+          continue;
+        }
+
+        if (processMoveTasks(fileTask, toRemove)) {
+          if (lastCompletedCheckFile == null || fileTask.getKafkaRecord().offset() >
+              lastCompletedCheckFile.getKafkaRecord().offset()) {
+            lastCompletedCheckFile = fileTask;
+          }
+        }
+        loopCount++;
+      }
+
+      fileTasks.removeAll(toRemove);
+      updateKafkaOffsets(lastCompletedCheckFile);
+    }
+
+    /**
+     * Handles checking the status of move tasks, determines if tasks were successful,
+     * failed or need to be retried and updating Kafka offsets.
+     */
+    private boolean processMoveTasks(FileTask fileTask, List<FileTask> toRemove) {
+      List<MoveItemTask> moveTasks = fileTask.getResult().getMoveTasks();
+      List<MoveItemTask> removeTasks = new ArrayList<>();
+      boolean isSuccess = true;
+      boolean isFailed = false;
+      long endTime = 0;
+
+      for (int i = 0; i < moveTasks.size(); i++) {
+        MoveItemTask moveItemTask = moveTasks.get(i);
+        if (moveItemTask == null) {
+          continue;
+        }
+        ReplicaDispatcher.ReplicaMoveTask replicaMoveTask = moveItemTask.getReplicaMoveTask();
+        if (replicaMoveTask != null && replicaMoveTask.getTaskState().equals(
+            ReplicaDispatcher.ReplicaMoverTaskState.SUCCESS)) {
+          removeTasks.add(moveItemTask);
+          if (replicaMoveTask.getEndTime() > endTime) {
+            endTime = replicaMoveTask.getEndTime();
+          }
+        } else {
+          isSuccess = false;
+          if (replicaMoveTask == null || replicaMoveTask.getTaskState().equals(
+              ReplicaDispatcher.ReplicaMoverTaskState.FAILED)) {
+            if (moveItemTask.getRetryCount().get() >= maxRetryCount) {
+              LOG.debug("{} execute task failed.", fileTask.getFilePath());
+              isFailed = true;
+              break;
+            } else if (moveItemTask.canRetry(retryTimeout)) {
+              LOG.debug("{} need to retry execute task.", fileTask.getFilePath());
+              moveTasks.set(i, retryExecuteTask(moveItemTask));
+            }
+          }
+        }
+      }
+      boolean isCompletedCheck = isSuccess || isFailed;
+      if (isCompletedCheck) {
+        if (zoneMoverMetrics != null) {
+          if (isSuccess) {
+            LOG.debug("Success to process path: {} .", fileTask.getFilePath());
+            zoneMoverMetrics.addSuccessFiles(endTime - fileTask.getStartTime());
+          } else {
+            zoneMoverMetrics.incrFailedFiles();
+            LOG.warn("Failed to process path: {} will record zk.", fileTask.getFilePath());
+            zoneMoverTrigger.savePathRecordToZookeeper(ns, fileTask.getFilePath());
+          }
+        }
+        toRemove.add(fileTask);
+      } else if (!removeTasks.isEmpty()) {
+        moveTasks.removeAll(removeTasks);
+      }
+      return isCompletedCheck;
+    }
+
+    /**
+     * Updates the Kafka offsets to Zookeeper based on the current processing state.
+     * Get the first element in the queue, if present will set to `record.offset() - 1`,
+     * indicating that the previous record has been processed,
+     * otherwise will use offset of lastSuccessCheckFile.
+     * @param lastCompletedCheckFile
+     */
+    private void updateKafkaOffsets(FileTask lastCompletedCheckFile) {
+      FileTask fileTask = fileTasks.peekFirst();
+      FileTask offsetCheckFile = (fileTask != null) ? fileTask : lastCompletedCheckFile;
+
+      if (offsetCheckFile != null) {
+        ConsumerRecord<String, String> record = offsetCheckFile.getKafkaRecord();
+        KafkaTopicRecord kafkaTopicRecord = new KafkaTopicRecord(ns, record.topic(),
+            zoneMoverTrigger.getGroupId(), record.partition(),
+            fileTask != null ? record.offset() - 1 : record.offset());
+        long duration = zoneMoverTrigger.saveOffsetToZookeeperCommon(kafkaTopicRecord);
+        if (duration != -1 && zoneMoverMetrics != null) {
+          zoneMoverMetrics.addKafkaOffsetZk(duration);
+        }
+      } else {
+        LOG.warn("No valid FileTask found to update Kafka offsets.");
+      }
+    }
+
+    private MoveItemTask retryExecuteTask(MoveItemTask moveItemTask) {
+      if (moveItemTask == null) {
+        return null;
+      }
+
+      try {
+        if (moveItemTask.getReplicaMoveTask() != null) {
+          replicaDispatcher.dispatchMoveTask(moveItemTask.getFullPath(),
+              moveItemTask.getReplicaMoveTask());
+        } else {
+          ReplicaDispatcher.ReplicaMoveTask movingTask = replicaDispatcher.
+              dispatchLocatedBlock(moveItemTask.getFullPath(),
+              moveItemTask.getSource(), moveItemTask.getLocatedBlock(),
+              moveItemTask.getPreferDC(), moveItemTask.getEcPolicy(),
+              moveItemTask.getExcludeNodes());
+          moveItemTask.setReplicaMoveTask(movingTask);
+        }
+      } catch (IOException e) {
+        LOG.error("Failed retry execute task {} for {} with error, ",
+            moveItemTask.getLocatedBlock(), moveItemTask.getFullPath(), e);
+      } finally {
+        moveItemTask.incRetryCount();
+        moveItemTask.setRunningTime(Time.monotonicNow());
+      }
+      return moveItemTask;
     }
   }
 

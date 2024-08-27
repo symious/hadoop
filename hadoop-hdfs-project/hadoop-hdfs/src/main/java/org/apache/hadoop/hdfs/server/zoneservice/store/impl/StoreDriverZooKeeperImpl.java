@@ -22,6 +22,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.server.zoneservice.store.BaseRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.KafkaTopicRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
+import org.apache.hadoop.hdfs.server.zoneservice.store.PathRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.QueryResult;
 import org.apache.hadoop.hdfs.server.zoneservice.store.SignalRecord;
@@ -83,7 +84,8 @@ public class StoreDriverZooKeeperImpl extends StoreDriver {
     // Initialize supported classes.
     if (!initRecordStorage(MigrationRecord.class)
         || !initRecordStorage(SignalRecord.class)
-        || !initRecordStorage(KafkaTopicRecord.class)) {
+        || !initRecordStorage(KafkaTopicRecord.class)
+        || !initRecordStorage(PathRecord.class)) {
       return false;
     };
     return true;

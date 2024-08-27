@@ -200,7 +200,7 @@ public class ZoneMoverWithDRV2 extends ZoneMoverV2 {
    */
   @Override
   protected void processFileWithPreMigration(String fullPath, HdfsLocatedFileStatus status,
-      ReplicationRule rule, Mover.Result result) {
+      ReplicationRule rule, Result result) {
     LOG.debug("Processing file: {}, mode: {}", fullPath, runMode);
     if (canSkip(fullPath, status)) {
       return;
@@ -300,7 +300,7 @@ public class ZoneMoverWithDRV2 extends ZoneMoverV2 {
    */
   @Override
   protected boolean processFileWithSetReplication(String fullPath,
-      HdfsLocatedFileStatus status, ReplicationRule targetRule, Mover.Result result) {
+      HdfsLocatedFileStatus status, ReplicationRule targetRule, Result result) {
     processFileDirectly(fullPath, status, targetRule, result);
     return false;
   }
@@ -313,7 +313,7 @@ public class ZoneMoverWithDRV2 extends ZoneMoverV2 {
    * Migrate EC file for DR.
    */
   private void processECFileDirectly(String fullPath,
-      HdfsLocatedFileStatus status, Mover.Result result) {
+      HdfsLocatedFileStatus status, Result result) {
     LocatedBlock locatedBlock = status.getLocatedBlocks().get(0);
     if (!locatedBlock.isStriped()) {
       LOG.debug("No need to process data for non ec file: {}", fullPath);

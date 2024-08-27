@@ -82,6 +82,8 @@ public class ZoneMoverMetrics {
   MutableRate successFiles;
   @Metric("Number of failed files")
   MutableCounterLong failedFiles;
+  @Metric("Number of skipped files")
+  MutableCounterLong skippedFiles;
 
   public ZoneMoverMetrics() {
     this.name = "ZoneMoverMetrics";
@@ -182,5 +184,13 @@ public class ZoneMoverMetrics {
 
   public void incrFailedFiles() {
     failedFiles.incr();
+  }
+
+  public void incrSkippedFiles() {
+    skippedFiles.incr();
+  }
+
+  public MutableRate getSuccessFiles() {
+    return successFiles;
   }
 }

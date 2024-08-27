@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.hdfs.server.zoneservice.store.BaseRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.KafkaTopicRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.MigrationRecord;
+import org.apache.hadoop.hdfs.server.zoneservice.store.PathRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.Query;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.hadoop.hdfs.server.zoneservice.store.TestStoreDriverBase;
@@ -161,6 +162,27 @@ public class TestStoreDriverZooKeeperImpl extends TestStoreDriverBase {
     assertEquals(1, driver.remove(new Query<>(record), KafkaTopicRecord.class));
     existedRecord =
         driver.get(new Query<>(record), KafkaTopicRecord.class);
+    assertNull(existedRecord);
+  }
+
+  @Test
+  public void testPathRecord() throws Exception {
+    // Create new record.
+    PathRecord record = new PathRecord("ns0", "/test");
+    PathRecord existedRecord = driver.get(new Query<>(record), PathRecord.class);
+    assertNull(existedRecord);
+    assertTrue(driver.put(record, true, false));
+
+    existedRecord =
+        driver.get(new Query<>(record), PathRecord.class);
+    assertEquals(record, existedRecord);
+    assertEquals("/test", existedRecord.getPath());
+    assertEquals("ns0", existedRecord.getNs());
+
+    // Delete exist record.
+    assertEquals(1, driver.remove(new Query<>(record), PathRecord.class));
+    existedRecord =
+        driver.get(new Query<>(record), PathRecord.class);
     assertNull(existedRecord);
   }
 }

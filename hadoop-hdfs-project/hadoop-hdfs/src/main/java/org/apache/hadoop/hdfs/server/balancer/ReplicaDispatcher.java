@@ -169,7 +169,6 @@ public class ReplicaDispatcher {
           sourceDNStorageType, preferDC == null ? this.preferDC : preferDC,
           excludeNodes);
     } catch (IOException e) {
-      METRICS.incrFailedScheduledBlocks();
       LOG.error("Failed schedule {} for {} with error, ",
           locatedBlock, fullPath, e);
       throw e;
@@ -222,7 +221,6 @@ public class ReplicaDispatcher {
       return buildMoveTask(null, block, isECBlock, sourceDN, locations,
           sourceDNStorageType, this.preferDC, new ArrayList<>(locations));
     } catch (IOException e) {
-      METRICS.incrFailedScheduledBlocks();
       LOG.error("Failed schedule {} with error, ", blkLocs, e);
       throw e;
     }
@@ -267,21 +265,38 @@ public class ReplicaDispatcher {
       boolean isECBlock, DatanodeInfo sourceDN, List<DatanodeInfo> locations,
       StorageType sourceDNStorageType, String preferDC, List<Node> excludeNodes)
       throws IOException {
+    ReplicaMoveTask movingTask = new ReplicaMoveTask(fullPath, block, isECBlock,
+        sourceDN, locations, sourceDNStorageType, preferDC, excludeNodes);
+    return dispatchMoveTask(fullPath, movingTask);
+  }
+
+  /**
+   * Schedule a ReplicaMove task.
+   * Caller can get running state from this ReplicaMoveTask.
+   * @param fullPath The HDFS path of the file being moved.
+   * @param movingTask The ReplicaMoveTask that encapsulates the details of the move operation.
+   * @throws IOException
+   */
+  public ReplicaMoveTask dispatchMoveTask(String fullPath, ReplicaMoveTask movingTask)
+      throws IOException {
     if (fullPath != null) {
       ZoneProgressTracker.queueFile(fullPath);
     }
 
-    ReplicaMoveTask movingTask = new ReplicaMoveTask(fullPath, block, isECBlock,
-        sourceDN, locations, sourceDNStorageType, preferDC, excludeNodes);
-    movingTask.chooseTarget();
-    movingTask.chooseProxy();
+    try {
+      movingTask.chooseTarget();
+      movingTask.chooseProxy();
 
-    // The moving task will be executed async.
-    MOVER_MANAGER.addTask(movingTask);
+      // The moving task will be executed async.
+      MOVER_MANAGER.addTask(movingTask);
 
-    METRICS.incrScheduledBlocks();
-    METRICS.incrPendingTasks();
-
+      // Update metrics for scheduled tasks.
+      METRICS.incrScheduledBlocks();
+      METRICS.incrPendingTasks();
+    } catch (IOException e) {
+      METRICS.incrFailedScheduledBlocks();
+      throw e;
+    }
     return movingTask;
   }
 
@@ -386,6 +401,10 @@ public class ReplicaDispatcher {
 
     public long getCreatingTime() {
       return this.creatingTime;
+    }
+
+    public ReplicaMoverTaskState getTaskState() {
+      return taskState;
     }
 
     public void chooseTarget() throws IOException {
@@ -712,9 +731,11 @@ public class ReplicaDispatcher {
               ZoneProgressTracker.incrBlockCount();
               ZoneProgressTracker.dequeueFile(replicaMoveTask.getFullPath());
             }
+            this.runningTasks.remove(replicaMoveTask);
           }
-          this.runningTasks.remove(replicaMoveTask);
-          METRICS.decrRunningTasks();
+          if (METRICS != null) {
+            METRICS.decrRunningTasks();
+          }
         }
       }
     }

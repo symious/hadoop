@@ -22,6 +22,8 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
+import org.apache.hadoop.hdfs.server.zoneservice.store.KafkaTopicRecord;
+import org.apache.hadoop.hdfs.server.zoneservice.store.PathRecord;
 import org.apache.hadoop.hdfs.server.zoneservice.store.StoreDriver;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 
@@ -60,11 +62,15 @@ public abstract class ZoneMoverTrigger {
 
   public abstract String getGroupId();
 
+  public abstract long saveOffsetToZookeeperCommon(KafkaTopicRecord kafkaTopicRecord);
+
   public abstract void saveOffsetToZookeeper(ConsumerRecord<String, String> record, String ns,
       String groupId, ZoneMoverMetrics zoneMoverMetrics);
 
   public abstract void saveOffsetToZookeeperForZS(ConsumerRecord<String, String> record,
       String ns, String groupId, ZoneServiceMetrics zoneServiceMetrics);
+
+  public abstract void savePathRecordToZookeeper(String ns, String path);
 
   public abstract StoreDriver getStoreDriver();
 }

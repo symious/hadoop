@@ -116,15 +116,10 @@ public class ZoneServiceMetrics {
       return;
     }
 
-    if (!nsKafkaOffsetZk.containsKey(ns)) {
-      synchronized (this) {
-        if (!nsKafkaOffsetZk.containsKey(ns)) {
-          String metricName = StringUtils.capitalize(ns + name);
-          nsKafkaOffsetZk.put(metricName, this.registry.newRate(metricName));
-        }
-      }
-    }
-    nsKafkaOffsetZk.get(ns).add(duration);
+    nsKafkaOffsetZk.computeIfAbsent(ns, key -> {
+      String metricName = StringUtils.capitalize(ns + name);
+      return this.registry.newRate(metricName);
+    }).add(duration);
   }
 
   public MutableCounterLong getSuccessTotalMoveCount() {

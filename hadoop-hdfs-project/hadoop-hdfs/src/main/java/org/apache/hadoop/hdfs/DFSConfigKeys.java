@@ -941,6 +941,16 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONESERVICE_BATCH_THREAD_REFRESH_INTERVAL_KEY = "dfs.zoneservice.batch.thread.refresh.interval";
   public static final long    DFS_ZONESERVICE_BATCH_THREAD_REFRESH_INTERVAL_DEFAULT = 10000L;
 
+  public static final String  DFS_ZONEMOVER_TASK_RETRY_TIMEOUT_MS =
+      "dfs.zonemover.task.retry.timeout.ms";
+  public static final long    DFS_ZONEMOVER_TASK_RETRY_TIMEOUT_MS_DEFAULT = 30 * 1000;
+  public static final String  DFS_ZONEMOVER_TASK_RETRY_COUNT =
+      "dfs.zonemover.task.retry.count";
+  public static final int    DFS_ZONEMOVER_TASK_RETRY_COUNT_DEFAULT = 1;
+  public static final String  DFS_ZONEMOVER_CHECK_PATH_LIMIT_KEY =
+      "dfs.zonemover.check.path.limit";
+  public static final int    DFS_ZONEMOVER_CHECK_PATH_LIMIT_DEFAULT = 100;
+
   /**
    * The maximum number of getBlocks RPCs data movement utilities can make to
    * a NameNode per second. Values &lt;= 0 disable throttling. This affects
