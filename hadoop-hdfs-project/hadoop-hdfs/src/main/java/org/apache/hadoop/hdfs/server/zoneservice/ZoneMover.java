@@ -42,8 +42,6 @@ import org.apache.hadoop.hdfs.server.mover.Mover.Result;
 import org.apache.hadoop.hdfs.server.balancer.Dispatcher.DDatanode.StorageGroup;
 import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
 import org.apache.hadoop.hdfs.server.balancer.NameNodeConnector;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter;
-import org.apache.hadoop.hdfs.server.namenode.UnsupportedActionException;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneDispatcher.ZoneSource;
 import org.apache.hadoop.hdfs.server.zoneservice.ZoneDispatcher.ZoneDDatanode;
@@ -262,20 +260,6 @@ public class ZoneMover {
 
   public boolean isFromZS() {
     return fromZS;
-  }
-
-  /**
-   * Check if zonemover is compatible with the block placement policy
-   * used by the NameNode.
-   */
-  protected static void checkReplicationPolicyCompatibility(Configuration conf)
-      throws UnsupportedActionException {
-    String clazz = conf.get(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY);
-    if (clazz == null || !clazz.equals(
-        BlockPlacementPolicyWithDataCenter.class.getName())) {
-      throw new UnsupportedActionException(
-          "ZoneMover must work with BlockPlacementPolicyWithDataCenter");
-    }
   }
 
   void init(Configuration conf) throws IOException {
@@ -1624,7 +1608,6 @@ public class ZoneMover {
                 .getPartialListing()[0];
             processor.processFile(preMigrationFile.getFilePath(), status,
                 preMigrationFile.getRule(), result);
-            ZoneProgressTracker.dequeueFile(preMigrationFile.getFilePath());
           } else {
             preMigrationFileQueue.put(preMigrationFile);
           }
