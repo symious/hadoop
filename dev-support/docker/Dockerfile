@@ -66,7 +66,6 @@ RUN apt-get -q update \
         libssl-dev \
         libsnappy-dev \
         libtool \
-        libzstd1-dev \
         locales \
         make \
         pinentry-curses \
@@ -105,6 +104,18 @@ RUN mkdir -p /opt/spotbugs \
     && tar xzf /opt/spotbugs.tgz --strip-components 1 -C /opt/spotbugs \
     && chmod +x /opt/spotbugs/bin/*
 ENV SPOTBUGS_HOME /opt/spotbugs
+
+#######
+# Install ZSTD 1.5.6
+#######
+RUN mkdir -p /opt/zstd-src \
+    && curl -L -s -S https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz \
+      -o /opt/zstd.tar.gz \
+    && tar xzf /opt/zstd.tar.gz --strip-components 1 -C /opt/zstd-src \
+    && cd /opt/zstd-src \
+    && make install \
+    && cd /root \
+    && rm -rf /opt/zstd-src
 
 #######
 # OpenJDK 8
