@@ -254,11 +254,7 @@ public enum DistCpOptionSwitch {
   USE_ITERATOR(DistCpConstants.CONF_LABEL_USE_ITERATOR,
       new Option("useiterator", false,
           "Use single threaded list status iterator to build "
-              + "the listing to save the memory utilisation at the client")),
-
-  EXIST_IGNORE_PRESERVE(DistCpConstants.CONF_LABEL_EXIST_IGNORE_PRESERVE,
-      new Option("existIgnorePreserve", false,
-          "Ignore -preserve flags and skip attr preservation if file already exists."));
+              + "the listing to save the memory utilisation at the client"));
 
 
   public static final String PRESERVE_STATUS_DEFAULT = "-prbugpct";

@@ -37,21 +37,26 @@ import org.apache.hadoop.hdfs.server.federation.router.RouterClient;
 import org.apache.hadoop.hdfs.server.federation.store.StateStoreService;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntriesRequest;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetMountTableEntriesResponse;
+import org.apache.hadoop.hdfs.server.federation.store.protocol.RemoveMountTableEntryRequest;
 import org.apache.hadoop.hdfs.server.federation.store.records.MountTable;
 import org.apache.hadoop.ipc.RemoteException;
 import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.hadoop.tools.federation.migration.MigrationJob;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.Timeout;
 import org.slf4j.LoggerFactory;
 
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.createMountTableEntry;
 import static org.apache.hadoop.hdfs.server.federation.FederationTestUtils.getAdminClient;
-import static org.apache.hadoop.tools.federation.NSMigrationTool.JobStage.COPY;
-import static org.apache.hadoop.tools.federation.NSMigrationTool.JobStage.FINISH;
-import static org.apache.hadoop.tools.federation.NSMigrationTool.JobStage.MOUNT;
-import static org.apache.hadoop.tools.federation.NSMigrationTool.JobStage.POST_COPY;
-import static org.apache.hadoop.tools.federation.NSMigrationTool.JobStage.POST_FINISH;
+import static org.apache.hadoop.tools.federation.migration.MigrationJob.JobStage.COPY;
+import static org.apache.hadoop.tools.federation.migration.MigrationJob.JobStage.FINISH;
+import static org.apache.hadoop.tools.federation.migration.MigrationJob.JobStage.MOUNT;
+import static org.apache.hadoop.tools.federation.migration.MigrationJob.JobStage.POST_COPY;
+import static org.apache.hadoop.tools.federation.migration.MigrationJob.JobStage.POST_FINISH;
+import static org.apache.hadoop.tools.federation.migration.MigrationJob.toggleSkipTopTwoLevelsForTesting;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -59,7 +64,7 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-public class TestNSMigrationTool {
+public class TestNSMigrationToolSingle {
   final private static int NUM_SUBCLUSTERS = 2;
   private static StateStoreDFSCluster cluster;
   private static MiniRouterDFSCluster.RouterContext routerContext;
@@ -70,6 +75,9 @@ public class TestNSMigrationTool {
   private static MiniRouterDFSCluster.NamenodeContext nnContext1;
   private static FileSystem nnFs0;
   private static FileSystem nnFs1;
+
+  @Rule
+  public Timeout timeout = new Timeout(60000);
 
   @BeforeClass
   public static void setup() throws Exception {
@@ -93,6 +101,7 @@ public class TestNSMigrationTool {
     nnContext1 = cluster.getNamenode("ns1", null);
     nnFs0 = nnContext0.getFileSystem();
     nnFs1 = nnContext1.getFileSystem();
+    toggleSkipTopTwoLevelsForTesting(false);
   }
 
   @AfterClass
@@ -101,48 +110,48 @@ public class TestNSMigrationTool {
       cluster.shutdown();
       cluster = null;
     }
+    System.gc();
   }
 
   @Test
   public void testReadWriteContext() throws IOException {
     String testPath = "/" + GenericTestUtils.getMethodName() + "0";
-    NSMigrationTool.MigrationJob jobW =
-        new NSMigrationTool.MigrationJob(new Path(testPath), "ns0", "ns1", routerContext.getConf(),
-            routerAdminAddress, false, false);
+    MigrationJob jobW = new MigrationJob(new Path(testPath), "ns0", "ns1", routerContext.getConf(),
+        routerAdminAddress, false, false);
     jobW.writeContext();
 
-    NSMigrationTool.MigrationJob jobR =
-        new NSMigrationTool.MigrationJob(new Path(testPath), "ns0", "ns1", routerContext.getConf(),
-            routerAdminAddress, false, false);
-    assertEquals(routerContext.getConf().toString(), jobR.getContext().conf.toString());
+    MigrationJob jobR = new MigrationJob(new Path(testPath), "ns0", "ns1", routerContext.getConf(),
+        routerAdminAddress, false, false);
+    assertEquals(routerContext.getConf().toString(), jobR.getContext().getConf().toString());
     assertEquals(jobR.getContext(), jobW.getContext());
   }
 
-  private NSMigrationTool.MigrationJob setupTest(boolean continueJob, Path path,
-      NSMigrationTool.JobStage runUntil, boolean createFile) throws Exception {
+  private MigrationJob setupTest(boolean continueJob, Path path, MigrationJob.JobStage runUntil,
+      boolean createFile) throws Exception {
     routerClient.mkdirs(path.toString());
-    NSMigrationTool.MigrationJob job =
-        new NSMigrationTool.MigrationJob(path, "ns0", "ns1", routerContext.getConf(),
-            routerAdminAddress, false, false);
+    MigrationJob job =
+        new MigrationJob(path, "ns0", "ns1", routerContext.getConf(), routerAdminAddress, false,
+            false);
     if (createFile) {
       FSDataOutputStream os = nnFs0.create(new Path(path, "tempFile"), true);
       os.writeUTF("TEST DATA");
       os.close();
     }
 
-    while (job.getStage().stageInt < runUntil.stageInt) {
+    while (job.getStage().getStageInt() < runUntil.getStageInt()) {
       job.writeContext();
-      if (continueJob && job.getStage().stageInt == runUntil.stageInt - 1) {
+      if (continueJob && job.getStage().getStageInt() == runUntil.getStageInt() - 1) {
         // Only simulate an interrupted stage during the tested stage, previous stages should pass
-        NSMigrationTool.toggleInterruptForTesting(true);
+        MigrationJob.toggleInterruptForTesting(true);
         try {
           job.handleStage();
         } catch (RuntimeException ignored) {
         }
-        NSMigrationTool.toggleInterruptForTesting(false);
+        MigrationJob.toggleInterruptForTesting(false);
         // Interrupt stage and retry stage again to ensure no issue would happen when stage is rerun
-        job = new NSMigrationTool.MigrationJob(path, "ns0", "ns1", routerContext.getConf(),
-            routerAdminAddress, false, false);
+        job =
+            new MigrationJob(path, "ns0", "ns1", routerContext.getConf(), routerAdminAddress, false,
+                false);
       }
       job.handleStage();
       if (!job.proceedToNextStage()) {
@@ -156,7 +165,7 @@ public class TestNSMigrationTool {
   @Test
   public void testJobStage1() throws Exception {
     GenericTestUtils.LogCapturer logs =
-        GenericTestUtils.LogCapturer.captureLogs(LoggerFactory.getLogger(NSMigrationTool.class));
+        GenericTestUtils.LogCapturer.captureLogs(LoggerFactory.getLogger(MigrationJob.class));
     String basePathStr = "/testStage1";
     Path basePath = new Path(basePathStr);
     routerClient.mkdirs(basePath.toString());
@@ -166,8 +175,7 @@ public class TestNSMigrationTool {
 
     // Directory is empty
     testPath = new Path(basePath, "EmptyDir");
-    NSMigrationTool.MigrationJob job1 =
-        setupTest(false, testPath, NSMigrationTool.JobStage.MOUNT, false);
+    MigrationJob job1 = setupTest(false, testPath, MigrationJob.JobStage.MOUNT, false);
     assertTrue(logs.getOutput().contains("Nothing to migrate"));
     assertEquals(FINISH, job1.getStage());
     logs.clearOutput();
@@ -176,8 +184,7 @@ public class TestNSMigrationTool {
     testPath = new Path(basePath, "ExistingMountPoint");
     createMountTableEntry(routerContext.getRouter(), testPath.toString(), DestinationOrder.FIXED,
         cluster.getNameservices());
-    NSMigrationTool.MigrationJob job2 = setupTest(false, testPath, NSMigrationTool.JobStage.MOUNT,
-        true);
+    MigrationJob job2 = setupTest(false, testPath, MigrationJob.JobStage.MOUNT, true);
     assertTrue(logs.getOutput().contains("Cannot initiate migration on existing mount point"));
     assertEquals(FINISH, job2.getStage());
     job2.handleStage();
@@ -188,8 +195,7 @@ public class TestNSMigrationTool {
     testPath = new Path(basePath, "NestedMountPoint");
     createMountTableEntry(routerContext.getRouter(), new Path(testPath, "inner").toString(),
         DestinationOrder.FIXED, cluster.getNameservices());
-    NSMigrationTool.MigrationJob job3 =
-        setupTest(false, testPath, NSMigrationTool.JobStage.MOUNT, true);
+    MigrationJob job3 = setupTest(false, testPath, MigrationJob.JobStage.MOUNT, true);
     assertTrue(logs.getOutput().contains("Cannot initiate migration on existing mount point"));
     assertEquals(FINISH, job3.getStage());
     job3.handleStage();
@@ -198,8 +204,7 @@ public class TestNSMigrationTool {
 
     // New mount point
     testPath = new Path(basePath, "NewMountPoint");
-    NSMigrationTool.MigrationJob job4 =
-        setupTest(false, testPath, NSMigrationTool.JobStage.MOUNT, true);
+    MigrationJob job4 = setupTest(false, testPath, MigrationJob.JobStage.MOUNT, true);
     assertEquals(MOUNT, job4.getStage());
   }
 
@@ -215,7 +220,7 @@ public class TestNSMigrationTool {
 
   public void testJobStage2Mount(boolean continueJob) throws Exception {
     GenericTestUtils.LogCapturer logs =
-        GenericTestUtils.LogCapturer.captureLogs(LoggerFactory.getLogger(NSMigrationTool.class));
+        GenericTestUtils.LogCapturer.captureLogs(LoggerFactory.getLogger(MigrationJob.class));
 
     String basePathStr;
     if (continueJob) {
@@ -247,7 +252,7 @@ public class TestNSMigrationTool {
       }
     });
     closeStream.start();
-    NSMigrationTool.MigrationJob job = setupTest(continueJob, testPath, COPY, true);
+    MigrationJob job = setupTest(continueJob, testPath, COPY, true);
     closeStream.join();
     assertEquals(COPY, job.getStage());
     MountTable mountTable = getMountTableEntry(testPath.toString());
@@ -279,13 +284,24 @@ public class TestNSMigrationTool {
     routerClient.mkdirs(basePath.toString());
 
     Path testPath = new Path(basePath, "NewMountPoint");
-    NSMigrationTool.MigrationJob job = setupTest(continueJob, testPath, POST_COPY, true);
+    MigrationJob job = setupTest(continueJob, testPath, POST_COPY, true);
     assertEquals(POST_COPY, job.getStage());
-    assertFalse(job.getContext().jobID.isEmpty());
+    assertFalse(job.getContext().getJobID().isEmpty());
     assertTrue(nnFs1.exists(new Path(testPath, "tempFile")));
     assertEquals("TEST DATA", nnFs1.open(new Path(testPath, "tempFile")).readUTF());
-  }
+    assertEquals(493, nnFs1.getFileStatus(testPath).getPermission().toShort());
+    clearMountTableEntry(testPath.toString());
 
+    testPath = new Path(basePath, "ExistingDestination");
+    nnFs1.mkdirs(testPath);
+    job = setupTest(continueJob, testPath, POST_COPY, true);
+    assertEquals(POST_COPY, job.getStage());
+    assertFalse(job.getContext().getJobID().isEmpty());
+    assertTrue(nnFs1.exists(new Path(testPath, "tempFile")));
+    assertEquals("TEST DATA", nnFs1.open(new Path(testPath, "tempFile")).readUTF());
+    assertEquals(493, nnFs1.getFileStatus(testPath).getPermission().toShort());
+    clearMountTableEntry(testPath.toString());
+  }
 
   @Test
   public void testJobStage4CleanupNormal() throws Exception {
@@ -308,7 +324,7 @@ public class TestNSMigrationTool {
     routerClient.mkdirs(basePath.toString());
 
     final Path testPath = new Path(basePath, "NewMountPoint");
-    NSMigrationTool.MigrationJob job = setupTest(continueJob, testPath, FINISH, true);
+    MigrationJob job = setupTest(continueJob, testPath, FINISH, true);
     assertEquals(FINISH, job.getStage());
     // Mount point still exists but should point to ns1 now
     MountTable mountTable = getMountTableEntry(testPath.toString());
@@ -319,8 +335,8 @@ public class TestNSMigrationTool {
     assertReadonly(routerClient, testFile);
     // Data should no longer exist on ns0
     assertFalse(nnFs0.exists(testPath));
-    // and now exist in trash
-    assertTrue(nnFs0.exists(nnFs0.getTrashRoot(testPath)));
+    // and now exist in recycle bin
+    assertTrue(nnFs0.exists(Path.mergePaths(MigrationJob.RECYCLE_BIN_PATH, testPath)));
   }
 
   @Test
@@ -344,13 +360,13 @@ public class TestNSMigrationTool {
     routerClient.mkdirs(basePath.toString());
 
     final Path testPath = new Path(basePath, "NewMountPoint");
-    NSMigrationTool.MigrationJob job = setupTest(continueJob, testPath, POST_FINISH, true);
+    MigrationJob job = setupTest(continueJob, testPath, POST_FINISH, true);
     assertEquals(FINISH, job.getStage());
     // Mount point should no longer exist
-    assertThrows(AssertionError.class, ()-> getMountTableEntry(testPath.toString()));
+    assertThrows(AssertionError.class, () -> getMountTableEntry(testPath.toString()));
     assertTrue(nnFs1.exists(new Path(testPath, "tempFile")));
     // Context files should be deleted
-    assertFalse(nnFs1.exists(job.getContext().contextPath));
+    assertFalse(nnFs1.exists(job.getContext().getContextPath()));
   }
 
   private MountTable getMountTableEntry(String mountPoint) throws IOException {
@@ -363,6 +379,11 @@ public class TestNSMigrationTool {
     assertEquals("Need exactly 1 entry: " + entries, 1, entries.size());
     assertEquals(mountPoint, entries.get(0).getSourcePath());
     return entries.get(0);
+  }
+
+  private void clearMountTableEntry(String mountPoint) throws IOException {
+    RemoveMountTableEntryRequest request = RemoveMountTableEntryRequest.newInstance(mountPoint);
+    routerAdmin.getMountTableManager().removeMountTableEntry(request);
   }
 
   private void assertReadonly(DFSClient client, String path) throws IOException {

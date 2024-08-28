@@ -1,0 +1,241 @@
+/**
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.hadoop.tools.federation.migration;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.URI;
+import java.util.List;
+import java.util.Set;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.ContentSummary;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.util.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * One of the supported commands for {@link NSMigrationTool}.
+ * One button solution that takes in a /projects/project style path and runs everything
+ * from start to finish. Supports resuming.
+ */
+public class ProjectJob {
+  private static final Logger LOG = LoggerFactory.getLogger(ProjectJob.class);
+
+  private final Path path;
+  private final String projectName;
+  private final String srcNs;
+  private final String dstNs;
+  private final String routerAddr;
+  private final int listingThreads;
+  private final int workerThreads;
+  private final long stopThreshold;
+  private final int coldThreshold;
+  private final boolean hot;
+  private final Configuration conf;
+
+  private final File inputPaths;
+  private final File migratedPaths;
+
+  private final File coldContextFile = new File("._MIGRATION_COLD");
+  private final File hotContextFile = new File("._MIGRATION_HOT");
+
+  public ProjectJob(String path, String projectName, String src, String dst, String routerAddr,
+      int listingThreads, int workerThreads, long stopThreshold, int coldThreshold, boolean hotMode, Configuration conf) {
+    this.path = new Path(path);
+    if (projectName == null) {
+      this.projectName = path.split("/")[2];
+    } else {
+      this.projectName = projectName;
+    }
+    this.srcNs = src;
+    this.dstNs = dst;
+    this.routerAddr = routerAddr;
+    this.listingThreads = listingThreads;
+    this.workerThreads = workerThreads;
+    this.stopThreshold = stopThreshold;
+    this.coldThreshold = coldThreshold;
+    this.hot = hotMode;
+    this.conf = conf;
+
+    this.inputPaths = new File(this.projectName + "_dirs.txt");
+    this.migratedPaths = new File(this.projectName + "_done.txt");
+  }
+
+  public static int handleArgs(List<String> argsList, Configuration conf) throws Exception {
+    // Project to migrate
+    String path = StringUtils.popOptionWithArgument("-path", argsList);
+    if (path == null) {
+      System.err.println("A path of format /projects/project must be provided via -path option.");
+      return -1;
+    }
+    while (path.endsWith("/")) {
+      path = path.substring(0, path.length() - 1);
+    }
+    String projectName = StringUtils.popOptionWithArgument("-project", argsList);
+
+    // Namespaces
+    String src = StringUtils.popOptionWithArgument("-src", argsList);
+    String dst = StringUtils.popOptionWithArgument("-dst", argsList);
+    if (src == null || dst == null) {
+      System.err.println("-src and -dst options are required.");
+      return -1;
+    }
+
+    // Router to create/update/delete mount points
+    String routerAddr = StringUtils.popOptionWithArgument("-router", argsList);
+    if (routerAddr == null) {
+      System.err.println("A router must be defined via option -router.");
+      return -1;
+    }
+
+    // How many threads to analyze paths?
+    String listingThreadsStr = StringUtils.popOptionWithArgument("-listingThreads", argsList);
+    int listingThreads = listingThreadsStr == null ? 64 : Integer.parseInt(listingThreadsStr);
+    // How many jobs to run in parallel in batch mode?
+    String workerThreadsStr = StringUtils.popOptionWithArgument("-workerThreads", argsList);
+    int workerThreads = workerThreadsStr == null ? 16 : Integer.parseInt(workerThreadsStr);
+
+    // How many days to consider data cold?
+    String coldThresholdStr = StringUtils.popOptionWithArgument("-coldThreshold", argsList);
+    int coldThreshold = coldThresholdStr == null ? 10 : Integer.parseInt(coldThresholdStr);
+
+    // Run hot mode?
+    boolean hotMode = StringUtils.popOption("-hot", argsList);
+
+    // How many files + subdirs left before stopping cycling cold mode?
+    String stopThresholdStr = StringUtils.popOptionWithArgument("-stop", argsList);
+    long stopThreshold = stopThresholdStr == null ? 0 : Long.parseLong(stopThresholdStr);
+
+    if (stopThreshold != 0 && hotMode) {
+      System.err.println("-stop or -hot not allowed at the same time.");
+      return -1;
+    }
+
+    ProjectJob job =
+        new ProjectJob(path, projectName, src, dst, routerAddr, listingThreads, workerThreads,
+            stopThreshold, coldThreshold, hotMode, conf);
+    job.execute();
+    return 0;
+  }
+
+  public void execute() throws Exception {
+    if (stopThreshold != 0) {
+      int cycle = 1;
+      while (!shouldStop()) {
+        LOG.info("Starting cold cycle {}", cycle);
+        coldCycle();
+        cycle++;
+      }
+      return;
+    }
+    if (hot) {
+      hotRun();
+    }
+  }
+
+  private boolean shouldStop() throws IOException {
+    // Short circuit and resume previous run that already progressed to cold phase if possible
+    if (coldContextFile.exists()) {
+      return false;
+    }
+    DistributedFileSystem srcFs =
+        (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + this.srcNs), conf);
+    ContentSummary content = srcFs.getContentSummary(path);
+    if (content.getFileCount() == 0) {
+      LOG.info("No files left to migrate.");
+      System.exit(0);
+    }
+    LOG.info("Total content count {} for path {}", content.getFileAndDirectoryCount(), path);
+    return content.getFileAndDirectoryCount() <= stopThreshold;
+  }
+
+  private void coldCycle() throws Exception {
+    startAnalyzeJobIfNecessary();
+    startBatchJob();
+  }
+
+  /**
+   * Checks input/output files, starts a new analyze job if there is no input file, or output file
+   * already contains all paths in input file. Skip entirely if there is a previous job already
+   * in COLD or HOT phase.
+   */
+  private void startAnalyzeJobIfNecessary() throws IOException {
+    // Resume a previous job already progressed to cold or hot phase.
+    if (coldContextFile.exists()) {
+      LOG.info("Resuming a previous run from COLD phase.");
+      return;
+    }
+    if (!inputPaths.exists()) {
+      LOG.info("No input file found, starting a new analyze job.");
+      startAnalyzeJob();
+      return;
+    }
+    if (migratedPaths.exists()) {
+      Set<Path> allPaths = MigrationUtils.loadPaths(path, inputPaths.getAbsolutePath());
+      Set<Path> donePaths = MigrationUtils.loadPaths(path, migratedPaths.getAbsolutePath());
+      // Previous batch job done, start a new analysis, clear current paths
+      if (donePaths.containsAll(allPaths)) {
+        LOG.info("All current dirs migrated, starting a new analyze job for new cold dirs");
+        inputPaths.delete();
+        migratedPaths.delete();
+        startAnalyzeJob();
+      }
+    }
+  }
+
+  private void startAnalyzeJob() throws IOException {
+    AnalyzeJob job = new AnalyzeJob(path.toString(), srcNs, String.valueOf(coldThreshold),
+        inputPaths.getAbsolutePath(), listingThreads, conf);
+    job.execute();
+  }
+
+  /**
+   * Reads the input + output files, start batch jobs. Skip if already in hot phase.
+   */
+  private void startBatchJob() throws Exception {
+    if (hotContextFile.exists()) {
+      LOG.info("Resuming a previous run from HOT phase.");
+      return;
+    }
+    if (!coldContextFile.exists()) {
+      coldContextFile.createNewFile();
+    }
+    Set<Path> allPaths = MigrationUtils.loadPaths(path, inputPaths.getAbsolutePath());
+    Set<Path> donePaths = MigrationUtils.loadPaths(path, migratedPaths.getAbsolutePath());
+    allPaths.removeAll(donePaths);
+    MigrationJob.runBatchJob(conf, String.valueOf(workerThreads), allPaths, srcNs, dstNs,
+        routerAddr, false, migratedPaths.getAbsolutePath(), false);
+    coldContextFile.delete();
+  }
+
+  private void hotRun() throws Exception {
+    if (!hotContextFile.exists()) {
+      hotContextFile.createNewFile();
+    }
+    // Hot migration
+    AnalyzeJob.listAllFilePaths(conf, srcNs, path.toString(), inputPaths.getAbsolutePath());
+    Set<Path> allPaths = MigrationUtils.loadPaths(path, inputPaths.getAbsolutePath());
+    MigrationJob.runBatchJob(conf, String.valueOf(workerThreads), allPaths, srcNs, dstNs,
+        routerAddr, false, migratedPaths.getAbsolutePath(), true);
+    hotContextFile.delete();
+  }
+}

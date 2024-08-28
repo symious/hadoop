@@ -113,7 +113,7 @@ if ! declare -f hadoop_subcommand_nsmigrate >/dev/null 2>/dev/null; then
 function hadoop_subcommand_nsmigrate
 {
   # shellcheck disable=SC2034
-  HADOOP_CLASSNAME=org.apache.hadoop.tools.federation.NSMigrationTool
+  HADOOP_CLASSNAME=org.apache.hadoop.tools.federation.migration.NSMigrationTool
   hadoop_add_to_classpath_tools hadoop-shopee
 }
 
@@ -135,7 +135,7 @@ if ! declare -f mapred_subcommand_nsmigrate >/dev/null 2>/dev/null; then
 function mapred_subcommand_nsmigrate
 {
   # shellcheck disable=SC2034
-  HADOOP_CLASSNAME=org.apache.hadoop.tools.federation.NSMigrationTool
+  HADOOP_CLASSNAME=org.apache.hadoop.tools.federation.migration.NSMigrationTool
   hadoop_add_to_classpath_tools hadoop-shopee
 }
 

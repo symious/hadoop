@@ -86,7 +86,6 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
   private boolean verboseLog = false;
   private boolean directWrite = false;
   private EnumSet<FileAttribute> preserve = EnumSet.noneOf(FileAttribute.class);
-  private boolean existIgnorePreserve = false;
 
   private FileSystem targetFS = null;
   private Path targetWorkPath = null;
@@ -115,8 +114,6 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
         PRESERVE_STATUS.getConfigLabel()));
     directWrite = conf.getBoolean(
         DistCpOptionSwitch.DIRECT_WRITE.getConfigLabel(), false);
-    existIgnorePreserve = conf.getBoolean(
-        DistCpOptionSwitch.EXIST_IGNORE_PRESERVE.getConfigLabel(), false);
 
     targetWorkPath = new Path(conf.get(DistCpConstants.CONF_LABEL_TARGET_WORK_PATH));
     Path targetFinalPath = new Path(conf.get(
@@ -152,7 +149,6 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
             = getFileAttributeSettings(context);
     final boolean preserveRawXattrs = context.getConfiguration().getBoolean(
         DistCpConstants.CONF_LABEL_PRESERVE_RAWXATTRS, false);
-    boolean existIgnorePreserve = this.existIgnorePreserve;
 
     final String description = "Copying " + sourcePath + " to " + target;
     context.setStatus(description);
@@ -200,7 +196,6 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
 
       FileAction action = checkUpdate(sourceFS, sourceCurrStatus, target,
           targetStatus);
-      existIgnorePreserve &= action == FileAction.SKIP;
 
       Path tmpTarget = target;
       if (action == FileAction.SKIP) {
@@ -226,10 +221,8 @@ public class CopyMapper extends Mapper<Text, CopyListingFileStatus, Text, Text> 
         copyFileWithRetry(description, sourceCurrStatus, tmpTarget,
             targetStatus, context, action, fileAttributes, sourceStatus);
       }
-      if (!existIgnorePreserve) {
-        DistCpUtils.preserve(target.getFileSystem(conf), tmpTarget, sourceCurrStatus,
-            fileAttributes, preserveRawXattrs);
-      }
+      DistCpUtils.preserve(target.getFileSystem(conf), tmpTarget,
+          sourceCurrStatus, fileAttributes, preserveRawXattrs);
     } catch (IOException exception) {
       handleFailures(exception, sourceFileStatus, target, context);
     }
