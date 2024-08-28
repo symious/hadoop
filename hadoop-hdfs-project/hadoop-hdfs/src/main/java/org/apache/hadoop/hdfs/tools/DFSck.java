@@ -84,7 +84,7 @@ public class DFSck extends Configured implements Tool {
           "-upgradedomains]]]] "
       + "[-includeSnapshots] [-showprogress] "
       + "[-storagepolicies] [-maintenance] "
-      + "[-blockId <blk_Id>] [-replicate]\n"
+      + "[-blockId <blk_Id>] [-datanode <datanode_ip>] [-replicate]\n"
       + "\t<path>\tstart checking from this path\n"
       + "\t-move\tmove corrupted files to /lost+found\n"
       + "\t-delete\tdelete corrupted files\n"
@@ -108,6 +108,7 @@ public class DFSck extends Configured implements Tool {
       + "\t-blockId\tprint out which file this blockId belongs to, locations"
       + " (nodes, racks) of this block, and other diagnostics info"
       + " (under replicated, corrupted or not, etc)\n"
+      + "\t-datanode\tprint out all blocks of this datanode\n"
       + "\t-replicate initiate replication work to make mis-replicated\n"
       + " blocks satisfy block placement policy\n\n"
       + "Please Note:\n\n"
@@ -310,6 +311,9 @@ public class DFSck extends Configured implements Tool {
           idx++;
         }
         url.append("&blockId=").append(URLEncoder.encode(sb.toString(), "UTF-8"));
+      } else if (args[idx].equals("-datanode")){
+        idx++;
+        url.append("&datanode=").append(args[idx]);
       } else if (args[idx].equals("-replicate")) {
         url.append("&replicate=1");
       } else if (!args[idx].startsWith("-")) {

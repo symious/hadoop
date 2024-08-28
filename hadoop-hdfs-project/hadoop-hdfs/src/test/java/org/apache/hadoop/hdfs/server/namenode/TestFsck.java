@@ -61,6 +61,7 @@ import java.util.regex.Pattern;
 
 import java.util.function.Supplier;
 import org.apache.commons.logging.impl.Log4JLogger;
+import org.apache.hadoop.hdfs.server.protocol.DatanodeStorageReport;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.ChecksumException;
@@ -1502,6 +1503,53 @@ public class TestFsck {
         "Block replica on datanode/rack: host1/rack1 is HEALTHY"));
     assertTrue(runFsckResult.contains(
         "Block replica on datanode/rack: host2/rack2 is HEALTHY"));
+  }
+
+  @Test
+  public void testDatanodeCK() throws Exception {
+
+    final short replFactor = 2;
+    short numDn = 2;
+    final long blockSize = 512;
+
+    String[] racks = {"/rack1", "/rack2"};
+    String[] hosts = {"host1", "host2"};
+
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, blockSize);
+    conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, 2);
+
+    DistributedFileSystem dfs = null;
+    File builderBaseDir = new File(GenericTestUtils.getRandomizedTempPath());
+    cluster = new MiniDFSCluster.Builder(conf, builderBaseDir)
+        .numDataNodes(numDn).hosts(hosts).racks(racks).build();
+
+    assertNotNull("Failed Cluster Creation", cluster);
+    cluster.waitClusterUp();
+    dfs = cluster.getFileSystem();
+    assertNotNull("Failed to get FileSystem", dfs);
+
+    DFSTestUtil util = new DFSTestUtil.Builder().
+        setName(getClass().getSimpleName()).setNumFiles(1).build();
+    //create files
+    final String pathString = "/testfile";
+    final Path path = new Path(pathString);
+    util.createFile(dfs, path, 1024, replFactor, 1000L);
+    util.waitReplication(dfs, path, replFactor);
+
+    //run fsck
+    //illegal input test
+    String runFsckResult = runFsck(conf, 0, true, "/", "-datanode",
+        "not_a_datanode");
+    assertTrue(runFsckResult.contains("does not exist"));
+
+    DatanodeStorageReport datanodeStorageReport = cluster.getNameNode(0)
+        .getNamesystem().getDatanodeStorageReport(HdfsConstants.DatanodeReportType.LIVE)[0];
+
+    //general test
+    runFsckResult = runFsck(conf, 0, true, "/", "-datanode",
+        datanodeStorageReport.getDatanodeInfo().getIpAddr());
+    assertTrue(runFsckResult.contains("blocks"));
+    System.out.println(runFsckResult);
   }
 
   /**

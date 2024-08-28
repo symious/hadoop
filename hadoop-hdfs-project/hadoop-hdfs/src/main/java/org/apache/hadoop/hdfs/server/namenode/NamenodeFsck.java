@@ -191,6 +191,8 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
 
   private String[] blockIds = null;
 
+  private String dataNode = null;
+
   // We return back N files that are corrupt; the list of files returned is
   // ordered by block id; to allow continuation support, pass in the last block
   // # from previous call
@@ -266,12 +268,19 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
         this.snapshottableDirs = new ArrayList<String>();
       } else if (key.equals("blockId")) {
         this.blockIds = pmap.get("blockId")[0].split(" ");
+      } else if (key.equals("datanode")) {
+        this.dataNode = pmap.get("datanode")[0];
       } else if (key.equals("replicate")) {
         this.doReplicate = true;
       }
     }
-    this.auditSource = (blockIds != null)
-        ? "blocksIds=" + Arrays.asList(blockIds) : path;
+    if (blockIds != null) {
+      this.auditSource = "blocksIds=" + Arrays.asList(blockIds);
+    } else if (dataNode != null) {
+      this.auditSource = "dataNode=" + dataNode;
+    } else {
+      this.auditSource = path;
+    }
   }
 
   public String getAuditSource() {
@@ -357,6 +366,57 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
     }
   }
 
+  private void dataNodeCK(String dataNode) {
+    if (dataNode == null || dataNode.isEmpty()) {
+      out.println("Please provide valid dataNode ip!");
+      return;
+    }
+
+    namenode.getNamesystem().readLock(FSNamesystemLockMode.GLOBAL, OperationName.FSCK);
+    try {
+      // Get datanode
+      DatanodeDescriptor dn = namenode.getNamesystem().getBlockManager()
+          .getDatanodeManager().getDatanodeByHost(dataNode);
+      if (dn == null) {
+        out.println("DataNode : " + dataNode  + " " + NONEXISTENT_STATUS);
+        LOG.warn("DataNode {} {}.", dataNode, NONEXISTENT_STATUS);
+        return;
+      }
+
+      // Get all blocks
+      int numberBlocks = dn.getNumBlocks();
+      out.println("DataNode " + dataNode + " contains " + numberBlocks + " blocks.");
+      if (numberBlocks >= 100) {
+        LOG.warn("There are too many blocks({}) in {}.", numberBlocks, dataNode);
+        return;
+      }
+
+      // Loop all blocks
+      Iterator<BlockInfo> blocks = dn.getBlockIterator();
+      while (blocks.hasNext()) {
+        BlockInfo block = blocks.next();
+        if (!block.isComplete()) {
+          final INodeFile iNode = namenode.getNamesystem().getBlockCollection(block);
+          out.println("Block Id: " + block.getBlockId()
+              + " still be written by " + iNode.getFullPathName());
+        } else if (namenode.getNamesystem().getBlockManager().isReplicaCorrupt(block, dn)) {
+          out.println("Block Id: " + block.getBlockId() + " in " + dataNode + " is corrupt.");
+        } else {
+          out.println("Block Id: " + block.getBlockId() + " is " + block.getBlockUCState());
+        }
+      }
+      out.println(dataNode + " " + HEALTHY_STATUS);
+    } catch (Exception e) {
+      String errMsg = "Fsck on datanode:" + dataNode;
+      LOG.warn(errMsg, e);
+      out.println(e.getMessage());
+      out.print("\n\n" + errMsg);
+      LOG.warn("Error in looking up datanode", e);
+    } finally {
+      namenode.getNamesystem().readUnlock(FSNamesystemLockMode.GLOBAL, OperationName.FSCK);
+    }
+  }
+
   private void printDatanodeReplicaStatus(Block block,
       Collection<DatanodeDescriptor> corruptionRecord, DatanodeDescriptor dn) {
     out.print("Block replica on datanode/rack: " + dn.getHostName() +
@@ -402,6 +462,19 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
           sb.append(blk + "\n");
         }
         LOG.info("{}", sb.toString());
+        out.flush();
+        return;
+      } else if (dataNode != null) {
+        namenode.getNamesystem().checkSuperuserPrivilege();
+        StringBuilder sb = new StringBuilder();
+        sb.append("FSCK started by ")
+            .append(UserGroupInformation.getCurrentUser()).append(" from ")
+            .append(remoteAddress).append(" at ").append(new Date());
+        out.println(sb);
+        sb.append(" for dataNode: \n");
+        dataNodeCK(dataNode);
+        sb.append(dataNode).append("\n");
+        LOG.info("{}", sb);
         out.flush();
         return;
       }

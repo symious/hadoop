@@ -634,7 +634,7 @@ public class DatanodeDescriptor extends DatanodeInfo {
     }
   }
 
-  Iterator<BlockInfo> getBlockIterator() {
+  public Iterator<BlockInfo> getBlockIterator() {
     return getBlockIterator(0);
   }
 

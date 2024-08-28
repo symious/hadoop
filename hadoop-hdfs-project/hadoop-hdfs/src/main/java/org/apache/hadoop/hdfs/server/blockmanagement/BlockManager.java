@@ -6416,7 +6416,7 @@ public class BlockManager implements BlockStatsMXBean {
     return blockIdManager.isGenStampInFuture(block);
   }
 
-  boolean isReplicaCorrupt(BlockInfo blk, DatanodeDescriptor d) {
+  public boolean isReplicaCorrupt(BlockInfo blk, DatanodeDescriptor d) {
     return corruptReplicas.isReplicaCorrupt(blk, d);
   }
 
