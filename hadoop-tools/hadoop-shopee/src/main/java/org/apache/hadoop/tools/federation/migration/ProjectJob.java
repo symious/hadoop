@@ -51,6 +51,7 @@ public class ProjectJob {
   private final int coldThreshold;
   private final boolean hot;
   private final Configuration conf;
+  private int emptyColdCycle;
 
   private final File inputPaths;
   private final File migratedPaths;
@@ -140,13 +141,17 @@ public class ProjectJob {
   public void execute() throws Exception {
     if (stopThreshold != 0) {
       int cycle = 1;
+      LOG.info("Starting cold cycle {}", cycle);
+      // Ensure at least 1 cold cycle before checking for stop condition
+      coldCycle();
       while (!shouldStop()) {
+        cycle++;
         LOG.info("Starting cold cycle {}", cycle);
         coldCycle();
-        cycle++;
       }
       return;
     }
+
     if (hot) {
       hotRun();
     }
@@ -157,14 +162,20 @@ public class ProjectJob {
     if (coldContextFile.exists()) {
       return false;
     }
+    if (emptyColdCycle >= 2) {
+      LOG.info("2 analyze jobs in a row found no cold dirs. Stopping cold cycles.");
+      return true;
+    }
     DistributedFileSystem srcFs =
         (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + this.srcNs), conf);
     ContentSummary content = srcFs.getContentSummary(path);
     if (content.getFileCount() == 0) {
-      LOG.info("No files left to migrate.");
-      System.exit(0);
+      LOG.info("No files left to migrate. Stopping cold cycles.");
+      return true;
     }
-    LOG.info("Total content count {} for path {}", content.getFileAndDirectoryCount(), path);
+    LOG.info("Total content count {} (files={},dirs={}) for path {}",
+        content.getFileAndDirectoryCount(), content.getFileCount(), content.getDirectoryCount(),
+        path);
     return content.getFileAndDirectoryCount() <= stopThreshold;
   }
 
@@ -189,8 +200,13 @@ public class ProjectJob {
       startAnalyzeJob();
       return;
     }
+    Set<Path> allPaths = MigrationUtils.loadPaths(path, inputPaths.getAbsolutePath());
+    if (allPaths.contains(path) && allPaths.size() == 1) {
+      LOG.info("Input file empty, starting a new analyze job.");
+      startAnalyzeJob();
+      return;
+    }
     if (migratedPaths.exists()) {
-      Set<Path> allPaths = MigrationUtils.loadPaths(path, inputPaths.getAbsolutePath());
       Set<Path> donePaths = MigrationUtils.loadPaths(path, migratedPaths.getAbsolutePath());
       // Previous batch job done, start a new analysis, clear current paths
       if (donePaths.containsAll(allPaths)) {
@@ -222,6 +238,12 @@ public class ProjectJob {
     Set<Path> allPaths = MigrationUtils.loadPaths(path, inputPaths.getAbsolutePath());
     Set<Path> donePaths = MigrationUtils.loadPaths(path, migratedPaths.getAbsolutePath());
     allPaths.removeAll(donePaths);
+    if (allPaths.isEmpty()) {
+      LOG.info("There's nothing to migrate.");
+      emptyColdCycle++;
+      coldContextFile.delete();
+      return;
+    }
     MigrationJob.runBatchJob(conf, String.valueOf(workerThreads), allPaths, srcNs, dstNs,
         routerAddr, false, migratedPaths.getAbsolutePath(), false);
     coldContextFile.delete();

@@ -23,6 +23,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -32,12 +33,14 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.permission.FsAction;
@@ -516,6 +519,33 @@ public class MigrationJob {
           context.dstNs);
       return false;
     }
+    if (!context.fileMode) {
+      // Check all subdirs exist in destination
+      FileStatus[] srcListing = srcFs.listStatus(context.path);
+      FileStatus[] dstListing = dstFs.listStatus(context.path);
+      Set<String> dstListingSet =
+          Arrays.stream(dstListing).map(x -> x.getPath().getName()).collect(Collectors.toSet());
+      for (FileStatus status : srcListing) {
+        if (!dstListingSet.contains(status.getPath().getName())) {
+          LOG.error("Path {} not found in destination namespace {} after migration!",
+              status.getPath(), context.dstNs);
+          return false;
+        }
+      }
+      // Random file check
+      List<String> pathsToCheck = new ArrayList<>();
+      RemoteIterator<LocatedFileStatus> ite = srcFs.listFiles(context.path, true);
+      while (ite.hasNext() && pathsToCheck.size() < 10) {
+        pathsToCheck.add(ite.next().getPath().toUri().getPath());
+      }
+      for (String pathToCheck : pathsToCheck) {
+        if (!dstFs.exists(new Path(pathToCheck))) {
+          LOG.error("Path {} not found in destination namespace {} after migration!", pathToCheck,
+              context.dstNs);
+          return false;
+        }
+      }
+    }
     GetMountTableEntriesRequest getRequest =
         GetMountTableEntriesRequest.newInstance(context.pathStr);
     GetMountTableEntriesResponse getResponse =
@@ -609,13 +639,14 @@ public class MigrationJob {
 
   /**
    * Settings pertained to the job. Will be stored on the destination namespace, under
-   * {@value BASE_PATH} and have an integer suffix indicating which stage a job is at.
+   * {@value BASE_PATH_STR} and have an integer suffix indicating which stage a job is at.
    * <br>
    * Context files won't participate in migration since they are already on the
    * destination namespace.
    */
   public static class JobContext implements Writable {
-    final static public Path BASE_PATH = new Path("/tmp/__MIGRATION/");
+    final static public String BASE_PATH_STR = "/tmp/__MIGRATION/";
+    final static public Path BASE_PATH = new Path(BASE_PATH_STR);
     final static public String CONTEXT_PREFIX = "__MIGRATION_";
 
     /** Paths to work on */
