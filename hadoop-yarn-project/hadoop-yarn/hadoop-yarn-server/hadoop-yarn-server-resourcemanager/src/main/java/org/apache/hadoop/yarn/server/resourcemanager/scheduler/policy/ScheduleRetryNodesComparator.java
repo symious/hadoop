@@ -47,8 +47,8 @@ public class ScheduleRetryNodesComparator implements Comparator<SchedulableEntit
     if (LOG.isDebugEnabled()) {
       LOG.debug("maxRetryNodesThreshold: " + maxRetryNodesThreshold);
     }
-    int lastScheduleRetryNodes1 = se1.getLastScheduleRetryNodes();
-    int lastScheduleRetryNodes2 = se2.getLastScheduleRetryNodes();
+    int lastScheduleRetryNodes1 = se1.getCachedScheduleRetryNodes();
+    int lastScheduleRetryNodes2 = se2.getCachedScheduleRetryNodes();
     if (LOG.isDebugEnabled()) {
       LOG.debug("app1: " + se1.getId() + " ,lastScheduleRetryNodes1: " +
           lastScheduleRetryNodes1 + " ,app2: " + se2.getId() +

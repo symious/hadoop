@@ -93,5 +93,9 @@ public interface SchedulableEntity {
    */
   void setLastScheduleRetryNodes(int retryNodes);
 
+  int getCachedScheduleRetryNodes();
+
+  void setCachedScheduleRetryNodes(int retryNodes);
+
   public Map<String, String> getApplicationSchedulingEnvs();
 }

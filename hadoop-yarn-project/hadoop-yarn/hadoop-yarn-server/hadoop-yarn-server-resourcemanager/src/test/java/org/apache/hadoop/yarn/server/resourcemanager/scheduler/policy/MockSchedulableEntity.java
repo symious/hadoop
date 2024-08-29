@@ -38,6 +38,8 @@ public class MockSchedulableEntity implements SchedulableEntity {
   private long reOrderTime;
   private Map<String, String> applicationSchedulingEnvs;
   private int lastScheduleRetryNodes;
+  private int cachedScheduleRetryNodes;
+
 
   public MockSchedulableEntity() { }
   
@@ -145,6 +147,16 @@ public class MockSchedulableEntity implements SchedulableEntity {
   @Override
   public void setLastScheduleRetryNodes(int retryNodes) {
     lastScheduleRetryNodes = retryNodes;
+  }
+
+  @Override
+  public int getCachedScheduleRetryNodes() {
+    return cachedScheduleRetryNodes;
+  }
+
+  @Override
+  public void setCachedScheduleRetryNodes(int retryNodes) {
+    cachedScheduleRetryNodes = retryNodes;
   }
 
   public void setApplicationSchedulingEnvs(Map<String, String> schedulingEnvs) {

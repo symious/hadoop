@@ -69,6 +69,8 @@ public abstract class AbstractComparatorOrderingPolicy<S extends SchedulableEnti
     updateSchedulingResourceUsage(
       schedulableEntity.getSchedulingResourceUsage());
     schedulableEntity.setReOrderTime(System.currentTimeMillis());
+    schedulableEntity.setCachedScheduleRetryNodes(
+        schedulableEntity.getLastScheduleRetryNodes());
     schedulableEntities.add(schedulableEntity);
   }
   
