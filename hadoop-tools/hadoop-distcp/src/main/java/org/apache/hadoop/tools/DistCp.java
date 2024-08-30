@@ -138,10 +138,9 @@ public class DistCp extends Configured implements Tool {
     }
     
     try {
-      context = new DistCpContext(OptionsParser.parse(argv));
-      checkSplitLargeFile();
-      setTargetPathExists();
+      DistCpContext context = new DistCpContext(OptionsParser.parse(argv));
       LOG.info("Input Options: " + context);
+      setContext(context);
     } catch (Throwable e) {
       LOG.error("Invalid arguments: ", e);
       System.err.println("Invalid arguments: " + e.getMessage());
@@ -179,6 +178,10 @@ public class DistCp extends Configured implements Tool {
   public Job execute() throws Exception {
     Preconditions.checkState(context != null,
         "The DistCpContext should have been created before running DistCp!");
+
+    checkSplitLargeFile();
+    setTargetPathExists();
+
     Job job = createAndSubmitJob();
 
     if (context.shouldBlock()) {
@@ -425,6 +428,13 @@ public class DistCp extends Configured implements Tool {
    */
   protected DistCpContext getContext() {
     return context;
+  }
+
+  /**
+   * @param context the context will be set.
+   */
+  public  void setContext(DistCpContext context) {
+    this.context = context;
   }
 
   /**
