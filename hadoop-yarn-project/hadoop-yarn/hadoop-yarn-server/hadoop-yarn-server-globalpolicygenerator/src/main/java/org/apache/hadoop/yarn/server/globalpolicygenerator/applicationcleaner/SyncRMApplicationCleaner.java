@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.globalpolicygenerator.applicationcleaner;
 
+import org.apache.commons.collections.MapUtils;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -33,6 +34,7 @@ import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException;
 import org.apache.hadoop.yarn.server.federation.failover.FederationProxyProviderUtil;
 import org.apache.hadoop.yarn.server.federation.store.records.ApplicationHomeSubCluster;
 import org.apache.hadoop.yarn.server.federation.store.records.SubClusterId;
+import org.apache.hadoop.yarn.server.federation.store.records.SubClusterInfo;
 import org.apache.hadoop.yarn.server.federation.utils.FederationStateStoreFacade;
 import org.apache.hadoop.yarn.server.globalpolicygenerator.GPGMetrics;
 import org.apache.hadoop.yarn.util.Records;
@@ -90,6 +92,15 @@ public class SyncRMApplicationCleaner extends ApplicationCleaner {
       for (ApplicationHomeSubCluster app : applicationHomeSubClusterList) {
         ApplicationId applicationId = app.getApplicationId();
         SubClusterId homeSubCluster = app.getHomeSubCluster();
+
+        Map<SubClusterId, SubClusterInfo> activeSubClusters =
+            facade.getSubClusters(true);
+        if (MapUtils.isEmpty(activeSubClusters) ||
+            !activeSubClusters.containsKey(homeSubCluster)) {
+          LOG.warn("applicationId: " + applicationId + " ,homeSubCluster: " +
+              homeSubCluster + " is not active, skip it first!");
+          continue;
+        }
 
         try {
           ApplicationClientProtocol clientRMProxy =
