@@ -60,7 +60,7 @@ import java.util.Set;
  * between datacenters when migrate DC.
  */
 public class ZoneMigrationV2 extends ZoneMoverV2 {
-  public static final Logger LOG = LoggerFactory.getLogger(ZoneMigration.class);
+  public static final Logger LOG = LoggerFactory.getLogger(ZoneMigrationV2.class);
   private final boolean allowChangeReplication;
   private final MigrationRuleMap migrationRuleMap;
   private final String sourceDC;
@@ -172,7 +172,7 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
   }
 
   @Override
-  public boolean skipPath(String path) {
+  public boolean doesSkipPath(String path) {
     String matchPath = "";
     for (Map.Entry<String, ReplicationRule> entry : blackList.entrySet()) {
       String key = entry.getKey();

@@ -57,7 +57,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 
 public class DecommissionToolV2 {
-  private static final Logger LOG = LoggerFactory.getLogger(DecommissionTool.class);
+  private static final Logger LOG = LoggerFactory.getLogger(DecommissionToolV2.class);
   static final Path DECOMMISSION_ID_PATH = new Path("/system/decommission.id");
 
   private final NameNodeConnector nnc;

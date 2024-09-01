@@ -1685,7 +1685,8 @@ public class ZoneMover {
         throws IllegalArgumentException, IOException {
       List<String> rawPaths;
       if (line.hasOption("path")) {
-        rawPaths = new ArrayList<>(Collections.singletonList(line.getOptionValue("path")));
+        rawPaths = new ArrayList<>(StringUtils.getTrimmedStringCollection(
+            line.getOptionValue("path")));
       } else {
         rawPaths = readPathFile(line.getOptionValue("pathFile"));
       }

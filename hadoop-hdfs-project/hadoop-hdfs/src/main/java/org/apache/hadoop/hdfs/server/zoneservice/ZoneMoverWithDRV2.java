@@ -68,9 +68,11 @@ public class ZoneMoverWithDRV2 extends ZoneMoverV2 {
   private final boolean skipEC;
   private final boolean skipCheckCold;
   private final long drColdDataThresholdMS;
+  private final boolean drRuleValidationEnabled;
   private Set<String> drDataCenters;
   private Map<Short, ReplicationRule> drReplicationRuleForColdData;
   private Map<Short, ReplicationRule> drStripedBlockRule;
+  private Set<String> drBlacklistPaths = new HashSet<>();
 
   public ZoneMoverWithDRV2(Configuration conf, URI nameNode, List<Path> paths,
       RunMode runMode, ZoneMoverTrigger zoneMoverTrigger, boolean useAccessTime,
@@ -81,12 +83,16 @@ public class ZoneMoverWithDRV2 extends ZoneMoverV2 {
     drColdDataThresholdMS = conf.getLong(
         DFSConfigKeys.DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY,
         DFSConfigKeys.DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_DEFAULT);
+    drRuleValidationEnabled = conf.getBoolean(
+        DFSConfigKeys.DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY,
+        DFSConfigKeys.DFS_NAMENODE_DR_RULE_VALIDATION_ENABLE_KEY_DEFAULT);
     setDrDataCenters(new HashSet<>(StringUtils.getTrimmedStringCollection(
         conf.get(DFSConfigKeys.DFS_NAMENODE_DR_DATACENTERS_KEY))));
     setDrReplicationRuleForColdData(StringUtils.getTrimmedStringCollection(
         conf.get(DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY), ";"));
     setDrStripedBlockRule(StringUtils.getTrimmedStringCollection(
         conf.get(DFSConfigKeys.DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY), ";"));
+    setDrBlacklistPaths(conf.get(DFSConfigKeys.DFS_NAMENODE_DR_BLACKLIST_PATHS));
     setEnableDR(true);
     this.useAccessTime = useAccessTime;
     this.skipReplica = skipReplica;
@@ -121,11 +127,12 @@ public class ZoneMoverWithDRV2 extends ZoneMoverV2 {
         }
       }
     }
-
-    Preconditions.checkArgument(replicationRules.containsKey((short) 3),
-        "%s least should contain 3 replica corresponding " +
-            "replication rule for DR",
-        DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY);
+    if (drRuleValidationEnabled) {
+      Preconditions.checkArgument(replicationRules.containsKey((short) 3),
+          "%s least should contain 3 replica corresponding " +
+              "replication rule for DR",
+          DFSConfigKeys.DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY);
+    }
     drReplicationRuleForColdData = replicationRules;
   }
 
@@ -150,11 +157,31 @@ public class ZoneMoverWithDRV2 extends ZoneMoverV2 {
       }
     }
 
-    Preconditions.checkArgument(stripedBlockRules.containsKey((short) 9),
-        "%s least should contain 9 replica corresponding " +
-            "striped block rule for DR",
-        DFSConfigKeys.DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY);
+    if (drRuleValidationEnabled) {
+      Preconditions.checkArgument(stripedBlockRules.containsKey((short) 9),
+          "%s least should contain 9 replica corresponding " +
+              "striped block rule for DR", DFSConfigKeys.DFS_NAMENODE_DR_STRIPED_BLOCK_RULE_KEY);
+    }
     drStripedBlockRule = stripedBlockRules;
+  }
+
+  public void setDrBlacklistPaths(final String valueString) {
+    Set<String> newBlacklistPaths = new HashSet<>(StringUtils.
+        getTrimmedStringCollection(valueString));
+    Set<String> validPaths = new HashSet<>();
+    for (String src : newBlacklistPaths) {
+      final Path path = new Path(src);
+      if (!path.isAbsolute()) {
+        LOG.error("{} ignoring relative path {}",
+            DFSConfigKeys.DFS_NAMENODE_DR_BLACKLIST_PATHS, src);
+      } else if (path.toUri().getScheme() != null) {
+        LOG.error("{} ignoring path {} with scheme",
+            DFSConfigKeys.DFS_NAMENODE_DR_BLACKLIST_PATHS, src);
+      } else {
+        validPaths.add(path.toString());
+      }
+    }
+    drBlacklistPaths = validPaths;
   }
 
   @Override
@@ -413,6 +440,20 @@ public class ZoneMoverWithDRV2 extends ZoneMoverV2 {
         zoneMoverTrigger.shutdown();
       }
     }
+  }
+
+  @Override
+  public boolean doesSkipPath(String path) {
+    if (drBlacklistPaths == null || drBlacklistPaths.isEmpty()) {
+      return false;
+    }
+
+    for (String blacklistedPath : drBlacklistPaths) {
+      if (!StringUtils.isNullOrEmpty(path) && path.startsWith(blacklistedPath)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   protected Path getIdPath(RunMode mode) {

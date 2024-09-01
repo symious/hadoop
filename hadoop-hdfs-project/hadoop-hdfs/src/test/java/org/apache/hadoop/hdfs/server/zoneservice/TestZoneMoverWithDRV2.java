@@ -64,6 +64,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -477,6 +478,156 @@ public class TestZoneMoverWithDRV2 {
         }
         zoneMoverTrigger.shutdown();
       }
+    }
+  }
+
+  @Test
+  public void testZoneMoverWithDRByBlacklist() throws Exception {
+    GenericTestUtils.LogCapturer logs =
+        GenericTestUtils.LogCapturer.captureLogs(ZoneMoverV2.LOG);
+
+    Configuration conf = new HdfsConfiguration();
+    final String[] racks = {"/datacenter0/rack0", "/datacenter0/rack1", "/datacenter0/rack2"
+        , "/datacenter0/rack3", "/datacenter0/rack4", "/datacenter0/rack5",
+        "/datacenter0/rack6", "/datacenter0/rack7", "/datacenter0/rack8"};
+    final String[] hosts = {"host0", "host1", "host2", "host10", "host11", "host12",
+        "host20", "host21", "host22"};
+    initConfForDr(conf, "/datacenter0", 0);
+    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).
+        nnTopology(MiniDFSNNTopology.simpleHATopology()).
+        numDataNodes(hosts.length).hosts(hosts).racks(racks).build()) {
+      HATestUtil.setFailoverConfigurations(cluster, conf, "dev1");
+      cluster.waitActive();
+      cluster.transitionToActive(0);
+      DistributedFileSystem fs = cluster.getFileSystem(0);
+
+      short replication = 3;
+      // create cold mode file.
+      Path path = new Path("/test/dir/file");
+      createAndVerifyFile(fs, path, replication,
+          ReplicationRule.parseFromString("/datacenter0:3"), null);
+      Path blacklistPath = new Path("/test/dir/subdir1/file");
+      createAndVerifyFile(fs, blacklistPath, replication,
+          ReplicationRule.parseFromString("/datacenter0:3"), null);
+      Path path1 = new Path("/test1/file");
+      createAndVerifyFile(fs, path1, replication,
+          ReplicationRule.parseFromString("/datacenter0:3"), null);
+      Path blacklistPath1 = new Path("/test2/dir1/file");
+      createAndVerifyFile(fs, blacklistPath1, replication,
+          ReplicationRule.parseFromString("/datacenter0:3"), null);
+      Path path2 = new Path("/test2/dir2/file");
+      createAndVerifyFile(fs, path2, replication,
+          ReplicationRule.parseFromString("/datacenter0:3"), null);
+
+      //create monitor mode file.
+      List<Path> paths = new ArrayList<>(Collections.singletonList(
+          new Path("/testMonitor")));
+      List<Pair<ConsumerRecord<String, String>, String>> records = new ArrayList<>();
+      String blackListPath = "/testMonitor/dir.1";
+      Map<String, ReplicationRule> expectedRuleMonitor = new HashMap<>();
+      Path monitorPath1 = new Path(blackListPath + "/file.1");
+      createAndVerifyFile(fs, monitorPath1, replication,
+          ReplicationRule.parseFromString("/datacenter0:3"), records);
+      Path monitorPath2 = new Path("/testMonitor/dir.2/file.1");
+      createAndVerifyFile(fs, monitorPath2, replication,
+          ReplicationRule.parseFromString("/datacenter0:3"), records);
+
+      // Adding 6 new hosts about '/datacenter1'.
+      cluster.startDataNodes(conf, 3, true, null,
+          new String[]{"/datacenter1/rack0", "/datacenter1/rack1", "/datacenter1/rack2"},
+          new String[]{"host6", "host7", "host8"},
+          null);
+      cluster.triggerBlockReports();
+      assertEquals("Number of datanodes should be 12", 12,
+          cluster.getDataNodes().size());
+
+      // Validate cold mode skip blacklist.
+      ZoneMoverWithDRV2.Cli tool = new ZoneMoverWithDRV2.Cli();
+      // Set blacklist path.
+      conf.set(DFSConfigKeys.DFS_NAMENODE_DR_BLACKLIST_PATHS, "/test/dir/subdir1,/test2/dir1");
+      tool.setConf(conf);
+      String[] args = {"-namespace", "dev1", "-path", "/test,/test1,/test2", "-cold"};
+      assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args));
+
+      Map<String, ReplicationRule> expectedRule = new HashMap<>();
+      expectedRule.put(path.toString(),
+          ReplicationRule.parseFromString("/datacenter0:1,/datacenter1:2"));
+      expectedRule.put(path1.toString(),
+          ReplicationRule.parseFromString("/datacenter0:1,/datacenter1:2"));
+      expectedRule.put(path2.toString(),
+          ReplicationRule.parseFromString("/datacenter0:1,/datacenter1:2"));
+
+      // blacklistPath and blacklistPath1 will not skip dr.
+      expectedRule.put(blacklistPath.toString(),
+          ReplicationRule.parseFromString("/datacenter0:3"));
+      expectedRule.put(blacklistPath1.toString(),
+          ReplicationRule.parseFromString("/datacenter0:3"));
+
+      // Validate replica rule.
+      for (Map.Entry<String, ReplicationRule> entry : expectedRule.entrySet()) {
+        String file = entry.getKey();
+        GenericTestUtils.waitFor(() -> {
+          try {
+            return expectedRule.get(file).equals(
+                ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
+                    DFSTestUtil.getAllBlocks(fs, new Path(file)).get(0))));
+          } catch (IOException e) {
+            return false;
+          }
+        }, 500, 50000);
+      }
+
+      assertTrue(logs.getOutput().contains(
+          "Skipping blacklisted path /test/dir/subdir1."));
+      assertTrue(logs.getOutput().contains(
+          "Skipping blacklisted path /test2/dir1."));
+
+      // Validate monitor mode skip blacklist.
+      ZoneMoverTrigger zoneMoverTrigger = new TestZoneMoverKafkaTrigger(records);
+      conf.set(DFSConfigKeys.DFS_NAMENODE_DR_BLACKLIST_PATHS, blackListPath);
+      ZoneMoverWithDRV2 zm = new ZoneMoverWithDRV2(conf, cluster.getURI(0), paths,
+          RunMode.MONITOR, zoneMoverTrigger, false, false,
+          false, false);
+      zm.initMoverMetrics();
+      zm.startInTriggerMonitor();
+
+      expectedRuleMonitor.put(monitorPath1.toString(),
+          ReplicationRule.parseFromString("/datacenter0:3"));
+      expectedRuleMonitor.put(monitorPath2.toString(),
+          ReplicationRule.parseFromString("/datacenter0:2,/datacenter1:1"));
+
+      // Validate replica rule.
+      for (Map.Entry<String, ReplicationRule> entry : expectedRuleMonitor.entrySet()) {
+        String file = entry.getKey();
+        GenericTestUtils.waitFor(() -> {
+          try {
+            return expectedRuleMonitor.get(file).equals(
+                ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
+                    DFSTestUtil.getAllBlocks(fs, new Path(file)).get(0))));
+          } catch (IOException e) {
+            return false;
+          }
+        }, 500, 50000);
+      }
+      assertTrue(logs.getOutput().contains(
+          "/testMonitor/dir.1/file.1 will be skipped."));
+      zm.shutdown();
+      logs.clearOutput();
+    }
+  }
+
+  private void createAndVerifyFile(DistributedFileSystem fs,
+      Path path, short replication, ReplicationRule expectedRule,
+      List<Pair<ConsumerRecord<String, String>, String>> records)
+      throws IOException, InterruptedException, TimeoutException {
+    DFSTestUtil.createFile(fs, path, FILE_LEN, replication, 0L);
+    DFSTestUtil.waitReplication(fs, path, replication);
+    assertEquals(expectedRule, ReplicationRule.parseFromMap(
+        ZoneUtil.getBlockDistribution(DFSTestUtil.getAllBlocks(fs, path).get(0))));
+    if (records != null) {
+      ConsumerRecord<String, String> record = new ConsumerRecord<>(
+          "test-topic", 0, 1, "key1", "value1");
+      records.add(Pair.of(record, path.toString()));
     }
   }
 

@@ -61,6 +61,7 @@ import org.apache.hadoop.net.Node;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Maps;
 import org.apache.hadoop.util.ReflectionUtils;
+import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -100,7 +101,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONESERVICE_STORE_DRIVER_
  *      hdfs zonemover -namespace <namespace> -path <path> -rule <rule>
  */
 public class ZoneMoverV2 {
-  private static final Logger LOG = LoggerFactory.getLogger(ZoneMover.class);
+  public static final Logger LOG = LoggerFactory.getLogger(ZoneMoverV2.class);
   protected final List<Path> targetPaths;
   protected ReplicationRule globalRule = null;
   protected Map<String, ReplicationRule> pathRuleMap = Maps.newHashMap();
@@ -279,7 +280,7 @@ public class ZoneMoverV2 {
   /**
    * Return true if this path can be skipped in trigger monitor.
    */
-  public boolean skipPath(String path) {
+  public boolean doesSkipPath(String path) {
     return false;
   }
 
@@ -294,7 +295,7 @@ public class ZoneMoverV2 {
         // process the path
         String curPath = curRecord.getRight();
         LOG.debug("Start to monitor process path: {}", curPath);
-        if (skipPath(curPath)) {
+        if (doesSkipPath(curPath)) {
           LOG.info("{} will be skipped.", curPath);
           continue;
         }
@@ -513,6 +514,10 @@ public class ZoneMoverV2 {
     // Recursively scan all files and submit move tasks.
     for (Path target : this.targetPaths) {
       String path = target.toUri().getPath();
+      if (doesSkipPath(path)) {
+        LOG.info("Skipping blacklisted path {}.", path);
+        continue;
+      }
       if (this.globalRule != null) {
         processPathWithRule(path, this.globalRule, result, dc);
       } else {
@@ -591,6 +596,10 @@ public class ZoneMoverV2 {
   private void processPathWithRuleRecursively(String parent, HdfsFileStatus status,
       ReplicationRule rule, Result result, MigrationDataCenters dc) {
     String fullPath = status.getFullName(parent);
+    if (doesSkipPath(fullPath)) {
+      LOG.info("Skipping blacklisted path {}.", fullPath);
+      return;
+    }
     if (status.isDir()) {
       processPathWithRule(fullPath, rule, result, dc);
     } else if (!status.isSymlink()) { // file
@@ -1431,7 +1440,8 @@ public class ZoneMoverV2 {
         throws IllegalArgumentException, IOException {
       List<String> rawPaths;
       if (line.hasOption("path")) {
-        rawPaths = new ArrayList<>(Collections.singletonList(line.getOptionValue("path")));
+        rawPaths = new ArrayList<>(StringUtils.getTrimmedStringCollection(
+            line.getOptionValue("path")));
       } else {
         rawPaths = readPathFile(line.getOptionValue("pathFile"));
       }

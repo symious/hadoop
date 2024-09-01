@@ -178,7 +178,7 @@ public class ZoneMoverKafkaTrigger extends ZoneMoverTrigger {
     monitorPaths = paths;
     LOG.info("ZoneMover trigger for {} has been started!", nameSpace);
     LOG.info("monitorPaths:{}, {}:{}, {}:{}", monitorPaths,
-        DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_SKIP_COMPLETE_KEYWORDS_KEY,skipCompleteKeywords,
+        DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_SKIP_COMPLETE_KEYWORDS_KEY, skipCompleteKeywords,
         DFSConfigKeys.DFS_ZONEMOVER_TRIGGER_SKIP_RENAME_KEYWORDS_KEY, skipRenameKeywords);
   }
 
