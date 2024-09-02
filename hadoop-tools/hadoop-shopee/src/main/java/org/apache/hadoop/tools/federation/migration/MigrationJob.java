@@ -143,9 +143,13 @@ public class MigrationJob {
     String concurrencyStr = StringUtils.popOptionWithArgument("-concurrency", argsList);
     // Output path with one successful path per line
     String output = StringUtils.popOptionWithArgument("-output", argsList);
-    Set<Path> paths = MigrationUtils.loadPaths(new Path(path), input);
 
-    runBatchJob(conf, concurrencyStr, paths, src, dst, routerAddr, skipOpenFiles, output, false);
+    DistributedFileSystem srcFs =
+        (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + src), conf);
+    Set<Path> paths = MigrationUtils.loadPathsFromDfs(srcFs, new Path(path), new Path(input));
+
+    runBatchJob(conf, concurrencyStr, paths, src, dst, routerAddr, skipOpenFiles, new Path(output),
+        false);
     return 0;
   }
 
@@ -165,7 +169,7 @@ public class MigrationJob {
    * @throws InterruptedException
    */
   public static void runBatchJob(Configuration conf, String concurrencyStr, Set<Path> paths,
-      String src, String dst, String routerAddr, boolean skipOpenFiles, String output,
+      String src, String dst, String routerAddr, boolean skipOpenFiles, Path output,
       boolean fileMode)
       throws InterruptedException {
     int totalPaths = paths.size();
@@ -192,7 +196,8 @@ public class MigrationJob {
       threadPool.submit(() -> {
         try {
           MigrationJob job =
-              new MigrationJob(singlePath, src, dst, conf, routerAddr, skipOpenFiles, fileMode);
+              new MigrationJob(singlePath, src, dst, new Configuration(conf), routerAddr,
+                  skipOpenFiles, fileMode);
           while (job.continueJob()) {
             LOG.info("Path={}, Stage {} done.", singlePath, job.stage);
           }
@@ -200,7 +205,7 @@ public class MigrationJob {
             LOG.info("Path={} done.", singlePath);
             if (output != null) {
               synchronized (output) {
-                MigrationUtils.appendLineToFile(singlePath.toString(), output);
+                MigrationUtils.appendLineToFileInDfs(job.srcFs, singlePath.toString(), output);
               }
             }
           }
@@ -318,11 +323,17 @@ public class MigrationJob {
   }
 
   @VisibleForTesting
-  public void writeContext() throws IOException {
+  public void writeContext() {
     Path contextPath = new Path(context.contextPath, JobContext.CONTEXT_PREFIX + stage.stageInt);
     // Overwrite stage context
-    try (FSDataOutputStream os = dstFs.create(contextPath, true)) {
-      context.write(os);
+    for (int attempt = 0; attempt < 5; attempt++) {
+      // Retry up to 5 times if necessary. Usually not necessary but sometimes ConcurrentModificationException can happen
+      try (FSDataOutputStream os = dstFs.create(contextPath, true)) {
+        context.write(os);
+        break;
+      } catch (Exception e) {
+        LOG.warn("Failed to write context for path {}, retrying {}/5", context.path, attempt, e);
+      }
     }
     LOG.info("Saved context for stage {} to {}", stage.name(), contextPath);
   }
@@ -443,6 +454,19 @@ public class MigrationJob {
   }
 
   private boolean fileMigrate() throws Exception {
+    FileStatus existingStatus = null;
+    try {
+      // Destination not supposed to exist
+      existingStatus = dstFs.getFileStatus(context.path);
+    } catch (FileNotFoundException ignored) {
+      // Expected outcome
+    }
+    if (existingStatus != null) {
+      // Not supposed to happen
+      FileStatus sourceStatus = srcFs.getFileStatus(context.path);
+      return checkEqualFileStatuses(sourceStatus, existingStatus);
+    }
+
     // Create a unique path for the temp destination
     Path tempPath = Path.mergePaths(TEMP_COPY_PATH, context.path);
     dstFs.delete(tempPath);
@@ -456,6 +480,40 @@ public class MigrationJob {
     }
 
     return dstFs.rename(tempPath, context.path);
+  }
+
+  private boolean checkEqualFileStatuses(FileStatus srcStatus, FileStatus dstStatus) {
+    StringBuilder result = new StringBuilder();
+    if (!srcStatus.getPermission().equals(dstStatus.getPermission())) {
+      result.append("srcPerm=").append(srcStatus.getPermission()).append(",");
+      result.append("dstPerm=").append(dstStatus.getPermission()).append(";");
+    }
+    if (srcStatus.getLen() != dstStatus.getLen()) {
+      result.append("srcLen=").append(srcStatus.getLen()).append(",");
+      result.append("dstLen=").append(dstStatus.getLen()).append(";");
+    }
+    if (!srcStatus.getGroup().equals(dstStatus.getGroup())) {
+      result.append("srcGroup=").append(srcStatus.getGroup()).append(",");
+      result.append("dstGroup=").append(dstStatus.getGroup()).append(";");
+    }
+    if (!srcStatus.getOwner().equals(dstStatus.getOwner())) {
+      result.append("srcOwner=").append(srcStatus.getOwner()).append(",");
+      result.append("dstOwner=").append(dstStatus.getOwner()).append(";");
+    }
+    if (srcStatus.getModificationTime() != dstStatus.getModificationTime()) {
+      result.append("srcMtime=").append(srcStatus.getModificationTime()).append(",");
+      result.append("dstMtime=").append(dstStatus.getModificationTime()).append(";");
+    }
+    if (srcStatus.getBlockSize() != dstStatus.getBlockSize()) {
+      result.append("srcBlocksize=").append(srcStatus.getBlockSize()).append(",");
+      result.append("dstBlocksize=").append(dstStatus.getBlockSize()).append(";");
+    }
+    LOG.warn("File {} already existed on destination.", context.path);
+    if (result.length() > 0) {
+      LOG.warn("Discrepancy detected for file {}: {}", context.path, result);
+      return false;
+    }
+    return true;
   }
 
   private boolean migrateWithDistCp() throws Exception {

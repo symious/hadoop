@@ -17,7 +17,6 @@
  */
 package org.apache.hadoop.tools.federation.migration;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.util.List;
@@ -40,6 +39,9 @@ import org.slf4j.LoggerFactory;
 public class ProjectJob {
   private static final Logger LOG = LoggerFactory.getLogger(ProjectJob.class);
 
+  final static public Path BASE_PATH = new Path("/tmp/__MIGRATION_PROJECT_JOBS/");
+  private final DistributedFileSystem srcFs;
+
   private final Path path;
   private final String projectName;
   private final String srcNs;
@@ -53,14 +55,14 @@ public class ProjectJob {
   private final Configuration conf;
   private int emptyColdCycle;
 
-  private final File inputPaths;
-  private final File migratedPaths;
-
-  private final File coldContextFile = new File("._MIGRATION_COLD");
-  private final File hotContextFile = new File("._MIGRATION_HOT");
+  private final Path inputPathsFilePath;
+  private final Path donePathsFilePath;
+  private final Path coldContextFilePath;
+  private final Path hotContextFilePath;
 
   public ProjectJob(String path, String projectName, String src, String dst, String routerAddr,
-      int listingThreads, int workerThreads, long stopThreshold, int coldThreshold, boolean hotMode, Configuration conf) {
+      int listingThreads, int workerThreads, long stopThreshold, int coldThreshold, boolean hotMode,
+      Configuration conf) throws IOException {
     this.path = new Path(path);
     if (projectName == null) {
       this.projectName = path.split("/")[2];
@@ -77,8 +79,13 @@ public class ProjectJob {
     this.hot = hotMode;
     this.conf = conf;
 
-    this.inputPaths = new File(this.projectName + "_dirs.txt");
-    this.migratedPaths = new File(this.projectName + "_done.txt");
+    this.srcFs = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + srcNs), conf);
+
+    this.inputPathsFilePath = new Path(BASE_PATH, this.projectName + "_input.txt");
+    this.donePathsFilePath = new Path(BASE_PATH, this.projectName + "_done.txt");
+
+    this.coldContextFilePath = new Path(BASE_PATH, "._MIGRATION_COLD_" + projectName);
+    this.hotContextFilePath = new Path(BASE_PATH, "._MIGRATION_HOT_" + projectName);
   }
 
   public static int handleArgs(List<String> argsList, Configuration conf) throws Exception {
@@ -159,7 +166,7 @@ public class ProjectJob {
 
   private boolean shouldStop() throws IOException {
     // Short circuit and resume previous run that already progressed to cold phase if possible
-    if (coldContextFile.exists()) {
+    if (srcFs.exists(coldContextFilePath)) {
       return false;
     }
     if (emptyColdCycle >= 2) {
@@ -182,6 +189,7 @@ public class ProjectJob {
   private void coldCycle() throws Exception {
     startAnalyzeJobIfNecessary();
     startBatchJob();
+    cleanPathsFiles();
   }
 
   /**
@@ -191,36 +199,33 @@ public class ProjectJob {
    */
   private void startAnalyzeJobIfNecessary() throws IOException {
     // Resume a previous job already progressed to cold or hot phase.
-    if (coldContextFile.exists()) {
+    if (srcFs.exists(coldContextFilePath)) {
       LOG.info("Resuming a previous run from COLD phase.");
       return;
     }
-    if (!inputPaths.exists()) {
+    if (!srcFs.exists(inputPathsFilePath)) {
       LOG.info("No input file found, starting a new analyze job.");
       startAnalyzeJob();
       return;
     }
-    Set<Path> allPaths = MigrationUtils.loadPaths(path, inputPaths.getAbsolutePath());
+    Set<Path> allPaths = MigrationUtils.loadPathsFromDfs(srcFs, path, inputPathsFilePath);
     if (allPaths.contains(path) && allPaths.size() == 1) {
       LOG.info("Input file empty, starting a new analyze job.");
       startAnalyzeJob();
       return;
     }
-    if (migratedPaths.exists()) {
-      Set<Path> donePaths = MigrationUtils.loadPaths(path, migratedPaths.getAbsolutePath());
-      // Previous batch job done, start a new analysis, clear current paths
-      if (donePaths.containsAll(allPaths)) {
-        LOG.info("All current dirs migrated, starting a new analyze job for new cold dirs");
-        inputPaths.delete();
-        migratedPaths.delete();
-        startAnalyzeJob();
-      }
+    Set<Path> donePaths = MigrationUtils.loadPathsFromDfs(srcFs, path, donePathsFilePath);
+    // Previous batch job done, start a new analysis, clear current paths
+    if (!donePaths.isEmpty() && donePaths.containsAll(allPaths)) {
+      LOG.info("All current dirs migrated, starting a new analyze job for new cold dirs");
+      cleanPathsFiles();
+      startAnalyzeJob();
     }
   }
 
   private void startAnalyzeJob() throws IOException {
     AnalyzeJob job = new AnalyzeJob(path.toString(), srcNs, String.valueOf(coldThreshold),
-        inputPaths.getAbsolutePath(), listingThreads, conf);
+        inputPathsFilePath, listingThreads, conf);
     job.execute();
   }
 
@@ -228,36 +233,45 @@ public class ProjectJob {
    * Reads the input + output files, start batch jobs. Skip if already in hot phase.
    */
   private void startBatchJob() throws Exception {
-    if (hotContextFile.exists()) {
-      LOG.info("Resuming a previous run from HOT phase.");
-      return;
+    if (srcFs.exists(hotContextFilePath)) {
+      LOG.info("Hot context file detected, either resume the hot migration or "
+          + "make sure it's finished and delete the context file then retry cold migration.");
+      System.exit(0);
     }
-    if (!coldContextFile.exists()) {
-      coldContextFile.createNewFile();
-    }
-    Set<Path> allPaths = MigrationUtils.loadPaths(path, inputPaths.getAbsolutePath());
-    Set<Path> donePaths = MigrationUtils.loadPaths(path, migratedPaths.getAbsolutePath());
+    srcFs.create(coldContextFilePath, true).close();
+    Set<Path> allPaths = MigrationUtils.loadPathsFromDfs(srcFs, path, inputPathsFilePath);
+    Set<Path> donePaths = MigrationUtils.loadPathsFromDfs(srcFs, path, donePathsFilePath);
     allPaths.removeAll(donePaths);
     if (allPaths.isEmpty()) {
       LOG.info("There's nothing to migrate.");
       emptyColdCycle++;
-      coldContextFile.delete();
+      srcFs.delete(coldContextFilePath);
       return;
     }
     MigrationJob.runBatchJob(conf, String.valueOf(workerThreads), allPaths, srcNs, dstNs,
-        routerAddr, false, migratedPaths.getAbsolutePath(), false);
-    coldContextFile.delete();
+        routerAddr, false, donePathsFilePath, false);
+    srcFs.delete(coldContextFilePath);
   }
 
   private void hotRun() throws Exception {
-    if (!hotContextFile.exists()) {
-      hotContextFile.createNewFile();
-    }
+    srcFs.create(hotContextFilePath, true).close();
     // Hot migration
-    AnalyzeJob.listAllFilePaths(conf, srcNs, path.toString(), inputPaths.getAbsolutePath());
-    Set<Path> allPaths = MigrationUtils.loadPaths(path, inputPaths.getAbsolutePath());
+    AnalyzeJob.listAllFilePaths(conf, srcNs, path.toString(), inputPathsFilePath);
+    Set<Path> allPaths = MigrationUtils.loadPathsFromDfs(srcFs, path, inputPathsFilePath);
     MigrationJob.runBatchJob(conf, String.valueOf(workerThreads), allPaths, srcNs, dstNs,
-        routerAddr, false, migratedPaths.getAbsolutePath(), true);
-    hotContextFile.delete();
+        routerAddr, false, donePathsFilePath, true);
+    cleanPathsFiles();
+    srcFs.delete(hotContextFilePath);
+  }
+
+  private void cleanPathsFiles() throws IOException {
+    Path backupInputPathsFilePath =
+        new Path(inputPathsFilePath.getParent(), inputPathsFilePath.getName() + ".old");
+    Path backupDonePathsFilePath =
+        new Path(donePathsFilePath.getParent(), donePathsFilePath.getName() + ".old");
+    srcFs.delete(backupInputPathsFilePath);
+    srcFs.delete(backupDonePathsFilePath);
+    srcFs.rename(inputPathsFilePath, backupDonePathsFilePath);
+    srcFs.rename(donePathsFilePath, backupDonePathsFilePath);
   }
 }

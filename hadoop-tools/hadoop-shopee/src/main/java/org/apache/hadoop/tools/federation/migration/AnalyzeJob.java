@@ -17,12 +17,8 @@
  */
 package org.apache.hadoop.tools.federation.migration;
 
-import java.io.BufferedWriter;
-import java.io.File;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
 import java.net.URI;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -33,6 +29,7 @@ import java.util.concurrent.RecursiveAction;
 
 import org.apache.commons.lang3.tuple.Triple;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
@@ -57,7 +54,7 @@ public class AnalyzeJob {
 
   private final DistributedFileSystem srcFs;
   private final Path input;
-  private final String outputFile;
+  private final Path output;
   private final long ms;
   private final int concurrency;
   /**
@@ -79,16 +76,16 @@ public class AnalyzeJob {
    */
   private final List<Triple<String, int[], Boolean>> results;
 
-  public AnalyzeJob(String path, String srcNs, String threshold, String outputFile, int concurrency,
+  public AnalyzeJob(String path, String srcNs, String threshold, Path output, int concurrency,
       Configuration conf) throws IOException {
     this.srcFs = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + srcNs), conf);
     this.input = new Path(path);
-    this.outputFile = outputFile;
+    this.output = output;
     this.results = new ArrayList<>();
     this.ms = Long.parseLong(threshold) * 86400 * 1000;
     this.concurrency = concurrency;
     LOG.info("Analyzing path hdfs://{}{} with threshold {}, output {}", srcNs, path, threshold,
-        outputFile);
+        output);
   }
 
   public static int handleArgs(List<String> argsList, Configuration conf) throws IOException {
@@ -117,7 +114,7 @@ public class AnalyzeJob {
     if (concurrencyStr != null) {
       concurrency = Integer.parseInt(concurrencyStr);
     }
-    AnalyzeJob job = new AnalyzeJob(path, src, threshold, outputFile, concurrency, conf);
+    AnalyzeJob job = new AnalyzeJob(path, src, threshold, new Path(outputFile), concurrency, conf);
     job.execute();
     return 0;
   }
@@ -375,11 +372,8 @@ public class AnalyzeJob {
     }
     // Recursively squash the tree, starting from root
     root.minimizeNode();
-    try (BufferedWriter writer = new BufferedWriter(
-        new OutputStreamWriter(Files.newOutputStream(new File(outputFile).toPath())))) {
-      writer.write(root.getAllLeafNodes(new StringBuilder(), new ArrayList<>()).toString());
-    } catch (IOException e) {
-      throw new RuntimeException(e);
+    try (FSDataOutputStream os = srcFs.create(output)) {
+      os.writeBytes(root.getAllLeafNodes(new StringBuilder(), new ArrayList<>()).toString());
     }
   }
 
@@ -387,19 +381,15 @@ public class AnalyzeJob {
    * Writes all files under a path recursively to an output file, one path per line.
    */
   public static void listAllFilePaths(Configuration conf, String srcNs, String pathStr,
-      String outputFile) throws IOException {
+      Path outputFile) throws IOException {
     DistributedFileSystem srcFs =
         (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + srcNs), conf);
     Path path = new Path(pathStr);
     RemoteIterator<LocatedFileStatus> ite = srcFs.listFiles(path, true);
-    try (BufferedWriter writer = new BufferedWriter(
-        new OutputStreamWriter(Files.newOutputStream(new File(outputFile).toPath())))) {
+    try (FSDataOutputStream os = srcFs.create(outputFile)) {
       while (ite.hasNext()) {
-        writer.write(ite.next().getPath().toUri().getPath());
-        writer.newLine();
+        os.writeBytes(ite.next().getPath().toUri().getPath() + "\n");
       }
-    } catch (IOException e) {
-      throw new RuntimeException(e);
     }
   }
 }

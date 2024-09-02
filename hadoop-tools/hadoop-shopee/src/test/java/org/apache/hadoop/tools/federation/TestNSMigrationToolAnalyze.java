@@ -1,6 +1,5 @@
 package org.apache.hadoop.tools.federation;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.Set;
 
@@ -18,7 +17,7 @@ import org.apache.hadoop.util.Time;
 import org.junit.Assert;
 import org.junit.Test;
 
-import static org.apache.hadoop.tools.federation.migration.MigrationUtils.loadPaths;
+import static org.apache.hadoop.tools.federation.migration.MigrationUtils.loadPathsFromDfs;
 
 public class TestNSMigrationToolAnalyze {
   @Test(timeout = 300000L)
@@ -65,10 +64,10 @@ public class TestNSMigrationToolAnalyze {
     setTimes(fs, "/base/colddir1", false, false);
     setTimes(fs, "/base/colddir2", false, false);
 
-    File outputFile = File.createTempFile("test_output", ".txt");
-    new AnalyzeJob("/base", "ns0", "7", outputFile.getAbsolutePath(), 2,
+    Path outputFile = new Path("/tmp/test_output.txt");
+    new AnalyzeJob("/base", "ns0", "7", outputFile, 2,
         routerContext.getConf()).execute();
-    Set<Path> paths = loadPaths(new Path("/base"), outputFile.getAbsolutePath());
+    Set<Path> paths = loadPathsFromDfs(fs, new Path("/base"), outputFile);
 
     Assert.assertEquals(3, paths.size());
     Assert.assertTrue(paths.contains(new Path("/base/hotdir2/coldinnerdir")));
@@ -77,10 +76,10 @@ public class TestNSMigrationToolAnalyze {
 
     // Do it again, but this time with an opened file
     FSDataOutputStream stream = fs.append(new Path("/base/colddir2/coldfile"));
-    new AnalyzeJob("/base", "ns0", "7", outputFile.getAbsolutePath(), 2,
+    new AnalyzeJob("/base", "ns0", "7", outputFile, 2,
         routerContext.getConf()).execute();
     stream.close();
-    paths = loadPaths(new Path("/base"), outputFile.getAbsolutePath());
+    paths = loadPathsFromDfs(fs, new Path("/base"), outputFile);
 
     Assert.assertEquals(4, paths.size());
     Assert.assertTrue(paths.contains(new Path("/base/hotdir2/coldinnerdir")));

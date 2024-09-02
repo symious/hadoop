@@ -18,16 +18,20 @@
 package org.apache.hadoop.tools.federation.migration;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileWriter;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.DistributedFileSystem;
+
+import static org.apache.hadoop.io.IOUtils.readFullyToByteArray;
 
 public class MigrationUtils {
   public static Set<Path> loadPaths(Path path, String inputFile) throws IOException {
@@ -49,10 +53,39 @@ public class MigrationUtils {
     return paths;
   }
 
-  public static void appendLineToFile(String line, String outputFile) throws IOException {
-    try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile, true))) {
-      writer.write(line);
-      writer.newLine();
+  public static Set<Path> loadPathsFromDfs(DistributedFileSystem dfs, Path path, Path inputFilePath)
+      throws IOException {
+    Set<Path> paths = new HashSet<>();
+    if (inputFilePath == null) {
+      paths.add(path);
+    } else {
+      FSDataInputStream is;
+      try {
+        is = dfs.open(inputFilePath);
+      } catch (FileNotFoundException fnfe) {
+        return paths;
+      }
+      byte[] fullBytes = readFullyToByteArray(is);
+      is.close();
+      String fullString = new String(fullBytes);
+      for (String split : fullString.split("\n")) {
+        paths.add(new Path(split));
+      }
+    }
+    return paths;
+  }
+
+  public static void appendLineToFileInDfs(DistributedFileSystem srcFs, String line, Path output) {
+    try (FSDataOutputStream os = srcFs.append(output)) {
+      os.writeBytes(line + "\n");
+    } catch (FileNotFoundException fnfe) {
+      try (FSDataOutputStream os = srcFs.create(output)) {
+        os.writeBytes(line + "\n");
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    } catch (IOException e) {
+      throw new RuntimeException(e);
     }
   }
 }
