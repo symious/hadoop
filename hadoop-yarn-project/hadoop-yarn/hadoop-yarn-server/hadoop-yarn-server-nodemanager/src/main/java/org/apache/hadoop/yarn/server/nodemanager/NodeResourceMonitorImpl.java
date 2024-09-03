@@ -314,6 +314,13 @@ public class NodeResourceMonitorImpl extends AbstractService implements
 
   @Override
   public void updateNodeResource(int coreNumber, long memory, int vcoreNumber) throws Exception {
+    boolean toUpdate = needToUpdate(coreNumber, memory);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Need to Update? " + toUpdate);
+    }
+    if (!toUpdate) {
+      return;
+    }
     ResourceManagerAdministrationProtocol adminProtocol =
         ClientRMProxy.createRMProxy(this.nmContext.getConf(),
             ResourceManagerAdministrationProtocol.class);
@@ -346,10 +353,19 @@ public class NodeResourceMonitorImpl extends AbstractService implements
     NodeManagerMetrics metric = this.nmContext.getNodeManagerMetrics();
     metric.setTotalCpuCore(coreNumber);
     metric.setTotalVCore(vcoreNumber);
-    metric.setTotalMemoryInGB(Math.max(Math.round(memory/1024),1));
+    metric.setTotalMemoryInGB(Math.round(memory/1024));
     if (LOG.isDebugEnabled()) {
       LOG.debug("New Resources: Mem-" + memory + ", Vcore-" + vcoreNumber + ", core-" + coreNumber +
           ", Ratio-" + coreRatio);
     }
+  }
+
+  private boolean needToUpdate(int coreNumber, long memory) {
+    NodeManagerMetrics metric = this.nmContext.getNodeManagerMetrics();
+    int newMem = Math.round(memory / 1024);
+    if (coreNumber == metric.getTotalCpuCore() && newMem == metric.getTotalMemoryInGB()) {
+      return false;
+    }
+    return true;
   }
 }
