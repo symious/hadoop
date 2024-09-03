@@ -37,6 +37,7 @@ import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -628,6 +629,7 @@ public class DebugAdmin extends Configured implements Tool {
           "verifyReadable "
               + "[-path <path> | -input <input>] "
               + "[-output <output>] "
+              + "[-log <log>] "
               + "[-concurrency <concurrency>] "
               + "[-suppressed]",
           "  Verify if one or multiple paths are fully readable and have no missing blocks.");
@@ -644,6 +646,7 @@ public class DebugAdmin extends Configured implements Tool {
       String pathStr = StringUtils.popOptionWithArgument("-path", args);
       String inputStr = StringUtils.popOptionWithArgument("-input", args);
       String outputStr = StringUtils.popOptionWithArgument("-output", args);
+      String logStr = StringUtils.popOptionWithArgument("-log", args);
       String concurrencyStr = StringUtils.popOptionWithArgument("-concurrency", args);
       suppressed = StringUtils.popOption("-suppressed", args);
       if (pathStr == null && inputStr == null) {
@@ -652,45 +655,79 @@ public class DebugAdmin extends Configured implements Tool {
         System.out.println(helpText + System.lineSeparator());
         return 1;
       }
+      BufferedWriter resultWriter = null;
+      BufferedWriter logWriter = null;
       try {
-        return handleArgs(pathStr, inputStr, outputStr, concurrencyStr);
+        resultWriter = buildWriter(outputStr);
+        logWriter = buildWriter(logStr);
+        return handleArgs(pathStr, inputStr, resultWriter, logWriter, concurrencyStr);
       } catch (Exception e) {
-        System.err.println(
+        outputLog(logWriter,
             "Got IOE: " + StringUtils.stringifyException(e) + " for command: " + StringUtils.join(
                 ",", args));
         return 1;
+      } finally {
+        if (resultWriter != null) {
+          resultWriter.flush();
+          resultWriter.close();
+        }
+        if (logWriter != null) {
+          logWriter.flush();
+          logWriter.close();
+        }
       }
     }
 
-    private int handleArgs(String pathStr, String inputStr, String outputStr,
-        String concurrencyStr) throws IOException, InterruptedException {
-      BufferedWriter writer = null;
-      try {
-        if (outputStr != null) {
-          File output = new File(outputStr);
-          // Move the old file out if it already exists
-          if (output.exists()) {
-            output.renameTo(new File(outputStr + ".old." + new Timer().now()));
-          }
-          writer = new BufferedWriter(new OutputStreamWriter(
-              Files.newOutputStream(output.toPath())));
+    /**
+     * Build buffered writer for outputStr.
+     */
+    private BufferedWriter buildWriter(String outputStr) throws IOException {
+      if (outputStr != null) {
+        File output = new File(outputStr);
+        // Move the old file out if it already exists
+        if (output.exists()) {
+          output.renameTo(new File(outputStr + ".old." + new Timer().now()));
         }
-
-        // -path takes priority over -input
-        if (pathStr != null) {
-          int result = handlePath(new Path(pathStr));
-          writeToOutput(writer, pathStr, result);
-          return result;
-        }
-
-        int concurrency = concurrencyStr == null ? 1 : Integer.parseInt(concurrencyStr);
-        return handlePaths(inputStr, writer, concurrency);
-      } finally {
-        if (writer != null) {
-          writer.flush();
-          writer.close();
-        }
+        return new BufferedWriter(new OutputStreamWriter(
+            Files.newOutputStream(output.toPath())));
       }
+      return null;
+    }
+
+    private int handleArgs(String pathStr, String inputStr, BufferedWriter resultWriter,
+        BufferedWriter logWriter, String concurrencyStr)
+        throws IOException, InterruptedException {
+      // -path takes priority over -input
+      if (pathStr != null) {
+        int result = handlePath(new Path(pathStr), logWriter);
+        writeToOutput(resultWriter, pathStr, result);
+        return 0;
+      }
+
+      int concurrency = concurrencyStr == null ? 1 : Integer.parseInt(concurrencyStr);
+      File input = new File(inputStr);
+      if (!input.exists()) {
+        outputLog(logWriter, "The input path " + inputStr + " doesn't exist.");
+        return 1;
+      }
+
+      // Line count
+      try (BufferedReader inputReader = new BufferedReader(
+          new InputStreamReader(Files.newInputStream(input.toPath())))) {
+        int total = 0;
+        try (BufferedReader reader = new BufferedReader(
+            new InputStreamReader(Files.newInputStream(input.toPath())))) {
+          String line;
+          while ((line = reader.readLine()) != null) {
+            if (line.trim().isEmpty()) {
+              continue;
+            }
+            total++;
+          }
+        }
+        handlePaths(inputReader, total, resultWriter, logWriter, concurrency);
+      }
+      return 0;
     }
 
     private void writeToOutput(BufferedWriter writer, String path, int result) throws IOException {
@@ -704,65 +741,42 @@ public class DebugAdmin extends Configured implements Tool {
       writer.flush();
     }
 
-    private int handlePaths(String inputStr, BufferedWriter writer, int concurrency)
+    private void handlePaths(BufferedReader inputReader, int finalTotal, BufferedWriter writer,
+        BufferedWriter logWriter, int concurrency)
         throws InterruptedException, IOException {
-      File input = new File(inputStr);
-      if (!input.exists()) {
-        return 1;
-      }
-
-      // Line count
-      BufferedReader reader =
-          new BufferedReader(new InputStreamReader(Files.newInputStream(input.toPath())));
-      int total = 0;
-      String line;
-      while ((line = reader.readLine()) != null) {
-        if (line.trim().isEmpty()) {
-          continue;
-        }
-        total++;
-      }
-      int finalTotal = total;
-
-      reader = new BufferedReader(new InputStreamReader(Files.newInputStream(input.toPath())));
 
       ExecutorService threadPool = Executors.newFixedThreadPool(concurrency);
       final AtomicInteger done = new AtomicInteger(0);
-      final AtomicBoolean failed = new AtomicBoolean(false);
       final Semaphore lock = new Semaphore(concurrency);
 
       long start = Time.monotonicNow();
-
-      while ((line = reader.readLine()) != null) {
+      String line;
+      while ((line = inputReader.readLine()) != null) {
         final String trimmedLine = line.trim();
         if (trimmedLine.isEmpty()) {
           continue;
         }
         lock.acquire();
         threadPool.submit(
-            () -> handlePathConcurrently(new Path(trimmedLine), lock, done, failed, start,
+            () -> handlePathConcurrently(new Path(trimmedLine), logWriter, lock, done, start,
                 finalTotal, writer));
       }
-      reader.close();
-      while (done.get() < total) {
+      while (done.get() < finalTotal) {
         Thread.sleep(1000);
       }
-      return failed.get() ? 1 : 0;
     }
 
-    private void handlePathConcurrently(Path path, Semaphore lock, AtomicInteger done,
-        AtomicBoolean failed, long start, int total, BufferedWriter writer) {
+    private void handlePathConcurrently(Path path, BufferedWriter logWriter,
+        Semaphore lock, AtomicInteger done, long start, int total, BufferedWriter writer) {
       try {
-        int result = handlePath(path);
-        if (result != 0) {
-          failed.set(true);
-        }
+        int result = handlePath(path, logWriter);
         int doneSnapshot = done.incrementAndGet();
         if (doneSnapshot % 1000 == 0) {
           long elapsed = Time.monotonicNow() - start;
           double rate = (double) doneSnapshot / elapsed * 1000;
-          String msg = "Progress: %d/%d, elapsed: %d ms, rate: %5.2f files/s%n";
-          System.out.printf(msg, doneSnapshot, total, elapsed, rate);
+          String msg = String.format("Progress: %d/%d, elapsed: %d ms, rate: %5.2f files/s%n",
+              doneSnapshot, total, elapsed, rate);
+          outputLog(logWriter, msg);
         }
         synchronized (writer) {
           writeToOutput(writer, path.toString(), result);
@@ -774,39 +788,51 @@ public class DebugAdmin extends Configured implements Tool {
       }
     }
 
-    private int handlePath(Path path) {
+    /**
+     * Print log to logWriter.
+     */
+    private synchronized void outputLog(BufferedWriter logWriter,
+        String message) throws IOException {
+      if (logWriter != null) {
+        logWriter.write(message);
+        logWriter.newLine();
+      } else {
+        System.err.println(message);
+      }
+    }
 
+    private int handlePath(Path path, BufferedWriter logWriter) throws IOException {
       HdfsBlockLocation[] locs;
       try {
         locs =
             (HdfsBlockLocation[]) dfs.getFileBlockLocations(path, 0, dfs.getFileStatus(path).getLen());
       } catch (FileNotFoundException e) {
-        System.err.println("Path not found: " + path);
+        outputLog(logWriter, "Path not found: " + path);
         return 1;
       } catch (AccessControlException e) {
-        System.err.println("No permission for path: " + path);
+        outputLog(logWriter, "No permission for path: " + path);
         return 1;
       } catch (IOException e) {
-        System.err.println("Got IOE: " + StringUtils.stringifyException(e) + " for path: " + path);
+        outputLog(logWriter, "Got IOE: " + StringUtils.stringifyException(e) + " for path: " + path);
         return 1;
       }
 
       // First pass: check for block with no live replicas
       for (HdfsBlockLocation loc: locs) {
         if (loc.getLocatedBlock().getLocations().length == 0) {
-          System.err.println("Path: " + path + ". No live replicas found: " + loc);
+          outputLog(logWriter, "Path: " + path + ". No live replicas found: " + loc);
           return 1;
         }
       }
 
       for (HdfsBlockLocation loc: locs) {
         if (!verifyBlock(loc.getLocatedBlock())) {
-          System.err.println("Path: " + path + ". Block not readable: " + loc);
+          outputLog(logWriter, "Path: " + path + ". Block not readable: " + loc);
           return 1;
         }
       }
       if (!suppressed) {
-        System.out.println("No issue found with path " + path);
+        outputLog(logWriter, "No issue found with path " + path);
       }
       return 0;
     }
@@ -925,8 +951,8 @@ public class DebugAdmin extends Configured implements Tool {
         System.out.println(command.usageText);
       }
       System.out.println();
-      ToolRunner.printGenericCommandUsage(System.out);
     }
+    ToolRunner.printGenericCommandUsage(System.out);
   }
 
   public static void main(String[] argsArray) throws Exception {

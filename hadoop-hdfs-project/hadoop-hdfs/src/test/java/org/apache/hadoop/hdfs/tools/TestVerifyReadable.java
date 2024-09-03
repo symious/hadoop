@@ -19,15 +19,19 @@ package org.apache.hadoop.hdfs.tools;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.io.PrintStream;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
@@ -73,6 +77,10 @@ public class TestVerifyReadable {
   }
 
   private int runDebugCommand(Path path, String input, String output, int concurrency) {
+    return runDebugCommand(path, input, output, null, concurrency);
+  }
+
+  private int runDebugCommand(Path path, String input, String output, String log, int concurrency) {
     List<String> args = new ArrayList<>();
     args.add("verifyReadable");
     if (path != null) {
@@ -86,6 +94,10 @@ public class TestVerifyReadable {
     if (output != null) {
       args.add("-output");
       args.add(output);
+    }
+    if (log != null) {
+      args.add("-log");
+      args.add(log);
     }
     if (concurrency > 1) {
       args.add("-concurrency");
@@ -115,11 +127,15 @@ public class TestVerifyReadable {
       Assert.assertEquals(0, runDebugCommand(testPath, null, null, 1));
     }
 
+    ByteArrayOutputStream err = new ByteArrayOutputStream();
+    System.setErr(new PrintStream(err));
+
     // Simple failure cases
     {
       // File not found
       Path testPath = new Path("/test404.txt");
-      Assert.assertEquals(1, runDebugCommand(testPath, null, null, 1));
+      Assert.assertEquals(0, runDebugCommand(testPath, null, null, 1));
+      Assert.assertTrue(err.toString().contains("Path not found"));
     }
 
     // Missing replicas
@@ -132,7 +148,8 @@ public class TestVerifyReadable {
       Assert.assertEquals(0, runDebugCommand(testPath, null, null, 1));
       // Unreadable when all replicas are gone for a block
       deleteReplica(fs, testPath, 1, 0);
-      Assert.assertEquals(1, runDebugCommand(testPath, null, null, 1));
+      Assert.assertEquals(0, runDebugCommand(testPath, null, null, 1));
+      Assert.assertTrue(err.toString().contains("replica does not exist"));
     }
 
     // Down DNs
@@ -144,7 +161,8 @@ public class TestVerifyReadable {
       Assert.assertEquals(0, runDebugCommand(testPath, null, null, 1));
       // Unreadable when all replicas are gone for a block
       shutdownDn(fs, testPath, 1, 0);
-      Assert.assertEquals(1, runDebugCommand(testPath, null, null, 1));
+      Assert.assertEquals(0, runDebugCommand(testPath, null, null, 1));
+      Assert.assertTrue(err.toString().contains("not readable"));
     }
   }
 
@@ -157,6 +175,7 @@ public class TestVerifyReadable {
     // Run the same test in testReadable but with input and output file
     File inputPath = File.createTempFile("testReadableIn", ".txt");
     File outputPath = File.createTempFile("testReadableOut", ".txt");
+    File logPath = File.createTempFile("testLogOut", ".txt");
     BufferedWriter inputWriter =
         new BufferedWriter(new OutputStreamWriter(Files.newOutputStream(inputPath.toPath())));
 
@@ -186,7 +205,8 @@ public class TestVerifyReadable {
 
     inputWriter.flush();
     inputWriter.close();
-    runDebugCommand(null, inputPath.getAbsolutePath(), outputPath.getAbsolutePath(), 2);
+    Assert.assertEquals(0, runDebugCommand(null, inputPath.getAbsolutePath(), outputPath.getAbsolutePath(),
+        logPath.getAbsolutePath(), 2));
     Map<String, Integer> results = new HashMap<>();
 
     BufferedReader outputReader =
@@ -197,6 +217,18 @@ public class TestVerifyReadable {
       results.put(split[0], Integer.parseInt(split[1]));
     }
     outputReader.close();
+
+    Set<String> logs = new HashSet<>();
+    BufferedReader logReader =
+        new BufferedReader(new InputStreamReader(Files.newInputStream(logPath.toPath())));
+    String line1;
+    while ((line1 = logReader.readLine()) != null) {
+      logs.add(line1);
+    }
+    outputReader.close();
+
+    Assert.assertFalse(logs.isEmpty());
+    Assert.assertEquals(5, logs.size());
 
     Assert.assertEquals(0, results.get("/testReadable1Repl.txt").intValue());
     Assert.assertEquals(0, results.get("/testReadable3Repl.txt").intValue());
