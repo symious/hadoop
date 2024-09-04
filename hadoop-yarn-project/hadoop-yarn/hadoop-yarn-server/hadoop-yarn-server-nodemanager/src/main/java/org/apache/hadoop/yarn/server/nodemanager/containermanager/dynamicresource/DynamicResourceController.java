@@ -24,7 +24,7 @@ public class DynamicResourceController extends Thread {
   private Context context;
   private Policy policy;
   private long monitoringInterval;
-  private long minAllocationMb;
+  private long baseMb;
 
   public DynamicResourceController(Configuration conf, Context context) {
     super("DynamicMemoryController");
@@ -34,9 +34,9 @@ public class DynamicResourceController extends Thread {
     monitoringInterval =
         conf.getLong(YarnConfiguration.NM_DYNAMIC_ADJUSTMENT_INTERVAL_MS,
             YarnConfiguration.DEFAULT_NM_DYNAMIC_ADJUSTMENT_INTERVAL_MS);
-    minAllocationMb =
-        conf.getLong(YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB,
-            YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_MB);
+    baseMb =
+        conf.getLong(YarnConfiguration.NM_DYNAMIC_ADJUSTMENT_BASE_MB,
+            YarnConfiguration.DEFAULT_NM_DYNAMIC_ADJUSTMENT_BASE_MB);
   }
 
   private Policy getPolicy(Configuration conf) {
@@ -111,7 +111,7 @@ public class DynamicResourceController extends Thread {
       return;
     }
     long delta = increaseSum;
-    long stepFactor = minAllocationMb;
+    long stepFactor = baseMb;
     Iterator<ContainerAdjustment> iter = decreaseSet.iterator();
     while (delta > 0) {
       if (!iter.hasNext()) {

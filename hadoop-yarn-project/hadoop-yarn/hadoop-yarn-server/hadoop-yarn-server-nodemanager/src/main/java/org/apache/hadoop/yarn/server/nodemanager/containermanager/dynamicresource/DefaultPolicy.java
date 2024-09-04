@@ -21,7 +21,7 @@ public class DefaultPolicy implements Policy {
 
   private long minInterval;
   private Cache<Object, Object> cache;
-  private long minAllocationMb;
+  private long baseMb;
   private long launchTimeThreshold;
 
   @Override
@@ -51,7 +51,7 @@ public class DefaultPolicy implements Policy {
         return null;
       }
       long normalized = ResourceCalculator
-          .roundUp(Math.max(minAllocationMb, target), minAllocationMb);
+          .roundUp(Math.max(baseMb, target), baseMb);
 
       LOG.info("Increase resource from " + limit + " to " + normalized
           + " for container: " + containerId);
@@ -66,7 +66,7 @@ public class DefaultPolicy implements Policy {
       } else {
         long target = limit - (limit - max) / 2;
         long normalized = ResourceCalculator
-            .roundUp(Math.max(minAllocationMb, target), minAllocationMb);
+            .roundUp(Math.max(baseMb, target), baseMb);
         LOG.debug(
             "Before normalized: " + target + " After normalized: " + normalized
                 + " for container: " + containerId);
@@ -91,9 +91,9 @@ public class DefaultPolicy implements Policy {
         YarnConfiguration.DEFAULT_NM_DYNAMIC_ADJUSTMENT_DEFAULT_POLICY_INTERVAL_MS);
     this.cache = CacheBuilder.newBuilder().expireAfterWrite(minInterval,
         TimeUnit.MILLISECONDS).build();
-    this.minAllocationMb =
-        conf.getLong(YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB,
-            YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_MB);
+    this.baseMb =
+        conf.getLong(YarnConfiguration.NM_DYNAMIC_ADJUSTMENT_BASE_MB,
+            YarnConfiguration.DEFAULT_NM_DYNAMIC_ADJUSTMENT_BASE_MB);
     this.launchTimeThreshold = conf.getLong(
         YarnConfiguration.NM_DYNAMIC_ADJUSTMENT_CONTAINER_LAUNCH_TIME_THRESHOLD,
         YarnConfiguration.DEFAULT_NM_DYNAMIC_ADJUSTMENT_CONTAINER_LAUNCH_TIME_THRESHOLD);

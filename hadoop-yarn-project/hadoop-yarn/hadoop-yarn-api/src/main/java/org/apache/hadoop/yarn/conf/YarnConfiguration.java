@@ -1939,6 +1939,10 @@ public class YarnConfiguration extends Configuration {
       NM_PREFIX + "dynamic.adjustment.interval-ms";
   public static final int DEFAULT_NM_DYNAMIC_ADJUSTMENT_INTERVAL_MS = 60000;
 
+  public static final String NM_DYNAMIC_ADJUSTMENT_BASE_MB =
+      NM_PREFIX + "dynamic.adjustment.base-mb";
+  public static final int DEFAULT_NM_DYNAMIC_ADJUSTMENT_BASE_MB = 1024;
+
   public static final String NM_DYNAMIC_ADJUSTMENT_POLICY_CLASS =
       NM_PREFIX + "dynamic.adjustment.policy.class";
 
