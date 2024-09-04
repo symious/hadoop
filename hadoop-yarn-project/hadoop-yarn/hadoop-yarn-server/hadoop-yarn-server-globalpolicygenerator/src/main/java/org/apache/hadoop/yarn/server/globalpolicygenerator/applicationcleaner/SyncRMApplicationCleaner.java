@@ -28,6 +28,7 @@ import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationReportRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationReportResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException;
@@ -105,31 +106,38 @@ public class SyncRMApplicationCleaner extends ApplicationCleaner {
         try {
           ApplicationClientProtocol clientRMProxy =
               getClientRMProxyForSubCluster(facade.getConf(), homeSubCluster);
-
           GetApplicationReportRequest request = Records
               .newRecord(GetApplicationReportRequest.class);
           request.setApplicationId(applicationId);
           GetApplicationReportResponse getApplicationReportResponse =
               clientRMProxy.getApplicationReport(request);
+          ApplicationReport applicationReport =
+              getApplicationReportResponse.getApplicationReport();
           YarnApplicationState applicationState =
-              getApplicationReportResponse.getApplicationReport()
-                  .getYarnApplicationState();
-
+              applicationReport.getYarnApplicationState();
           if (LOG.isDebugEnabled()) {
             LOG.debug("homeSubCluster: " + homeSubCluster + " ,appId: " +
                 applicationId + " ,applicationState: " +
                 applicationState);
           }
 
-          //delete finished app
+          //delete apps with some status and have finished more than expire time
           if ((applicationState.equals(YarnApplicationState.FINISHED) ||
               applicationState.equals(YarnApplicationState.FAILED) ||
               applicationState.equals(YarnApplicationState.KILLED))) {
-            facade.deleteApplicationHomeSubCluster(applicationId);
-            deletedAppStateStores++;
-            LOG.info("Deleted " + applicationId +
-                " from stateStore, due to application state: " +
-                applicationState);
+            long appFinishedStamp = applicationReport.getFinishTime();
+            if (System.currentTimeMillis() - appFinishedStamp >
+                getAppHomeExpireMinTime()) {
+              facade.deleteApplicationHomeSubCluster(applicationId);
+              deletedAppStateStores++;
+              LOG.info(
+                  "ApplicationID: " + applicationId + " ,applicationState: " +
+                      applicationState + " ,have finished: " +
+                      (System.currentTimeMillis() - appFinishedStamp) / 1000 +
+                      " s, exceeds ExpireMinTime : " +
+                      getAppHomeExpireMinTime() / 1000 +
+                      " s, deleted it from stateStore!");
+            }
           }
 
         } catch (ApplicationNotFoundException e) {
