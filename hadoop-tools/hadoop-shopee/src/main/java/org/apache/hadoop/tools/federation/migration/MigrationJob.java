@@ -71,6 +71,7 @@ import org.apache.hadoop.tools.DistCp;
 import org.apache.hadoop.tools.FastCopy;
 import org.apache.hadoop.tools.OptionsParser;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -517,20 +518,14 @@ public class MigrationJob {
   }
 
   private boolean migrateWithDistCp() throws Exception {
-    String path = context.pathStr;
-    Path pathObj = new Path(path);
-    String src = String.format("hdfs://%s%s", context.srcNs, pathObj);
-    String dst = String.format("hdfs://%s%s", context.dstNs, pathObj.getParent().toString());
+    String src = String.format("hdfs://%s%s", context.srcNs, context.path);
+    String dst = String.format("hdfs://%s%s", context.dstNs, context.path.getParent().toString());
     String[] args = new String[] { "-fastCopyEnable", "-prbugpcaxte", src, dst };
 
     Configuration config = new Configuration(conf);
     if (context.jobID.isEmpty()) {
       DistCp distCp = new DistCp(config, OptionsParser.parse(args));
-      Job job = distCp.createAndSubmitJob();
-      context.jobID = job.getJobID().toString();
-      writeContext();
-      interruptForTesting();
-      return job.waitForCompletion(false);
+      return submitDistCpJobWithRetry(distCp);
     } else {
       JobClient client = new JobClient(config);
       RunningJob job = client.getJob(JobID.forName(context.jobID));
@@ -548,25 +543,43 @@ public class MigrationJob {
           LOG.info("Cannot find past job {}, source ns is not empty, submitting a new job...",
               context.jobID);
           DistCp distCp = new DistCp(config, OptionsParser.parse(args));
-          Job newJob = distCp.createAndSubmitJob();
-          context.jobID = newJob.getJobID().toString();
-          writeContext();
-          interruptForTesting();
-          return newJob.waitForCompletion(false);
+          return submitDistCpJobWithRetry(distCp);
         }
       } else {
         if (job.isComplete() && !job.isSuccessful()) {
           // Submit a new one
           LOG.info("Old job {} failed, submitting another one...", context.jobID);
           DistCp distCp = new DistCp(config, OptionsParser.parse(args));
-          Job newJob = distCp.createAndSubmitJob();
-          context.jobID = newJob.getJobID().toString();
-          writeContext();
-          interruptForTesting();
-          return newJob.waitForCompletion(false);
+          return submitDistCpJobWithRetry(distCp);
         }
         job.waitForCompletion();
         return job.isSuccessful();
+      }
+    }
+  }
+
+  private boolean submitDistCpJobWithRetry(DistCp distCp) throws Exception {
+    long lastLogging = -1;
+    while (true) {
+      Job job;
+      try {
+        job = distCp.createAndSubmitJob();
+        context.jobID = job.getJobID().toString();
+        writeContext();
+        interruptForTesting();
+        return job.waitForCompletion(false);
+      } catch (IOException ioe) {
+        if (ioe.getMessage().contains("already has")) {
+          // Overcrowded queue, ignore and retry
+          Thread.sleep(1000);
+          long now = Time.monotonicNow();
+          if (now - lastLogging > 60000) {
+            LOG.info("Path={}, YARN queue full, waiting...", context.path, ioe);
+            lastLogging = now;
+          }
+        } else {
+          throw ioe;
+        }
       }
     }
   }

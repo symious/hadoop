@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.tools.federation.migration;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -52,6 +53,7 @@ import org.slf4j.LoggerFactory;
 public class AnalyzeJob {
   private static final Logger LOG = LoggerFactory.getLogger(AnalyzeJob.class);
 
+  private final DistributedFileSystem router;
   private final DistributedFileSystem srcFs;
   private final Path input;
   private final Path output;
@@ -76,15 +78,16 @@ public class AnalyzeJob {
    */
   private final List<Triple<String, int[], Boolean>> results;
 
-  public AnalyzeJob(String path, String srcNs, String threshold, Path output, int concurrency,
-      Configuration conf) throws IOException {
+  public AnalyzeJob(String path, String srcNs, String fedNs, String threshold, Path output,
+      int concurrency, Configuration conf) throws IOException {
+    this.router = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + fedNs), conf);
     this.srcFs = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + srcNs), conf);
     this.input = new Path(path);
     this.output = output;
     this.results = new ArrayList<>();
     this.ms = Long.parseLong(threshold) * 86400 * 1000;
     this.concurrency = concurrency;
-    LOG.info("Analyzing path hdfs://{}{} with threshold {}, output {}", srcNs, path, threshold,
+    LOG.info("Analyzing path hdfs://{}{} with threshold {}, output {}", fedNs, path, threshold,
         output);
   }
 
@@ -98,6 +101,10 @@ public class AnalyzeJob {
     if (src == null) {
       System.err.println("-src option is required.");
       return -1;
+    }
+    String fed = StringUtils.popOptionWithArgument("-fed", argsList);
+    if (fed == null) {
+      fed = src;
     }
     String threshold = StringUtils.popOptionWithArgument("-days", argsList);
     if (threshold == null) {
@@ -114,7 +121,8 @@ public class AnalyzeJob {
     if (concurrencyStr != null) {
       concurrency = Integer.parseInt(concurrencyStr);
     }
-    AnalyzeJob job = new AnalyzeJob(path, src, threshold, new Path(outputFile), concurrency, conf);
+    AnalyzeJob job =
+        new AnalyzeJob(path, src, fed, threshold, new Path(outputFile), concurrency, conf);
     job.execute();
     return 0;
   }
@@ -172,7 +180,11 @@ public class AnalyzeJob {
     protected void compute() {
       FileStatus[] statuses;
       try {
-        statuses = srcFs.listStatus(base.status.getPath());
+        statuses = router.listStatus(base.status.getPath());
+      } catch (FileNotFoundException fnfe) {
+        // Path disappeared during analysis job. Likely hot dir in this case.
+        LOG.info("Path {} not found", base.status.getPath());
+        return;
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
@@ -212,7 +224,7 @@ public class AnalyzeJob {
   public void execute() throws IOException {
     ForkJoinPool p = new ForkJoinPool(concurrency);
     RecursiveAction task = new AnalyzeSubroutine(
-        new FileStatusWithColdRequirements(srcFs.getFileStatus(input), new int[0]));
+        new FileStatusWithColdRequirements(router.getFileStatus(input), new int[0]));
     p.execute(task);
     task.join();
     p.shutdown();
@@ -278,6 +290,11 @@ public class AnalyzeJob {
         if (children.values().stream().allMatch(x -> x.empty)) {
           this.empty = true;
         }
+        // Special case, /projects/project_name or /user/username node, do not squash
+        if ((parent.name.equals("projects") || parent.name.equals("user"))
+            && parent.parent.name.isEmpty()) {
+          return;
+        }
         children.clear();
         children = null;
         count = 0;
@@ -329,7 +346,7 @@ public class AnalyzeJob {
         cur = cur.children.get(component);
       }
       // If can fully traverse the tree, increment requirement if not leaf node, else drop the node
-      if (children == null && count == 0) {
+      if (cur.children == null && cur.count == 0) {
         cur.parent.children.remove(cur.name);
         cur.parent = null;
       } else {
@@ -362,10 +379,13 @@ public class AnalyzeJob {
     // Reconstruct tree
     NodeWithCount root = new NodeWithCount(null, "", -1, false);
     for (Triple<String, int[], Boolean> path : results) {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("path={},reqs={},empty={}", path.getLeft(), path.getMiddle(), path.getRight());
+      }
       root.addPath(path.getLeft(), path.getMiddle(), path.getRight());
     }
     RemoteIterator<OpenFileEntry> ite =
-        srcFs.listOpenFiles(EnumSet.of(OpenFilesIterator.OpenFilesType.ALL_OPEN_FILES),
+        router.listOpenFiles(EnumSet.of(OpenFilesIterator.OpenFilesType.ALL_OPEN_FILES),
             input.toString());
     while (ite.hasNext()) {
       root.incrRequirement(ite.next());

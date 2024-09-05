@@ -65,7 +65,7 @@ public class TestNSMigrationToolAnalyze {
     setTimes(fs, "/base/colddir2", false, false);
 
     Path outputFile = new Path("/tmp/test_output.txt");
-    new AnalyzeJob("/base", "ns0", "7", outputFile, 2,
+    new AnalyzeJob("/base", "ns0", "ns0", "7", outputFile, 2,
         routerContext.getConf()).execute();
     Set<Path> paths = loadPathsFromDfs(fs, new Path("/base"), outputFile);
 
@@ -76,7 +76,7 @@ public class TestNSMigrationToolAnalyze {
 
     // Do it again, but this time with an opened file
     FSDataOutputStream stream = fs.append(new Path("/base/colddir2/coldfile"));
-    new AnalyzeJob("/base", "ns0", "7", outputFile, 2,
+    new AnalyzeJob("/base", "ns0", "ns0", "7", outputFile, 2,
         routerContext.getConf()).execute();
     stream.close();
     paths = loadPathsFromDfs(fs, new Path("/base"), outputFile);

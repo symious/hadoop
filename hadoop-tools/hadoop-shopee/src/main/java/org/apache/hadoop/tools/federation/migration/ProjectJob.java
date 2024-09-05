@@ -46,6 +46,7 @@ public class ProjectJob {
   private final String projectName;
   private final String srcNs;
   private final String dstNs;
+  private final String fedNs;
   private final String routerAddr;
   private final int listingThreads;
   private final int workerThreads;
@@ -60,9 +61,9 @@ public class ProjectJob {
   private final Path coldContextFilePath;
   private final Path hotContextFilePath;
 
-  public ProjectJob(String path, String projectName, String src, String dst, String routerAddr,
-      int listingThreads, int workerThreads, long stopThreshold, int coldThreshold, boolean hotMode,
-      Configuration conf) throws IOException {
+  public ProjectJob(String path, String projectName, String src, String dst, String fed,
+      String routerAddr, int listingThreads, int workerThreads, long stopThreshold,
+      int coldThreshold, boolean hotMode, Configuration conf) throws IOException {
     this.path = new Path(path);
     if (projectName == null) {
       this.projectName = path.split("/")[2];
@@ -71,6 +72,7 @@ public class ProjectJob {
     }
     this.srcNs = src;
     this.dstNs = dst;
+    this.fedNs = fed;
     this.routerAddr = routerAddr;
     this.listingThreads = listingThreads;
     this.workerThreads = workerThreads;
@@ -103,8 +105,9 @@ public class ProjectJob {
     // Namespaces
     String src = StringUtils.popOptionWithArgument("-src", argsList);
     String dst = StringUtils.popOptionWithArgument("-dst", argsList);
-    if (src == null || dst == null) {
-      System.err.println("-src and -dst options are required.");
+    String fed = StringUtils.popOptionWithArgument("-fed", argsList);
+    if (src == null || dst == null || fed == null) {
+      System.err.println("-src, -dst, -fed options are required.");
       return -1;
     }
 
@@ -139,7 +142,7 @@ public class ProjectJob {
     }
 
     ProjectJob job =
-        new ProjectJob(path, projectName, src, dst, routerAddr, listingThreads, workerThreads,
+        new ProjectJob(path, projectName, src, dst, fed, routerAddr, listingThreads, workerThreads,
             stopThreshold, coldThreshold, hotMode, conf);
     job.execute();
     return 0;
@@ -224,7 +227,7 @@ public class ProjectJob {
   }
 
   private void startAnalyzeJob() throws IOException {
-    AnalyzeJob job = new AnalyzeJob(path.toString(), srcNs, String.valueOf(coldThreshold),
+    AnalyzeJob job = new AnalyzeJob(path.toString(), srcNs, fedNs, String.valueOf(coldThreshold),
         inputPathsFilePath, listingThreads, conf);
     job.execute();
   }

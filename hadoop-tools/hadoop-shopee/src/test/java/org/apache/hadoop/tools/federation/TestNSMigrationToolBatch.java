@@ -94,8 +94,7 @@ public class TestNSMigrationToolBatch {
     setupTest(basePath);
     Path tempDirsList = new Path("/tmp/input.txt");
 
-    new AnalyzeJob("/testBatch", "ns0", "10", tempDirsList, 1,
-        routerContext.getConf()).execute();
+    new AnalyzeJob("/testBatch", "ns0", "ns0", "10", tempDirsList, 1, routerContext.getConf()).execute();
 
     DistributedFileSystem fs = (DistributedFileSystem) routerContext.getFileSystem();
     Set<Path> coldPaths = loadPathsFromDfs(fs, basePath, tempDirsList);
@@ -116,8 +115,7 @@ public class TestNSMigrationToolBatch {
     // Remaining data: One fully hot dir with 5 hot subdirs, 2 partially hot dirs with 3 hot subdirs
     assertEquals(5 + 3 * 2, nnFs0.getContentSummary(basePath).getFileCount());
 
-    AnalyzeJob.listAllFilePaths(routerContext.getConf(), "ns0", "/testBatch",
-        tempDirsList);
+    AnalyzeJob.listAllFilePaths(routerContext.getConf(), "ns0", "/testBatch", tempDirsList);
     Set<Path> hotPaths = loadPathsFromDfs(fs, basePath, tempDirsList);
     // Hot migration
     MigrationJob.runBatchJob(routerContext.getConf(), "6", hotPaths, "ns0", "ns1",
@@ -132,11 +130,11 @@ public class TestNSMigrationToolBatch {
     Path basePath = new Path("/projects/test");
     setupTest(basePath);
     // Cold run
-    new ProjectJob(basePath.toString(), "test", "ns0", "ns1", routerAdminAddress, 8, 6, 100, 10,
-        false, routerContext.getConf()).execute();
+    new ProjectJob(basePath.toString(), "test", "ns0", "ns1", "ns0", routerAdminAddress, 8, 6, 100,
+        10, false, routerContext.getConf()).execute();
     // Hot run
-    new ProjectJob(basePath.toString(), "test", "ns0", "ns1", routerAdminAddress, 8, 6, 0, 10,
-        true, routerContext.getConf()).execute();
+    new ProjectJob(basePath.toString(), "test", "ns0", "ns1", "ns0", routerAdminAddress, 8, 6, 0,
+        10, true, routerContext.getConf()).execute();
     assertEquals(25, nnFs1.getContentSummary(basePath).getFileCount());
   }
 
