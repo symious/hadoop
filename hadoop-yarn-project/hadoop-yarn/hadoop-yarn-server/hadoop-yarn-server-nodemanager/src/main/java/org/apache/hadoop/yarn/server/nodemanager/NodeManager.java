@@ -85,6 +85,7 @@ import org.apache.hadoop.yarn.server.scheduler.DistributedOpportunisticContainer
 import org.apache.hadoop.yarn.server.scheduler.OpportunisticContainerAllocator;
 import org.apache.hadoop.yarn.server.security.ApplicationACLsManager;
 import org.apache.hadoop.yarn.state.MultiStateTransitionListener;
+import org.apache.hadoop.yarn.util.YarnVersionInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1027,6 +1028,7 @@ public class NodeManager extends CompositeService
       long now = System.currentTimeMillis();
       long costTime = now - NodeManager.getNMStartupTime();
       metrics.setTotalStartNMCostTime(costTime);
+      metrics.setVersionSeriesNum(YarnVersionInfo.getSeriesNumber());
       LOG.info("NodeManager start all service cost time: " + costTime +
           " ms!");
     } catch (Throwable t) {

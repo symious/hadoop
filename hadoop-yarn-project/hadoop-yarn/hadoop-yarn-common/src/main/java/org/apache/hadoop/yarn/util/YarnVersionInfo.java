@@ -45,7 +45,16 @@ public class YarnVersionInfo extends VersionInfo {
   public static String getVersion() {
     return YARN_VERSION_INFO._getVersion();
   }
-  
+
+  public static int getSeriesNumber() {
+    String[] vsInfo = getVersion().split("-");
+    String versionStr = vsInfo[vsInfo.length - 1];
+    if (versionStr.matches("\\d+")) {
+      return Integer.valueOf(versionStr);
+    }
+    return 0;
+  }
+
   /**
    * Get the subversion revision number for the root directory
    * @return the revision number, eg. "451451"

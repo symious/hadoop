@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.resourcemanager;
 
 import static org.apache.hadoop.metrics2.lib.Interns.info;
 
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -33,12 +34,14 @@ import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableGaugeInt;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.metrics2.lib.MutableRate;
+import org.apache.hadoop.util.VersionInfo;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.yarn.api.records.ResourceInformation;
 import org.apache.hadoop.yarn.metrics.CustomResourceMetricValue;
 import org.apache.hadoop.yarn.metrics.CustomResourceMetrics;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueMetricsForCustomResources;
+import org.apache.hadoop.yarn.util.YarnVersionInfo;
 import org.apache.hadoop.yarn.util.resource.ResourceUtils;
 
 @InterfaceAudience.Private
@@ -85,6 +88,7 @@ public class ClusterMetrics {
     rmMainEventProcCPUMax;
   @Metric("Number of RM Timeline Event failures") MutableGaugeLong
     timelineEventFailures;
+  @Metric("Version series number") MutableGaugeInt versionSeriesNum;
 
   private boolean rmEventProcMonitorEnable = false;
 
@@ -114,6 +118,7 @@ public class ClusterMetrics {
         }
       }
     }
+    INSTANCE.setVersionSeriesNum(YarnVersionInfo.getSeriesNumber());
     return INSTANCE;
   }
 
@@ -142,7 +147,15 @@ public class ClusterMetrics {
     isInitialized.set(false);
     INSTANCE = null;
   }
-  
+
+  public long getVersionSeriesNum() {
+    return versionSeriesNum.value();
+  }
+
+  public void setVersionSeriesNum(int version) {
+    versionSeriesNum.set(version);
+  }
+
   // Indicate whether RM Event Thread CPU Monitor is enabled
   public void setRmEventProcMonitorEnable(boolean value) {
     rmEventProcMonitorEnable = value;

@@ -162,6 +162,9 @@ public class NodeManagerMetrics {
   @Metric("Total physic cpu core")
   MutableGaugeInt totalCpuCore;
 
+  @Metric("Version series number")
+  MutableGaugeInt versionSeriesNum;
+
   private NodeManagerMetrics(JvmMetrics jvmMetrics) {
     this.jvmMetrics = jvmMetrics;
   }
@@ -177,6 +180,15 @@ public class NodeManagerMetrics {
 
   public JvmMetrics getJvmMetrics() {
     return jvmMetrics;
+  }
+
+
+  public long getVersionSeriesNum() {
+    return versionSeriesNum.value();
+  }
+
+  public void setVersionSeriesNum(int version) {
+    versionSeriesNum.set(version);
   }
 
   // Potential instrumentation interface methods
