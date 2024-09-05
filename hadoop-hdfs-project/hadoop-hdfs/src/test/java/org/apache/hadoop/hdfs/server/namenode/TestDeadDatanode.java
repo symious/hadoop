@@ -242,6 +242,8 @@ public class TestDeadDatanode {
       // Mark the DN1 as the faulty DN
       blockManager.setFaultyDC("/datacenter1");
       assertTrue(storeDN1.isProtectedByFaultyDC());
+      assertEquals("/datacenter1", cluster.getNameNode(0).getConf()
+          .get(DFSConfigKeys.DFS_NAMENODE_FAULTY_DC_KEY));
 
       // Start the DN4.
       dn4.setHeartbeatsDisabledForTests(false);

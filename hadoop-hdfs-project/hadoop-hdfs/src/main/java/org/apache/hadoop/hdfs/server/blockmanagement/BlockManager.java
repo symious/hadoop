@@ -569,8 +569,11 @@ public class BlockManager implements BlockStatsMXBean {
 
   private final int batchedScanLimit;
 
+  private final Configuration conf;
+
   public BlockManager(final FSNamesystem namesystem, boolean haEnabled,
       final Configuration conf) throws IOException {
+    this.conf = conf;
     this.namesystem = namesystem;
     datanodeManager = new DatanodeManager(this, namesystem, conf);
     heartbeatManager = datanodeManager.getHeartbeatManager();
@@ -1074,6 +1077,7 @@ public class BlockManager implements BlockStatsMXBean {
       this.faultyDC = faultyDC;
       if (this.faultyDC != null && this.faultyDC.startsWith("/") &&
           !this.faultyDC.equals(oldFaultyDC)) {
+        this.conf.set(DFSConfigKeys.DFS_NAMENODE_FAULTY_DC_KEY, faultyDC);
         // Make DNs under this faultyDC as in_maintenance
         getDatanodeManager().markDNsUnderFaultyDCMaintenance(this.faultyDC);
       }
