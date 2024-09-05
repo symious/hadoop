@@ -38,6 +38,7 @@ import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyDefault;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDataCenter;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDefaultFallbackDataCenter;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
@@ -87,7 +88,7 @@ public class TestZoneMoverWithDR {
       long drColdDataThresholdMS) {
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE);
     conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
-        BlockPlacementPolicyDefault.class,
+        BlockPlacementPolicyWithDefaultFallbackDataCenter.class,
         BlockPlacementPolicy.class);
     conf.setBoolean(DFSConfigKeys.DFS_USE_DFS_NETWORK_TOPOLOGY_KEY, true);
     conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY,
@@ -198,6 +199,9 @@ public class TestZoneMoverWithDR {
 
       // Validate use "-path" replica rule.
       ZoneMoverWithDR.Cli tool1 = new ZoneMoverWithDR.Cli();
+      conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+          BlockPlacementPolicyDefault.class,
+          BlockPlacementPolicy.class);
       tool1.setConf(conf);
       String[] args3 = {"-namespace", "dev1", "-path", "/test2", "-cold", "-useAccessTime"};
       assertEquals(ExitStatus.SUCCESS.getExitCode(), tool1.run(args3));
@@ -309,6 +313,9 @@ public class TestZoneMoverWithDR {
           null);
       cluster.triggerBlockReports();
 
+      conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+          BlockPlacementPolicyDefault.class,
+          BlockPlacementPolicy.class);
       ZoneMoverWithDR.runWithColdDataReplication(conf, cluster.getURI(), pathList,
           false, false, false, false);
 
@@ -382,6 +389,10 @@ public class TestZoneMoverWithDR {
           null);
       cluster.triggerBlockReports();
       List<Path> pathList = new ArrayList<>(map.values());
+
+      conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+          BlockPlacementPolicyDefault.class,
+          BlockPlacementPolicy.class);
       ZoneMoverWithDR.runWithColdDataReplication(conf, cluster.getURI(), pathList,
           false, true, false, false);
 
@@ -450,6 +461,9 @@ public class TestZoneMoverWithDR {
       assertEquals(zoneMoverMetric.getSuccessTotalMove().lastStat().numSamples(), 0);
 
       ZoneMoverTrigger zoneMoverTrigger = new TestZoneMoverKafkaTrigger(records);
+      conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
+          BlockPlacementPolicyDefault.class,
+          BlockPlacementPolicy.class);
       ZoneMoverWithDR.runWithNewDataReplication(zoneMoverTrigger, conf, cluster.getURI(), paths,
           false, false);
 
