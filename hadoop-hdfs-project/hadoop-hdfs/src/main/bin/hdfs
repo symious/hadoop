@@ -65,6 +65,7 @@ function hadoop_usage
   hadoop_add_subcommand "storagepolicies" admin "list/get/set/satisfyStoragePolicy block storage policies"
   hadoop_add_subcommand "sps" daemon "run external storagepolicysatisfier"
   hadoop_add_subcommand "version" client "print the version"
+  hadoop_add_subcommand "zonechecker" client "run a utility to check replicas distribution"
   hadoop_add_subcommand "zonemover" client "run a utility to migrate replicas between datacenters"
   hadoop_add_subcommand "zonemoverv2" client "run a utility to migrate replicas between datacenters"
   hadoop_add_subcommand "zoneenhancedmover" client "run a utility to migrate replicas between datacenters with change the file replication"
