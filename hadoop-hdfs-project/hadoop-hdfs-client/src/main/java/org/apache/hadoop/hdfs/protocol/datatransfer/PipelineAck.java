@@ -44,9 +44,16 @@ public class PipelineAck {
   final static int OOB_START = Status.OOB_RESTART_VALUE; // the first OOB type
   final static int OOB_END = Status.OOB_RESERVED3_VALUE; // the last OOB type
 
+  /**
+   * In order to be compatible with the 2.10 old version protocol, the value of NORMAL is set to 0.
+   * Protocol in 2.10 old version is as bellow:
+   * NORMAL(0), SLOW(1).
+   * The client using the current code cannot distinguish DISABLED and NORMAL, but it's ok.
+   * Because client currently only uses SLOW flag.
+   */
   public enum SLOW {
     DISABLED(0),
-    NORMAL(1),
+    NORMAL(0),
     SLOW(2),
     RESERVED(3);
 

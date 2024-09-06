@@ -43,6 +43,7 @@ import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.datatransfer.BlockConstructionStage;
 import org.apache.hadoop.hdfs.protocol.datatransfer.PipelineAck;
+import org.apache.hadoop.hdfs.protocol.proto.DataTransferProtos;
 import org.apache.hadoop.hdfs.protocolPB.DatanodeProtocolClientSideTranslatorPB;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeDescriptor;
 import org.apache.hadoop.hdfs.server.common.HdfsServerConstants.BlockUCState;
@@ -805,6 +806,33 @@ public class TestClientProtocolForPipelineRecovery {
         cluster.shutdown();
       }
     }
+  }
+
+  @Test
+  public void testSlowNodeProto() {
+    System.out.println(Arrays.toString(PipelineAck.SLOW.values()));
+    System.out.println("The value of DISABLED is " + PipelineAck.SLOW.DISABLED.getValue());
+    System.out.println("The value of NORMAL is " + PipelineAck.SLOW.NORMAL.getValue());
+    System.out.println("The value of SLOW is " + PipelineAck.SLOW.SLOW.getValue());
+    System.out.println("The value of RESERVED is " + PipelineAck.SLOW.RESERVED.getValue());
+
+    int headerWithDisable = PipelineAck.combineHeader(PipelineAck.ECN.CONGESTED,
+        DataTransferProtos.Status.SUCCESS, PipelineAck.SLOW.DISABLED);
+    System.out.println("DISABLED Header: " + headerWithDisable);
+    Assert.assertNotEquals(1, PipelineAck.getSLOWFromHeader(headerWithDisable).getValue());
+    Assert.assertEquals(PipelineAck.SLOW.DISABLED, PipelineAck.getSLOWFromHeader(headerWithDisable));
+
+    int headerWithSlow = PipelineAck.combineHeader(PipelineAck.ECN.CONGESTED,
+        DataTransferProtos.Status.SUCCESS, PipelineAck.SLOW.SLOW);
+    System.out.println("SLOW Header: " + headerWithSlow);
+    Assert.assertNotEquals(1, PipelineAck.getSLOWFromHeader(headerWithSlow).getValue());
+    Assert.assertEquals(PipelineAck.SLOW.SLOW, PipelineAck.getSLOWFromHeader(headerWithSlow));
+
+    int headerWithNormal = PipelineAck.combineHeader(PipelineAck.ECN.CONGESTED,
+        DataTransferProtos.Status.SUCCESS, PipelineAck.SLOW.NORMAL);
+    System.out.println("NORMAL Header: " + headerWithNormal);
+    Assert.assertNotEquals(1, PipelineAck.getSLOWFromHeader(headerWithNormal).getValue());
+    Assert.assertEquals(PipelineAck.SLOW.DISABLED, PipelineAck.getSLOWFromHeader(headerWithNormal));
   }
 
   @Test

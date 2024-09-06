@@ -83,6 +83,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LIFELINE_RPC_ADD
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_MSYNC_RPC_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_RPC_ADDRESS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SERVICE_RPC_ADDRESS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PIPELINE_SLOWNODE_ENABLED;
 import static org.apache.hadoop.hdfs.DFSUtilClient.addSuffix;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_HA_NAMENODES_KEY_PREFIX;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_NAMENODE_RPC_ADDRESS_AUXILIARY_KEY;
@@ -394,7 +395,8 @@ public class DataNode extends ReconfigurableBase
               DFS_DATANODE_SLOWDISK_LOW_THRESHOLD_MS_KEY,
               FS_DU_INTERVAL_KEY,
               FS_GETSPACEUSED_JITTER_KEY,
-              FS_GETSPACEUSED_CLASSNAME));
+              FS_GETSPACEUSED_CLASSNAME,
+              DFS_PIPELINE_SLOWNODE_ENABLED));
 
   public static final Log METRICS_LOG = LogFactory.getLog("DataNodeMetricsLog");
 
@@ -468,7 +470,7 @@ public class DataNode extends ReconfigurableBase
   private final String confVersion;
   private final long maxNumberOfBlocksToLog;
   private final boolean pipelineSupportECN;
-  private final boolean pipelineSupportSlownode;
+  private volatile boolean pipelineSupportSlownode = false;
 
   private final List<String> usersWithLocalPathAccess;
   private final boolean connectToDnViaHostname;
@@ -563,7 +565,7 @@ public class DataNode extends ReconfigurableBase
     this.connectToDnViaHostname = false;
     this.blockScanner = new BlockScanner(this, this.getConf());
     this.pipelineSupportECN = false;
-    this.pipelineSupportSlownode = false;
+    setPipelineSupportSlownode(false);
     this.socketFactory = NetUtils.getDefaultSocketFactory(conf);
     this.dnConf = new DNConf(this);
     this.dataSetLockManager = new DataSetLockManager(conf);
@@ -622,9 +624,9 @@ public class DataNode extends ReconfigurableBase
     this.pipelineSupportECN = conf.getBoolean(
         DFSConfigKeys.DFS_PIPELINE_ECN_ENABLED,
         DFSConfigKeys.DFS_PIPELINE_ECN_ENABLED_DEFAULT);
-    this.pipelineSupportSlownode = conf.getBoolean(
-        DFSConfigKeys.DFS_PIPELINE_SLOWNODE_ENABLED,
-        DFSConfigKeys.DFS_PIPELINE_SLOWNODE_ENABLED_DEFAULT);
+    setPipelineSupportSlownode(conf.getBoolean(
+        DFS_PIPELINE_SLOWNODE_ENABLED,
+        DFSConfigKeys.DFS_PIPELINE_SLOWNODE_ENABLED_DEFAULT));
 
     confVersion = "core-" +
         conf.get("hadoop.common.configuration.version", "UNSPECIFIED") +
@@ -694,6 +696,12 @@ public class DataNode extends ReconfigurableBase
     this.ecReconstructWriteThrottler = ecReconstructWriteBandwidth > 0 ?
         new DataTransferThrottler(100, ecReconstructWriteBandwidth) : null;
     this.blockCopyExecutor = Executors.newCachedThreadPool();
+  }
+
+  void setPipelineSupportSlownode(boolean newValue) {
+    LOG.info("Changing pipelineSupportSlownode from {} to {}.",
+        this.pipelineSupportSlownode, newValue);
+    this.pipelineSupportSlownode = newValue;
   }
 
   @Override  // ReconfigurableBase
@@ -911,6 +919,31 @@ public class DataNode extends ReconfigurableBase
             LOG.warn(String.format(
                 "Exception in updating datanode scan period hours ms %s to %s",
                 property, newVal), rootException);
+            throw rootException;
+          }
+        }
+        break;
+      }
+      case DFS_PIPELINE_SLOWNODE_ENABLED: {
+        ReconfigurationException rootException = null;
+        try {
+          LOG.info("Reconfiguring {} to {}.", property, newVal);
+          boolean enableSlowPipeline;
+          if (newVal == null) {
+            // set to default
+            enableSlowPipeline = DFSConfigKeys.DFS_PIPELINE_SLOWNODE_ENABLED_DEFAULT;
+          } else {
+            enableSlowPipeline = Boolean.parseBoolean(newVal);
+          }
+          setPipelineSupportSlownode(enableSlowPipeline);
+          return Boolean.toString(enableSlowPipeline);
+        } catch (NumberFormatException nfe) {
+          rootException = new ReconfigurationException(
+              property, newVal, getConf().get(property), nfe);
+        } finally {
+          if (rootException != null) {
+            LOG.warn("Exception in enabling slow pipeline {} to {}", 
+                property, newVal, rootException);
             throw rootException;
           }
         }
@@ -1196,6 +1229,10 @@ public class DataNode extends ReconfigurableBase
     }
     return isSlownodeByBlockPoolId(bpId) ? PipelineAck.SLOW.SLOW :
         PipelineAck.SLOW.NORMAL;
+  }
+
+  public boolean isPipelineSupportSlownode() {
+    return pipelineSupportSlownode;
   }
 
   public FileIoProvider getFileIoProvider() {

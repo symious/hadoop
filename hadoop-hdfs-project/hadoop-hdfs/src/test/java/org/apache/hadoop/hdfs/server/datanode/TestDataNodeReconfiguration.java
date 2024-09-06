@@ -37,6 +37,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SLOWDISK_LOW_THR
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SLOWDISK_LOW_THRESHOLD_MS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SLOWPEER_LOW_THRESHOLD_MS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_DATANODE_SLOWPEER_LOW_THRESHOLD_MS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_PIPELINE_SLOWNODE_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -513,6 +514,12 @@ public class TestDataNodeReconfiguration {
           dn.getDiskMetrics().getSlowDiskDetector().getMinOutlierDetectionNodes());
       assertEquals(DFS_DATANODE_SLOWDISK_LOW_THRESHOLD_MS_DEFAULT,
           dn.getDiskMetrics().getSlowDiskDetector().getLowThresholdMs());
+
+      dn.reconfigureProperty(DFS_PIPELINE_SLOWNODE_ENABLED, "true");
+      assertTrue(dn.isPipelineSupportSlownode());
+
+      dn.reconfigureProperty(DFS_PIPELINE_SLOWNODE_ENABLED, "false");
+      assertFalse(dn.isPipelineSupportSlownode());
     }
   }
 
