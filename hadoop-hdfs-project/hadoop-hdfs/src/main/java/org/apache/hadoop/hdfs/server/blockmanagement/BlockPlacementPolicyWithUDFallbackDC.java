@@ -17,26 +17,24 @@
  */
 package org.apache.hadoop.hdfs.server.blockmanagement;
 
-import java.util.EnumMap;
-import java.util.List;
-import java.util.Set;
-
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.net.Node;
+import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
+
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Set;
 
 /**
- * See {@link BlockPlacementPolicyWithDataCenter}.
+ * See {@link BlockPlacementPolicyWithUpgradeDomainForDataCenter}.
  * This class is essentially the same but returns off DC nodes in a
  * configurable fallback DC in the case of no valid DNs from the same DC as
  * the client.
  */
-@InterfaceAudience.Private
-public class BlockPlacementPolicyWithDefaultFallbackDataCenter
-    extends BlockPlacementPolicyWithDataCenter {
+public class BlockPlacementPolicyWithUDFallbackDC extends
+    BlockPlacementPolicyWithUpgradeDomainForDataCenter {
 
   private String defaultDC;
   private String defaultScope = null;
@@ -79,9 +77,8 @@ public class BlockPlacementPolicyWithDefaultFallbackDataCenter
           }
         }
         if (allInDefaultDC) {
-          LOG.debug("All chosen nodes are from default DC " + this.defaultDC
-              + ", choosing more nodes from default DC for writer "
-              + writer.getNetworkLocation());
+          LOG.debug("All chosen nodes are from default DC {}, choosing more nodes" +
+                  " from default DC for writer {}", this.defaultDC, writer.getNetworkLocation());
           chooseRandom(numOfReplicas - results.size(), this.defaultScope,
               excludedNodes, blocksize, maxNodesPerRack, results,
               avoidStaleNodes, storageTypes);

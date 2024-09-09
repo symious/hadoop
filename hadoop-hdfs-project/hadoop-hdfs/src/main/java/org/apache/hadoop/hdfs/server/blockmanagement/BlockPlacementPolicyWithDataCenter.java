@@ -42,6 +42,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY;
+
 
 /**
  * This class is responsible for choosing the desired number of targets
@@ -66,6 +69,19 @@ public class BlockPlacementPolicyWithDataCenter extends
   protected static final String VIRTUAL_HOST = "virtual_host";
   protected static final String VIRTUAL_RACK = "/virtual_rack";
   private static final List<DatanodeStorageInfo> EMPTY_NODES = Collections.emptyList();
+
+  protected String getDefaultDC(Configuration conf) {
+    String defaultDC = conf.get(
+        DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_KEY,
+        DFS_NAMENODE_BLOCK_PLACEMENT_POLICY_WITH_DATA_CENTER_FALLBACK_DC_DEFAULT);
+    if (defaultDC == null) {
+      return null;
+    } else if (!defaultDC.startsWith("/")) {
+      return "/" + defaultDC;
+    } else {
+      return defaultDC;
+    }
+  }
 
   @Override
   public void initialize(Configuration conf,
