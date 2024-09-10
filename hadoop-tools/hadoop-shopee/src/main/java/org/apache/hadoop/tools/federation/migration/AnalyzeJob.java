@@ -117,7 +117,7 @@ public class AnalyzeJob {
       return -1;
     }
     int concurrency = 64;
-    String concurrencyStr = StringUtils.popOptionWithArgument("-output", argsList);
+    String concurrencyStr = StringUtils.popOptionWithArgument("-concurrency", argsList);
     if (concurrencyStr != null) {
       concurrency = Integer.parseInt(concurrencyStr);
     }
