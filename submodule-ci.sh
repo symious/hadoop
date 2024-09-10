@@ -532,6 +532,25 @@ hadoop-shopee:
   $SUFFIX
 EOF
       ;;
+      hadoop-distcp)
+      EMPTY=false
+      cat <<EOF >> "${CI_CONFIG_FILE}"
+hadoop-distcp:
+  stage: test
+  $TAGS
+  $REBUILD_BEFORE_SCRIPT
+  script:
+    - cd hadoop-tools/hadoop-distcp/
+    $COMMON_SCRIPTS
+  coverage: '/Total.*?([0-9]{1,3})%/'
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - hadoop-tools/hadoop-distcp/target/surefire-reports/TEST-*.xml
+  $SUFFIX
+EOF
+      ;;
      *)
      echo default
      ;;

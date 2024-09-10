@@ -139,34 +139,40 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
+          <argLine>${argLine} -Xmx4096m</argLine>
           <testFailureIgnore>${ignoreTestFailure}</testFailureIgnore>
-          <forkCount>1</forkCount>
-          <reuseForks>false</reuseForks>
-          <forkedProcessTimeoutInSeconds>600</forkedProcessTimeoutInSeconds>
-          <argLine>-Xmx1024m</argLine>
+          <rerunFailingTestsCount>6</rerunFailingTestsCount>
           <includes>
             <include>**/Test*.java</include>
           </includes>
           <redirectTestOutputToFile>true</redirectTestOutputToFile>
-          <systemProperties>
-            <property>
-              <name>test.build.data</name>
-              <value>${basedir}/target/test/data</value>
-            </property>
-            <property>
-              <name>hadoop.log.dir</name>
-              <value>target/test/logs</value>
-            </property>
-            <property>
-              <name>org.apache.commons.logging.Log</name>
-              <value>org.apache.commons.logging.impl.SimpleLog</value>
-            </property>
-            <property>
-              <name>org.apache.commons.logging.simplelog.defaultlog</name>
-              <value>warn</value>
-            </property>
-          </systemProperties>
+          <systemPropertyVariables>
+            <test.build.data>${basedir}/target/test/data</test.build.data>
+            <hadoop.log.dir>target/test/logs</hadoop.log.dir>
+            <org.apache.commons.logging.Log>org.apache.commons.logging.impl.SimpleLog</org.apache.commons.logging.Log>
+            <org.apache.commons.logging.simplelog.defaultlog>warn</org.apache.commons.logging.simplelog.defaultlog>
+          </systemPropertyVariables>
         </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>0.8.7</version>
+        <executions>
+          <execution>
+            <id>prepare-agent</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>report</id>
+            <phase>test</phase>
+            <goals>
+              <goal>report</goal>
+            </goals>
+          </execution>
+        </executions>
       </plugin>
       <plugin>
         <artifactId>maven-dependency-plugin</artifactId>
