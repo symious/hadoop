@@ -70,6 +70,7 @@ import java.text.DateFormat;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 @InterfaceAudience.Private
 public class Mover {
@@ -117,6 +118,7 @@ public class Mover {
   private final Dispatcher dispatcher;
   private final StorageMap storages;
   private final List<Path> targetPaths;
+  private final String nsId;
   private final int retryMaxAttempts;
   private final AtomicInteger retryCount;
   private final Map<Long, Set<DatanodeInfo>> excludedPinnedBlocks;
@@ -157,6 +159,7 @@ public class Mover {
         maxConcurrentMovesPerNode, maxNoMoveInterval, conf);
     this.storages = new StorageMap();
     this.targetPaths = nnc.getTargetPaths();
+    this.nsId = nnc.getNameNodeUri().getAuthority();
     this.blockStoragePolicies = new BlockStoragePolicy[1 <<
         BlockStoragePolicySuite.ID_BIT_LENGTH];
     this.moverForMigration = conf.getBoolean(DFSConfigKeys.DFS_MOVER_FOR_MIGRATION_KEY,
@@ -261,6 +264,10 @@ public class Mover {
   class Processor {
     private final DFSClient dfs;
     private final List<String> snapshottableDirs = new ArrayList<String>();
+    private final AtomicLong checkedFiles = new AtomicLong(0);
+    private final AtomicLong checkedBlocks = new AtomicLong(0);
+    private final AtomicLong scheduledBlocks = new AtomicLong(0);
+    private final AtomicLong failedBlocks = new AtomicLong(0);
 
     Processor() {
       dfs = dispatcher.getDistributedFileSystem().getClient();
@@ -395,8 +402,38 @@ public class Mover {
         } catch (IOException e) {
           LOG.warn("Failed to check the status of " + parent
               + ". Ignore it and continue.", e);
+        } finally {
+          long numCheckedFiles = checkedFiles.incrementAndGet();
+          if (numCheckedFiles % 100 == 0) {
+            LOG.info("Progress of {}: {} files checked, {} blocks checked, " +
+                "{} blocks scheduled, {} failed blocks.", nsId, numCheckedFiles,
+                checkedBlocks.get(), scheduledBlocks.get(), failedBlocks.get());
+          }
         }
       }
+    }
+
+    /**
+     * Get real number of replicas for EC Block.
+     */
+    private int getRealTotalBlockNum(ErasureCodingPolicy ecPolicy, Block block) {
+      return Math.min(ecPolicy.getNumDataUnits(),
+          (int) ((block.getNumBytes() - 1) / ecPolicy.getCellSize() + 1)) +
+          ecPolicy.getNumParityUnits();
+    }
+
+    /**
+     * Get prefer number of upgrade domains. If the number of storages is smaller
+     * than replication factor, the size of the current storages will be used as the prefer number.
+     */
+    private int getPreferDomains(HdfsLocatedFileStatus status, LocatedBlock lb, int numReplicas) {
+      ErasureCodingPolicy ecPolicy = status.getErasureCodingPolicy();
+      int preferNumDomains = ecPolicy != null ? getRealTotalBlockNum(ecPolicy, lb.getBlock()
+          .getLocalBlock()) : upgradeDomainFactor;
+      if (numReplicas < preferNumDomains) {
+        preferNumDomains = numReplicas;
+      }
+      return preferNumDomains;
     }
 
     /**
@@ -410,22 +447,30 @@ public class Mover {
       final ErasureCodingPolicy ecPolicy = status.getErasureCodingPolicy();
 
       for (int i = 0; i < lbs.size(); i++) {
+        checkedBlocks.incrementAndGet();
         if (i == lbs.size() - 1 && !lastBlkComplete) {
           // last block is incomplete, skip it
           continue;
         }
         LocatedBlock lb = lbs.get(i);
+        DatanodeInfo[] locs = lb.getLocations();
+        if (locs == null || locs.length == 0) {
+          // skip blocks without replicas.
+          continue;
+        }
+        int preferNumDomains = getPreferDomains(status, lb, locs.length);
         BlockPlacementStatus placementStatus = UpgradeDomainUtil.verifyBlockPlacement(
-            lb.getLocations(), status.getReplication(),
-            dispatcher.getCluster(), upgradeDomainFactor);
+            lb.getLocations(), preferNumDomains,
+            dispatcher.getCluster(), preferNumDomains);
         if (!placementStatus.isPlacementPolicySatisfied()) {
           LOG.debug("The block {} of {} is not satisfied the block placement policy.",
               lb, fullPath);
           DatanodeInfo[] targetInfos;
           try {
             targetInfos = UpgradeDomainUtil.correctBlock(lb.getLocations(),
-                upgradeDomainFactor, dispatcher.getCluster());
+                preferNumDomains, dispatcher.getCluster());
           } catch (BlockPlacementPolicy.NotEnoughReplicasException e) {
+            failedBlocks.incrementAndGet();
             LOG.info("Skip migrate {} of {} with {}.", lb, fullPath, e.getLocalizedMessage());
             LOG.debug("Failed correct the block {} of {} and will skip migrate it.",
                 lb, fullPath, e);
@@ -455,11 +500,15 @@ public class Mover {
               sourcesIt = sources.iterator();
             }
             DatanodeInfo sourceInfo = sourcesIt.next();
-            if (sourceInfo != null && target != null
-                && scheduleMovers4Migration(sourceInfo, target, lb, ecPolicy)) {
-              LOG.info("Schedule migrate the block {} of {} from {} to {}.",
-                  lb, fullPath, sourceInfo, target);
-              result.setNoBlockMoved(false);
+            if (sourceInfo != null && target != null) {
+              if (scheduleMovers4Migration(sourceInfo, target, lb, ecPolicy)) {
+                scheduledBlocks.incrementAndGet();
+                LOG.info("Schedule migrate the block {} of {} from {} to {}.",
+                    lb, fullPath, sourceInfo, target);
+                result.setNoBlockMoved(false);
+              } else {
+                failedBlocks.incrementAndGet();
+              }
             }
           }
         }
@@ -492,6 +541,7 @@ public class Mover {
       final boolean lastBlkComplete = locatedBlocks.isLastBlockComplete();
       List<LocatedBlock> lbs = locatedBlocks.getLocatedBlocks();
       for (int i = 0; i < lbs.size(); i++) {
+        checkedBlocks.incrementAndGet();
         if (i == lbs.size() - 1 && !lastBlkComplete) {
           // last block is incomplete, skip it
           continue;
@@ -502,6 +552,7 @@ public class Mover {
               .checkStoragePolicySuitableForECStripedMode(policyId)) {
             types = policy.chooseStorageTypes((short) lb.getLocations().length);
           } else {
+            failedBlocks.incrementAndGet();
             // Currently we support only limited policies (HOT, COLD, ALLSSD)
             // for EC striped mode files.
             // Mover tool will ignore to move the blocks if the storage policy
@@ -516,11 +567,13 @@ public class Mover {
             lb.getStorageTypes());
         if (!diff.removeOverlap(true)) {
           if (scheduleMoves4Block(diff, lb, ecPolicy)) {
+            scheduledBlocks.incrementAndGet();
             result.updateHasRemaining(diff.existing.size() > 1
                 && diff.expected.size() > 1);
             // One block scheduled successfully, set noBlockMoved to false
             result.setNoBlockMoved(false);
           } else {
+            failedBlocks.incrementAndGet();
             result.updateHasRemaining(true);
           }
         }

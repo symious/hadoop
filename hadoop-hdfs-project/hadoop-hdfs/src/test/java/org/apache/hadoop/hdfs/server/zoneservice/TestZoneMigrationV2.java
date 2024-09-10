@@ -75,6 +75,7 @@ public class TestZoneMigrationV2 {
   }
 
   private void initConf(Configuration conf) {
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_KEY, false);
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE);
     conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
         BlockPlacementPolicyWithDataCenter.class,

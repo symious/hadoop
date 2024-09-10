@@ -87,6 +87,7 @@ public class TestZoneMoverWithDRV2 {
 
   private void initConfForDr(Configuration conf,
       String defaultDataCenter, long drColdDataThresholdMS) {
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_KEY, false);
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE);
     conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
         BlockPlacementPolicyWithDataCenter.class,
@@ -496,7 +497,7 @@ public class TestZoneMoverWithDRV2 {
     try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).
         nnTopology(MiniDFSNNTopology.simpleHATopology()).
         numDataNodes(hosts.length).hosts(hosts).racks(racks).build()) {
-      HATestUtil.setFailoverConfigurations(cluster, conf, "dev1");
+      HATestUtil.setFailoverConfigurations(cluster, conf, "dev2");
       cluster.waitActive();
       cluster.transitionToActive(0);
       DistributedFileSystem fs = cluster.getFileSystem(0);
@@ -546,7 +547,7 @@ public class TestZoneMoverWithDRV2 {
       // Set blacklist path.
       conf.set(DFSConfigKeys.DFS_NAMENODE_DR_BLACKLIST_PATHS, "/test/dir/subdir1,/test2/dir1");
       tool.setConf(conf);
-      String[] args = {"-namespace", "dev1", "-path", "/test,/test1,/test2", "-cold"};
+      String[] args = {"-namespace", "dev2", "-path", "/test,/test1,/test2", "-cold"};
       assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args));
 
       Map<String, ReplicationRule> expectedRule = new HashMap<>();

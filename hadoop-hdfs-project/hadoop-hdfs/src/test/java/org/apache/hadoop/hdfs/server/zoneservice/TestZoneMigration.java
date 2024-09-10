@@ -81,6 +81,7 @@ public class TestZoneMigration {
   }
 
   private void initConf(Configuration conf) {
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_KEY, false);
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE);
     conf.setBoolean(DFSConfigKeys.DFS_USE_DFS_NETWORK_TOPOLOGY_KEY, true);
     conf.setClass(DFSConfigKeys.DFS_NET_TOPOLOGY_IMPL_KEY,

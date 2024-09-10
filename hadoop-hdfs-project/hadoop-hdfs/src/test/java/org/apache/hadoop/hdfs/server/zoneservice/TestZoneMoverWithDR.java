@@ -86,6 +86,7 @@ public class TestZoneMoverWithDR {
 
   private void initConfForDr(Configuration conf, String defaultDataCenter,
       long drColdDataThresholdMS) {
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_CONSIDERLOAD_KEY, false);
     conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, DEFAULT_BLOCK_SIZE);
     conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,
         BlockPlacementPolicyWithDefaultFallbackDataCenter.class,
