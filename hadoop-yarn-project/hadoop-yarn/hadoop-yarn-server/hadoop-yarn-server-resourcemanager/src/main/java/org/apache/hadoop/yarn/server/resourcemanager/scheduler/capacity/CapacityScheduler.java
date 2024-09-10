@@ -3620,7 +3620,9 @@ public class CapacityScheduler extends
       }
     }
 
-    LOG.debug("Try to commit allocation proposal={}", request);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Try to commit allocation proposal={}", request);
+    }
 
     boolean isSuccess = false;
     if (attemptId != null) {
@@ -3642,11 +3644,15 @@ public class CapacityScheduler extends
           long commitFailed = System.nanoTime() - commitStart;
           CapacitySchedulerMetrics.getMetrics()
               .addCommitFailure(commitFailed);
-          LOG.info("Failed to accept allocation proposal");
+          if(LOG.isDebugEnabled()){
+            LOG.debug("Failed to accept allocation proposal");
+          }
         }
 
-        LOG.debug("Allocation proposal accepted={}, proposal={}", isSuccess,
-            request);
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Allocation proposal accepted={}, proposal={}", isSuccess,
+              request);
+        }
 
         // Update unconfirmed allocated resource.
         if (updateUnconfirmedAllocatedResource) {

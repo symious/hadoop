@@ -569,9 +569,11 @@ public class FiCaSchedulerApp extends SchedulerApplicationAttempt {
             getPendingAsk(schedulerContainer.getSchedulerRequestKey(),
                 ResourceRequest.ANY).getPerAllocationResource(),
             schedulerContainer.getRmContainer().getContainer().getResource())) {
-          LOG.info("Allocated container[" + schedulerContainer.getRmContainer()
-              .getContainerId()
-              + "] resource is not consistent with resource request, just reject it");
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Allocated container[" + schedulerContainer.getRmContainer()
+                .getContainerId()
+                + "] resource is not consistent with resource request, just reject it");
+          }
           return false;
         }
 

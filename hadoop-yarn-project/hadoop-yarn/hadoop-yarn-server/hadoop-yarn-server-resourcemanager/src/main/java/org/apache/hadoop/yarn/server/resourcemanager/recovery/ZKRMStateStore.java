@@ -849,8 +849,10 @@ public class ZKRMStateStore extends RMStateStore {
         appState.attempts.put(attemptState.getAttemptId(), attemptState);
       }
     }
-    LOG.info("current threadId: " + Thread.currentThread().getId() +
-        " done loading applications from ZK state store for app: " + appPath);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("current threadId: " + Thread.currentThread().getId() +
+          " done loading applications from ZK state store for app: " + appPath);
+    }
   }
 
   /**
