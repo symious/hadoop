@@ -50,7 +50,7 @@ public class UpgradeDomainUtil {
   public static String getUpgradeDomainWithDefaultValue(DatanodeInfo datanodeInfo) {
     String upgradeDomain = datanodeInfo.getUpgradeDomain();
     if (upgradeDomain == null) {
-      LOG.warn("Upgrade domain isn't defined for " + datanodeInfo);
+      LOG.debug("Upgrade domain isn't defined for {}.", datanodeInfo);
       upgradeDomain = datanodeInfo.getXferAddr();
     }
     LOG.debug("Upgrade domain of {} is {}.", datanodeInfo, upgradeDomain);

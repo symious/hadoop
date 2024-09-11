@@ -307,6 +307,7 @@ public class DatanodeManager {
       this.hostConfigManager.refresh();
     } catch (IOException e) {
       LOG.error("error reading hosts files: ", e);
+      throw e;
     }
 
     this.dnsToSwitchMapping = ReflectionUtils.newInstance(

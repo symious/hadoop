@@ -114,6 +114,7 @@ public final class CombinedHostsFileReader {
       } catch (Throwable ex) {
         LOG.warn(hostsFilePath + " has invalid JSON format." + REFER_TO_DOC_MSG,
                 ex);
+        throw new IOException(ex);
       }
       allDNs = all.toArray(new DatanodeAdminProperties[all.size()]);
     }
