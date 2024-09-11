@@ -94,7 +94,7 @@ public class CreateTopDirJob {
       if (dstFs.exists(path)) {
         continue;
       }
-      FileStatus fileStatus = srcFs.getFileStatus(inputPath);
+      FileStatus fileStatus = srcFs.getFileStatus(path);
       allSuccessful &= dstFs.mkdir(path, fileStatus.getPermission());
       dstFs.setOwner(path, fileStatus.getOwner(), fileStatus.getGroup());
       dstFs.setAcl(path, srcFs.getAclStatus(path).getEntries());

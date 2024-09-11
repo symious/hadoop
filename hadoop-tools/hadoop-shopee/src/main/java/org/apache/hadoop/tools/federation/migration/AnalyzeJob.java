@@ -39,6 +39,7 @@ import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
 import org.apache.hadoop.hdfs.protocol.OpenFilesIterator;
+import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.slf4j.Logger;
@@ -340,6 +341,11 @@ public class AnalyzeJob {
       for (int i = 1; i < components.length - 1; i++) {
         final String component = components[i];
         // If node doesn't exist in cold tree, it has to be an already hot node, can ignore.
+        if (cur.children == null) {
+          cur.parent.children.remove(cur.name);
+          cur.parent = null;
+          return;
+        }
         if (!cur.children.containsKey(component)) {
           return;
         }
@@ -384,6 +390,9 @@ public class AnalyzeJob {
       }
       root.addPath(path.getLeft(), path.getMiddle(), path.getRight());
     }
+
+    waitForTesting();
+
     RemoteIterator<OpenFileEntry> ite =
         router.listOpenFiles(EnumSet.of(OpenFilesIterator.OpenFilesType.ALL_OPEN_FILES),
             input.toString());
@@ -395,6 +404,10 @@ public class AnalyzeJob {
     try (FSDataOutputStream os = srcFs.create(output)) {
       os.writeBytes(root.getAllLeafNodes(new StringBuilder(), new ArrayList<>()).toString());
     }
+  }
+
+  @VisibleForTesting
+  public void waitForTesting() {
   }
 
   /**

@@ -2,6 +2,7 @@ package org.apache.hadoop.tools.federation;
 
 import java.io.IOException;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -65,8 +66,7 @@ public class TestNSMigrationToolAnalyze {
     setTimes(fs, "/base/colddir2", false, false);
 
     Path outputFile = new Path("/tmp/test_output.txt");
-    new AnalyzeJob("/base", "ns0", "ns0", "7", outputFile, 2,
-        routerContext.getConf()).execute();
+    new AnalyzeJob("/base", "ns0", "ns0", "7", outputFile, 2, routerContext.getConf()).execute();
     Set<Path> paths = loadPathsFromDfs(fs, new Path("/base"), outputFile);
 
     Assert.assertEquals(3, paths.size());
@@ -74,11 +74,30 @@ public class TestNSMigrationToolAnalyze {
     Assert.assertTrue(paths.contains(new Path("/base/colddir1")));
     Assert.assertTrue(paths.contains(new Path("/base/colddir2")));
 
-    // Do it again, but this time with an opened file
+    // Do it again, but this time with an opened file and a dir that changed during the process
+    setTimes(fs, "/base/colddir2/newdir/file", true, false);
+    setTimes(fs, "/base/colddir2/newdir", false, false);
+    final CountDownLatch latch = new CountDownLatch(1);
+    Thread thread = new Thread(() -> {
+      try {
+        AnalyzeJobWithWait job = new AnalyzeJobWithWait("/base", "ns0", "ns0", "7", outputFile, 2,
+            routerContext.getConf());
+        job.setLock(latch);
+        job.execute();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    });
+    thread.start();
     FSDataOutputStream stream = fs.append(new Path("/base/colddir2/coldfile"));
-    new AnalyzeJob("/base", "ns0", "ns0", "7", outputFile, 2,
-        routerContext.getConf()).execute();
+    fs.mkdirs(new Path("/base/colddir2/newdir/innerdir"));
+    fs.rename(new Path("/base/colddir2/newdir/file"), new Path("/base/colddir2/newdir/innerdir/file"));
+    FSDataOutputStream stream2 = fs.create(new Path("/base/colddir2/newdir/innerdir/file"));
+    latch.countDown();
+    thread.join();
+
     stream.close();
+    stream2.close();
     paths = loadPathsFromDfs(fs, new Path("/base"), outputFile);
 
     Assert.assertEquals(4, paths.size());
@@ -86,6 +105,29 @@ public class TestNSMigrationToolAnalyze {
     Assert.assertTrue(paths.contains(new Path("/base/colddir1")));
     Assert.assertTrue(paths.contains(new Path("/base/colddir2/coldinnerdir1/")));
     Assert.assertTrue(paths.contains(new Path("/base/colddir2/coldinnerdir2/")));
+  }
+
+  static class AnalyzeJobWithWait extends AnalyzeJob {
+
+    private CountDownLatch latch;
+
+    public AnalyzeJobWithWait(String path, String srcNs, String fedNs, String threshold,
+        Path output, int concurrency, Configuration conf) throws IOException {
+      super(path, srcNs, fedNs, threshold, output, concurrency, conf);
+    }
+
+    void setLock(CountDownLatch latch) {
+      this.latch = latch;
+    }
+
+    @Override
+    public void waitForTesting() {
+      try {
+        this.latch.await();
+      } catch (InterruptedException e) {
+        throw new RuntimeException(e);
+      }
+    }
   }
 
   private void setTimes(DistributedFileSystem fileSystem, String pathStr, boolean createFile,
