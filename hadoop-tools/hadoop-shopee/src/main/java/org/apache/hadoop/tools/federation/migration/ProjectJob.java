@@ -155,6 +155,8 @@ public class ProjectJob {
       // Ensure at least 1 cold cycle before checking for stop condition
       coldCycle();
       while (!shouldStop()) {
+        // Rate limit cycles
+        Thread.sleep(60000);
         cycle++;
         LOG.info("Starting cold cycle {}", cycle);
         coldCycle();
@@ -172,9 +174,8 @@ public class ProjectJob {
     if (srcFs.exists(coldContextFilePath)) {
       return false;
     }
-    if (emptyColdCycle >= 2) {
-      LOG.info("2 analyze jobs in a row found no cold dirs. Stopping cold cycles.");
-      return true;
+    if (emptyColdCycle > 1) {
+      LOG.warn("{} analyze jobs in a row found no cold dirs.", emptyColdCycle);
     }
     DistributedFileSystem srcFs =
         (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + this.srcNs), conf);
@@ -251,6 +252,8 @@ public class ProjectJob {
       srcFs.delete(coldContextFilePath);
       return;
     }
+    // Reset emptyColdCycle if some data to migration is found
+    emptyColdCycle = 0;
     MigrationJob.runBatchJob(conf, String.valueOf(workerThreads), allPaths, srcNs, dstNs,
         routerAddr, false, donePathsFilePath, false);
     srcFs.delete(coldContextFilePath);
