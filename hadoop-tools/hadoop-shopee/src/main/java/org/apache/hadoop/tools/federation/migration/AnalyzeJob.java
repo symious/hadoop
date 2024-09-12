@@ -56,6 +56,7 @@ public class AnalyzeJob {
 
   private final DistributedFileSystem router;
   private final DistributedFileSystem srcFs;
+  private final DistributedFileSystem dstFs;
   private final Path input;
   private final Path output;
   private final long ms;
@@ -79,10 +80,15 @@ public class AnalyzeJob {
    */
   private final List<Triple<String, int[], Boolean>> results;
 
-  public AnalyzeJob(String path, String srcNs, String fedNs, String threshold, Path output,
+  public AnalyzeJob(String path, String srcNs, String dstNs, String fedNs, String threshold, Path output,
       int concurrency, Configuration conf) throws IOException {
     this.router = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + fedNs), conf);
     this.srcFs = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + srcNs), conf);
+    if (!dstNs.equals(srcNs)) {
+      this.dstFs = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + dstNs), conf);
+    } else {
+      this.dstFs = null;
+    }
     this.input = new Path(path);
     this.output = output;
     this.results = new ArrayList<>();
@@ -102,6 +108,10 @@ public class AnalyzeJob {
     if (src == null) {
       System.err.println("-src option is required.");
       return -1;
+    }
+    String dst = StringUtils.popOptionWithArgument("-dst", argsList);
+    if (dst == null) {
+      dst = src;
     }
     String fed = StringUtils.popOptionWithArgument("-fed", argsList);
     if (fed == null) {
@@ -123,7 +133,7 @@ public class AnalyzeJob {
       concurrency = Integer.parseInt(concurrencyStr);
     }
     AnalyzeJob job =
-        new AnalyzeJob(path, src, fed, threshold, new Path(outputFile), concurrency, conf);
+        new AnalyzeJob(path, src, dst, fed, threshold, new Path(outputFile), concurrency, conf);
     job.execute();
     return 0;
   }
@@ -394,10 +404,17 @@ public class AnalyzeJob {
     waitForTesting();
 
     RemoteIterator<OpenFileEntry> ite =
-        router.listOpenFiles(EnumSet.of(OpenFilesIterator.OpenFilesType.ALL_OPEN_FILES),
+        srcFs.listOpenFiles(EnumSet.of(OpenFilesIterator.OpenFilesType.ALL_OPEN_FILES),
             input.toString());
     while (ite.hasNext()) {
       root.incrRequirement(ite.next());
+    }
+    if (dstFs != null) {
+      ite = dstFs.listOpenFiles(EnumSet.of(OpenFilesIterator.OpenFilesType.ALL_OPEN_FILES),
+          input.toString());
+      while (ite.hasNext()) {
+        root.incrRequirement(ite.next());
+      }
     }
     // Recursively squash the tree, starting from root
     root.minimizeNode();

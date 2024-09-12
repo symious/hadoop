@@ -228,8 +228,9 @@ public class ProjectJob {
   }
 
   private void startAnalyzeJob() throws IOException {
-    AnalyzeJob job = new AnalyzeJob(path.toString(), srcNs, fedNs, String.valueOf(coldThreshold),
-        inputPathsFilePath, listingThreads, conf);
+    AnalyzeJob job =
+        new AnalyzeJob(path.toString(), srcNs, dstNs, fedNs, String.valueOf(coldThreshold),
+            inputPathsFilePath, listingThreads, conf);
     job.execute();
   }
 

@@ -94,7 +94,7 @@ public class TestNSMigrationToolBatch {
     setupTest(basePath);
     Path tempDirsList = new Path("/tmp/input.txt");
 
-    new AnalyzeJob("/testBatch", "ns0", "ns0", "10", tempDirsList, 1, routerContext.getConf()).execute();
+    new AnalyzeJob("/testBatch", "ns0", "ns1", "ns0", "10", tempDirsList, 1, routerContext.getConf()).execute();
 
     DistributedFileSystem fs = (DistributedFileSystem) routerContext.getFileSystem();
     Set<Path> coldPaths = loadPathsFromDfs(fs, basePath, tempDirsList);

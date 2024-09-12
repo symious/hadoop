@@ -66,7 +66,7 @@ public class TestNSMigrationToolAnalyze {
     setTimes(fs, "/base/colddir2", false, false);
 
     Path outputFile = new Path("/tmp/test_output.txt");
-    new AnalyzeJob("/base", "ns0", "ns0", "7", outputFile, 2, routerContext.getConf()).execute();
+    new AnalyzeJob("/base", "ns0", "ns0", "ns0", "7", outputFile, 2, routerContext.getConf()).execute();
     Set<Path> paths = loadPathsFromDfs(fs, new Path("/base"), outputFile);
 
     Assert.assertEquals(3, paths.size());
@@ -80,8 +80,9 @@ public class TestNSMigrationToolAnalyze {
     final CountDownLatch latch = new CountDownLatch(1);
     Thread thread = new Thread(() -> {
       try {
-        AnalyzeJobWithWait job = new AnalyzeJobWithWait("/base", "ns0", "ns0", "7", outputFile, 2,
-            routerContext.getConf());
+        AnalyzeJobWithWait job =
+            new AnalyzeJobWithWait("/base", "ns0", "ns0", "ns0", "7", outputFile, 2,
+                routerContext.getConf());
         job.setLock(latch);
         job.execute();
       } catch (IOException e) {
@@ -111,9 +112,9 @@ public class TestNSMigrationToolAnalyze {
 
     private CountDownLatch latch;
 
-    public AnalyzeJobWithWait(String path, String srcNs, String fedNs, String threshold,
-        Path output, int concurrency, Configuration conf) throws IOException {
-      super(path, srcNs, fedNs, threshold, output, concurrency, conf);
+    public AnalyzeJobWithWait(String path, String srcNs, String dstNs, String fedNs,
+        String threshold, Path output, int concurrency, Configuration conf) throws IOException {
+      super(path, srcNs, dstNs, fedNs, threshold, output, concurrency, conf);
     }
 
     void setLock(CountDownLatch latch) {
