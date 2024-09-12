@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -142,6 +143,7 @@ public class RMAppImpl implements RMApp, Recoverable {
   private final ApplicationMasterService masterService;
   private final StringBuilder diagnostics = new StringBuilder();
   private final int maxAppAttempts;
+  private final int strictReturnNumOfNodes;
   private final ReadLock readLock;
   private final WriteLock writeLock;
   private final Map<ApplicationAttemptId, RMAppAttempt> attempts
@@ -487,6 +489,9 @@ public class RMAppImpl implements RMApp, Recoverable {
           + ".");
     }
 
+    this.strictReturnNumOfNodes = conf.getInt(YarnConfiguration.RM_AM_STRICT_RETURN_NUM_NODES,
+        YarnConfiguration.DEFAULT_RM_AM_STRICT_RETURN_NUM_NODES);
+
     ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     this.readLock = lock.readLock();
     this.writeLock = lock.writeLock();
@@ -682,9 +687,16 @@ public class RMAppImpl implements RMApp, Recoverable {
   public int pullRMNodeUpdates(Map<RMNode, NodeUpdateType> upNodes) {
     this.writeLock.lock();
     try {
-      int updatedNodeCount = this.updatedNodes.size();
-      upNodes.putAll(this.updatedNodes);
-      this.updatedNodes.clear();
+      Iterator<Map.Entry<RMNode, NodeUpdateType>> iterator = updatedNodes.entrySet().iterator();
+      int updatedNodeCount = 0;
+
+      //Strict limit to return the nodes to AM
+      while (iterator.hasNext() && updatedNodeCount < this.strictReturnNumOfNodes) {
+        Map.Entry<RMNode, NodeUpdateType> entry = iterator.next();
+        upNodes.put(entry.getKey(), entry.getValue());
+        iterator.remove();
+        updatedNodeCount++;
+      }
       return updatedNodeCount;
     } finally {
       this.writeLock.unlock();

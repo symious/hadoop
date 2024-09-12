@@ -582,6 +582,11 @@ public class YarnConfiguration extends Configuration {
     RM_PREFIX + "am.max-attempts";
   public static final int DEFAULT_RM_AM_MAX_ATTEMPTS = 2;
 
+
+  public static final String RM_AM_STRICT_RETURN_NUM_NODES =
+      RM_PREFIX + "am.strict.return.num.nodes";
+  public static final int DEFAULT_RM_AM_STRICT_RETURN_NUM_NODES = 30;
+
   /**
    * The maximum number of application attempts.
    * It's a global setting for all application masters.
