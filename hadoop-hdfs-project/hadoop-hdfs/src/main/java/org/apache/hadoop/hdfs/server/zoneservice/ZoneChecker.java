@@ -17,6 +17,11 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice;
 
+import org.apache.hadoop.hdfs.protocol.Block;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfoWithStorage;
+import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoStriped;
+import org.apache.hadoop.hdfs.server.blockmanagement.utils.UpgradeDomainUtil;
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
@@ -70,6 +75,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RecursiveAction;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class ZoneChecker {
   private static final Logger LOG = LoggerFactory.getLogger(ZoneChecker.class);
@@ -204,18 +210,21 @@ public class ZoneChecker {
    * @param conf configuration
    * @param path the path to be checked
    * @param blockSummary   flag to check replica and storage size under every DataCenter
+   * @param upgradeDomain  flag to check upgrade domain distribution
    * @param countOnly      flag to count the block number and size for every distribution
    * @param countDepth     the depth at which block distribution is printed
    * @param threadCount    the count of threads to check the replication distribution
    */
   private static int check(Configuration conf, URI nameNode, String path, Float ratio,
-      boolean blockSummary, boolean countOnly, int countDepth, int threadCount) {
+      boolean blockSummary, boolean upgradeDomain, boolean countOnly, int countDepth, int threadCount) {
     try {
       DistributedFileSystem fs = (DistributedFileSystem) FileSystem.get(nameNode, conf);
       final ZoneChecker zch = new ZoneChecker(fs, conf);
       //if ratio is inputted by user, set it
       if (blockSummary) {
         LOG.info("Start to summary the blocks of {}", path);
+      } else if (upgradeDomain) {
+        LOG.info("Start to check the distribution of upgrade domain for {}.", path);
       } else if (countOnly) {
         LOG.info("Start to count the block number for {} at depth {}", path, countDepth);
       } else {
@@ -229,13 +238,18 @@ public class ZoneChecker {
       ConcurrentHashMap<ReplicationRule, Set<String>> rulePathMap = new ConcurrentHashMap<>();
       Map<String, List<Long>> dcStatMap = new HashMap<>();
       ZoneCheckerCountTree zcct = new ZoneCheckerCountTree(path, countDepth);
+      UpgradeDomainDistribution upgradeDomainDistribution = new UpgradeDomainDistribution();
       if (threadCount > 1) {
-        zch.concurrentlyCheck(path, rulePathMap, dcStatMap, zcct, blockSummary, countOnly, threadCount);
+        zch.concurrentlyCheck(path, rulePathMap, dcStatMap, zcct, upgradeDomainDistribution,
+            blockSummary, countOnly, threadCount, upgradeDomain);
       } else {
-        zch.check(path, rulePathMap, dcStatMap, zcct, blockSummary, countOnly);
+        zch.check(path, rulePathMap, dcStatMap, zcct, upgradeDomainDistribution,
+            blockSummary, countOnly, upgradeDomain);
       }
       if (blockSummary) {
         printBlockSummary(dcStatMap);
+      } else if (upgradeDomain) {
+        System.out.println(upgradeDomainDistribution);
       } else if (countOnly) {
         printFileCount(zcct);
       } else {
@@ -260,10 +274,12 @@ public class ZoneChecker {
         zch.setRatio(ratio);
       }
       ConcurrentHashMap<ReplicationRule, Set<String>> rulePathMap = new ConcurrentHashMap<>();
+      UpgradeDomainDistribution upgradeDomainDistribution = new UpgradeDomainDistribution();
       if (threads > 1) {
-        zch.concurrentlyCheck(path, rulePathMap, new HashMap<>(), null, false, false, threads);
+        zch.concurrentlyCheck(path, rulePathMap, new HashMap<>(), null,
+            upgradeDomainDistribution, false, false, threads, false);
       } else {
-        zch.check(path, rulePathMap, new HashMap<>(), null, false, false);
+        zch.check(path, rulePathMap, new HashMap<>(), null, upgradeDomainDistribution, false, false, false);
       }
       return rulePathMap;
     } catch (IOException e) {
@@ -278,12 +294,14 @@ public class ZoneChecker {
     try {
       // Clear up the map
       Map<String, List<Long>> dcBlockStat = new HashMap<>();
+      UpgradeDomainDistribution upgradeDomainDistribution = new UpgradeDomainDistribution();
       DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(namenode, conf);
       final ZoneChecker zch = new ZoneChecker(dfs, conf);
       if (threads > 1) {
-        zch.concurrentlyCheck(path, new ConcurrentHashMap<>(), dcBlockStat, null, true, false, threads);
+        zch.concurrentlyCheck(path, new ConcurrentHashMap<>(), dcBlockStat, null,
+            upgradeDomainDistribution, true, false, threads, false);
       } else {
-        zch.check(path, new HashMap<>(), dcBlockStat, null, true, false);
+        zch.check(path, new HashMap<>(), dcBlockStat, null, upgradeDomainDistribution, true, false, false);
       }
       return dcBlockStat;
     } catch (IOException e) {
@@ -298,13 +316,15 @@ public class ZoneChecker {
     try {
       // Clear up the map
       Map<String, List<Long>> dcBlockStat = new HashMap<>();
+      UpgradeDomainDistribution upgradeDomainDistribution = new UpgradeDomainDistribution();
       DistributedFileSystem dfs = (DistributedFileSystem) FileSystem.get(namenode, conf);
       final ZoneChecker zch = new ZoneChecker(dfs, conf);
       ZoneCheckerCountTree zcct = new ZoneCheckerCountTree(path, 0);
       if (threads > 1) {
-        zch.concurrentlyCheck(path, new ConcurrentHashMap<>(), dcBlockStat, zcct, false, true, threads);
+        zch.concurrentlyCheck(path, new ConcurrentHashMap<>(), dcBlockStat, zcct,
+            upgradeDomainDistribution, false, true, threads, false);
       } else {
-        zch.check(path, new HashMap<>(), dcBlockStat, zcct, false, true);
+        zch.check(path, new HashMap<>(), dcBlockStat, zcct, upgradeDomainDistribution, false, true, false);
       }
       return zcct.getMap();
     } catch (IOException e) {
@@ -320,6 +340,7 @@ public class ZoneChecker {
         + "\n\t[-ratio <ratio>]\tif the path is a directory, the ratio of "
         + "files will be checked"
         + "\n\t[-blockSummary]\tCheck data size and blocks number of DCs"
+        + "\n\t[-upgradeDomain]\tCheck the upgrade domain distribution"
         + "\n\t[-count]\tCount the number of blocks under the every distribution"
         + "\n\t[-depth depth]\tthe depth at which block distribution is printed"
         + "\n\t[-threadCount threadCount]\tcheck replication distribution with multiple threads";
@@ -344,6 +365,11 @@ public class ZoneChecker {
       option = new Option(
           null, "blockSummary", false,
           "check data size and blocks number of DCs");
+      options.addOption(option);
+
+      option = new Option(
+          null, "upgradeDomain", false,
+          "Check the upgrade domain distribution");
       options.addOption(option);
 
       option = new Option(
@@ -399,6 +425,13 @@ public class ZoneChecker {
     }
 
     /**
+     * Get upgrade domain from args
+     */
+    private boolean getUpgradeDomain(CommandLine line) {
+      return line.hasOption("upgradeDomain");
+    }
+
+    /**
      * Get block count only under every distribution
      */
     private boolean getCountOnly(CommandLine line) {
@@ -441,7 +474,8 @@ public class ZoneChecker {
         }
         return ZoneChecker.check(conf, ZoneMover.getNamespaceUri(commandLine, conf),
             getPath(commandLine), getRatio(commandLine), getBlockSummary(commandLine),
-            getCountOnly(commandLine), getCountDepth(commandLine), getThreadCount(commandLine));
+            getUpgradeDomain(commandLine), getCountOnly(commandLine),
+            getCountDepth(commandLine), getThreadCount(commandLine));
       } catch (ParseException | IllegalArgumentException e) {
         System.out.println(e + ".  Exiting ...");
         return ExitStatus.ILLEGAL_ARGUMENTS.getExitCode();
@@ -457,12 +491,13 @@ public class ZoneChecker {
    */
   void concurrentlyCheck(String fullPath, ConcurrentHashMap<ReplicationRule, Set<String>> rulePathMap,
       Map<String, List<Long>> dcBlockStat, ZoneCheckerCountTree zcct,
-      boolean blockSummaryFlag, boolean countOnly, int threads) {
+      UpgradeDomainDistribution upgradeDomainDistribution, boolean blockSummaryFlag,
+      boolean countOnly, int threads, boolean upgradeDomainFlag) {
     LOG.info("Checking replication distribution of {} with {} thread(s).", fullPath, threads);
     long start = Time.monotonicNow();
     ForkJoinPool p = new ForkJoinPool(threads);
     CheckTask task = new CheckTask(this, dfs, fullPath, rulePathMap, dcBlockStat, zcct,
-        blockSummaryFlag, countOnly, ratio);
+        upgradeDomainDistribution, blockSummaryFlag, countOnly, ratio, upgradeDomainFlag);
     p.execute(task);
     task.join();
     p.shutdown();
@@ -474,8 +509,9 @@ public class ZoneChecker {
    * Checking the replication distribution with one thread.
    */
   void check(String fullPath, Map<ReplicationRule, Set<String>> rulePathMap,
-      Map<String, List<Long>> dcBlockStat, ZoneCheckerCountTree zcct, boolean blockSummaryFlag,
-      boolean countOnly) {
+      Map<String, List<Long>> dcBlockStat, ZoneCheckerCountTree zcct,
+      UpgradeDomainDistribution upgradeDomainDistribution, boolean blockSummaryFlag,
+      boolean countOnly, boolean upgradeDomainFlag) {
     for (byte[] lastReturnedName = HdfsFileStatus.EMPTY_NAME; ; ) {
       final DirectoryListing children;
       try {
@@ -493,7 +529,7 @@ public class ZoneChecker {
         // To make sure when the sub-dir is merged in rulePathMap, sub result is fully merged
         Map<ReplicationRule, Set<String>> subRulePathMap = new HashMap<>();
         getReplicaInfoRecursively(fullPath, child, subRulePathMap, dcBlockStat, zcct,
-            blockSummaryFlag, countOnly);
+            upgradeDomainDistribution, blockSummaryFlag, countOnly, upgradeDomainFlag);
         if (!blockSummaryFlag && !countOnly) {
           mergeRules(rulePathMap, subRulePathMap);
         }
@@ -519,16 +555,19 @@ public class ZoneChecker {
    */
   private void getReplicaInfoRecursively(String parent, HdfsFileStatus status,
       Map<ReplicationRule, Set<String>> rulePathMap, Map<String, List<Long>> dcBlockStat,
-      ZoneCheckerCountTree zcct, boolean blockSummaryFlag, boolean countOnly) {
+      ZoneCheckerCountTree zcct, UpgradeDomainDistribution upgradeDomainDistribution,
+      boolean blockSummaryFlag, boolean countOnly, boolean upgradeDomainFlag) {
     String fullPath = status.getFullName(parent);
     if (status.isDir()) {
       if (!fullPath.endsWith(Path.SEPARATOR)) {
         fullPath = fullPath + Path.SEPARATOR;
       }
-      check(fullPath, rulePathMap, dcBlockStat, zcct, blockSummaryFlag, countOnly);
+      check(fullPath, rulePathMap, dcBlockStat, zcct, upgradeDomainDistribution,
+          blockSummaryFlag, countOnly, upgradeDomainFlag);
     } else {
       getReplicaInfoOfFile(parent, (HdfsLocatedFileStatus) status, rulePathMap,
-          dcBlockStat, zcct, blockSummaryFlag, countOnly);
+          dcBlockStat, zcct, upgradeDomainDistribution, blockSummaryFlag,
+          countOnly, upgradeDomainFlag);
     }
   }
 
@@ -683,23 +722,28 @@ public class ZoneChecker {
     private final Map<ReplicationRule, Set<String>> ruleSetMap;
     private final Map<String, List<Long>> dcBlockStat;
     private final ZoneCheckerCountTree zcct;
+    private final UpgradeDomainDistribution upgradeDomainDistribution;
     private final boolean blockSummaryFlag;
     private final boolean countOnly;
     private final float ratio;
+    private final boolean upgradeDomainFlag;
 
     public CheckTask(ZoneChecker zoneChecker, DistributedFileSystem dfs, String fullPath,
         ConcurrentHashMap<ReplicationRule, Set<String>> ruleSetMap,
         Map<String, List<Long>> dcBlockStat, ZoneCheckerCountTree zcct,
-        boolean blockSummaryFlag, boolean countOnly, float ratio) {
+        UpgradeDomainDistribution upgradeDomainDistribution, boolean blockSummaryFlag,
+        boolean countOnly, float ratio, boolean upgradeDomainFlag) {
       this.zoneChecker = zoneChecker;
       this.dfs = dfs;
       this.fullPath = new Path(fullPath);
       this.ruleSetMap = ruleSetMap;
       this.dcBlockStat = dcBlockStat;
       this.zcct = zcct;
+      this.upgradeDomainDistribution = upgradeDomainDistribution;
       this.blockSummaryFlag = blockSummaryFlag;
       this.countOnly = countOnly;
       this.ratio = ratio;
+      this.upgradeDomainFlag = upgradeDomainFlag;
     }
 
     /**
@@ -738,11 +782,11 @@ public class ZoneChecker {
           if (child.isDirectory()) {
             subtasks.add(new CheckTask(this.zoneChecker, dfs,
                 child.getFullName(this.fullPath.toUri().getPath()),
-                tmpRuleSetMap, this.dcBlockStat, this.zcct,
-                this.blockSummaryFlag, this.countOnly, this.ratio));
+                tmpRuleSetMap, this.dcBlockStat, this.zcct, this.upgradeDomainDistribution,
+                this.blockSummaryFlag, this.countOnly, this.ratio, this.upgradeDomainFlag));
           } else {
             this.zoneChecker.getReplicaInfoOfFile(fullPath.toUri().getPath(), child, tmpRuleSetMap,
-                dcBlockStat, zcct, blockSummaryFlag, countOnly);
+                dcBlockStat, zcct, upgradeDomainDistribution, blockSummaryFlag, countOnly, upgradeDomainFlag);
           }
         }
         // invoke and wait for completion
@@ -765,21 +809,71 @@ public class ZoneChecker {
     }
   }
 
+  private boolean isSatisfyUpgradeDomain(ErasureCodingPolicy erasureCodingPolicy,
+      short replica, LocatedBlock lb, UpgradeDomainDistribution upgradeDomainDistribution) {
+    upgradeDomainDistribution.incrCheckedBlocks();
+    DatanodeInfoWithStorage[] storages = lb.getLocations();
+    if (storages != null && storages.length > 0) {
+      Set<String> upgradeDomains = UpgradeDomainUtil
+          .getUpgradeDomainsForDNs(Arrays.asList(storages));
+
+      int preferDomains = erasureCodingPolicy != null ?
+          getInternalBlocks(erasureCodingPolicy, lb.getBlock().getLocalBlock()) : replica;
+      if (storages.length < preferDomains) {
+        LOG.debug("{} with ECPolicy {} is underReplicated({} < {}).",
+            lb, erasureCodingPolicy, storages.length, preferDomains);
+        upgradeDomainDistribution.incrUnderReplicaBlocks();
+        preferDomains = storages.length;
+      }
+
+      if (upgradeDomains.size() < preferDomains) {
+        upgradeDomainDistribution.incrAbnormalBlocks();
+        LOG.debug("{} with ECPolicy {} does not satisfy upgrade domain({}<{}).",
+            lb, erasureCodingPolicy, upgradeDomains.size(), preferDomains);
+        if (upgradeDomainDistribution.getAbnormalBlocks() % 100 == 0) {
+          LOG.warn("{} with ECPolicy {} does not upgrade domain({}<{}).",
+              lb, erasureCodingPolicy, upgradeDomains.size(), preferDomains);
+        }
+        return false;
+      } else {
+        LOG.debug("{} with ECPolicy {} satisfies upgrade domain({}>={}).",
+            lb, erasureCodingPolicy, upgradeDomains.size(), preferDomains);
+      }
+    }
+    return true;
+  }
+
+  /**
+   * This method is copied from {@link BlockInfoStriped#getRealTotalBlockNum()}.
+   * This method is mainly used to calculate the number of actual internal blocks.
+   * Especially for blocks smaller than a stripe.
+   */
+  private int getInternalBlocks(ErasureCodingPolicy ecPolicy, Block block) {
+    return Math.min(ecPolicy.getNumDataUnits(),
+        (int) ((block.getNumBytes() - 1) / ecPolicy.getCellSize() + 1)) +
+        ecPolicy.getNumParityUnits();
+  }
+
   /**
    * Check replication distribution for a file.
    */
   private void getReplicaInfoOfFile(String parent, HdfsLocatedFileStatus fileStatus,
       Map<ReplicationRule, Set<String>> ruleSetMap, Map<String, List<Long>> dcBlockStat,
-      ZoneCheckerCountTree zcct, boolean blockSummaryFlag, boolean countOnly) {
+      ZoneCheckerCountTree zcct, UpgradeDomainDistribution upgradeDomainDistribution,
+      boolean blockSummaryFlag, boolean countOnly, boolean upgradeDomainFlag) {
     if (!fileStatus.isSymlink()) { // ignore symlink
       String fullPath = fileStatus.getFullName(parent);
       short replication = fileStatus.getReplication();
+      boolean satisfyUpgradeDomain = true;
       try {
         final LocatedBlocks locatedBlocks = fileStatus.getLocatedBlocks();
+        final ErasureCodingPolicy erasureCodingPolicy = fileStatus.getErasureCodingPolicy();
+        final short replica = fileStatus.getReplication();
         final boolean lastBlkComplete = locatedBlocks.isLastBlockComplete();
         List<LocatedBlock> lbs = locatedBlocks.getLocatedBlocks();
         for (int i = 0; i < lbs.size(); i++) {
           if (i == lbs.size() - 1 && !lastBlkComplete) {
+            upgradeDomainDistribution.incrUCBlocks();
             // last block is incomplete, skip it
             continue;
           }
@@ -803,6 +897,9 @@ public class ZoneChecker {
                 }
               }
             }
+          } else if (upgradeDomainFlag) {
+            satisfyUpgradeDomain &= isSatisfyUpgradeDomain(erasureCodingPolicy,
+                replica, lb, upgradeDomainDistribution);
           } else {
             ReplicationRule replicationRule = ReplicationRule.parseFromMap(mapDCReplica);
             // Aggregate the number of blocks and the total size of blocks
@@ -826,7 +923,68 @@ public class ZoneChecker {
         }
       } catch (Exception e) {
         LOG.warn("Failed to check the status of {}. Ignore it and continue.", parent, e);
+      } finally {
+        if (!satisfyUpgradeDomain) {
+          upgradeDomainDistribution.incrAbnormalFiles();
+        }
+        upgradeDomainDistribution.incrCheckedFiles();
       }
+    }
+  }
+
+  /**
+   * A class to count distribution for UpgradeDomain.
+   */
+  static class UpgradeDomainDistribution {
+    private final AtomicLong checkedFiles = new AtomicLong(0);
+    private final AtomicLong checkedBlocks = new AtomicLong(0);
+    private final AtomicLong ucBlocks = new AtomicLong(0);
+    private final AtomicLong underReplicaBlocks = new AtomicLong(0);
+    private final AtomicLong abnormalFiles = new AtomicLong(0);
+    private final AtomicLong abnormalBlocks = new AtomicLong(0);
+
+    public void incrAbnormalFiles() {
+      abnormalFiles.incrementAndGet();
+    }
+
+    public void incrAbnormalBlocks() {
+      abnormalBlocks.incrementAndGet();
+    }
+
+    public long getAbnormalBlocks() {
+      return abnormalBlocks.get();
+    }
+
+    public void incrUCBlocks() {
+      ucBlocks.incrementAndGet();
+    }
+
+    public void incrUnderReplicaBlocks() {
+      underReplicaBlocks.incrementAndGet();
+    }
+
+    public void incrCheckedFiles() {
+      checkedFiles.incrementAndGet();
+    }
+
+    public long getCheckedFiles() {
+      return checkedFiles.get();
+    }
+
+    public void incrCheckedBlocks() {
+      checkedBlocks.incrementAndGet();
+    }
+
+    public long getCheckedBlocks() {
+      return checkedBlocks.get();
+    }
+
+    @Override
+    public String toString() {
+      return String.format("A total of %s files and %s blocks were checked, " +
+          "%s ucBlocks, %s underReplicaBlocks, %s files failed and %s blocks failed.",
+          checkedFiles.get(), checkedBlocks.get(), ucBlocks.get(), underReplicaBlocks.get(),
+          abnormalFiles.get(), abnormalBlocks.get());
     }
   }
 

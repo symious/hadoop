@@ -105,14 +105,16 @@ public class TestZoneChecker {
         new HashMap<>();
     replicationRuleListMap.put(replicationRule, new HashSet<>(
         Collections.singletonList(pathName)));
+    ZoneChecker.UpgradeDomainDistribution upgradeDomainDistribution =
+        new ZoneChecker.UpgradeDomainDistribution();
 
     ConcurrentHashMap<ReplicationRule, Set<String>> rulePathMap = new ConcurrentHashMap<>();
     Map<String, List<Long>> dcStatMap = new HashMap<>();
-    zch.check(pathName, rulePathMap, dcStatMap, null, false, false);
+    zch.check(pathName, rulePathMap, dcStatMap, null, upgradeDomainDistribution, false, false, false);
     assertEquals(replicationRuleListMap, rulePathMap);
     rulePathMap.clear();
     dcStatMap.clear();
-    zch.concurrentlyCheck(pathName, rulePathMap, dcStatMap, null, false, false, 10);
+    zch.concurrentlyCheck(pathName, rulePathMap, dcStatMap, null, upgradeDomainDistribution, false, false, 10, false);
     assertEquals(replicationRuleListMap, rulePathMap);
 
     //Check the zone check for dir
@@ -120,11 +122,11 @@ public class TestZoneChecker {
     replicationRuleListMap.put(replicationRule, new HashSet<>(
         Collections.singletonList(dirName)));
     ConcurrentHashMap<ReplicationRule, Set<String>> rulePathMap1 = new ConcurrentHashMap<>();
-    zch.check(dirName, rulePathMap1, dcStatMap, null, false, false);
+    zch.check(dirName, rulePathMap1, dcStatMap, null, upgradeDomainDistribution, false, false, false);
     assertEquals(replicationRuleListMap, rulePathMap1);
     rulePathMap1.clear();
     dcStatMap.clear();
-    zch.concurrentlyCheck(dirName, rulePathMap1, dcStatMap, null, false, false, 10);
+    zch.concurrentlyCheck(dirName, rulePathMap1, dcStatMap, null, upgradeDomainDistribution, false, false, 10, false);
     assertEquals(replicationRuleListMap, rulePathMap1);
 
     //Check the block summary
@@ -132,11 +134,11 @@ public class TestZoneChecker {
     blockSummaryResult.put("/dc0", Arrays.asList(4L, 4096L));
     blockSummaryResult.put("/dc1", Arrays.asList(2L, 2048L));
     Map<String, List<Long>> blockSummary = new HashMap<>();
-    zch.check(dirName, rulePathMap1, blockSummary, null, true, false);
+    zch.check(dirName, rulePathMap1, blockSummary, null, upgradeDomainDistribution, true, false, false);
     assertEquals(blockSummaryResult, blockSummary);
     rulePathMap1.clear();
     blockSummary.clear();
-    zch.concurrentlyCheck(dirName, rulePathMap1, blockSummary, null, true, false, 10);
+    zch.concurrentlyCheck(dirName, rulePathMap1, blockSummary, null, upgradeDomainDistribution, true, false, 10, false);
     assertEquals(blockSummaryResult, blockSummary);
 
     //Check the block number summary
@@ -145,12 +147,16 @@ public class TestZoneChecker {
     Map<String, List<Long>> countSummary = new HashMap<>();
     ZoneChecker.ZoneCheckerCountTree zcct =
         new ZoneChecker.ZoneCheckerCountTree(dirName, 0);
-    zch.check(dirName, rulePathMap1, countSummary, zcct, false, true);
+    zch.check(dirName, rulePathMap1, countSummary, zcct, upgradeDomainDistribution, false, true, false);
     assertEquals(countResult, zcct.getMap());
     countSummary.clear();
     zcct = new ZoneChecker.ZoneCheckerCountTree(dirName, 0);
-    zch.concurrentlyCheck(dirName, rulePathMap1, countSummary, zcct, false, true, 10);
+    zch.concurrentlyCheck(dirName, rulePathMap1, countSummary, zcct, upgradeDomainDistribution, false, true, 10, false);
     assertEquals(countResult, zcct.getMap());
+    upgradeDomainDistribution = new ZoneChecker.UpgradeDomainDistribution();
+    zch.concurrentlyCheck(dirName, rulePathMap1, countSummary, zcct, upgradeDomainDistribution, false, false, 10, true);
+    assertEquals(2, upgradeDomainDistribution.getCheckedFiles());
+    assertEquals(2, upgradeDomainDistribution.getCheckedBlocks());
   }
 
   @Test
@@ -177,27 +183,29 @@ public class TestZoneChecker {
     final ZoneChecker zc = new ZoneChecker(dfs, conf);
 
     ConcurrentHashMap<ReplicationRule, Set<String>> rulePathMap;
+    ZoneChecker.UpgradeDomainDistribution upgradeDomainDistribution =
+        new ZoneChecker.UpgradeDomainDistribution();
     Map<String, List<Long>> dcStatMap;
     for (int trackedDepth = 1; trackedDepth < MAX_DEPTH; trackedDepth++) {
       rulePathMap = new ConcurrentHashMap<>();
       dcStatMap = new HashMap<>();
       ZoneChecker.ZoneCheckerCountTree zcct =
           new ZoneChecker.ZoneCheckerCountTree(basePath.toString(), trackedDepth);
-      zc.check(basePath.toString(), rulePathMap, dcStatMap, zcct, false, true);
+      zc.check(basePath.toString(), rulePathMap, dcStatMap, zcct, upgradeDomainDistribution, false, true, false);
       checkCountTree(zcct.getRoot());
       ZoneChecker.printFileCount(zcct);
 
       rulePathMap.clear();
       dcStatMap.clear();
       zcct = new ZoneChecker.ZoneCheckerCountTree(basePath.toString(), trackedDepth);
-      zc.concurrentlyCheck(basePath.toString(), rulePathMap, dcStatMap, zcct, false, true, 10);
+      zc.concurrentlyCheck(basePath.toString(), rulePathMap, dcStatMap, zcct, upgradeDomainDistribution, false, true, 10, false);
       checkCountTree(zcct.getRoot());
       ZoneChecker.printFileCount(zcct);
     }
 
     rulePathMap = new ConcurrentHashMap<>();
     dcStatMap = new HashMap<>();
-    zc.check(basePath.toString(), rulePathMap, dcStatMap, null, true, false);
+    zc.check(basePath.toString(), rulePathMap, dcStatMap, null, upgradeDomainDistribution, true, false, false);
     Map<String, List<Long>> blockSummaryResult = new HashMap<>();
     blockSummaryResult.put("/dc0", Arrays.asList((long) (1 << MAX_DEPTH + 1) - 2,
         (long) FILE_LEN * ((1 << MAX_DEPTH + 1) - 2)));
@@ -207,7 +215,7 @@ public class TestZoneChecker {
 
     rulePathMap.clear();
     dcStatMap.clear();
-    zc.concurrentlyCheck(basePath.toString(), rulePathMap, dcStatMap, null, true, false, 10);
+    zc.concurrentlyCheck(basePath.toString(), rulePathMap, dcStatMap, null, upgradeDomainDistribution, true, false, 10, false);
     assertEquals(blockSummaryResult, dcStatMap);
   }
 
