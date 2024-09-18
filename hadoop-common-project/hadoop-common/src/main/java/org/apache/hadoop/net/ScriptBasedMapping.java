@@ -20,6 +20,7 @@ package org.apache.hadoop.net;
 
 import java.util.*;
 import java.io.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.hadoop.util.Shell.ShellCommandExecutor;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -137,6 +138,22 @@ public class ScriptBasedMapping extends CachedDNSToSwitchMapping {
     getRawMapping().setConf(conf);
   }
 
+  public long getUnknownHostsNum() {
+    if (rawMapping instanceof RawScriptBasedMapping) {
+      return ((RawScriptBasedMapping) rawMapping).unknownHostsNum.get();
+    } else {
+      return 0;
+    }
+  }
+
+  public long getUnknownTopologiesNum() {
+    if (rawMapping instanceof RawScriptBasedMapping) {
+      return ((RawScriptBasedMapping) rawMapping).unknownTopologiesNum.get();
+    } else {
+      return 0;
+    }
+  }
+
   /**
    * This is the uncached script mapping that is fed into the cache managed
    * by the superclass {@link CachedDNSToSwitchMapping}
@@ -147,6 +164,8 @@ public class ScriptBasedMapping extends CachedDNSToSwitchMapping {
     private int maxArgs; //max hostnames per call of the script
     private static final Logger LOG =
         LoggerFactory.getLogger(ScriptBasedMapping.class);
+    protected AtomicLong unknownHostsNum = new AtomicLong(0);
+    protected AtomicLong unknownTopologiesNum = new AtomicLong(0);
 
     /**
      * Set the configuration and extract the configuration parameters of interest
@@ -182,6 +201,7 @@ public class ScriptBasedMapping extends CachedDNSToSwitchMapping {
         for (String name : names) {
           m.add(NetworkTopology.DEFAULT_RACK);
         }
+        unknownTopologiesNum.getAndAdd(names.size());
         return m;
       }
 
@@ -201,6 +221,8 @@ public class ScriptBasedMapping extends CachedDNSToSwitchMapping {
           return null;
         }
       } else {
+        unknownTopologiesNum.getAndAdd(names.size());
+        LOG.error("Script {} does not exists.", scriptName);
         // an error occurred. return null to signify this.
         // (exn was already logged in runResolveCommand)
         return null;

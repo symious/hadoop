@@ -131,6 +131,7 @@ public class IpRangeScriptBasedMapping extends ScriptBasedMapping {
         }
       }
       LOG.warn("Cannot resolve {} from ipRangeDC mapping", ip);
+      unknownHostsNum.getAndIncrement();
       if (this.returnActualRack) {
         LOG.warn("Using {} for {}", NetworkTopology.UNKNOWN_DC_RACK, ip);
         return NetworkTopology.UNKNOWN_DC_RACK;
@@ -187,6 +188,8 @@ public class IpRangeScriptBasedMapping extends ScriptBasedMapping {
     public List<String> reloadIpRange(String newIpRange2DCFile) {
       this.ipRangeDCMapping = load(newIpRange2DCFile);
       this.ipRange2DCFile = newIpRange2DCFile;
+      this.unknownHostsNum.set(0);
+      this.unknownTopologiesNum.set(0);
       getConf().set(NET_TOPOLOGY_IP_RANGE_DC_MAPPING_FILE_KEY, newIpRange2DCFile);
       List<String> needReloadCacheList = new ArrayList<>(this.cachedIps);
       this.cachedIps.clear();

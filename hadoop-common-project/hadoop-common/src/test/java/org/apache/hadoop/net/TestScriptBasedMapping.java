@@ -42,6 +42,7 @@ public class TestScriptBasedMapping {
     names.add("some.machine.name");
     names.add("other.machine.name");
     List<String> result = mapping.resolve(names);
+    assertEquals(2, mapping.getUnknownTopologiesNum());
     assertNull("Expected an empty list", result);
   }
 

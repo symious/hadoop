@@ -8953,6 +8953,16 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     return JSON.toString(resultMap);
   }
 
+  @Metric({"UnknownHostsNum", "Number of hosts that can not be resolved to known IDC"})
+  public long getUnknownHostsNum() {
+    return getBlockManager().getDatanodeManager().getUnknownHostsNum();
+  }
+
+  @Metric({"UnknownTopologiesNum", "Number of hosts that can not be resolved to topology.script"})
+  public long getUnknownTopology() {
+    return getBlockManager().getDatanodeManager().getUnknownTopologiesNum();
+  }
+
   private ECTopologyVerifierResult getEcTopologyVerifierResultForEnabledPolicies() {
     int numOfDataNodes =
         getBlockManager().getDatanodeManager().getNumOfDataNodes();

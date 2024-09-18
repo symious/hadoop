@@ -42,6 +42,9 @@ import org.apache.hadoop.metrics2.lib.MutableRatesWithAggregation;
 import org.apache.hadoop.metrics2.lib.MutableStat;
 import org.apache.hadoop.metrics2.source.JvmMetrics;
 import org.apache.hadoop.net.DNSToSwitchMapping;
+import org.apache.hadoop.net.ScriptBasedMapping;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -64,6 +67,7 @@ import java.util.concurrent.ThreadLocalRandom;
 @Metrics(about="DataNode metrics", context="dfs")
 public class DataNodeMetrics {
 
+  public static final Logger LOG = LoggerFactory.getLogger(DataNodeMetrics.class);
   @Metric MutableCounterLong bytesWritten;
   @Metric("Milliseconds spent writing")
   MutableCounterLong totalWriteTime;
@@ -940,5 +944,27 @@ public class DataNodeMetrics {
 
   public void incrNullStorageBlockReports() {
     nullStorageBlockReports.incr();
+  }
+
+  @Metric({"UnknownHostsNum", "Number of hosts that can not be resolved to known IDC"})
+  public long getUnknownHostsNum() {
+    if (dnsToSwitchMapping instanceof ScriptBasedMapping) {
+      return ((ScriptBasedMapping) dnsToSwitchMapping).getUnknownHostsNum();
+    } else {
+      LOG.debug("dnsToSwitchMapping : {} does not support logging unknown hosts num",
+          dnsToSwitchMapping.getClass().getName());
+      return 0;
+    }
+  }
+
+  @Metric({"UnknownTopology", "Number of hosts that can not be resolved by topology script"})
+  public long getUnknownTopology() {
+    if (dnsToSwitchMapping instanceof ScriptBasedMapping) {
+      return ((ScriptBasedMapping) dnsToSwitchMapping).getUnknownTopologiesNum();
+    } else {
+      LOG.debug("dnsToSwitchMapping : {} does not support logging unknown topologies num",
+          dnsToSwitchMapping.getClass().getName());
+      return 0;
+    }
   }
 }

@@ -82,6 +82,8 @@ public class TestIpRangeScriptBasedMapping {
     assertEquals("/dc1" + NetworkTopology.DEFAULT_RACK, result.get(0));
     assertEquals("/dc2" + NetworkTopology.DEFAULT_RACK, result.get(1));
     assertEquals(NetworkTopology.UNKNOWN_DC_RACK, result.get(2));
+    assertEquals(1, mapping.getUnknownHostsNum());
+    assertEquals(3, mapping.getUnknownTopologiesNum());
   }
 
 
@@ -171,6 +173,8 @@ public class TestIpRangeScriptBasedMapping {
     assertEquals("/dc1" + NetworkTopology.DEFAULT_RACK, result.get(0));
     assertEquals("/dc2" + NetworkTopology.DEFAULT_RACK, result.get(1));
     assertEquals(NetworkTopology.DEFAULT_RACK, result.get(2));
+    assertEquals(1, mapping.getUnknownHostsNum());
+    assertEquals(3, mapping.getUnknownTopologiesNum());
 
     ipRange2DCFile = File.createTempFile(getClass().getSimpleName() + ".testResolve", ".txt");
     String ipRange3 = "9.10.0.0/16";
@@ -180,6 +184,8 @@ public class TestIpRangeScriptBasedMapping {
     conf.set(NET_TOPOLOGY_IP_RANGE_DC_MAPPING_FILE_KEY, ipRange2DCFile.getCanonicalPath());
 
     mapping.reloadIpRange2DC(conf);
+    assertEquals(0, mapping.getUnknownHostsNum());
+    assertEquals(0, mapping.getUnknownTopologiesNum());
 
     names = new ArrayList<String>();
     names.add(hostName1);
@@ -193,6 +199,8 @@ public class TestIpRangeScriptBasedMapping {
     // Tips: hostName3 be cached by ScriptBasedMapping,
     // so it will not be reloaded by IpRangeScriptBasedMapping.
     assertEquals(NetworkTopology.DEFAULT_RACK, result.get(2));
+    assertEquals(0, mapping.getUnknownHostsNum());
+    assertEquals(2, mapping.getUnknownTopologiesNum());
   }
 
   @Test(timeout=60000)

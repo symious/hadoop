@@ -715,6 +715,28 @@ public class DatanodeManager {
     return this.maxSlowPeerReportNodes;
   }
 
+  public long getUnknownHostsNum() {
+    if (this.dnsToSwitchMapping instanceof ScriptBasedMapping) {
+      return ((ScriptBasedMapping) this.dnsToSwitchMapping).getUnknownHostsNum();
+    } else {
+      LOG.debug("dnsToSwitchMapping : {} is not an instance of ScriptBasedMapping, "
+              + "so it does not log the number of unknown hosts",
+          dnsToSwitchMapping.getClass().getName());
+      return 0;
+    }
+  }
+
+  public long getUnknownTopologiesNum() {
+    if (this.dnsToSwitchMapping instanceof ScriptBasedMapping) {
+      return ((ScriptBasedMapping) this.dnsToSwitchMapping).getUnknownTopologiesNum();
+    } else {
+      LOG.debug("dnsToSwitchMapping : {} is not an instance of ScriptBasedMapping, "
+              + "so it does not log the number of unknown topologies",
+          dnsToSwitchMapping.getClass().getName());
+      return 0;
+    }
+  }
+
   /**
    * Sort the non-striped located blocks by the distance to the target host.
    *
