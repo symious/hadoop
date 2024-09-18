@@ -63,6 +63,7 @@ class FSDirDeleteOp {
         if (unprotectedDelete(fsd, iip, context, mtime)) {
           filesRemoved = context.quotaDelta().getNsDelta();
           fsn.removeSnapshottableDirs(snapshottableDirs);
+          fsn.decFileStatisticsWithNum(context.numECFileToDelete, context.numReplicaFileToDelete);
         }
         fsd.updateReplicationFactor(context.collectedBlocks()
                                         .toUpdateReplicationInfo());

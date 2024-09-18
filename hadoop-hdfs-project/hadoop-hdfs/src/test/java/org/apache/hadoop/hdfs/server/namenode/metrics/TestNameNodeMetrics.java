@@ -410,6 +410,63 @@ public class TestNameNodeMetrics {
     assertCounter("FilesDeleted", 2L, rb);
   }
 
+  /** Test ec and replica file metrics associated with addition and deletion */
+  @Test
+  public void testECAndReplicaFileMetrics() throws Exception {
+    // File creations
+    List<Path> replicaFiles = createReplicaFiles("/testReplicaMetrics", 1024, 4, (short) 3);
+    List<Path> ecFiles = createEmptyECFiles(3);
+    MetricsRecordBuilder rb = getMetrics(NN_METRICS);
+    //ec file count will be 3
+    assertGauge("TotalECFileCount", 3L, rb);
+    //replica file count will be 4
+    assertGauge("TotalReplicaCount", 4L, rb);
+    //concat (3 and 4) -> 2
+    fs.concat(replicaFiles.get(1), new Path[]{replicaFiles.get(2), replicaFiles.get(3)});
+    rb = getMetrics(NN_METRICS);
+    //replica file count will be 2 since concat above will delete 2 files
+    assertGauge("TotalReplicaCount", 2L, rb);
+    fs.delete(replicaFiles.get(0), true);
+    fs.delete(ecFiles.get(0), true);
+    rb = getMetrics(NN_METRICS);
+    //ec file count will be 2
+    assertGauge("TotalECFileCount", 2L, rb);
+    //replica file count will be 1
+    assertGauge("TotalReplicaCount", 1L, rb);
+    //delete directory "/testReplicaMetrics"
+    fs.delete(new Path("/testReplicaMetrics"), true);
+    //delete directory "/testECMetrics"
+    fs.delete(ecDir, true);
+    rb = getMetrics(NN_METRICS);
+    //replica file count will be 0 since all replica file in directory "/testMetrics" have been deleted.
+    assertGauge("TotalReplicaCount", 0L, rb);
+    //ec file count will be 0 since all ec file in directory "/ec" have been deleted.
+    assertGauge("TotalECFileCount", 0L, rb);
+  }
+
+  private List<Path> createReplicaFiles(String parent, long fileSize, int fileNum, short replications)
+      throws IOException {
+    List<Path> createdFiles = new ArrayList<>();
+    for (int i = 1; i <= fileNum; i++) {
+      Path filePath = new Path(parent, "testFileAdd" + i);
+      createFile(filePath, fileSize, replications);
+      createdFiles.add(filePath);
+    }
+    return createdFiles;
+  }
+
+  private List<Path> createEmptyECFiles(int fileNum)
+      throws Exception {
+    List<Path> createdFiles = new ArrayList<>();
+    for (int i = 1; i <= fileNum; i++) {
+      Path ecFilePath = new Path(ecDir, "ecFile" + i + ".log");
+      DFSTestUtil.createStripedFile(cluster, ecFilePath, null, 0, 0,
+          false, EC_POLICY);
+      createdFiles.add(ecFilePath);
+    }
+    return createdFiles;
+  }
+
   /**
    * Verify low redundancy and corrupt blocks metrics are zero.
    * @throws Exception

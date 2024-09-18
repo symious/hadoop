@@ -20,6 +20,7 @@ package org.apache.hadoop.hdfs.server.namenode.metrics;
 import static org.apache.hadoop.metrics2.impl.MsInfo.ProcessName;
 import static org.apache.hadoop.metrics2.impl.MsInfo.SessionId;
 
+import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -94,6 +95,10 @@ public class NameNodeMetrics {
   MutableCounterLong blockOpsBatched;
   @Metric("Number of pending edits")
   MutableGaugeInt pendingEditsCount;
+  @Metric("Number of total EC file")
+  MutableGaugeLong totalECFileCount;
+  @Metric("Number of total Replica file")
+  MutableGaugeLong totalReplicaCount;
 
   @Metric("Number of file system operations")
   public long totalFileOps(){
@@ -326,7 +331,20 @@ public class NameNodeMetrics {
   public void incrCreateSnapshotOps() {
     createSnapshotOps.incr();
   }
-  
+
+  public void addTotalECFileCount(long ecFileNumDelta) {
+    totalECFileCount.incr(ecFileNumDelta);
+  }
+
+  public void addTotalReplicaFileCount(long replicaFileNumDelta) {
+    totalReplicaCount.incr(replicaFileNumDelta);
+  }
+
+  public void resetFileStatistics() {
+    totalECFileCount.set(0);
+    totalReplicaCount.set(0);
+  }
+
   public void incrDeleteSnapshotOps() {
     deleteSnapshotOps.incr();
   }

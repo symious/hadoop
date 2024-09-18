@@ -996,6 +996,8 @@ public abstract class INode implements INodeAttributes, Diff.Element<byte[]> {
     protected final BlocksMapUpdateInfo collectedBlocks;
     protected final List<INode> removedINodes;
     protected final List<Long> removedUCFiles;
+    protected long numECFileToDelete = 0L;
+    protected long numReplicaFileToDelete = 0L;
     /** Used to collect quota usage delta */
     private final QuotaDelta quotaDelta;
 

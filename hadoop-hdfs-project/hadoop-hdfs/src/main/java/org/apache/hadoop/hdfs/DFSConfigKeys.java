@@ -1615,6 +1615,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
 
   public static final String  DFS_STORAGE_POLICY_ENABLED_KEY = "dfs.storage.policy.enabled";
   public static final boolean DFS_STORAGE_POLICY_ENABLED_DEFAULT = true;
+  public static final String FILE_STATISTICS_ENABLED_KEY = "dfs.file.statistics.enabled";
+  public static final boolean FILE_STATISTICS_ENABLED_DEFAULT = false;
   public static final String DFS_STORAGE_POLICY_PERMISSIONS_SUPERUSER_ONLY_KEY =
       "dfs.storage.policy.permissions.superuser-only";
   public static final boolean

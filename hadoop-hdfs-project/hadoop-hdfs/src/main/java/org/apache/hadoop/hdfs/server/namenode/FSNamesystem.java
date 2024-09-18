@@ -49,6 +49,8 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_QUOTA_IGNORE_SYMLINKS_ENA
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_ENABLED_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_PERMISSIONS_SUPERUSER_ONLY_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_STORAGE_POLICY_PERMISSIONS_SUPERUSER_ONLY_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.FILE_STATISTICS_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.FILE_STATISTICS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_BYTES_PER_CHECKSUM_DEFAULT;
 import static org.apache.hadoop.hdfs.client.HdfsClientConfigKeys.DFS_BYTES_PER_CHECKSUM_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_CHECKSUM_TYPE_DEFAULT;
@@ -520,6 +522,7 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   private final int maxCorruptFileBlocksReturn;
   private final boolean isPermissionEnabled;
   private final boolean isStoragePolicyEnabled;
+  private final boolean isFileStatisticsEnabled;
   private final boolean isStoragePolicySuperuserOnly;
   private final UserGroupInformation fsOwner;
   private final String supergroup;
@@ -925,7 +928,9 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       this.snapshotDiffReportLimit =
           conf.getInt(DFS_NAMENODE_SNAPSHOT_DIFF_LISTING_LIMIT,
               DFS_NAMENODE_SNAPSHOT_DIFF_LISTING_LIMIT_DEFAULT);
-
+      this.isFileStatisticsEnabled =
+          conf.getBoolean(FILE_STATISTICS_ENABLED_KEY,
+              FILE_STATISTICS_ENABLED_DEFAULT);
       LOG.info("fsOwner                = " + fsOwner);
       LOG.info("supergroup             = " + supergroup);
       LOG.info("isPermissionEnabled    = " + isPermissionEnabled);
@@ -2385,6 +2390,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     }
     getEditLog().logSync();
     logAuditEvent(true, OperationName.CONCAT, Arrays.toString(srcs), target, stat);
+    //update ec and replica file Metrics
+    decFileStatisticsWithNum(stat.isErasureCoded(), srcs.length);
   }
 
   /**
@@ -2781,6 +2788,8 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
       throw e;
     }
     logAuditEvent(true, OperationName.CREATE, src, status);
+    //update ec and replica file Metrics
+    incFileStatisticsWithNum(status.isErasureCoded());
     return status;
   }
 
@@ -9067,6 +9076,65 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   @VisibleForTesting
   public long getWriteLockReportingThresholdMs() {
     return this.fsLock.getWriteLockReportingThresholdMs();
+  }
+
+  public void resetFileStatistics() {
+    if (isUpdatingFileStatisticsEnabled()) {
+      NameNode.getNameNodeMetrics().resetFileStatistics();
+    }
+  }
+
+  public void incFileStatisticsWithNum(boolean isStriped) {
+    if (isStriped) {
+      updateFileStatisticsWithNum(1, 0, false);
+    } else {
+      updateFileStatisticsWithNum(0, 1, false);
+    }
+  }
+
+  public void decFileStatisticsWithNum(long numECFile, long numReplicaFile) {
+    updateFileStatisticsWithNum(numECFile, numReplicaFile, true);
+  }
+
+  public void decFileStatisticsWithNum(boolean isStriped, long numFile) {
+    if (isStriped) {
+      updateFileStatisticsWithNum(numFile, 0, true);
+    } else {
+      updateFileStatisticsWithNum(0, numFile, true);
+    }
+  }
+
+  /**
+   * Update EC and Regular replication file Metrics by number.
+   * @param decrease is true if the number need minus,
+   *                 is false if the number need add.
+   */
+  public void updateFileStatisticsWithNum(long numECFileToDelete, long numReplicaFileToDelete, boolean decrease) {
+    if (isUpdatingFileStatisticsEnabled()) {
+      NameNodeMetrics nameNodeMetrics = NameNode.getNameNodeMetrics();
+      if (decrease) {
+        nameNodeMetrics.addTotalECFileCount(-numECFileToDelete);
+        nameNodeMetrics.addTotalReplicaFileCount(-numReplicaFileToDelete);
+      } else {
+        nameNodeMetrics.addTotalECFileCount(numECFileToDelete);
+        nameNodeMetrics.addTotalReplicaFileCount(numReplicaFileToDelete);
+      }
+    }
+  }
+
+  public boolean isUpdatingFileStatisticsEnabled() {
+    if (isFileStatisticsEnabled && NameNode.getNameNodeMetrics() != null) {
+      LOG.debug("EC and Replica file metrics are enabled, and NameNodeMetrics is not null.");
+      return true;
+    } else {
+      if (!isFileStatisticsEnabled) {
+        LOG.debug("EC and Replica file metrics are disabled.");
+      }
+      if (NameNode.getNameNodeMetrics() == null) {
+        LOG.debug("NameNodeMetrics is null");
+      }
+      return false;
+    }
   }
 }
 

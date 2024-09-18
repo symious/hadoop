@@ -810,6 +810,11 @@ public class INodeFile extends INodeWithAdditionalFields
       AclStorage.removeAclFeature(getAclFeature());
     }
     clear();
+    if (isStriped()) {
+      reclaimContext.numECFileToDelete++;
+    } else {
+      reclaimContext.numReplicaFileToDelete++;
+    }
     reclaimContext.removedINodes.add(this);
   }
 

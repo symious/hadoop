@@ -6781,4 +6781,11 @@
       The maximum number of paths to be checked in a single iteration.
     </description>
   </property>
+  <property>
+    <name>dfs.file.statistics.enabled</name>
+    <value>false</value>
+    <description>
+      Determine whether to collect the numbers of ec and replica files.
+    </description>
+  </property>
 </configuration>

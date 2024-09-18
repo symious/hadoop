@@ -946,6 +946,8 @@ public class FSDirectory implements Closeable {
       long start = Time.monotonicNow();
       QuotaCounts counts = new QuotaCounts.Builder().build();
       ForkJoinPool p = new ForkJoinPool(threads);
+      //clear file info Metrics
+      getFSNamesystem().resetFileStatistics();
       RecursiveAction task = new InitQuotaTask(getBlockStoragePolicySuite(),
           rootDir.getStoragePolicyID(), rootDir, counts);
       p.execute(task);
@@ -965,7 +967,7 @@ public class FSDirectory implements Closeable {
   /**
    * parallel initialization using fork-join.
    */
-  private static class InitQuotaTask extends RecursiveAction {
+  private class InitQuotaTask extends RecursiveAction {
     private final INodeDirectory dir;
     private final QuotaCounts counts;
     private final BlockStoragePolicySuite bsps;
@@ -999,6 +1001,9 @@ public class FSDirectory implements Closeable {
             // file or symlink. count using the local counts variable
             myCounts.add(child.computeQuotaUsage(bsps, childPolicyId, false,
                 CURRENT_STATE_ID));
+            if (child instanceof INodeFile) {
+              namesystem.incFileStatisticsWithNum(((INodeFile) child).isStriped());
+            }
           }
         }
         // invoke and wait for completion
