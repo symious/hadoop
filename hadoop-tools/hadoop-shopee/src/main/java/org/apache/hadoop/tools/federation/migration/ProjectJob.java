@@ -20,14 +20,22 @@ package org.apache.hadoop.tools.federation.migration;
 import java.io.IOException;
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.StorageSize;
 import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.log4j.Appender;
+import org.apache.log4j.ConsoleAppender;
+import org.apache.log4j.Layout;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.PatternLayout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,8 +44,21 @@ import org.slf4j.LoggerFactory;
  * One button solution that takes in a /projects/project style path and runs everything
  * from start to finish. Supports resuming.
  */
+@SuppressWarnings("UnstableApiUsage")
 public class ProjectJob {
   private static final Logger LOG = LoggerFactory.getLogger(ProjectJob.class);
+
+  static {
+    org.apache.log4j.Logger logger = org.apache.log4j.Logger.getLogger(ProjectJob.class.getName());
+    Appender appender = logger.getAppender("stdout");
+    if (appender == null) {
+      appender = logger.getAppender("console");
+    }
+    Layout layout = (appender == null) ? new PatternLayout() : appender.getLayout();
+    ((PatternLayout) layout).setConversionPattern("%d{ISO8601} [%t] %-5p %c{2} (%F:%M(%L)) - %m%n");
+    ConsoleAppender newAppender = new ConsoleAppender(layout);
+    LogManager.getLogger(LOG.getName()).addAppender(newAppender);
+  }
 
   final static public Path BASE_PATH = new Path("/tmp/__MIGRATION_PROJECT_JOBS/");
   private final DistributedFileSystem srcFs;
@@ -53,6 +74,8 @@ public class ProjectJob {
   private final long stopThreshold;
   private final int coldThreshold;
   private final boolean hot;
+  private final int fileLimit;
+  private final long sizeLimit;
   private final Configuration conf;
   private int emptyColdCycle;
 
@@ -60,10 +83,13 @@ public class ProjectJob {
   private final Path donePathsFilePath;
   private final Path coldContextFilePath;
   private final Path hotContextFilePath;
+  private final Path coldContextDoneFilePath;
+  private final Path hotContextDoneFilePath;
 
   public ProjectJob(String path, String projectName, String src, String dst, String fed,
       String routerAddr, int listingThreads, int workerThreads, long stopThreshold,
-      int coldThreshold, boolean hotMode, Configuration conf) throws IOException {
+      int coldThreshold, boolean hotMode, int fileLimit, long sizeLimit, Configuration conf)
+      throws IOException {
     this.path = new Path(path);
     if (projectName == null) {
       this.projectName = path.split("/")[2];
@@ -79,6 +105,8 @@ public class ProjectJob {
     this.stopThreshold = stopThreshold;
     this.coldThreshold = coldThreshold;
     this.hot = hotMode;
+    this.fileLimit = fileLimit;
+    this.sizeLimit = sizeLimit;
     this.conf = conf;
 
     this.srcFs = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + srcNs), conf);
@@ -86,8 +114,12 @@ public class ProjectJob {
     this.inputPathsFilePath = new Path(BASE_PATH, this.projectName + "_input.txt");
     this.donePathsFilePath = new Path(BASE_PATH, this.projectName + "_done.txt");
 
-    this.coldContextFilePath = new Path(BASE_PATH, "._MIGRATION_COLD_" + projectName);
-    this.hotContextFilePath = new Path(BASE_PATH, "._MIGRATION_HOT_" + projectName);
+    this.coldContextFilePath = new Path(BASE_PATH, "._MIGRATION_COLD_" + this.projectName);
+    this.coldContextDoneFilePath =
+        new Path(BASE_PATH, "._MIGRATION_COLD_" + this.projectName + ".done");
+    this.hotContextFilePath = new Path(BASE_PATH, "._MIGRATION_HOT_" + this.projectName);
+    this.hotContextDoneFilePath =
+        new Path(BASE_PATH, "._MIGRATION_HOT_" + this.projectName + ".done");
   }
 
   public static int handleArgs(List<String> argsList, Configuration conf) throws Exception {
@@ -141,9 +173,22 @@ public class ProjectJob {
       return -1;
     }
 
+    // Max file count or size limit of a cold dir to use local distcp instead of YARN
+    String limit = StringUtils.popOptionWithArgument("-localDistCpLimit", argsList);
+    int fileLimit = 0;
+    long sizeLimit = 0;
+    if (limit != null) {
+      if (org.apache.commons.lang3.StringUtils.isNumeric(limit)) {
+        fileLimit = Integer.parseInt(limit);
+      } else {
+        StorageSize size = StorageSize.parse(limit);
+        sizeLimit = (long) size.getUnit().toBytes(size.getValue());
+      }
+    }
+
     ProjectJob job =
         new ProjectJob(path, projectName, src, dst, fed, routerAddr, listingThreads, workerThreads,
-            stopThreshold, coldThreshold, hotMode, conf);
+            stopThreshold, coldThreshold, hotMode, fileLimit, sizeLimit, conf);
     job.execute();
     return 0;
   }
@@ -161,11 +206,13 @@ public class ProjectJob {
         LOG.info("Starting cold cycle {}", cycle);
         coldCycle();
       }
+      srcFs.create(coldContextDoneFilePath).close();
       return;
     }
 
     if (hot) {
       hotRun();
+      srcFs.create(hotContextDoneFilePath).close();
     }
   }
 
@@ -201,7 +248,7 @@ public class ProjectJob {
    * already contains all paths in input file. Skip entirely if there is a previous job already
    * in COLD or HOT phase.
    */
-  private void startAnalyzeJobIfNecessary() throws IOException {
+  private void startAnalyzeJobIfNecessary() throws IOException, InterruptedException {
     // Resume a previous job already progressed to cold or hot phase.
     if (srcFs.exists(coldContextFilePath)) {
       LOG.info("Resuming a previous run from COLD phase.");
@@ -227,7 +274,7 @@ public class ProjectJob {
     }
   }
 
-  private void startAnalyzeJob() throws IOException {
+  private void startAnalyzeJob() throws IOException, InterruptedException {
     AnalyzeJob job =
         new AnalyzeJob(path.toString(), srcNs, dstNs, fedNs, String.valueOf(coldThreshold),
             inputPathsFilePath, listingThreads, conf);
@@ -244,9 +291,12 @@ public class ProjectJob {
       System.exit(0);
     }
     srcFs.create(coldContextFilePath, true).close();
-    Set<Path> allPaths = MigrationUtils.loadPathsFromDfs(srcFs, path, inputPathsFilePath);
+    Map<Path, Pair<Integer, Long>> allPaths =
+        MigrationUtils.loadPathsWithCountFromDfs(srcFs, inputPathsFilePath);
     Set<Path> donePaths = MigrationUtils.loadPathsFromDfs(srcFs, path, donePathsFilePath);
-    allPaths.removeAll(donePaths);
+    for (Path donePath : donePaths) {
+      allPaths.remove(donePath);
+    }
     if (allPaths.isEmpty()) {
       LOG.info("There's nothing to migrate.");
       emptyColdCycle++;
@@ -256,7 +306,7 @@ public class ProjectJob {
     // Reset emptyColdCycle if some data to migration is found
     emptyColdCycle = 0;
     MigrationJob.runBatchJob(conf, String.valueOf(workerThreads), allPaths, srcNs, dstNs,
-        routerAddr, false, donePathsFilePath, false);
+        routerAddr, false, donePathsFilePath, false, fileLimit, sizeLimit);
     srcFs.delete(coldContextFilePath);
   }
 
@@ -266,7 +316,7 @@ public class ProjectJob {
     AnalyzeJob.listAllFilePaths(conf, srcNs, path.toString(), inputPathsFilePath);
     Set<Path> allPaths = MigrationUtils.loadPathsFromDfs(srcFs, path, inputPathsFilePath);
     MigrationJob.runBatchJob(conf, String.valueOf(workerThreads), allPaths, srcNs, dstNs,
-        routerAddr, false, donePathsFilePath, true);
+        routerAddr, false, donePathsFilePath, true, 0, 0);
     cleanPathsFiles();
     srcFs.delete(hotContextFilePath);
   }
@@ -278,7 +328,7 @@ public class ProjectJob {
         new Path(donePathsFilePath.getParent(), donePathsFilePath.getName() + ".old");
     srcFs.delete(backupInputPathsFilePath);
     srcFs.delete(backupDonePathsFilePath);
-    srcFs.rename(inputPathsFilePath, backupDonePathsFilePath);
+    srcFs.rename(inputPathsFilePath, backupInputPathsFilePath);
     srcFs.rename(donePathsFilePath, backupDonePathsFilePath);
   }
 }

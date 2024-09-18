@@ -23,12 +23,19 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.RecursiveAction;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.commons.lang3.tuple.Triple;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
@@ -54,34 +61,32 @@ import org.slf4j.LoggerFactory;
 public class AnalyzeJob {
   private static final Logger LOG = LoggerFactory.getLogger(AnalyzeJob.class);
 
+  // HDFS stuff
   private final DistributedFileSystem router;
   private final DistributedFileSystem srcFs;
   private final DistributedFileSystem dstFs;
   private final Path input;
   private final Path output;
   private final long ms;
-  private final int concurrency;
-  /**
-   * List of tuples representing cold directories, to be populated during recursive traversal.
-   * The 3 values are (path, requirements, is empty dir).
-   * See {@link FileStatusWithColdRequirements} to see what values are in int[] requirements.
-   * <pre>
-   *   E.g. a path /projects/proj/a/b/c/d with requirements [3,7,2] means
-   *               /projects/proj/a/b/c need 2 children (/projects/proj/a/b/c/d being one of them)
-   *                                    to be cold for the path itself to be cold
-   *               /projects/proj/a/b   need 7 children to be cold for the path to be cold
-   *               /projects/proj/a     need 3 children to be cold
-   *               /projects/proj       is the input and will not be considered cold
-   * </pre>
-   * {@link Triple} are used instead of {@link FileStatusWithColdRequirements}
-   * when {@link FileStatusWithColdRequirements} objects already contain all necessary info
-   * to prevent OOM due to the extra memory usage by each {@link FileStatus} object,
-   * which is required during the traversal step but useless during the tree creation step.
-   */
-  private final List<Triple<String, int[], Boolean>> results;
 
-  public AnalyzeJob(String path, String srcNs, String dstNs, String fedNs, String threshold, Path output,
-      int concurrency, Configuration conf) throws IOException {
+  // Threading stuff
+  private final ExecutorService threadPool;
+  private final AtomicInteger pathsOngoing;
+
+  /**
+   * {@link ConcurrentLinkedQueue} of {@link RawNodeData} representing cold directories,
+   * to be populated during recursive traversal, and to be drained by {@link TreeProcessor}.
+   */
+  private final ConcurrentLinkedQueue<RawNodeData> results;
+  /** Latch to prevent {@link TreeProcessor} from prematurely quitting. */
+  private final CountDownLatch latch = new CountDownLatch(1);
+
+  // Logging stuff
+  private final AtomicInteger pathsChecked;
+  private volatile long lastProgressLog;
+
+  public AnalyzeJob(String path, String srcNs, String dstNs, String fedNs, String threshold,
+      Path output, int concurrency, Configuration conf) throws IOException {
     this.router = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + fedNs), conf);
     this.srcFs = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + srcNs), conf);
     if (!dstNs.equals(srcNs)) {
@@ -91,14 +96,19 @@ public class AnalyzeJob {
     }
     this.input = new Path(path);
     this.output = output;
-    this.results = new ArrayList<>();
+    this.results = new ConcurrentLinkedQueue<>();
     this.ms = Long.parseLong(threshold) * 86400 * 1000;
-    this.concurrency = concurrency;
+    this.pathsChecked = new AtomicInteger();
+    this.lastProgressLog = Time.monotonicNow();
+    this.threadPool = new ForkJoinPool(concurrency);
+    // One for the root path, one as a flag
+    this.pathsOngoing = new AtomicInteger(2);
     LOG.info("Analyzing path hdfs://{}{} with threshold {}, output {}", fedNs, path, threshold,
         output);
   }
 
-  public static int handleArgs(List<String> argsList, Configuration conf) throws IOException {
+  public static int handleArgs(List<String> argsList, Configuration conf)
+      throws IOException, InterruptedException {
     String path = StringUtils.popOptionWithArgument("-path", argsList);
     if (path == null) {
       System.err.println("-path option is required.");
@@ -139,62 +149,87 @@ public class AnalyzeJob {
   }
 
   /**
-   * Container class with {@link FileStatus} and the number of cold dirs
-   * of the same level to consider parent also a cold dir.
-   * <br>
-   * E.g. /base/a, /base/b, /base/file. /base/file is checked to be cold when
-   * getListing(/base) is called. If /base/a and /base/b are both cold, then /base
-   * can be considered cold. The augmented number stored by /base/a and /base/b is 2. After
-   * the recursive part involving getListing calls, reconstruct a filesystem tree and backtrack
-   * to create the minimal set of bottom level cold directories.
+   * Short-lived container class that contains the path, to be consumed by {@link TreeProcessor}.
+   * See {@link AnalyzeSubroutine} to see what data is stored by the arrays.
    */
-  static class FileStatusWithColdRequirements {
-    private final FileStatus status;
-    /** All requirements down to this inode */
+  static class RawNodeData {
+    private final String path;
     private final int[] requirements;
+    // Note: the next 2 arrays have 1 more element than int[] requirements
+    private final int[] fileCounts;
+    private final long[] fileSizes;
+    private final boolean isEmpty;
 
-    FileStatusWithColdRequirements(FileStatus status, int[] requirements) {
-      this.status = status;
+    RawNodeData(String path, int[] requirements, int[] fileCounts, long[] fileSizes,
+        boolean isEmpty) {
+      this.path = path;
       this.requirements = requirements;
+      this.fileCounts = fileCounts;
+      this.fileSizes = fileSizes;
+      this.isEmpty = isEmpty;
+    }
+
+    private void printDebug() {
+      LOG.debug("path={},reqs={},counts={},sizes={},empty={}", path, requirements, fileCounts,
+          fileSizes, isEmpty);
     }
   }
 
   /**
    * Recursively traverses through a subtree starting at {@link AnalyzeJob#input},
-   * populates {@link AnalyzeJob#results}. Once the traversal is done, reconstructs a filesystem
-   * tree containing only dirs in {@link AnalyzeJob#results} into a tree of {@link NodeWithCount}.
-   * Then collapses as many {@link NodeWithCount} as possible into parent nodes.
+   * populates {@link AnalyzeJob#results}.
+   * <br>
+   * int[] requirements is the number of cold dirs
+   * of the same level to consider parent also a cold dir.
    * <pre>
-   *   E.g. /projects/proj/a/b/c1/d1 requirements [3,3,2]
-   *        /projects/proj/a/b/c1/d2 requirements [3,3,2]
-   *        /projects/proj/a/b/c2    requirements [3,3]
-   *        /projects/proj/a/b/c3/d1 requirements [3,3,3]
-   *        /projects/proj/a/b/c3/d2 requirements [3,3,3]
-   *        /projects/proj/a/b/c3/d3 requirements [3,3,3]
-   *          can collapse into
-   *        /projects/proj/a/b/c1     requirements [3,3]
-   *        /projects/proj/a/b/c2     requirements [3,3]
-   *        /projects/proj/a/b/c3     requirements [3,3]
-   *          then into
-   *        /projects/proj/a/b        requirements [3]
+   *   E.g. a path /projects/proj/a/b/c/d with requirements [3,7,2] means
+   *               /projects/proj/a/b/c needs 2 children (/projects/proj/a/b/c/d being one of them)
+   *                                    to be cold for the path itself to be cold
+   *               /projects/proj/a/b   needs 7 children to be cold for the path to be cold
+   *               /projects/proj/a     needs 3 children to be cold
+   *               /projects/proj       is the input and will not be considered cold
+   * </pre>
+   * <br>
+   * int[] fileCounts and long[] fileSizes are similar to int[] requirements,
+   * the difference being these arrays contain the number/total size of files at each directory,
+   * not counting subdirs.
+   * <pre>
+   *   E.g. a path /projects/proj/a/b/c/d with fileCounts [5,0,100,200]
+   *                                       and fileSizes [1000,0,2000,5000] means
+   *               /projects/proj/a/b/c/d has 200 files and they add up to 5000 bytes
+   *               /projects/proj/a/b/c   has 100 files and they add up to 2000 bytes
+   *               /projects/proj/a/b     has no files
+   *               /projects/proj/a       has 5 files and they add up to 1000 bytes
+   *               /projects/proj         is excluded from this calculation
    * </pre>
    */
-  class AnalyzeSubroutine extends RecursiveAction {
+  class AnalyzeSubroutine implements Runnable {
 
-    private final FileStatusWithColdRequirements base;
+    String path;
+    long mTime;
+    int[] requirements;
+    int[] fileCounts;
+    long[] fileSizes;
 
-    AnalyzeSubroutine(FileStatusWithColdRequirements base) {
-      this.base = base;
+    AnalyzeSubroutine(String path, long mTime, int[] requirements, int[] fileCounts,
+        long[] fileSizes) {
+      this.path = path;
+      this.mTime = mTime;
+      this.requirements = requirements;
+      this.fileCounts = fileCounts;
+      this.fileSizes = fileSizes;
     }
 
     @Override
-    protected void compute() {
+    public void run() {
       FileStatus[] statuses;
       try {
-        statuses = router.listStatus(base.status.getPath());
+        statuses = router.listStatus(new Path(path));
       } catch (FileNotFoundException fnfe) {
         // Path disappeared during analysis job. Likely hot dir in this case.
-        LOG.info("Path {} not found", base.status.getPath());
+        LOG.info("Path {} not found", path);
+        countAndPrintProgress();
+        pathsOngoing.decrementAndGet();
         return;
       } catch (IOException e) {
         throw new RuntimeException(e);
@@ -202,52 +237,84 @@ public class AnalyzeJob {
 
       // Count all the cold files first
       int coldDirsNeeded = statuses.length;
+      int fileCount = 0;
+      long fileSize = 0;
       for (FileStatus status : statuses) {
-        if (status.isFile() && Time.now() - base.status.getModificationTime() > ms
+        if (status.isFile() && Time.now() - mTime > ms
             && Time.now() - status.getModificationTime() > ms) {
           coldDirsNeeded--;
+          fileCount++;
+          fileSize += status.getLen();
         }
       }
+
+      // Count progress here after checking the dir listing
+      countAndPrintProgress();
 
       // If everything is cold files, the dir is cold dir
       if (coldDirsNeeded == 0) {
-        synchronized (results) {
-          String pathStr = base.status.getPath().toUri().getPath();
-          results.add(Triple.of(pathStr, base.requirements, statuses.length == 0));
-        }
+        int[] currentFileCounts = new int[fileCounts.length + 1];
+        long[] currentFileSizes = new long[fileSizes.length + 1];
+        System.arraycopy(fileCounts, 0, currentFileCounts, 0, fileCounts.length);
+        System.arraycopy(fileSizes, 0, currentFileSizes, 0, fileSizes.length);
+        currentFileCounts[fileCounts.length] = fileCount;
+        currentFileSizes[fileSizes.length] = fileSize;
+        results.add(new RawNodeData(path, requirements, currentFileCounts, currentFileSizes,
+            statuses.length == 0));
+        pathsOngoing.decrementAndGet();
         return;
       }
 
-      List<AnalyzeSubroutine> subtasks = new ArrayList<>();
       for (FileStatus status : statuses) {
         if (!status.isFile()) {
-          int[] currentRequirements = new int[base.requirements.length + 1];
-          System.arraycopy(base.requirements, 0, currentRequirements, 0, base.requirements.length);
-          currentRequirements[base.requirements.length] = coldDirsNeeded;
-          subtasks.add(new AnalyzeSubroutine(
-              new FileStatusWithColdRequirements(status, currentRequirements)));
+          int[] currentRequirements = new int[requirements.length + 1];
+          int[] currentFileCounts = new int[fileCounts.length + 1];
+          long[] currentFileSizes = new long[fileSizes.length + 1];
+          System.arraycopy(requirements, 0, currentRequirements, 0, requirements.length);
+          System.arraycopy(fileCounts, 0, currentFileCounts, 0, fileCounts.length);
+          System.arraycopy(fileSizes, 0, currentFileSizes, 0, fileSizes.length);
+          currentRequirements[requirements.length] = coldDirsNeeded;
+          currentFileCounts[fileCounts.length] = fileCount;
+          currentFileSizes[fileSizes.length] = fileSize;
+          pathsOngoing.incrementAndGet();
+          threadPool.submit(new AnalyzeSubroutine(status.getPath().toUri().getPath(),
+              status.getModificationTime(), currentRequirements, currentFileCounts,
+              currentFileSizes));
         }
       }
-      invokeAll(subtasks);
+      pathsOngoing.decrementAndGet();
+    }
+
+    private void countAndPrintProgress() {
+      int count = pathsChecked.incrementAndGet();
+      if (count % 10000 == 0) {
+        long now = Time.monotonicNow();
+        LOG.info("{} paths checked, {}ms since last time.", count, now - lastProgressLog);
+        lastProgressLog = now;
+      }
     }
   }
 
-  public void execute() throws IOException {
-    ForkJoinPool p = new ForkJoinPool(concurrency);
-    RecursiveAction task = new AnalyzeSubroutine(
-        new FileStatusWithColdRequirements(router.getFileStatus(input), new int[0]));
-    p.execute(task);
-    task.join();
-    p.shutdown();
-
-    LOG.info("Collected {} cold paths", results.size());
-    minimizeBottomLevelDirs();
+  public void execute() throws IOException, InterruptedException {
+    FileStatus baseStatus = router.getFileStatus(input);
+    Runnable task = new AnalyzeSubroutine(baseStatus.getPath().toUri().getPath(),
+        baseStatus.getModificationTime(), new int[0], new int[0], new long[0]);
+    threadPool.execute(task);
+    TreeProcessor processor = new TreeProcessor();
+    processor.start();
+    pathsOngoing.decrementAndGet();
+    while (pathsOngoing.get() > 0) {
+      Thread.sleep(100);
+    }
+    latch.countDown();
+    processor.join();
+    threadPool.shutdown();
   }
 
   /**
    * Augmented node with an integer value indicating how many of its children nodes need to be
    * cold for the node itself to be cold. Do note that this value is different from
-   * {@link FileStatusWithColdRequirements} where the parent's requirement is stored
+   * {@link RawNodeData} where the parent's requirement is stored
    * in the child path instead for ease of value propagation during traversal, whereas this class
    * stores the requirement of a path directly in the node it represents for better code
    * readability.
@@ -266,14 +333,19 @@ public class AnalyzeJob {
   static class NodeWithCount {
     String name;
     int count;
+    int files;
+    long size;
     NodeWithCount parent;
     Map<String, NodeWithCount> children = null;
     boolean empty;
 
-    NodeWithCount(NodeWithCount parent, String name, int count, boolean empty) {
+    NodeWithCount(NodeWithCount parent, String name, int count, int files, long size,
+        boolean empty) {
       this.parent = parent;
       this.name = name;
       this.count = count;
+      this.files = files;
+      this.size = size;
       this.empty = empty;
     }
 
@@ -306,6 +378,10 @@ public class AnalyzeJob {
             && parent.parent.name.isEmpty()) {
           return;
         }
+        for (NodeWithCount child : children.values()) {
+          files += child.files;
+          size += child.size;
+        }
         children.clear();
         children = null;
         count = 0;
@@ -315,8 +391,8 @@ public class AnalyzeJob {
     /**
      * Adds a path to this node. Should only be called from the root "/" node.
      */
-    void addPath(String path, int[] requirements, boolean empty) {
-      String[] components = path.split("/");
+    void addPath(RawNodeData raw) {
+      String[] components = raw.path.split("/");
 
       NodeWithCount cur = this;
       for (int i = 1; i < components.length; i++) {
@@ -326,16 +402,21 @@ public class AnalyzeJob {
           cur.children = new HashMap<>();
         }
         cur = finalCur.children.compute(component,
-            (k, v) -> v == null ? new NodeWithCount(finalCur, component, -1, false) : v);
+            (k, v) -> v == null ? new NodeWithCount(finalCur, component, -1, 0, 0, false) : v);
       }
-      // Update leaf node only
-      cur.empty = empty;
+      // Update leaf node with some values
+      cur.empty = raw.isEmpty;
       cur.count = 0;
+      cur.files = raw.fileCounts[raw.fileCounts.length - 1];
+      cur.size = raw.fileSizes[raw.fileSizes.length - 1];
 
       // Backtrack to fill the counts
       cur = cur.parent;
-      for (int i = requirements.length - 1; i >= 0; i--) {
-        cur.count = requirements[i];
+      for (int i = raw.requirements.length - 1; i >= 0; i--) {
+        cur.count = raw.requirements[i];
+        // Note: fileCounts and fileSizes have 1 more element than requirements
+        cur.files = raw.fileCounts[i];
+        cur.size = raw.fileSizes[i];
         cur = cur.parent;
       }
     }
@@ -370,16 +451,14 @@ public class AnalyzeJob {
       }
     }
 
-    StringBuilder getAllLeafNodes(StringBuilder result, List<String> components)
-        throws IOException {
+    Map<String, Pair<Integer, Long>> getAllLeafNodes(Map<String, Pair<Integer, Long>> result,
+        List<String> components) {
       // Do not include empty dirs
       if (empty) {
         return result;
       }
       if (count == 0) {
-        result.append("/");
-        result.append(String.join("/", components));
-        result.append("\n");
+        result.put("/" + String.join("/", components), Pair.of(files, size));
       } else {
         for (NodeWithCount node : children.values()) {
           List<String> subdirComponents = new ArrayList<>(components);
@@ -391,35 +470,145 @@ public class AnalyzeJob {
     }
   }
 
-  private void minimizeBottomLevelDirs() throws IOException {
-    // Reconstruct tree
-    NodeWithCount root = new NodeWithCount(null, "", -1, false);
-    for (Triple<String, int[], Boolean> path : results) {
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("path={},reqs={},empty={}", path.getLeft(), path.getMiddle(), path.getRight());
+  /**
+   * Consumer class that keeps polling from {@link AnalyzeJob#results}, reconstructs a tree
+   * of {@link NodeWithCount} to create the minimal set of cold directory. First, reconstructs
+   * a full tree then collapses as many {@link NodeWithCount} as possible into parent nodes.
+   * <pre>
+   *   E.g. /projects/proj/a/b/c1/d1 requirements [3,3,2]
+   *        /projects/proj/a/b/c1/d2 requirements [3,3,2]
+   *        /projects/proj/a/b/c2    requirements [3,3]
+   *        /projects/proj/a/b/c3/d1 requirements [3,3,3]
+   *        /projects/proj/a/b/c3/d2 requirements [3,3,3]
+   *        /projects/proj/a/b/c3/d3 requirements [3,3,3]
+   *          can collapse into
+   *        /projects/proj/a/b/c1     requirements [3,3]
+   *        /projects/proj/a/b/c2     requirements [3,3]
+   *        /projects/proj/a/b/c3     requirements [3,3]
+   *          then into
+   *        /projects/proj/a/b        requirements [3]
+   * </pre>
+   */
+  class TreeProcessor extends Thread {
+
+    private final static char DELIMITER = '|';
+    private final NodeWithCount root;
+
+    TreeProcessor() {
+      root = new NodeWithCount(null, "", -1, 0, 0, false);
+    }
+
+    @Override
+    public void run() {
+      try {
+        consumeQueue();
+        waitForTesting();
+        excludeUCFiles();
+        minimizeTree();
+      } catch (Exception e) {
+        throw new RuntimeException(e);
       }
-      root.addPath(path.getLeft(), path.getMiddle(), path.getRight());
     }
 
-    waitForTesting();
-
-    RemoteIterator<OpenFileEntry> ite =
-        srcFs.listOpenFiles(EnumSet.of(OpenFilesIterator.OpenFilesType.ALL_OPEN_FILES),
-            input.toString());
-    while (ite.hasNext()) {
-      root.incrRequirement(ite.next());
+    private void consumeQueue() throws InterruptedException {
+      // As long as traversal is still going on, latch is not empty, keep polling for new data
+      int total = 0;
+      while (latch.getCount() > 0 || !results.isEmpty()) {
+        RawNodeData node = results.poll();
+        if (node == null) {
+          Thread.sleep(100);
+          continue;
+        }
+        total++;
+        if (LOG.isDebugEnabled()) {
+          node.printDebug();
+        }
+        root.addPath(node);
+      }
+      LOG.info("Collected {} cold paths", total);
     }
-    if (dstFs != null) {
-      ite = dstFs.listOpenFiles(EnumSet.of(OpenFilesIterator.OpenFilesType.ALL_OPEN_FILES),
-          input.toString());
+
+    private void excludeUCFiles() throws IOException {
+      RemoteIterator<OpenFileEntry> ite =
+          srcFs.listOpenFiles(EnumSet.of(OpenFilesIterator.OpenFilesType.ALL_OPEN_FILES),
+              input.toString());
       while (ite.hasNext()) {
         root.incrRequirement(ite.next());
       }
+      if (dstFs != null) {
+        ite = dstFs.listOpenFiles(EnumSet.of(OpenFilesIterator.OpenFilesType.ALL_OPEN_FILES),
+            input.toString());
+        while (ite.hasNext()) {
+          root.incrRequirement(ite.next());
+        }
+      }
     }
-    // Recursively squash the tree, starting from root
-    root.minimizeNode();
-    try (FSDataOutputStream os = srcFs.create(output)) {
-      os.writeBytes(root.getAllLeafNodes(new StringBuilder(), new ArrayList<>()).toString());
+
+    /**
+     * Recursively squashes the tree, starting from the root. Ignores directories that no longer
+     * exist on source namespace.
+     */
+    private void minimizeTree() throws IOException, ExecutionException, InterruptedException {
+      root.minimizeNode();
+      Map<String, Pair<Integer, Long>> allColdDirs = getColdDirsOnSrc();
+
+      try (FSDataOutputStream os = srcFs.create(output)) {
+        for (Map.Entry<String, Pair<Integer, Long>> coldDir : allColdDirs.entrySet()) {
+          os.writeBytes(String.format("%s|%d|%d%n", coldDir.getKey(), coldDir.getValue().getLeft(),
+              coldDir.getValue().getRight()));
+        }
+      }
+    }
+
+    /**
+     * Reads from the .dst_only file for paths that no longer exist on the source namespace,
+     * then checks new cold dirs if they exist on source ns or not. If not, removes from the
+     * list of cold dirs and writes to .dst_only file.
+     * @return list of cold dirs that exist on source namespace
+     */
+    private Map<String, Pair<Integer, Long>> getColdDirsOnSrc()
+        throws IOException, InterruptedException, ExecutionException {
+      Map<String, Pair<Integer, Long>> allColdDirs =
+          root.getAllLeafNodes(new HashMap<>(), new ArrayList<>());
+      Set<String> toRemove = new HashSet<>();
+
+      Path dstOnlyFilePath = new Path(output.getParent(), output.getName() + ".dst_only");
+      if (srcFs.exists(dstOnlyFilePath)) {
+        for (Path path : MigrationUtils.loadPathsFromDfs(srcFs, null, dstOnlyFilePath)) {
+          toRemove.add(path.toUri().getPath());
+        }
+      }
+
+      List<Future<Void>> futures = new ArrayList<>();
+      for (String coldDir : allColdDirs.keySet()) {
+        if (toRemove.contains(coldDir)) {
+          continue;
+        }
+        futures.add(threadPool.submit(() -> {
+          try {
+            if (!srcFs.exists(new Path(coldDir))) {
+              toRemove.add(coldDir);
+            }
+            return null;
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+        }));
+      }
+      for (Future<Void> future : futures) {
+        future.get();
+      }
+      try (FSDataOutputStream os = srcFs.create(dstOnlyFilePath)) {
+        for (String dstOnlyDir : toRemove) {
+          os.writeBytes(dstOnlyDir);
+          os.write('\n');
+        }
+      }
+
+      for (String dir : toRemove) {
+        allColdDirs.remove(dir);
+      }
+      return allColdDirs;
     }
   }
 

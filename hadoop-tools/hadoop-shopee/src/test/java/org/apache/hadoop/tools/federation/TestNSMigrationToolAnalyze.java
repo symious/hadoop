@@ -85,7 +85,7 @@ public class TestNSMigrationToolAnalyze {
                 routerContext.getConf());
         job.setLock(latch);
         job.execute();
-      } catch (IOException e) {
+      } catch (IOException | InterruptedException e) {
         throw new RuntimeException(e);
       }
     });

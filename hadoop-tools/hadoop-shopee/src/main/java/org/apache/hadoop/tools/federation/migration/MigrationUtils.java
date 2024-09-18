@@ -23,9 +23,12 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
@@ -69,8 +72,38 @@ public class MigrationUtils {
       is.close();
       String fullString = new String(fullBytes);
       for (String split : fullString.split("\n")) {
+        split = split.split("\\|")[0].trim();
+        if (split.isEmpty()) {
+          continue;
+        }
         paths.add(new Path(split));
       }
+    }
+    return paths;
+  }
+
+  public static Map<Path, Pair<Integer, Long>> loadPathsWithCountFromDfs(DistributedFileSystem dfs,
+      Path inputFilePath) throws IOException {
+    Map<Path, Pair<Integer, Long>> paths = new HashMap<>();
+    FSDataInputStream is;
+    try {
+      is = dfs.open(inputFilePath);
+    } catch (FileNotFoundException fnfe) {
+      return paths;
+    }
+    byte[] fullBytes = readFullyToByteArray(is);
+    is.close();
+    String fullString = new String(fullBytes);
+    for (String line : fullString.split("\n")) {
+      line = line.trim();
+      if (line.isEmpty()) {
+        continue;
+      }
+      String[] split = line.split("\\|");
+      String path = split[0];
+      int fileCount = Integer.parseInt(split[1]);
+      long size = Long.parseLong(split[2]);
+      paths.put(new Path(path), Pair.of(fileCount, size));
     }
     return paths;
   }

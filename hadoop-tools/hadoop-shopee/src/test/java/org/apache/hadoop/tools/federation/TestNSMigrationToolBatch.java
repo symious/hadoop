@@ -18,8 +18,10 @@
 package org.apache.hadoop.tools.federation;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.Set;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.FileSystem;
@@ -42,8 +44,9 @@ import org.junit.Test;
 
 import static org.apache.hadoop.tools.federation.migration.MigrationJob.toggleSkipTopTwoLevelsForTesting;
 import static org.apache.hadoop.tools.federation.migration.MigrationUtils.loadPathsFromDfs;
+import static org.apache.hadoop.tools.federation.migration.MigrationUtils.loadPathsWithCountFromDfs;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotNull;
 
 public class TestNSMigrationToolBatch {
   final private static int NUM_SUBCLUSTERS = 2;
@@ -97,20 +100,20 @@ public class TestNSMigrationToolBatch {
     new AnalyzeJob("/testBatch", "ns0", "ns1", "ns0", "10", tempDirsList, 1, routerContext.getConf()).execute();
 
     DistributedFileSystem fs = (DistributedFileSystem) routerContext.getFileSystem();
-    Set<Path> coldPaths = loadPathsFromDfs(fs, basePath, tempDirsList);
+    Map<Path, Pair<Integer, Long>> coldPaths = loadPathsWithCountFromDfs(fs, tempDirsList);
     assertEquals(2 + 2 * 2, coldPaths.size());
-    assertTrue(coldPaths.contains(new Path("/testBatch/0")));
-    assertTrue(coldPaths.contains(new Path("/testBatch/1")));
-    assertTrue(coldPaths.contains(new Path("/testBatch/2/0")));
-    assertTrue(coldPaths.contains(new Path("/testBatch/2/1")));
-    assertTrue(coldPaths.contains(new Path("/testBatch/3/0")));
-    assertTrue(coldPaths.contains(new Path("/testBatch/3/1")));
+    assertNotNull(coldPaths.get(new Path("/testBatch/0")));
+    assertNotNull(coldPaths.get(new Path("/testBatch/1")));
+    assertNotNull(coldPaths.get(new Path("/testBatch/2/0")));
+    assertNotNull(coldPaths.get(new Path("/testBatch/2/1")));
+    assertNotNull(coldPaths.get(new Path("/testBatch/3/0")));
+    assertNotNull(coldPaths.get(new Path("/testBatch/3/1")));
 
     Path migratedPaths = new Path("/tmp/output.txt");
 
     // Cold migration
     MigrationJob.runBatchJob(routerContext.getConf(), "6", coldPaths, "ns0", "ns1",
-        routerAdminAddress, false, migratedPaths, false);
+        routerAdminAddress, false, migratedPaths, false, 0, 0);
 
     // Remaining data: One fully hot dir with 5 hot subdirs, 2 partially hot dirs with 3 hot subdirs
     assertEquals(5 + 3 * 2, nnFs0.getContentSummary(basePath).getFileCount());
@@ -119,7 +122,7 @@ public class TestNSMigrationToolBatch {
     Set<Path> hotPaths = loadPathsFromDfs(fs, basePath, tempDirsList);
     // Hot migration
     MigrationJob.runBatchJob(routerContext.getConf(), "6", hotPaths, "ns0", "ns1",
-        routerAdminAddress, false, migratedPaths, true);
+        routerAdminAddress, false, migratedPaths, true, 0, 0);
 
     // Everything has been moved
     assertEquals(25, nnFs1.getContentSummary(basePath).getFileCount());
@@ -131,10 +134,10 @@ public class TestNSMigrationToolBatch {
     setupTest(basePath);
     // Cold run
     new ProjectJob(basePath.toString(), "test", "ns0", "ns1", "ns0", routerAdminAddress, 8, 6, 100,
-        10, false, routerContext.getConf()).execute();
+        10, false, 0, 0, routerContext.getConf()).execute();
     // Hot run
     new ProjectJob(basePath.toString(), "test", "ns0", "ns1", "ns0", routerAdminAddress, 8, 6, 0,
-        10, true, routerContext.getConf()).execute();
+        10, true, 0, 0, routerContext.getConf()).execute();
     assertEquals(25, nnFs1.getContentSummary(basePath).getFileCount());
   }
 
