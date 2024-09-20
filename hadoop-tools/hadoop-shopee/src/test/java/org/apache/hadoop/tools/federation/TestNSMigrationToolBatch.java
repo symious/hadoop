@@ -24,6 +24,7 @@ import java.util.Set;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsAction;
@@ -139,6 +140,17 @@ public class TestNSMigrationToolBatch {
     new ProjectJob(basePath.toString(), "test", "ns0", "ns1", "ns0", routerAdminAddress, 8, 6, 0,
         10, true, 0, 0, routerContext.getConf()).execute();
     assertEquals(25, nnFs1.getContentSummary(basePath).getFileCount());
+
+    for (int i = 0; i < 5; i++) {
+      Path outerPath = new Path(basePath, String.valueOf(i));
+      for (int j = 0; j < 5; j++) {
+        Path dirPath = new Path(outerPath, String.valueOf(j));
+        Path filePath = new Path(dirPath, "file");
+        FileStatus fileStatus = nnFs1.getFileStatus(filePath);
+        assertEquals("alice", fileStatus.getOwner());
+        assertEquals("bob", fileStatus.getGroup());
+      }
+    }
   }
 
   private static void setupTest(Path basePath) throws IOException {
@@ -150,6 +162,7 @@ public class TestNSMigrationToolBatch {
         Path filePath = new Path(dirPath, "file");
         nnFs0.mkdirs(dirPath, new FsPermission(FsAction.ALL, FsAction.NONE, FsAction.NONE));
         nnFs0.create(filePath).close();
+        nnFs0.setOwner(filePath, "alice", "bob");
         // First 2 dirs are fully cold, next 2 dirs are partially cold
         if (i < 2 || i < 4 && j < 2) {
           nnFs0.setTimes(dirPath, oldTime, -1);

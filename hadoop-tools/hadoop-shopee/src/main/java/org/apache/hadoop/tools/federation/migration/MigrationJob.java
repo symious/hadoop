@@ -600,7 +600,20 @@ public class MigrationJob {
       return false;
     }
 
-    return dstFs.rename(tempPath, context.path);
+    FileStatus sourceStatus = srcFs.getFileStatus(context.path);
+    dstFs.setOwner(tempPath, sourceStatus.getOwner(), sourceStatus.getGroup());
+    dstFs.setAcl(tempPath, srcFs.getAclStatus(context.path).getEntries());
+    Map<String, byte[]> srcXAttrs = srcFs.getXAttrs(context.path);
+    for (Map.Entry<String, byte[]> entry : srcXAttrs.entrySet()) {
+      String xattrName = entry.getKey();
+      dstFs.setXAttr(tempPath, xattrName, entry.getValue());
+    }
+    if (dstFs.rename(tempPath, context.path)) {
+      dstFs.setTimes(context.path, sourceStatus.getModificationTime(), sourceStatus.getAccessTime());
+      return true;
+    } else {
+      return false;
+    }
   }
 
   private boolean checkEqualFileStatuses(FileStatus srcStatus, FileStatus dstStatus) {

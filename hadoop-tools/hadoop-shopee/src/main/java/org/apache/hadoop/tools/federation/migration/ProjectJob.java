@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.hadoop.util.Time;
 import org.apache.log4j.Appender;
 import org.apache.log4j.ConsoleAppender;
 import org.apache.log4j.Layout;
@@ -322,10 +323,11 @@ public class ProjectJob {
   }
 
   private void cleanPathsFiles() throws IOException {
+    String suffix = ".old" + Time.now();
     Path backupInputPathsFilePath =
-        new Path(inputPathsFilePath.getParent(), inputPathsFilePath.getName() + ".old");
+        new Path(inputPathsFilePath.getParent(), inputPathsFilePath.getName() + suffix);
     Path backupDonePathsFilePath =
-        new Path(donePathsFilePath.getParent(), donePathsFilePath.getName() + ".old");
+        new Path(donePathsFilePath.getParent(), donePathsFilePath.getName() + suffix);
     srcFs.delete(backupInputPathsFilePath);
     srcFs.delete(backupDonePathsFilePath);
     srcFs.rename(inputPathsFilePath, backupInputPathsFilePath);
