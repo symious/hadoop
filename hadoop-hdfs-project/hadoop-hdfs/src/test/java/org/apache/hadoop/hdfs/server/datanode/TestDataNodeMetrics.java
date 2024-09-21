@@ -30,7 +30,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.management.ManagementFactory;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -42,6 +44,7 @@ import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 
 import net.jcip.annotations.NotThreadSafe;
 import org.apache.hadoop.hdfs.MiniDFSNNTopology;
+import org.eclipse.jetty.util.ajax.JSON;
 import org.mockito.stubbing.Answer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -663,6 +666,34 @@ public class TestDataNodeMetrics {
           "ReadsFromLocalClient",
           "LocalBytesRead"));
       assertZeroLocalityMetrics(rb, excluded);
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
+
+  @Test
+  public void testBPActorNumMetrics() throws IOException {
+    Configuration conf = new HdfsConfiguration();
+    SimulatedFSDataset.setFactory(conf);
+    MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).build();
+    try {
+      cluster.waitActive();
+      List<DataNode> datanodes = cluster.getDataNodes();
+      assertEquals(datanodes.size(), 1);
+      DataNode datanode = datanodes.get(0);
+      MetricsRecordBuilder rb = getMetrics(datanode.getMetrics().name());
+      int actualTotalBPActorNum = MetricsAsserts.getIntGauge(
+          "TotalBPActorNum", rb);
+      int actualActiveBPActorNum = MetricsAsserts.getIntGauge(
+          "AliveBPActorNum", rb);
+      int actualInactiveBPActorNum = MetricsAsserts.getIntGauge(
+          "DeadBPActorNum", rb);
+      //MiniDFSCluster will create and active only one BPActor.
+      assertEquals(1, actualTotalBPActorNum);
+      assertEquals(1, actualActiveBPActorNum);
+      assertEquals(0, actualInactiveBPActorNum);
     } finally {
       if (cluster != null) {
         cluster.shutdown();

@@ -22,6 +22,7 @@ import java.net.InetSocketAddress;
 import java.security.PrivilegedExceptionAction;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
@@ -53,6 +54,8 @@ class BlockPoolManager {
       new CopyOnWriteArrayList<>();
 
   private final DataNode dn;
+  private int totalBPActorCount;
+  private int deadBPActorCount;
 
   //This lock is used only to ensure exclusion of refreshNamenodes
   private final Object refreshNamenodesLock = new Object();
@@ -168,6 +171,7 @@ class BlockPoolManager {
 
     synchronized (refreshNamenodesLock) {
       doRefreshNamenodes(newAddressMap, newLifelineAddressMap);
+      doFreshBPActorNumInfo(newAddressMap);
     }
   }
   
@@ -287,6 +291,49 @@ class BlockPoolManager {
           throw ioe;
         }
       }
+    }
+  }
+
+  private void doFreshBPActorNumInfo(Map<String, Map<String, InetSocketAddress>> addrMap) {
+    assert Thread.holdsLock(refreshNamenodesLock);
+    totalBPActorCount = 0;
+    AtomicInteger tmpTotalBPActorCount = new AtomicInteger();
+    addrMap.forEach((k, v) -> tmpTotalBPActorCount.addAndGet(v.size()));
+    totalBPActorCount = tmpTotalBPActorCount.get();
+  }
+
+  public int getTotalBPActorCount() {
+    synchronized (refreshNamenodesLock) {
+      LOG.debug("BlockPoolManager has {} TotalBPActor", totalBPActorCount);
+      return totalBPActorCount;
+    }
+  }
+
+  public int getAliveBPActorCount() {
+    synchronized (refreshNamenodesLock) {
+      //reset aliveBPActorCount
+      int liveActors = 0;
+      for (BPOfferService service : dn.getAllBpOs()) {
+        for (BPServiceActor actor : service.getBPServiceActors()) {
+          if (actor.isAlive()) {
+            liveActors++;
+          }
+        }
+      }
+      LOG.debug("BlockPoolManager has {} AliveBPActor", liveActors);
+      this.deadBPActorCount = this.totalBPActorCount - liveActors;
+      return liveActors;
+    }
+  }
+
+  public int getDeadBPActorCount() {
+    synchronized (refreshNamenodesLock) {
+      if (this.deadBPActorCount < 0) {
+        LOG.warn("The deadBPActorCounter is {} <= 0, ignore it first.", this.deadBPActorCount);
+        return 0;
+      }
+      LOG.debug("BlockPoolManager has {} DeadBPActor", deadBPActorCount);
+      return deadBPActorCount;
     }
   }
 

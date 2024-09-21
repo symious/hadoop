@@ -2126,7 +2126,7 @@ public class DataNode extends ReconfigurableBase
     LOG.info("supergroup = {}", supergroup);
     initIpcServer();
 
-    metrics = DataNodeMetrics.create(getConf(), getDisplayName(), this.switchMapping);
+    metrics = DataNodeMetrics.create(getConf(), getDisplayName(), this);
     // Metrics is only initialized here. Try to attach metrics to data transceiver server throttlers
     if (this.dataXceiverServer != null) {
       xserver.tryAttachThrottlerMetrics();
@@ -3594,6 +3594,10 @@ public class DataNode extends ReconfigurableBase
     return StartupOption.getEnum(value);
   }
 
+  public DNSToSwitchMapping getSwitchMapping() {
+    return this.switchMapping;
+  }
+
   /**
    * This methods  arranges for the data node to send 
    * the block report at the next heartbeat.
@@ -3930,6 +3934,48 @@ public class DataNode extends ReconfigurableBase
   @Override
   public boolean isSecurityEnabled() {
     return UserGroupInformation.isSecurityEnabled();
+  }
+
+  /**
+   * Gets number of total BPServiceActors
+   * @return number of total BPServiceActors.
+   */
+  public int getTotalBPActorNum() {
+    if (blockPoolManager != null) {
+      return blockPoolManager.getTotalBPActorCount();
+    } else {
+      LOG.debug("Datanode : {} 's blockPoolManager is null, so TotalBPActorNum is 0",
+          this.getClass().getName());
+      return 0;
+    }
+  }
+
+  /**
+   * Gets number of alive BPServiceActors
+   * @return number of alive BPServiceActors.
+   */
+  public int getAliveBPActorNum() {
+    if (blockPoolManager != null) {
+      return blockPoolManager.getAliveBPActorCount();
+    } else {
+      LOG.debug("Datanode : {} 's BlockPoolManager is null, so AliveBPActorNum is 0",
+          this.getClass().getName());
+      return 0;
+    }
+  }
+
+  /**
+   * Gets number of dead BPServiceActors
+   * @return number of dead BPServiceActors.
+   */
+  public int getDeadBPActorNum() {
+    if (blockPoolManager != null) {
+      return blockPoolManager.getDeadBPActorCount();
+    } else {
+      LOG.debug("Datanode : {} 's BlockPoolManager is null, so DeadBPActorNum is 0",
+          this.getClass().getName());
+      return 0;
+    }
   }
 
   public void refreshNamenodes(Configuration conf) throws IOException {

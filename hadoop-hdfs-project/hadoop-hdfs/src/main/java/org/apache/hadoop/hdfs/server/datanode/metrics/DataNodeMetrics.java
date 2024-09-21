@@ -238,13 +238,14 @@ public class DataNodeMetrics {
 
   final String name;
   JvmMetrics jvmMetrics = null;
+  private final DataNode dataNode;
   private final DNSToSwitchMapping dnsToSwitchMapping;
   private DataNodeUsageReportUtil dnUsageReportUtil;
 
   private long[] bandwidths = new long[3];
 
   public DataNodeMetrics(String name, String sessionId, int[] intervals,
-      final JvmMetrics jvmMetrics, final DNSToSwitchMapping switchMapping) {
+      final JvmMetrics jvmMetrics, final DataNode dataNode) {
     this.name = name;
     this.jvmMetrics = jvmMetrics;    
     registry.tag(SessionId, sessionId);
@@ -290,11 +291,16 @@ public class DataNodeMetrics {
           "Time between the RamDisk block write and disk persist in ms",
           "ops", "latency", interval);
     }
-    this.dnsToSwitchMapping = switchMapping;
+    this.dataNode = dataNode;
+    if (this.dataNode != null) {
+      this.dnsToSwitchMapping = dataNode.getSwitchMapping();
+    } else {
+      this.dnsToSwitchMapping = null;
+    }
   }
 
   public static DataNodeMetrics create(Configuration conf,
-      String dnName, DNSToSwitchMapping switchMapping) {
+      String dnName, DataNode dataNode) {
     String sessionId = conf.get(DFSConfigKeys.DFS_METRICS_SESSION_ID_KEY);
     MetricsSystem ms = DefaultMetricsSystem.instance();
     JvmMetrics jm = JvmMetrics.create("DataNode", sessionId, ms);
@@ -306,7 +312,7 @@ public class DataNodeMetrics {
     int[] intervals = conf.getInts(DFSConfigKeys.DFS_METRICS_PERCENTILES_INTERVALS_KEY);
     
     return ms.register(name, null, new DataNodeMetrics(name, sessionId,
-        intervals, jm, switchMapping));
+        intervals, jm, dataNode));
   }
 
   public String name() { return name; }
@@ -964,6 +970,39 @@ public class DataNodeMetrics {
     } else {
       LOG.debug("dnsToSwitchMapping : {} does not support logging unknown topologies num",
           dnsToSwitchMapping.getClass().getName());
+      return 0;
+    }
+  }
+
+  @Metric({"TotalBPActorNum", "Number of total BPServiceActors"})
+  public int getTotalBPActorNum() {
+    if (dataNode != null) {
+      return dataNode.getTotalBPActorNum();
+    } else {
+      LOG.debug("DataNodeMetric : {}'s DataNode is null, can not get totalBPActorNum",
+          this.getClass().getName());
+      return 0;
+    }
+  }
+
+  @Metric({"AliveBPActorNum", "Number of alive BPServiceActors"})
+  public int getAliveBPActorNum() {
+    if (dataNode != null) {
+      return dataNode.getAliveBPActorNum();
+    } else {
+      LOG.debug("DataNodeMetric : {}'s DataNode is null, can not get AliveBPActorNum",
+          this.getClass().getName());
+      return 0;
+    }
+  }
+
+  @Metric({"DeadBPActorNum", "Number of dead BPServiceActors"})
+  public int getDeadBPActorNum() {
+    if (dataNode != null) {
+      return dataNode.getDeadBPActorNum();
+    } else {
+      LOG.debug("DataNodeMetric : {}'s DataNode is null, can not get DeadBPActorNum",
+          this.getClass().getName());
       return 0;
     }
   }
