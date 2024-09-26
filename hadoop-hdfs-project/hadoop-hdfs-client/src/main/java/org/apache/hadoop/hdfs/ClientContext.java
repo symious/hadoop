@@ -221,11 +221,11 @@ public class ClientContext {
     this.deadNodeDetectionEnabled = conf.isDeadNodeDetectionEnabled();
     this.avoidSlowDataNodesForRead = conf.isAvoidSlowDataNodesForReadEnabled();
     this.avoidSlowDataNodesForReadEC = conf.isAvoidSlowDataNodesForReadECEnabled();
-    if((avoidSlowDataNodesForRead || avoidSlowDataNodesForReadEC) && slowNodeCache == null) {
-      LOG.info("Initialize SlowNodeCache slowNodeCacheExpiryMillis:{}, slowNodeCacheSize:{}."
-          ,conf.getSlowNodeCacheExpiryMillis(), conf.getSlowNodeCacheSize());
-      slowNodeCache = new SlowNodeCacheImpl(conf.getSlowNodeCacheExpiryMillis(),
-          conf.getSlowNodeCacheSize());
+    if ((avoidSlowDataNodesForRead || avoidSlowDataNodesForReadEC) && slowNodeCache == null) {
+      LOG.debug("Initialize SlowNodeCache slowNodeCacheExpiryMillis:{}, slowNodeCacheSize:{}.",
+          conf.getSlowNodeCacheExpiryMillis(), conf.getSlowNodeCacheSize());
+      slowNodeCache =
+          new SlowNodeCacheImpl(conf.getSlowNodeCacheExpiryMillis(), conf.getSlowNodeCacheSize());
     }
     initTopologyResolution(config);
   }
