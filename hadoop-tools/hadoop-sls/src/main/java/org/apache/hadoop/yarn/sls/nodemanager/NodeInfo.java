@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
@@ -50,7 +51,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.Scheduli
 @Private
 @Unstable
 public class NodeInfo {
-  private static int NODE_ID = 0;
+  private static AtomicInteger NODE_ID = new AtomicInteger(0);
 
   public static NodeId newNodeID(String host, int port) {
     return NodeId.newInstance(host, port);
@@ -302,6 +303,6 @@ public class NodeInfo {
   
   public static RMNode newNodeInfo(String rackName, String hostName,
                               final Resource resource) {
-    return newNodeInfo(rackName, hostName, resource, NODE_ID++);
+    return newNodeInfo(rackName, hostName, resource, NODE_ID.getAndIncrement());
   }
 }

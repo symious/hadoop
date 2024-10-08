@@ -246,7 +246,7 @@ public class MockAMRunner extends Configured implements Tool {
       this.appId = rmClient.getNewApplication(request).getApplicationId();
       ResourceRequest rr = Records.newRecord(ResourceRequest.class);
       rr.setCapability(Resource.newInstance(1024, 1));
-      rr.setNumContainers(15);
+      rr.setNumContainers(5);
       rr.setResourceName(ResourceRequest.ANY);
       rr.setPriority(Priority.newInstance(5));
       rr.setAllocationRequestId(0);

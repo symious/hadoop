@@ -58,7 +58,7 @@ public class MockNMRunner extends Configured
   private List<Integer> weightsList = new ArrayList<>();
   private static Random random = new Random();
 
-  private Map<String, MockNM> mockNMMap = new HashMap<>();
+  private Map<String, MockNM> mockNMMap = new ConcurrentHashMap<>();
 
   public final static Logger LOG = LoggerFactory.getLogger(MockNMRunner.class);
 
@@ -92,7 +92,7 @@ public class MockNMRunner extends Configured
       getConf().set("yarn.resourcemanager.resource-tracker.address", rmAddress);
       getConf().setBoolean("yarn.resourcemanager.ha.enabled", false);
     }
-    getConf().setLong("yarn.resourcemanager.connect.retry-interval.ms", 1000L);
+    getConf().setLong("yarn.resourcemanager.connect.retry-interval.ms", 15000L);
 
     if (heartbeatInterval > 0) {
       getConf()
@@ -113,7 +113,7 @@ public class MockNMRunner extends Configured
                 new MockNM(getConf(), finalI, connectAddress, labelSet,
                     weightsList);
             mockNMMap.put(mockNM.node.getNodeID().toString(), mockNM);
-            LOG.info("XYF: node.getHostName(): " + mockNM.node.getHostName());
+            LOG.info("Run node: " + mockNM.node.getNodeID());
             int heartbeatInterval = getConf()
                 .getInt(SLSConfiguration.NM_HEARTBEAT_INTERVAL_MS,
                     SLSConfiguration.NM_HEARTBEAT_INTERVAL_MS_DEFAULT);
@@ -279,6 +279,7 @@ public class MockNMRunner extends Configured
       if (response.getNodeAction() == NodeAction.SHUTDOWN) {
         LOG.info("register NM shutdown");
       }
+      LOG.info(node.getNodeID() + " registered.");
     }
 
     public int getIndex(int random) {
@@ -329,7 +330,7 @@ public class MockNMRunner extends Configured
       beatRequest.setLastKnownContainerTokenMasterKey(containerTokenKey);
       NodeStatus ns = Records.newRecord(NodeStatus.class);
       ns.setNodeId(node.getNodeID());
-      ns.setResponseId(responseId++);
+      ns.setResponseId(responseId);
       ns.setNodeHealthStatus(NodeHealthStatus.newInstance(true, "", 0));
 
       ResourceUtilization resourceUtilization =
@@ -342,15 +343,21 @@ public class MockNMRunner extends Configured
       beatRequest.setNodeStatus(ns);
       NodeHeartbeatResponse beatResponse =
           resourceTracker.nodeHeartbeat(beatRequest);
+      if (beatResponse.getNodeAction() == NodeAction.NORMAL) {
+          responseId = beatResponse.getResponseId();
+          setRepeatInterval(beatResponse.getNextHeartBeatInterval());
+      }
+
       if (beatResponse.getNodeAction() == NodeAction.SHUTDOWN) {
         LOG.info("hearbeat NM shutdown");
       }
 
       if (beatResponse.getNodeAction() == NodeAction.RESYNC) {
-        LOG.info("hearbeat NM resync");
+        LOG.info("hearbeat NM resync " + node.getNodeID());
         responseId = 0;
-        LOG.info("reregister start");
+        LOG.info("reregister start " + node.getNodeID());
         List<NMContainerStatus> containerReports = getNMContainerStatuses();
+        req.getNMContainerStatuses().clear();
         req.setContainerStatuses(containerReports);
         RegisterNodeManagerResponse response =
             resourceTracker.registerNodeManager(req);
@@ -359,7 +366,7 @@ public class MockNMRunner extends Configured
         if (response.getNodeAction() == NodeAction.SHUTDOWN) {
           LOG.info("register NM shutdown");
         }
-        LOG.info("reregister end");
+        LOG.info("reregister end " + node.getNodeID());
       }
     }
 

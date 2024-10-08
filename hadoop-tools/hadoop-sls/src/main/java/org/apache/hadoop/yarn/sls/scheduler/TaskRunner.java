@@ -82,6 +82,10 @@ public class TaskRunner {
       this.queue = queue;
     }
 
+    public void setRepeatInterval(long repeatInterval) {
+      this.repeatInterval = repeatInterval;
+    }
+
     @Override
     public final void run() {
       try {
