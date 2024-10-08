@@ -2390,8 +2390,10 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
     }
     getEditLog().logSync();
     logAuditEvent(true, OperationName.CONCAT, Arrays.toString(srcs), target, stat);
-    //update ec and replica file Metrics
-    decFileStatisticsWithNum(stat.isErasureCoded(), srcs.length);
+    if (stat != null) {
+      //update ec and replica file Metrics
+      decFileStatisticsWithNum(stat.isErasureCoded(), srcs.length);
+    }
   }
 
   /**

@@ -79,7 +79,8 @@ public class TestZoneMoverV2 {
         "-path", "/test", "-rule", "/sg_dc:3"};
 
     // Unable to match namespace
-    cluster = new MiniDFSCluster.Builder(TestUtils.getConf()).numDataNodes(0).build();
+    cluster = new MiniDFSCluster.Builder(TestUtils.getConf()).numDataNodes(1).build();
+    cluster.getConfiguration(0).setInt(DFSConfigKeys.DFS_REPLICATION_KEY, 1);
     tool.setConf(cluster.getConfiguration(0));
     assertEquals(ExitStatus.ILLEGAL_ARGUMENTS.getExitCode(), tool.run(args));
 
@@ -95,10 +96,12 @@ public class TestZoneMoverV2 {
   @Test
   public void testZoneMoverCliWithHAConf() throws Exception {
     Configuration conf = TestUtils.getConf();
+    conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, 1);
     cluster = new MiniDFSCluster
         .Builder(conf)
         .nnTopology(MiniDFSNNTopology.simpleHATopology())
-        .numDataNodes(0).build();
+        .numDataNodes(1).build();
+    cluster.transitionToActive(0);
     cluster.waitActive();
     HATestUtil.setFailoverConfigurations(cluster, conf, "dev");
 
@@ -127,23 +130,23 @@ public class TestZoneMoverV2 {
     cluster = new MiniDFSCluster
         .Builder(conf)
         .nnTopology(MiniDFSNNTopology.simpleHATopology())
-        .numDataNodes(1).build();
-    cluster.waitActive();
+        .numDataNodes(3).build();
     cluster.transitionToActive(0);
-    HATestUtil.setFailoverConfigurations(cluster, conf, "dev");
+    cluster.waitActive();
+    HATestUtil.setFailoverConfigurations(cluster, conf, "dev2");
     DistributedFileSystem fs = cluster.getFileSystem(0);
     fs.mkdir(new Path("/test"), new FsPermission("777"));
     fs.mkdir(new Path("/test/foo"), new FsPermission("777"));
     DFSTestUtil.createFile(fs, new Path("/test/test.txt"),
-        FILE_LEN, REPLICATION, 0L);
+        0L, REPLICATION, 123);
 
     Tool tool = new ZoneMoverV2.Cli();
     tool.setConf(conf);
 
     // No block moved as the file is empty
-    String[] args = {"-namespace", "dev",
+    String[] args = {"-namespace", "dev2",
         "-path", "/test", "-rule", "/sg_dc:3"};
-    assertEquals(ExitStatus.NO_MOVE_BLOCK.getExitCode(), tool.run(args));
+    assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args));
   }
 
   @Test
@@ -433,5 +436,6 @@ public class TestZoneMoverV2 {
       cluster.shutdown();
       cluster = null;
     }
+    System.gc();
   }
 }

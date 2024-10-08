@@ -146,6 +146,7 @@ public class TestNameNodeMetrics {
     // Enable stale DataNodes checking
     CONF.setBoolean(
         DFSConfigKeys.DFS_NAMENODE_AVOID_STALE_DATANODE_FOR_READ_KEY, true);
+    CONF.setBoolean(DFSConfigKeys.FILE_STATISTICS_ENABLED_KEY, true);
     GenericTestUtils.setLogLevel(LoggerFactory.getLogger(MetricsAsserts.class),
         Level.DEBUG);
   }

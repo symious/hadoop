@@ -242,6 +242,7 @@ public class TestDecommission extends AdminStatesBaseTest {
     // Restart the cluster and ensure recommissioned datanodes
     // are allowed to register with the namenode
     shutdownCluster();
+    setup();
     startCluster(1, 4);
   }
   
@@ -443,6 +444,7 @@ public class TestDecommission extends AdminStatesBaseTest {
     // Restart the cluster and ensure decommissioned datanodes
     // are allowed to register with the namenode
     shutdownCluster();
+    setup();
     startCluster(numNamenodes, numDatanodes);
   }
 
@@ -1207,6 +1209,7 @@ public class TestDecommission extends AdminStatesBaseTest {
     // Restart the cluster and ensure recommissioned datanodes
     // are allowed to register with the namenode
     shutdownCluster();
+    setup();
     startCluster(numNamenodes, numDatanodes);
   }
 

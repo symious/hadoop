@@ -17,27 +17,25 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
-import org.apache.hadoop.hdfs.DFSInputStream;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.apache.hadoop.hdfs.MiniDFSNNTopology;
-import org.apache.hadoop.hdfs.StripedFileTestUtil;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopology;
 import org.apache.hadoop.hdfs.net.DFSNetworkTopologyWithDataCenter;
-import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicy;
-import org.apache.hadoop.hdfs.protocol.SystemErasureCodingPolicies;
-import org.apache.hadoop.hdfs.server.balancer.ExitStatus;
-import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
-import org.apache.hadoop.hdfs.server.namenode.NameNode;
-import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneMoverMetrics;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneProgressTracker;
 import org.apache.hadoop.hdfs.server.zoneservice.metrics.ZoneServiceMetrics;
@@ -49,29 +47,14 @@ import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.mockito.Mockito;
-
-import java.io.IOException;
-import java.net.URI;
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONEMOVER_DISTRIBUTION_RULE_MAP_FILE_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONE_SUPPORT_MIGRATE_REPLICA_RULES_KEY;
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 public class TestZoneMigration {
   private static final long FILE_LEN = 1024;
   private static final int DEFAULT_BLOCK_SIZE = 1024 * 1024;
-  private static final ErasureCodingPolicy ecPolicy = SystemErasureCodingPolicies.getByID(
-      SystemErasureCodingPolicies.RS_3_2_POLICY_ID);
   private final static String TEST_RULE_MAP_FILE1 = "testRuleMapFile1";
 
   @BeforeClass
@@ -97,228 +80,7 @@ public class TestZoneMigration {
   }
 
   @Test
-  public void testZoneMigrationCli() throws Exception {
-    GenericTestUtils.setLogLevel(BlockManager.LOG, Level.DEBUG);
-    GenericTestUtils.setLogLevel(NameNode.blockStateChangeLog, Level.DEBUG);
-    GenericTestUtils.setLogLevel(ZoneMigration.LOG, Level.DEBUG);
-
-    Configuration conf = new HdfsConfiguration();
-    final String[] racks = {"/AirTrunk/rack0", "/AirTrunk/rack1", "/AirTrunk/rack2"
-        , "/AirTrunk/rack3", "/AirTrunk/rack4", "/AirTrunk/rack5"};
-    final String[] hosts = {"host0", "host1", "host2", "host10", "host11", "host12"};
-    initConf(conf);
-    try (MiniDFSCluster cluster = new MiniDFSCluster.Builder(conf).
-        nnTopology(MiniDFSNNTopology.simpleHATopology()).
-        numDataNodes(hosts.length).hosts(hosts).racks(racks).build()) {
-      HATestUtil.setFailoverConfigurations(cluster, conf, "dev1");
-      cluster.waitActive();
-      cluster.transitionToActive(0);
-
-      // Spy tool.
-      ZoneMigration.Cli tool = Mockito.spy(new ZoneMigration.Cli());
-      Mockito.doReturn(ExitStatus.SUCCESS.getExitCode()).when(tool).run(
-          Mockito.any(Configuration.class),
-          Mockito.any(URI.class),
-          Mockito.anyListOf(Path.class),
-          Mockito.any(ReplicationRule.class),
-          Mockito.any(String.class),
-          Mockito.any(String.class),
-          Mockito.any(Boolean.class),
-          Mockito.any(Boolean.class));
-
-      tool.setConf(conf);
-      // Unable to match namespace.
-      String[] args = {"-namespace", "dev", "-path", "/test", "-cold"};
-      assertEquals(ExitStatus.ILLEGAL_ARGUMENTS.getExitCode(), tool.run(args));
-
-      // Validate must specify either '-rule' or both '-sourceDC' and '-targetDC'.
-      String[] args1 = {"-namespace", "dev1", "-path", "/test"};
-      assertEquals(ExitStatus.ILLEGAL_ARGUMENTS.getExitCode(), tool.run(args1));
-
-      // Invalid path.
-      String[] args2 = {"-namespace", "dev1", "-path", "test", "-sourceDC", "/AirTrunk",
-          "-targetDC", "/YTL"};
-      assertEquals(ExitStatus.ILLEGAL_ARGUMENTS.getExitCode(), tool.run(args2));
-
-      String ruleMapFile = Objects.requireNonNull(TestMigrationRuleMap.class.getClassLoader()
-          .getResource(TEST_RULE_MAP_FILE1)).getPath();
-      conf.set(DFS_ZONEMOVER_DISTRIBUTION_RULE_MAP_FILE_KEY, ruleMapFile);
-
-      // Validate correct parameter settings.
-      String[] args3 = {"-namespace", "dev1", "-path", "/test", "-sourceDC", "/AirTrunk",
-          "-targetDC", "/YTL", "-isDecrease", "-changeReplica"};
-      assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args3));
-
-      String[] args33 = {"-namespace", "dev1", "-path", "/test", "-sourceDC", "/AirTrunk",
-          "-targetDC", "/YTL"};
-      assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args33));
-
-      String[] args333 = {"-namespace", "dev1", "-path", "/test", "-rule", "/AirTrunk:1,/YTL:2"};
-      assertEquals(ExitStatus.SUCCESS.getExitCode(), tool.run(args333));
-
-      DistributedFileSystem fs = cluster.getFileSystem(0);
-      short replication = 2;
-      Path path1 = new Path("/test/File");
-      DFSTestUtil.createFile(fs, path1, FILE_LEN, replication, 0L);
-      DFSTestUtil.waitReplication(fs, path1, replication);
-      assertEquals(ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
-              DFSTestUtil.getAllBlocks(fs, path1).get(0))),
-          ReplicationRule.parseFromString("/AirTrunk:2"));
-
-      replication = 3;
-      Path path2 = new Path("/test/File1");
-      DFSTestUtil.createFile(fs, path2, FILE_LEN, replication, 0L);
-      DFSTestUtil.waitReplication(fs, path2, replication);
-      assertEquals(ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
-              DFSTestUtil.getAllBlocks(fs, path2).get(0))),
-          ReplicationRule.parseFromString("/AirTrunk:3"));
-
-      Path path3 = new Path("/test1/File3");
-      DFSTestUtil.createFile(fs, path3, FILE_LEN, replication, 0L);
-      DFSTestUtil.waitReplication(fs, path3, replication);
-      assertEquals(ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
-              DFSTestUtil.getAllBlocks(fs, path3).get(0))),
-          ReplicationRule.parseFromString("/AirTrunk:3"));
-
-      replication = 5;
-      Path path5 = new Path("/test/File5");
-      DFSTestUtil.createFile(fs, path5, FILE_LEN, replication, 0L);
-      DFSTestUtil.waitReplication(fs, path5, replication);
-      assertEquals(ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
-              DFSTestUtil.getAllBlocks(fs, path5).get(0))),
-          ReplicationRule.parseFromString("/AirTrunk:5"));
-
-      // Create ec dir.
-      Path ecDir = new Path("/test/ec");
-      fs.mkdirs(ecDir);
-      fs.enableErasureCodingPolicy(ecPolicy.getName());
-      fs.setErasureCodingPolicy(ecDir, ecPolicy.getName());
-      // Create ec file.
-      Path ecFile = new Path(ecDir, "file");
-      int dataSize = DEFAULT_BLOCK_SIZE * 3;
-      byte[] expected = StripedFileTestUtil.generateBytes(dataSize);
-      DFSTestUtil.writeFile(fs, ecFile, new String(expected));
-      StripedFileTestUtil.waitBlockGroupsReported(fs, ecFile.toString());
-      StripedFileTestUtil.verifyLength(fs, ecFile, dataSize);
-      assertEquals(ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
-              DFSTestUtil.getAllBlocks(fs, ecFile).get(0))),
-          ReplicationRule.parseFromString("/AirTrunk:5"));
-
-      // Adding 6 new hosts about '/YTL'.
-      cluster.startDataNodes(conf, 6, true, null,
-          new String[]{"/YTL/rack0", "/YTL/rack1", "/YTL/rack2",
-              "/YTL/rack3", "/STT/rack4", "/YTL/rack5"},
-          new String[]{"host6", "host7", "host8", "host9", "host10", "host11"},
-          null);
-      cluster.triggerBlockReports();
-      assertEquals("Number of datanodes should be 12", 12,
-          cluster.getDataNodes().size());
-
-      // Validate use "-path" replica rule.
-      ruleMapFile = Objects.requireNonNull(TestMigrationRuleMap.class.getClassLoader()
-          .getResource(TEST_RULE_MAP_FILE1)).getPath();
-      conf.set(DFS_ZONEMOVER_DISTRIBUTION_RULE_MAP_FILE_KEY, ruleMapFile);
-
-      ZoneMigration.Cli toolZoneMigration = new ZoneMigration.Cli();
-      toolZoneMigration.setConf(conf);
-      String[] args5 = {"-namespace", "dev1", "-path", "/test", "-sourceDC", "/AirTrunk",
-          "-targetDC", "/YTL", "-changeReplica"};
-      assertEquals(ExitStatus.SUCCESS.getExitCode(), toolZoneMigration.run(args5));
-
-      GenericTestUtils.waitFor(() -> {
-        try {
-          return ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
-              DFSTestUtil.getAllBlocks(fs, path1).get(0))).
-              equals(ReplicationRule.parseFromString("/AirTrunk:1,/YTL:1"));
-        } catch (IOException e) {
-          return false;
-        }
-      }, 500, 30000);
-
-      GenericTestUtils.waitFor(() -> {
-        try {
-          return ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
-                  DFSTestUtil.getAllBlocks(fs, path2).get(0))).
-              equals(ReplicationRule.parseFromString("/AirTrunk:1,/YTL:2"));
-        } catch (IOException e) {
-          return false;
-        }
-      }, 500, 30000);
-
-      // Validate ec data.
-      GenericTestUtils.waitFor(() -> {
-        try {
-          return ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
-                  DFSTestUtil.getAllBlocks(fs, ecFile).get(0))).
-              equals(ReplicationRule.parseFromString("/YTL:5"));
-        } catch (IOException e) {
-          return false;
-        }
-      }, 500, 30000);
-
-      DFSClient dfsClient = fs.getClient();
-      int done = 0;
-      ByteBuffer readBuffer = ByteBuffer.allocate(dataSize);
-      try (DFSInputStream in = dfsClient.open(ecFile.toString())) {
-        while (done < dataSize) {
-          int ret = in.read(readBuffer);
-          assertTrue(ret > 0);
-          done += ret;
-        }
-        assertArrayEquals(expected, readBuffer.array());
-      }
-
-      GenericTestUtils.waitFor(() -> {
-        try {
-          return ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
-                  DFSTestUtil.getAllBlocks(fs, path5).get(0))).
-              equals(ReplicationRule.parseFromString("/AirTrunk:2,/YTL:3"));
-        } catch (IOException e) {
-          return false;
-        }
-      }, 500, 30000);
-
-      // Adding 3 new hosts about '/STT'.
-      cluster.startDataNodes(conf, 3, true, null,
-          new String[]{"/STT/rack0", "/STT/rack1", "/STT/rack2"},
-          new String[]{"host22", "host23", "host21"},
-          null);
-      cluster.triggerBlockReports();
-      assertEquals("Number of datanodes should be 15", 15,
-          cluster.getDataNodes().size());
-
-      String[] args6 = {"-namespace", "dev1", "-path", path3.toString(), "-rule",
-          "/AirTrunk:2,/STT:1"};
-      assertEquals(ExitStatus.SUCCESS.getExitCode(), toolZoneMigration.run(args6));
-
-      GenericTestUtils.waitFor(() -> {
-        try {
-          return ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
-                  DFSTestUtil.getAllBlocks(fs, path3).get(0))).
-              equals(ReplicationRule.parseFromString("/AirTrunk:2,/STT:1"));
-        } catch (IOException e) {
-          return false;
-        }
-      }, 500, 30000);
-
-      String[] args7 = {"-namespace", "dev1", "-path", "/test1", "-sourceDC", "/AirTrunk",
-          "-targetDC", "/YTL", "-changeReplica"};
-      assertEquals(ExitStatus.SUCCESS.getExitCode(), toolZoneMigration.run(args7));
-
-      GenericTestUtils.waitFor(() -> {
-        try {
-          return ReplicationRule.parseFromMap(ZoneMover.getBlockDistribution(
-                  DFSTestUtil.getAllBlocks(fs, path3).get(0))).
-              equals(ReplicationRule.parseFromString("/AirTrunk:1,/STT:1,/YTL:2"));
-        } catch (IOException e) {
-          return false;
-        }
-      }, 500, 30000);
-    }
-  }
-
-  @Test
-  public void testZonMigrationRMonitorMode() throws Exception {
+  public void testZoneMigrationRMonitorMode() throws Exception {
     Configuration conf = new HdfsConfiguration();
     final String[] racks = {"/AirTrunk/rack0", "/AirTrunk/rack1", "/AirTrunk/rack2"
         , "/AirTrunk/rack3", "/AirTrunk/rack4", "/AirTrunk/rack5"};
@@ -387,7 +149,7 @@ public class TestZoneMigration {
   }
 
   @Test
-  public void testZonMigrationFromZoneService() throws Exception {
+  public void testZoneMigrationFromZoneService() throws Exception {
     Configuration conf = new HdfsConfiguration();
     final String[] racks = {"/AirTrunk/rack0", "/AirTrunk/rack1", "/AirTrunk/rack2",
         "/AirTrunk/rack3", "/AirTrunk/rack4", "/AirTrunk/rack5"};
