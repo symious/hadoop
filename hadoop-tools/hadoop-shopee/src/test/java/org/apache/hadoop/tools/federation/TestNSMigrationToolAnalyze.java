@@ -1,7 +1,8 @@
 package org.apache.hadoop.tools.federation;
 
 import java.io.IOException;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
 import org.apache.hadoop.conf.Configuration;
@@ -64,15 +65,19 @@ public class TestNSMigrationToolAnalyze {
     setTimes(fs, "/base/colddir2/coldinnerdir2/", false, false);
     setTimes(fs, "/base/colddir1", false, false);
     setTimes(fs, "/base/colddir2", false, false);
+    fs.setTimes(new Path("/base/colddir1"), 300000000, -1);
+    fs.setTimes(new Path("/base/colddir2"), 200000000, -1);
+    fs.setTimes(new Path("/base/hotdir2/coldinnerdir"), 100000000, -1);
 
     Path outputFile = new Path("/tmp/test_output.txt");
-    new AnalyzeJob("/base", "ns0", "ns0", "ns0", "7", outputFile, 2, routerContext.getConf()).execute();
-    Set<Path> paths = loadPathsFromDfs(fs, new Path("/base"), outputFile);
+    new AnalyzeJob("/base", "ns0", "ns0", "ns0", "7", outputFile, 2,
+        routerContext.getConf()).execute();
+    List<Path> paths = new ArrayList<>(loadPathsFromDfs(fs, new Path("/base"), outputFile));
 
     Assert.assertEquals(3, paths.size());
-    Assert.assertTrue(paths.contains(new Path("/base/hotdir2/coldinnerdir")));
-    Assert.assertTrue(paths.contains(new Path("/base/colddir1")));
-    Assert.assertTrue(paths.contains(new Path("/base/colddir2")));
+    Assert.assertEquals(new Path("/base/colddir1"), paths.get(0));
+    Assert.assertEquals(new Path("/base/colddir2"), paths.get(1));
+    Assert.assertEquals(new Path("/base/hotdir2/coldinnerdir"), paths.get(2));
 
     // Do it again, but this time with an opened file and a dir that changed during the process
     setTimes(fs, "/base/colddir2/newdir/file", true, false);
@@ -80,6 +85,10 @@ public class TestNSMigrationToolAnalyze {
     final CountDownLatch latch = new CountDownLatch(1);
     Thread thread = new Thread(() -> {
       try {
+        fs.setTimes(new Path("/base/hotdir2/coldinnerdir"), 100000000, -1);
+        fs.setTimes(new Path("/base/colddir1"), 200000000, -1);
+        fs.setTimes(new Path("/base/colddir2/coldinnerdir1/"), 300000000, -1);
+        fs.setTimes(new Path("/base/colddir2/coldinnerdir2/"), 400000000, -1);
         AnalyzeJobWithWait job =
             new AnalyzeJobWithWait("/base", "ns0", "ns0", "ns0", "7", outputFile, 2,
                 routerContext.getConf());
@@ -92,20 +101,21 @@ public class TestNSMigrationToolAnalyze {
     thread.start();
     FSDataOutputStream stream = fs.append(new Path("/base/colddir2/coldfile"));
     fs.mkdirs(new Path("/base/colddir2/newdir/innerdir"));
-    fs.rename(new Path("/base/colddir2/newdir/file"), new Path("/base/colddir2/newdir/innerdir/file"));
+    fs.rename(new Path("/base/colddir2/newdir/file"),
+        new Path("/base/colddir2/newdir/innerdir/file"));
     FSDataOutputStream stream2 = fs.create(new Path("/base/colddir2/newdir/innerdir/file"));
     latch.countDown();
     thread.join();
 
     stream.close();
     stream2.close();
-    paths = loadPathsFromDfs(fs, new Path("/base"), outputFile);
+    paths = new ArrayList<>(loadPathsFromDfs(fs, new Path("/base"), outputFile));
 
     Assert.assertEquals(4, paths.size());
-    Assert.assertTrue(paths.contains(new Path("/base/hotdir2/coldinnerdir")));
-    Assert.assertTrue(paths.contains(new Path("/base/colddir1")));
-    Assert.assertTrue(paths.contains(new Path("/base/colddir2/coldinnerdir1/")));
-    Assert.assertTrue(paths.contains(new Path("/base/colddir2/coldinnerdir2/")));
+    Assert.assertEquals(new Path("/base/colddir2/coldinnerdir2/"), paths.get(0));
+    Assert.assertEquals(new Path("/base/colddir2/coldinnerdir1/"), paths.get(1));
+    Assert.assertEquals(new Path("/base/colddir1"), paths.get(2));
+    Assert.assertEquals(new Path("/base/hotdir2/coldinnerdir"), paths.get(3));
   }
 
   static class AnalyzeJobWithWait extends AnalyzeJob {

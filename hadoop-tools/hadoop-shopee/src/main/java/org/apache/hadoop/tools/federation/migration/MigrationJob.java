@@ -77,11 +77,6 @@ import org.apache.hadoop.tools.OptionsParser;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
-import org.apache.log4j.Appender;
-import org.apache.log4j.ConsoleAppender;
-import org.apache.log4j.Layout;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.PatternLayout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -93,19 +88,6 @@ import org.slf4j.LoggerFactory;
 @SuppressWarnings("UnstableApiUsage")
 public class MigrationJob {
   private static final Logger LOG = LoggerFactory.getLogger(MigrationJob.class);
-
-  static {
-    org.apache.log4j.Logger logger =
-        org.apache.log4j.Logger.getLogger(MigrationJob.class.getName());
-    Appender appender = logger.getAppender("stdout");
-    if (appender == null) {
-      appender = logger.getAppender("console");
-    }
-    Layout layout = (appender == null) ? new PatternLayout() : appender.getLayout();
-    ((PatternLayout) layout).setConversionPattern("%d{ISO8601} [%t] %-5p %c{2} (%F:%M(%L)) - %m%n");
-    ConsoleAppender newAppender = new ConsoleAppender(layout);
-    LogManager.getLogger(LOG.getName()).addAppender(newAppender);
-  }
 
   private static boolean INTERRUPT_FOR_TESTING = false;
   private static boolean skipTopTwoLevels = true;
@@ -181,7 +163,7 @@ public class MigrationJob {
 
     DistributedFileSystem srcFs =
         (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + src), conf);
-    Map<Path, Pair<Integer, Long>> paths =
+    LinkedHashMap<Path, Pair<Integer, Long>> paths =
         MigrationUtils.loadPathsWithCountFromDfs(srcFs, new Path(input));
 
     runBatchJob(conf, concurrencyStr, paths, src, dst, routerAddr, skipOpenFiles, new Path(output),
@@ -241,11 +223,21 @@ public class MigrationJob {
           MigrationJob job =
               new MigrationJob(singlePath, src, dst, new Configuration(conf), routerAddr,
                   skipOpenFiles, fileMode, localDistcp);
-          while (job.continueJob()) {
-            LOG.info("Path={}, Stage {} starting.", singlePath, job.stage);
+          long migrationStart = Time.monotonicNow();
+          while (true) {
+            long start = Time.monotonicNow();
+            JobStage lastStage = job.stage;
+            boolean doesContinueJob = job.continueJob();
+            if (doesContinueJob || job.stage == JobStage.FINISH) {
+              LOG.info("Path={}, stage={}, nextStage={}, time={}", singlePath,
+                  lastStage, job.stage, Time.monotonicNow() - start);
+            }
+            if (!doesContinueJob) {
+              break;
+            }
           }
           if (job.stage == JobStage.FINISH) {
-            LOG.info("Path={} done.", singlePath);
+            LOG.info("Path={}, total={}", singlePath, Time.monotonicNow() - migrationStart);
             if (output != null) {
               synchronized (output) {
                 MigrationUtils.appendLineToFileInDfs(job.srcFs, singlePath.toString(), output);
@@ -387,18 +379,30 @@ public class MigrationJob {
 
   @VisibleForTesting
   public void writeContext() {
+    boolean successful = false;
+    long start = Time.monotonicNow();
     Path contextPath = new Path(context.contextPath, JobContext.CONTEXT_PREFIX + stage.stageInt);
     // Overwrite stage context
     for (int attempt = 0; attempt < 5; attempt++) {
       // Retry up to 5 times if necessary. Usually not necessary but sometimes ConcurrentModificationException can happen
-      try (FSDataOutputStream os = dstFs.create(contextPath, true)) {
+      // Context files are short-lived, no need for replicas. Use 1 replica to save time.
+      try (FSDataOutputStream os = dstFs.create(contextPath, true, (short) 1)) {
         context.write(os);
+        successful = true;
         break;
       } catch (Exception e) {
         LOG.warn("Failed to write context for path {}, retrying {}/5", context.path, attempt, e);
       }
     }
-    LOG.info("Saved context for stage {} to {}", stage.name(), contextPath);
+    long elapsed = Time.monotonicNow() - start;
+    if (!successful) {
+      LOG.warn("Failed to save context for stage {} to {}", stage.name(), contextPath);
+    } else if (elapsed > 5000) {
+      LOG.warn("Saved context for stage {} to {}, slow context time over 5s: {} ms", stage.name(),
+          contextPath, elapsed);
+    } else {
+      LOG.info("Saved context for stage {} to {}", stage.name(), contextPath);
+    }
   }
 
   @VisibleForTesting

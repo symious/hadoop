@@ -27,6 +27,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -35,7 +37,6 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
@@ -82,11 +83,14 @@ public class AnalyzeJob {
   private final CountDownLatch latch = new CountDownLatch(1);
 
   // Logging stuff
+  private final long start;
   private final AtomicInteger pathsChecked;
   private volatile long lastProgressLog;
 
   public AnalyzeJob(String path, String srcNs, String dstNs, String fedNs, String threshold,
       Path output, int concurrency, Configuration conf) throws IOException {
+    this.start = Time.monotonicNow();
+
     this.router = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + fedNs), conf);
     this.srcFs = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + srcNs), conf);
     if (!dstNs.equals(srcNs)) {
@@ -155,23 +159,25 @@ public class AnalyzeJob {
   static class RawNodeData {
     private final String path;
     private final int[] requirements;
-    // Note: the next 2 arrays have 1 more element than int[] requirements
+    // Note: the next 3 arrays have 1 more element than int[] requirements
     private final int[] fileCounts;
     private final long[] fileSizes;
+    private final long[] mTimes;
     private final boolean isEmpty;
 
-    RawNodeData(String path, int[] requirements, int[] fileCounts, long[] fileSizes,
+    RawNodeData(String path, int[] requirements, int[] fileCounts, long[] fileSizes, long[] mTimes,
         boolean isEmpty) {
       this.path = path;
       this.requirements = requirements;
       this.fileCounts = fileCounts;
       this.fileSizes = fileSizes;
+      this.mTimes = mTimes;
       this.isEmpty = isEmpty;
     }
 
     private void printDebug() {
-      LOG.debug("path={},reqs={},counts={},sizes={},empty={}", path, requirements, fileCounts,
-          fileSizes, isEmpty);
+      LOG.debug("path={},reqs={},counts={},sizes={},mTimes={},empty={}", path, requirements,
+          fileCounts, fileSizes, mTimes, isEmpty);
     }
   }
 
@@ -190,9 +196,9 @@ public class AnalyzeJob {
    *               /projects/proj       is the input and will not be considered cold
    * </pre>
    * <br>
-   * int[] fileCounts and long[] fileSizes are similar to int[] requirements,
+   * int[] fileCounts, long[] fileSizes, long[] mTimes are similar to int[] requirements,
    * the difference being these arrays contain the number/total size of files at each directory,
-   * not counting subdirs.
+   * not counting subdirs. mTimes contains the modification time of ancestor nodes, including itself.
    * <pre>
    *   E.g. a path /projects/proj/a/b/c/d with fileCounts [5,0,100,200]
    *                                       and fileSizes [1000,0,2000,5000] means
@@ -210,14 +216,16 @@ public class AnalyzeJob {
     int[] requirements;
     int[] fileCounts;
     long[] fileSizes;
+    long[] mTimes;
 
     AnalyzeSubroutine(String path, long mTime, int[] requirements, int[] fileCounts,
-        long[] fileSizes) {
+        long[] fileSizes, long[] mTimes) {
       this.path = path;
       this.mTime = mTime;
       this.requirements = requirements;
       this.fileCounts = fileCounts;
       this.fileSizes = fileSizes;
+      this.mTimes = mTimes;
     }
 
     @Override
@@ -253,33 +261,26 @@ public class AnalyzeJob {
 
       // If everything is cold files, the dir is cold dir
       if (coldDirsNeeded == 0) {
-        int[] currentFileCounts = new int[fileCounts.length + 1];
-        long[] currentFileSizes = new long[fileSizes.length + 1];
-        System.arraycopy(fileCounts, 0, currentFileCounts, 0, fileCounts.length);
-        System.arraycopy(fileSizes, 0, currentFileSizes, 0, fileSizes.length);
-        currentFileCounts[fileCounts.length] = fileCount;
-        currentFileSizes[fileSizes.length] = fileSize;
-        results.add(new RawNodeData(path, requirements, currentFileCounts, currentFileSizes,
-            statuses.length == 0));
+        int[] currentFileCounts = copyAndAppend(fileCounts, fileCount);
+        long[] currentFileSizes = copyAndAppend(fileSizes, fileSize);
+        long[] currentMTimes = copyAndAppend(mTimes, mTime);
+        results.add(
+            new RawNodeData(path, requirements, currentFileCounts, currentFileSizes, currentMTimes,
+                statuses.length == 0));
         pathsOngoing.decrementAndGet();
         return;
       }
 
       for (FileStatus status : statuses) {
         if (!status.isFile()) {
-          int[] currentRequirements = new int[requirements.length + 1];
-          int[] currentFileCounts = new int[fileCounts.length + 1];
-          long[] currentFileSizes = new long[fileSizes.length + 1];
-          System.arraycopy(requirements, 0, currentRequirements, 0, requirements.length);
-          System.arraycopy(fileCounts, 0, currentFileCounts, 0, fileCounts.length);
-          System.arraycopy(fileSizes, 0, currentFileSizes, 0, fileSizes.length);
-          currentRequirements[requirements.length] = coldDirsNeeded;
-          currentFileCounts[fileCounts.length] = fileCount;
-          currentFileSizes[fileSizes.length] = fileSize;
+          int[] currentRequirements = copyAndAppend(requirements, coldDirsNeeded);
+          int[] currentFileCounts = copyAndAppend(fileCounts, fileCount);
+          long[] currentFileSizes = copyAndAppend(fileSizes, fileSize);
+          long[] currentMTimes = copyAndAppend(mTimes, mTime);
           pathsOngoing.incrementAndGet();
           threadPool.submit(new AnalyzeSubroutine(status.getPath().toUri().getPath(),
               status.getModificationTime(), currentRequirements, currentFileCounts,
-              currentFileSizes));
+              currentFileSizes, currentMTimes));
         }
       }
       pathsOngoing.decrementAndGet();
@@ -298,7 +299,7 @@ public class AnalyzeJob {
   public void execute() throws IOException, InterruptedException {
     FileStatus baseStatus = router.getFileStatus(input);
     Runnable task = new AnalyzeSubroutine(baseStatus.getPath().toUri().getPath(),
-        baseStatus.getModificationTime(), new int[0], new int[0], new long[0]);
+        baseStatus.getModificationTime(), new int[0], new int[0], new long[0], new long[0]);
     threadPool.execute(task);
     TreeProcessor processor = new TreeProcessor();
     processor.start();
@@ -335,18 +336,18 @@ public class AnalyzeJob {
     int count;
     int files;
     long size;
+    long mTime;
     NodeWithCount parent;
     Map<String, NodeWithCount> children = null;
     boolean empty;
 
-    NodeWithCount(NodeWithCount parent, String name, int count, int files, long size,
-        boolean empty) {
+    NodeWithCount(NodeWithCount parent, String name) {
       this.parent = parent;
       this.name = name;
-      this.count = count;
-      this.files = files;
-      this.size = size;
-      this.empty = empty;
+      this.count = -1;
+      this.files = 0;
+      this.size = 0;
+      this.empty = false;
     }
 
     /**
@@ -402,13 +403,14 @@ public class AnalyzeJob {
           cur.children = new HashMap<>();
         }
         cur = finalCur.children.compute(component,
-            (k, v) -> v == null ? new NodeWithCount(finalCur, component, -1, 0, 0, false) : v);
+            (k, v) -> v == null ? new NodeWithCount(finalCur, component) : v);
       }
       // Update leaf node with some values
       cur.empty = raw.isEmpty;
       cur.count = 0;
       cur.files = raw.fileCounts[raw.fileCounts.length - 1];
       cur.size = raw.fileSizes[raw.fileSizes.length - 1];
+      cur.mTime = raw.mTimes[raw.mTimes.length - 1];
 
       // Backtrack to fill the counts
       cur = cur.parent;
@@ -417,6 +419,7 @@ public class AnalyzeJob {
         // Note: fileCounts and fileSizes have 1 more element than requirements
         cur.files = raw.fileCounts[i];
         cur.size = raw.fileSizes[i];
+        cur.mTime = raw.mTimes[i];
         cur = cur.parent;
       }
     }
@@ -451,14 +454,15 @@ public class AnalyzeJob {
       }
     }
 
-    Map<String, Pair<Integer, Long>> getAllLeafNodes(Map<String, Pair<Integer, Long>> result,
+    SortedMap<ResultNode, ResultNode> getAllLeafNodes(SortedMap<ResultNode, ResultNode> result,
         List<String> components) {
       // Do not include empty dirs
       if (empty) {
         return result;
       }
       if (count == 0) {
-        result.put("/" + String.join("/", components), Pair.of(files, size));
+        ResultNode node = new ResultNode("/" + String.join("/", components), mTime, files, size);
+        result.put(node, node);
       } else {
         for (NodeWithCount node : children.values()) {
           List<String> subdirComponents = new ArrayList<>(components);
@@ -491,11 +495,10 @@ public class AnalyzeJob {
    */
   class TreeProcessor extends Thread {
 
-    private final static char DELIMITER = '|';
     private final NodeWithCount root;
 
     TreeProcessor() {
-      root = new NodeWithCount(null, "", -1, 0, 0, false);
+      root = new NodeWithCount(null, "");
     }
 
     @Override
@@ -525,7 +528,7 @@ public class AnalyzeJob {
         }
         root.addPath(node);
       }
-      LOG.info("Collected {} cold paths", total);
+      LOG.info("Collected {} cold paths in {} ms.", total, Time.monotonicNow() - start);
     }
 
     private void excludeUCFiles() throws IOException {
@@ -550,12 +553,12 @@ public class AnalyzeJob {
      */
     private void minimizeTree() throws IOException, ExecutionException, InterruptedException {
       root.minimizeNode();
-      Map<String, Pair<Integer, Long>> allColdDirs = getColdDirsOnSrc();
+      SortedMap<ResultNode, ResultNode> allColdDirs = getColdDirsOnSrc();
 
       try (FSDataOutputStream os = srcFs.create(output)) {
-        for (Map.Entry<String, Pair<Integer, Long>> coldDir : allColdDirs.entrySet()) {
-          os.writeBytes(String.format("%s|%d|%d%n", coldDir.getKey(), coldDir.getValue().getLeft(),
-              coldDir.getValue().getRight()));
+        for (Map.Entry<ResultNode, ResultNode> coldDir : allColdDirs.entrySet()) {
+          os.writeBytes(String.format("%s|%d|%d%n", coldDir.getKey().path, coldDir.getKey().files,
+              coldDir.getValue().size));
         }
       }
     }
@@ -566,28 +569,29 @@ public class AnalyzeJob {
      * list of cold dirs and writes to .dst_only file.
      * @return list of cold dirs that exist on source namespace
      */
-    private Map<String, Pair<Integer, Long>> getColdDirsOnSrc()
+    private SortedMap<ResultNode, ResultNode> getColdDirsOnSrc()
         throws IOException, InterruptedException, ExecutionException {
-      Map<String, Pair<Integer, Long>> allColdDirs =
-          root.getAllLeafNodes(new HashMap<>(), new ArrayList<>());
+      SortedMap<ResultNode, ResultNode> allColdDirs =
+          root.getAllLeafNodes(new TreeMap<>(), new ArrayList<>());
       Set<String> toRemove = new HashSet<>();
 
       Path dstOnlyFilePath = new Path(output.getParent(), output.getName() + ".dst_only");
       if (srcFs.exists(dstOnlyFilePath)) {
+        // Paths are sorted by modified time, from newest to oldest
         for (Path path : MigrationUtils.loadPathsFromDfs(srcFs, null, dstOnlyFilePath)) {
           toRemove.add(path.toUri().getPath());
         }
       }
 
       List<Future<Void>> futures = new ArrayList<>();
-      for (String coldDir : allColdDirs.keySet()) {
-        if (toRemove.contains(coldDir)) {
+      for (ResultNode coldDir : allColdDirs.keySet()) {
+        if (toRemove.contains(coldDir.path)) {
           continue;
         }
         futures.add(threadPool.submit(() -> {
           try {
-            if (!srcFs.exists(new Path(coldDir))) {
-              toRemove.add(coldDir);
+            if (!srcFs.exists(new Path(coldDir.path))) {
+              toRemove.add(coldDir.path);
             }
             return null;
           } catch (IOException e) {
@@ -605,10 +609,58 @@ public class AnalyzeJob {
         }
       }
 
-      for (String dir : toRemove) {
-        allColdDirs.remove(dir);
-      }
+      allColdDirs.entrySet().removeIf(entry -> toRemove.contains(entry.getValue().path));
       return allColdDirs;
+    }
+  }
+
+  /**
+   * Hashable class to use as both key and value for a {@link TreeMap}.
+   */
+  static class ResultNode implements Comparable<ResultNode> {
+    private final String path;
+    private final long mTime;
+    private final long files;
+    private final long size;
+
+    ResultNode(String path, long mTime, long files, long size) {
+      this.path = path;
+      this.mTime = mTime;
+      this.files = files;
+      this.size = size;
+    }
+
+    @Override
+    public int compareTo(ResultNode o) {
+      if (path.equals(o.path)) {
+        return 0;
+      }
+      // Newer dir > older dir
+      return mTime > o.mTime ? -1 : 1;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof ResultNode)) {
+        return false;
+      }
+      if (path == null || ((ResultNode) o).path == null) {
+        return false;
+      }
+      return path.equals(((ResultNode) o).path);
+    }
+
+    /**
+     * Hash using path.
+     */
+    @Override
+    public int hashCode() {
+      return path.hashCode();
+    }
+
+    @Override
+    public String toString() {
+      return path;
     }
   }
 
@@ -630,5 +682,19 @@ public class AnalyzeJob {
         os.writeBytes(ite.next().getPath().toUri().getPath() + "\n");
       }
     }
+  }
+
+  private static int[] copyAndAppend(int[] originalArray, int newElement) {
+    int[] newArray = new int[originalArray.length + 1];
+    System.arraycopy(originalArray, 0, newArray, 0, originalArray.length);
+    newArray[originalArray.length] = newElement;
+    return newArray;
+  }
+
+  private static long[] copyAndAppend(long[] originalArray, long newElement) {
+    long[] newArray = new long[originalArray.length + 1];
+    System.arraycopy(originalArray, 0, newArray, 0, originalArray.length);
+    newArray[originalArray.length] = newElement;
+    return newArray;
   }
 }

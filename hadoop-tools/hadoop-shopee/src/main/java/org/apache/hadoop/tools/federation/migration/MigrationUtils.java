@@ -23,9 +23,9 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 import org.apache.commons.lang3.tuple.Pair;
@@ -56,9 +56,9 @@ public class MigrationUtils {
     return paths;
   }
 
-  public static Set<Path> loadPathsFromDfs(DistributedFileSystem dfs, Path path, Path inputFilePath)
-      throws IOException {
-    Set<Path> paths = new HashSet<>();
+  public static LinkedHashSet<Path> loadPathsFromDfs(DistributedFileSystem dfs, Path path,
+      Path inputFilePath) throws IOException {
+    LinkedHashSet<Path> paths = new LinkedHashSet<>();
     if (inputFilePath == null) {
       paths.add(path);
     } else {
@@ -82,9 +82,9 @@ public class MigrationUtils {
     return paths;
   }
 
-  public static Map<Path, Pair<Integer, Long>> loadPathsWithCountFromDfs(DistributedFileSystem dfs,
-      Path inputFilePath) throws IOException {
-    Map<Path, Pair<Integer, Long>> paths = new HashMap<>();
+  public static LinkedHashMap<Path, Pair<Integer, Long>> loadPathsWithCountFromDfs(
+      DistributedFileSystem dfs, Path inputFilePath) throws IOException {
+    LinkedHashMap<Path, Pair<Integer, Long>> paths = new LinkedHashMap<>();
     FSDataInputStream is;
     try {
       is = dfs.open(inputFilePath);

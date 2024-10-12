@@ -19,8 +19,8 @@ package org.apache.hadoop.tools.federation.migration;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import org.apache.commons.lang3.tuple.Pair;
@@ -32,9 +32,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
-import org.apache.log4j.Appender;
 import org.apache.log4j.ConsoleAppender;
-import org.apache.log4j.Layout;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.PatternLayout;
 import org.slf4j.Logger;
@@ -49,16 +47,12 @@ import org.slf4j.LoggerFactory;
 public class ProjectJob {
   private static final Logger LOG = LoggerFactory.getLogger(ProjectJob.class);
 
+  // Makes all logger print detailed messages if starting a project job.
   static {
-    org.apache.log4j.Logger logger = org.apache.log4j.Logger.getLogger(ProjectJob.class.getName());
-    Appender appender = logger.getAppender("stdout");
-    if (appender == null) {
-      appender = logger.getAppender("console");
-    }
-    Layout layout = (appender == null) ? new PatternLayout() : appender.getLayout();
-    ((PatternLayout) layout).setConversionPattern("%d{ISO8601} [%t] %-5p %c{2} (%F:%M(%L)) - %m%n");
+    PatternLayout layout = new PatternLayout("%d{ISO8601} [%t] %-5p %c{2} (%F:%M(%L)) - %m%n");
     ConsoleAppender newAppender = new ConsoleAppender(layout);
-    LogManager.getLogger(LOG.getName()).addAppender(newAppender);
+    LogManager.getRootLogger().removeAllAppenders();
+    LogManager.getRootLogger().addAppender(newAppender);
   }
 
   final static public Path BASE_PATH = new Path("/tmp/__MIGRATION_PROJECT_JOBS/");
@@ -292,7 +286,7 @@ public class ProjectJob {
       System.exit(0);
     }
     srcFs.create(coldContextFilePath, true).close();
-    Map<Path, Pair<Integer, Long>> allPaths =
+    LinkedHashMap<Path, Pair<Integer, Long>> allPaths =
         MigrationUtils.loadPathsWithCountFromDfs(srcFs, inputPathsFilePath);
     Set<Path> donePaths = MigrationUtils.loadPathsFromDfs(srcFs, path, donePathsFilePath);
     for (Path donePath : donePaths) {
