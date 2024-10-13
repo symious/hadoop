@@ -37,20 +37,22 @@ import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.RecursiveAction;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.HdfsBlockLocation;
 import org.apache.hadoop.hdfs.DFSClient;
 import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
@@ -108,6 +110,7 @@ public class DebugAdmin extends Configured implements Tool {
       new ReadWithDNPreference(),
       new WriteWithDNPreference(),
       new VerifyReadableCommand(),
+      new ScanBottomDirectoryCommand(),
       new HelpCommand()
   };
 
@@ -874,6 +877,216 @@ public class DebugAdmin extends Configured implements Tool {
         if (cdp != null) {
           RPC.stopProxy(cdp);
         }
+      }
+    }
+  }
+
+  private class ScanBottomDirectoryCommand extends DebugCommand {
+    DistributedFileSystem dfs;
+    ScanBottomDirectoryCommand() {
+      super("scanBottomDirectory",
+          "scanBottomDirectory "
+              + "[-path <path> | -input <input>] "
+              + "[-filter <filter path>"
+              + "[-output <output>] "
+              + "[-concurrency <concurrency>] ",
+          "  Scan all bottom-level directories for the input paths.");
+    }
+
+    @Override
+    int run(List<String> args) throws IOException {
+      if (args.isEmpty()) {
+        System.out.println(usageText);
+        System.out.println(helpText + System.lineSeparator());
+        return 1;
+      }
+      dfs = AdminHelper.getDFS(getConf());
+      String pathStr = StringUtils.popOptionWithArgument("-path", args);
+      String inputStr = StringUtils.popOptionWithArgument("-input", args);
+      String filterPath = StringUtils.popOptionWithArgument("-filter", args);
+      String outputStr = StringUtils.popOptionWithArgument("-output", args);
+      String concurrencyStr = StringUtils.popOptionWithArgument("-concurrency", args);
+      if (pathStr == null && inputStr == null) {
+        System.out.println("Either -path or -input must be present.");
+        System.out.println(usageText);
+        System.out.println(helpText + System.lineSeparator());
+        return 1;
+      }
+      BufferedWriter resultWriter = null;
+      try {
+        resultWriter = buildWriter(outputStr);
+        return handleArgs(pathStr, inputStr, filterPath, resultWriter, concurrencyStr);
+      } catch (Exception e) {
+        System.out.println( "Got IOE: " + StringUtils.stringifyException(e) + " for command: " + StringUtils.join(
+            ",", args));
+        return 1;
+      } finally {
+        if (resultWriter != null) {
+          resultWriter.flush();
+          resultWriter.close();
+        }
+      }
+    }
+
+    /**
+     * Build buffered writer for outputStr.
+     */
+    private BufferedWriter buildWriter(String outputStr) throws IOException {
+      if (outputStr != null) {
+        File output = new File(outputStr);
+        // Move the old file out if it already exists
+        if (output.exists()) {
+          output.renameTo(new File(outputStr + ".old." + new Timer().now()));
+        }
+        return new BufferedWriter(new OutputStreamWriter(
+            Files.newOutputStream(output.toPath())));
+      }
+      return null;
+    }
+
+    private int handleArgs(String pathStr, String inputStr, String filterPath,
+        BufferedWriter resultWriter, String concurrencyStr)
+        throws IOException {
+      List<String> filterPaths = readFilterPaths(filterPath);
+
+      int concurrency = concurrencyStr == null ? 1 : Integer.parseInt(concurrencyStr);
+
+      // -path takes priority over -input
+      if (pathStr != null) {
+        handlePath(new Path(pathStr), filterPaths, resultWriter, concurrency);
+        return 0;
+      }
+
+      File input = new File(inputStr);
+      if (!input.exists()) {
+        System.out.println("The input path " + inputStr + " doesn't exist.");
+        return 1;
+      }
+
+      // Line count
+      try (BufferedReader inputReader = new BufferedReader(
+          new InputStreamReader(Files.newInputStream(input.toPath())))) {
+        handlePaths(inputReader, filterPaths, resultWriter, concurrency);
+      }
+      return 0;
+    }
+
+    /**
+     * Read all filter paths from local file.
+     */
+    private List<String> readFilterPaths(String filterPath) throws IOException {
+      List<String> result = new ArrayList<>();
+      if (filterPath == null || filterPath.isEmpty()) {
+        return result;
+      }
+      File filterFile = new File(filterPath);
+      if (!filterFile.exists()) {
+        return result;
+      }
+      try (BufferedReader reader = new BufferedReader(
+          new InputStreamReader(Files.newInputStream(filterFile.toPath())))) {
+        String line;
+        while ((line = reader.readLine()) != null) {
+          if (line.trim().isEmpty() || line.startsWith("#")) {
+            continue;
+          }
+          result.add(line);
+        }
+      }
+      return result;
+    }
+
+    private void handlePaths(BufferedReader inputReader,
+        List<String> filterPaths, BufferedWriter writer, int concurrency)
+        throws IOException {
+      String line;
+      while ((line = inputReader.readLine()) != null) {
+        final String trimmedLine = line.trim();
+        if (trimmedLine.isEmpty() || trimmedLine.startsWith("#")) {
+          continue;
+        }
+        handlePath(new Path(trimmedLine), filterPaths, writer, concurrency);
+      }
+    }
+
+    private int handlePath(Path path, List<String> filterPaths,
+        BufferedWriter writer, int concurrency) {
+      ForkJoinPool p = new ForkJoinPool(concurrency);
+      ScanTask task = new ScanTask(dfs, path, filterPaths, writer);
+      p.execute(task);
+      task.join();
+      p.shutdown();
+      return 0;
+    }
+  }
+
+  /**
+   * parallel checking using fork-join.
+   */
+  private static class ScanTask extends RecursiveAction {
+    private final DistributedFileSystem dfs;
+    private final Path fullPath;
+    private final List<String> filterPaths;
+    private final BufferedWriter resultWriter;
+
+    public ScanTask(DistributedFileSystem dfs, Path path,
+        List<String> filterPaths, BufferedWriter writer) {
+      this.dfs = dfs;
+      this.fullPath = path;
+      this.filterPaths = filterPaths;
+      this.resultWriter = writer;
+    }
+
+    private void writeToOutput(BufferedWriter writer, String path) throws IOException {
+      if (writer == null) {
+        return;
+      }
+      synchronized (writer) {
+        writer.write(path);
+        writer.newLine();
+        writer.flush();
+      }
+    }
+
+    /**
+     * All subtasks update results safely to avoid aggregate operation.
+     */
+    @Override
+    public void compute() {
+      if (fullPath.toUri().getPath().contains(".hive-staging")
+          || fullPath.toUri().getPath().contains(".spark-staging")) {
+        System.out.println("Ignore " + fullPath);
+        return;
+      }
+
+      try {
+        FileStatus[] children = dfs.listStatus(this.fullPath);
+        List<ScanTask> subtasks = new ArrayList<>();
+        for (FileStatus child : children) {
+          if (child.isDirectory()) {
+            String childPath = child.getPath().toUri().getPath();
+            if (childPath.contains(".hive-staging") || childPath.contains(".spark-staging")) {
+              System.out.println("Ignore " + child.getPath());
+            } else {
+              subtasks.add(new ScanTask(dfs, child.getPath(), filterPaths, resultWriter));
+            }
+          }
+        }
+        if (!subtasks.isEmpty()) {
+          invokeAll(subtasks);
+        } else {
+          // All children are file.
+          for (String filterPath : filterPaths) {
+            if (this.fullPath.toUri().getPath().startsWith(filterPath)) {
+              System.out.println("Ignore " + fullPath + " because filter path is " + filterPath);
+              return;
+            }
+          }
+          writeToOutput(this.resultWriter, fullPath.toUri().getPath());
+        }
+      } catch (IOException e) {
+        System.out.println("Failed to scan: " + fullPath + " : "
+            + StringUtils.stringifyException(e));
       }
     }
   }
