@@ -117,11 +117,11 @@ public class TestNSMigrationToolSingle {
   public void testReadWriteContext() throws IOException {
     String testPath = "/" + GenericTestUtils.getMethodName() + "0";
     MigrationJob jobW = new MigrationJob(new Path(testPath), "ns0", "ns1", routerContext.getConf(),
-        routerAdminAddress, false, false, false);
+        routerAdminAddress, false, false, false, false);
     jobW.writeContext();
 
     MigrationJob jobR = new MigrationJob(new Path(testPath), "ns0", "ns1", routerContext.getConf(),
-        routerAdminAddress, false, false, false);
+        routerAdminAddress, false, false, false, false);
     assertEquals(routerContext.getConf().toString(), jobR.getContext().getConf().toString());
     assertEquals(jobR.getContext(), jobW.getContext());
   }
@@ -131,7 +131,7 @@ public class TestNSMigrationToolSingle {
     routerClient.mkdirs(path.toString());
     MigrationJob job =
         new MigrationJob(path, "ns0", "ns1", routerContext.getConf(), routerAdminAddress, false,
-            false, false);
+            false, false, false);
     if (createFile) {
       FSDataOutputStream os = nnFs0.create(new Path(path, "tempFile"), true);
       os.writeUTF("TEST DATA");
@@ -151,7 +151,7 @@ public class TestNSMigrationToolSingle {
         // Interrupt stage and retry stage again to ensure no issue would happen when stage is rerun
         job =
             new MigrationJob(path, "ns0", "ns1", routerContext.getConf(), routerAdminAddress, false,
-                false, false);
+                false, false, false);
       }
       job.handleStage();
       if (!job.proceedToNextStage()) {

@@ -27,10 +27,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -79,6 +81,8 @@ import org.apache.hadoop.util.Time;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.hadoop.tools.federation.migration.AnalyzeJob.IGNORE_SUFFIX;
 
 /**
  * One of the supported commands for {@link NSMigrationTool}.
@@ -163,11 +167,14 @@ public class MigrationJob {
 
     DistributedFileSystem srcFs =
         (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + src), conf);
+    Path inputPath = new Path(input);
     LinkedHashMap<Path, Pair<Integer, Long>> paths =
         MigrationUtils.loadPathsWithCountFromDfs(srcFs, new Path(input));
 
-    runBatchJob(conf, concurrencyStr, paths, src, dst, routerAddr, skipOpenFiles, new Path(output),
-        false, fileLimit, sizeLimit);
+    Path ignorePath = new Path(inputPath.getParent(), inputPath.getName() + IGNORE_SUFFIX);
+
+    runBatchJob(conf, concurrencyStr, paths, src, dst, routerAddr, skipOpenFiles, ignorePath,
+        new Path(output), false, fileLimit, sizeLimit, null);
     return 0;
   }
 
@@ -183,22 +190,28 @@ public class MigrationJob {
    * @param dst            destination namespace
    * @param routerAddr     router address for mount table operations, in IP:PORT format
    * @param skipOpenFiles  flag to skip checking for UC files, will wait until no UC files if false
+   * @param ignore         path containing paths to ignore
    * @param output         path to output file to store migrated paths
    * @param fileMode        true to run at individual file level, in which case, input paths have
    *                       to be files
    * @param fileLimit       the minimum file count of a cold dir to use YARN distcp instead of local
    * @param sizeLimit      the minimum size of a cold dir to use YARN distcp instead of local
+   * @param corruptFiles   corrupt files, ignored if fileMode, allowed to fail distcp if cold mode
    * @throws InterruptedException
    */
   public static void runBatchJob(Configuration conf, String concurrencyStr,
       Map<Path, Pair<Integer, Long>> paths, String src, String dst, String routerAddr,
-      boolean skipOpenFiles, Path output, boolean fileMode, int fileLimit, long sizeLimit)
-      throws InterruptedException {
+      boolean skipOpenFiles, Path ignore, Path output, boolean fileMode, int fileLimit,
+      long sizeLimit, Set<String> corruptFiles) throws InterruptedException {
     int totalPaths = paths.size();
     if (totalPaths == 0) {
       LOG.info("There's nothing to migrate.");
       return;
     }
+    if (corruptFiles == null) {
+      corruptFiles = new HashSet<>();
+    }
+    Set<String> finalCorruptFiles = corruptFiles;
     LOG.info("Migrating {} paths", totalPaths);
     MigrationJob.initializeFastCopyInstance(conf);
     for (Path path : paths.keySet()) {
@@ -222,7 +235,8 @@ public class MigrationJob {
               fileLimit > entry.getValue().getLeft() || sizeLimit > entry.getValue().getRight();
           MigrationJob job =
               new MigrationJob(singlePath, src, dst, new Configuration(conf), routerAddr,
-                  skipOpenFiles, fileMode, localDistcp);
+                  skipOpenFiles, fileMode, localDistcp, MigrationUtils.setHasChildOfPath(singlePath,
+                  finalCorruptFiles));
           long migrationStart = Time.monotonicNow();
           while (true) {
             long start = Time.monotonicNow();
@@ -238,9 +252,10 @@ public class MigrationJob {
           }
           if (job.stage == JobStage.FINISH) {
             LOG.info("Path={}, total={}", singlePath, Time.monotonicNow() - migrationStart);
-            if (output != null) {
-              synchronized (output) {
-                MigrationUtils.appendLineToFileInDfs(job.srcFs, singlePath.toString(), output);
+            synchronized (output) {
+              MigrationUtils.appendLineToFileInDfs(job.srcFs, singlePath.toString(), output);
+              if (job.context.keepSource) {
+                MigrationUtils.appendLineToFileInDfs(job.srcFs, singlePath.toString(), ignore);
               }
             }
           }
@@ -269,17 +284,16 @@ public class MigrationJob {
    * Entrypoint. Only used for hot migration.
    * @param paths set of paths to migrate
    */
-  public static void runBatchJob(Configuration conf, String concurrencyStr,
-      Set<Path> paths, String src, String dst, String routerAddr,
-      boolean skipOpenFiles, Path output, boolean fileMode, int fileLimit, long sizeLimit)
-      throws InterruptedException {
+  public static void runBatchJob(Configuration conf, String concurrencyStr, Set<Path> paths,
+      String src, String dst, String routerAddr, boolean skipOpenFiles, Path ignore, Path output,
+      boolean fileMode, int fileLimit, long sizeLimit) throws InterruptedException {
     // Make mock values since it doesn't matter for hot migration
     Map<Path, Pair<Integer, Long>> pathMap = new HashMap<>();
     for (Path path : paths) {
       pathMap.put(path, Pair.of(1, 1L));
     }
-    runBatchJob(conf, concurrencyStr, pathMap, src, dst, routerAddr, skipOpenFiles, output,
-        fileMode, fileLimit, sizeLimit);
+    runBatchJob(conf, concurrencyStr, pathMap, src, dst, routerAddr, skipOpenFiles, ignore, output,
+        fileMode, fileLimit, sizeLimit, null);
   }
 
   @VisibleForTesting
@@ -293,8 +307,8 @@ public class MigrationJob {
   }
 
   public MigrationJob(Path path, String srcNs, String dstNs, Configuration conf,
-      String routerAddress, boolean skipOpenFiles, boolean fileMode, boolean localDistcp)
-      throws IOException {
+      String routerAddress, boolean skipOpenFiles, boolean fileMode, boolean localDistcp,
+      boolean keepSource) throws IOException {
     this.conf = conf;
     this.dstFs = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + dstNs), conf);
     this.srcFs = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + srcNs), conf);
@@ -306,6 +320,7 @@ public class MigrationJob {
     this.context.dstNs = dstNs;
     this.context.fileMode = fileMode;
     this.context.localDistcp = localDistcp;
+    this.context.keepSource = keepSource;
     this.skipOpenFiles = skipOpenFiles;
     LOG.info("Initialized job with context {}", context);
   }
@@ -571,10 +586,21 @@ public class MigrationJob {
   }
 
   private boolean migratePath() throws Exception {
-    if (context.fileMode) {
-      return fileMigrate();
-    } else {
-      return migrateWithDistCp();
+    try {
+      if (context.fileMode) {
+        return fileMigrate();
+      } else {
+        return migrateWithDistCp() || context.keepSource;
+      }
+    } catch (ExecutionException ee) {
+      // Special handling for file mode since it's easy to detect corrupt block unlike with distcp
+      if (ee.getCause().getMessage().contains("All replicas are bad for block")) {
+        LOG.warn("Detected corrupt file in path {}", context.path, ee);
+        context.keepSource = true;
+        return true;
+      } else {
+        throw ee;
+      }
     }
   }
 
@@ -613,7 +639,8 @@ public class MigrationJob {
       dstFs.setXAttr(tempPath, xattrName, entry.getValue());
     }
     if (dstFs.rename(tempPath, context.path)) {
-      dstFs.setTimes(context.path, sourceStatus.getModificationTime(), sourceStatus.getAccessTime());
+      dstFs.setTimes(context.path, sourceStatus.getModificationTime(),
+          sourceStatus.getAccessTime());
       return true;
     } else {
       return false;
@@ -690,7 +717,11 @@ public class MigrationJob {
           return submitDistCpJobWithRetry(distCp);
         }
         job.waitForCompletion();
-        return job.isSuccessful();
+        if (job.isSuccessful()) {
+          return true;
+        } else {
+          throw new IOException(job.getFailureInfo());
+        }
       }
     }
   }
@@ -722,12 +753,12 @@ public class MigrationJob {
   }
 
   private boolean cleanup() throws IOException {
-    if (!dstFs.exists(context.path)) {
+    if (!dstFs.exists(context.path) && !context.keepSource) {
       LOG.error("Path {} not found in destination namespace {} after migration!", context.path,
           context.dstNs);
       return false;
     }
-    if (!context.fileMode) {
+    if (!context.fileMode && !context.keepSource) {
       // Check all subdirs exist in destination
       FileStatus[] srcListing = srcFs.listStatus(context.path);
       FileStatus[] dstListing = dstFs.listStatus(context.path);
@@ -774,7 +805,7 @@ public class MigrationJob {
       LOG.error("Failed to update mount {} to readonly", existing);
       return false;
     }
-    return moveToMigrationRecycleBin();
+    return context.keepSource || moveToMigrationRecycleBin();
   }
 
   private boolean moveToMigrationRecycleBin() throws IOException {
@@ -876,6 +907,8 @@ public class MigrationJob {
     public boolean fileMode;
     /** Run distcp in local mode instead of YARN mode? */
     public boolean localDistcp;
+    /** Skip moving source data to recycle bin? */
+    public boolean keepSource;
 
     JobContext(Path path) {
       this.path = path;
@@ -892,6 +925,7 @@ public class MigrationJob {
       out.writeBoolean(prepareStageFailed);
       out.writeBoolean(fileMode);
       out.writeBoolean(localDistcp);
+      out.writeBoolean(keepSource);
     }
 
     @Override
@@ -904,6 +938,7 @@ public class MigrationJob {
       prepareStageFailed = in.readBoolean();
       fileMode = in.readBoolean();
       localDistcp = in.readBoolean();
+      keepSource = in.readBoolean();
     }
 
     @Override
@@ -915,7 +950,8 @@ public class MigrationJob {
       return conf.toString().equals(other.conf.toString()) && path.equals(other.path)
           && pathStr.equals(other.pathStr) && srcNs.equals(other.srcNs) && dstNs.equals(other.dstNs)
           && jobID.equals(other.jobID) && prepareStageFailed == other.prepareStageFailed
-          && fileMode == other.fileMode && localDistcp == other.localDistcp;
+          && fileMode == other.fileMode && localDistcp == other.localDistcp
+          && keepSource == other.keepSource;
     }
 
     @Override

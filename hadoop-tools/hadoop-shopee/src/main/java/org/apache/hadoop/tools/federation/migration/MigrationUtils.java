@@ -121,4 +121,24 @@ public class MigrationUtils {
       throw new RuntimeException(e);
     }
   }
+
+  public static boolean setHasChildOfPath(Path pathToCheck, Set<String> corruptFiles) {
+    String pathToCheckStr = pathToCheck.toUri().getPath();
+    for (String corruptFile : corruptFiles) {
+      if (corruptFile.startsWith(pathToCheckStr)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public static boolean pathIsChildOfSet(Path pathToCheck, Set<String> ignorePaths) {
+    String pathToCheckStr = pathToCheck.toUri().getPath();
+    for (String ignorePath : ignorePaths) {
+      if (pathToCheckStr.startsWith(ignorePath)) {
+        return true;
+      }
+    }
+    return false;
+  }
 }

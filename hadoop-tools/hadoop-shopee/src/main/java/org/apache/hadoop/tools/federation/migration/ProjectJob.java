@@ -19,9 +19,11 @@ package org.apache.hadoop.tools.federation.migration;
 
 import java.io.IOException;
 import java.net.URI;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
@@ -29,6 +31,7 @@ import org.apache.hadoop.conf.StorageSize;
 import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Time;
@@ -71,6 +74,7 @@ public class ProjectJob {
   private final boolean hot;
   private final int fileLimit;
   private final long sizeLimit;
+  private final boolean ignoreCorrupt;
   private final Configuration conf;
   private int emptyColdCycle;
 
@@ -80,11 +84,12 @@ public class ProjectJob {
   private final Path hotContextFilePath;
   private final Path coldContextDoneFilePath;
   private final Path hotContextDoneFilePath;
+  private final Path ignorePathsFilePath;
 
   public ProjectJob(String path, String projectName, String src, String dst, String fed,
       String routerAddr, int listingThreads, int workerThreads, long stopThreshold,
-      int coldThreshold, boolean hotMode, int fileLimit, long sizeLimit, Configuration conf)
-      throws IOException {
+      int coldThreshold, boolean hotMode, int fileLimit, long sizeLimit, boolean ignoreCorrupt,
+      Configuration conf) throws IOException {
     this.path = new Path(path);
     if (projectName == null) {
       this.projectName = path.split("/")[2];
@@ -102,12 +107,15 @@ public class ProjectJob {
     this.hot = hotMode;
     this.fileLimit = fileLimit;
     this.sizeLimit = sizeLimit;
+    this.ignoreCorrupt = ignoreCorrupt;
     this.conf = conf;
 
     this.srcFs = (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + srcNs), conf);
 
     this.inputPathsFilePath = new Path(BASE_PATH, this.projectName + "_input.txt");
     this.donePathsFilePath = new Path(BASE_PATH, this.projectName + "_done.txt");
+    this.ignorePathsFilePath =
+        new Path(BASE_PATH, this.projectName + "_input.txt" + AnalyzeJob.IGNORE_SUFFIX);
 
     this.coldContextFilePath = new Path(BASE_PATH, "._MIGRATION_COLD_" + this.projectName);
     this.coldContextDoneFilePath =
@@ -181,9 +189,13 @@ public class ProjectJob {
       }
     }
 
+    // Allow cold migration to fail a path if it contains a corrupt file?
+    // In the case of hot migration, straight up ignore the file.
+    boolean ignoreCorrupt = StringUtils.popOption("-ignoreCorrupt", argsList);
+
     ProjectJob job =
         new ProjectJob(path, projectName, src, dst, fed, routerAddr, listingThreads, workerThreads,
-            stopThreshold, coldThreshold, hotMode, fileLimit, sizeLimit, conf);
+            stopThreshold, coldThreshold, hotMode, fileLimit, sizeLimit, ignoreCorrupt, conf);
     job.execute();
     return 0;
   }
@@ -298,10 +310,18 @@ public class ProjectJob {
       srcFs.delete(coldContextFilePath);
       return;
     }
+    Set<String> corruptFiles = new HashSet<>();
+    if (ignoreCorrupt) {
+      RemoteIterator<Path> corruptFilesIte = srcFs.listCorruptFileBlocks(path);
+      while (corruptFilesIte.hasNext()) {
+        corruptFiles.add(corruptFilesIte.next().toUri().getPath());
+      }
+    }
     // Reset emptyColdCycle if some data to migration is found
     emptyColdCycle = 0;
     MigrationJob.runBatchJob(conf, String.valueOf(workerThreads), allPaths, srcNs, dstNs,
-        routerAddr, false, donePathsFilePath, false, fileLimit, sizeLimit);
+        routerAddr, false, ignorePathsFilePath, donePathsFilePath, false, fileLimit, sizeLimit,
+        corruptFiles);
     srcFs.delete(coldContextFilePath);
   }
 
@@ -310,8 +330,21 @@ public class ProjectJob {
     // Hot migration
     AnalyzeJob.listAllFilePaths(conf, srcNs, path.toString(), inputPathsFilePath);
     Set<Path> allPaths = MigrationUtils.loadPathsFromDfs(srcFs, path, inputPathsFilePath);
+    Set<String> ignorePaths =
+        MigrationUtils.loadPathsFromDfs(srcFs, null, ignorePathsFilePath).stream()
+            .map(x -> x.toUri().getPath()).collect(Collectors.toSet());
+    if (ignoreCorrupt) {
+      RemoteIterator<Path> corruptFilesIte = srcFs.listCorruptFileBlocks(path);
+      while (corruptFilesIte.hasNext()) {
+        Path corruptFile = corruptFilesIte.next();
+        allPaths.remove(corruptFile);
+        if (!MigrationUtils.pathIsChildOfSet(corruptFile, ignorePaths)) {
+          MigrationUtils.appendLineToFileInDfs(srcFs, corruptFile.toString(), ignorePathsFilePath);
+        }
+      }
+    }
     MigrationJob.runBatchJob(conf, String.valueOf(workerThreads), allPaths, srcNs, dstNs,
-        routerAddr, false, donePathsFilePath, true, 0, 0);
+        routerAddr, false, ignorePathsFilePath, donePathsFilePath, true, 0, 0);
     cleanPathsFiles();
     srcFs.delete(hotContextFilePath);
   }

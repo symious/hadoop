@@ -74,6 +74,9 @@ public class AnalyzeJob {
   private final ExecutorService threadPool;
   private final AtomicInteger pathsOngoing;
 
+  public static final String DST_ONLY_SUFFIX = ".dst_only";
+  public static final String IGNORE_SUFFIX = ".ignore";
+
   /**
    * {@link ConcurrentLinkedQueue} of {@link RawNodeData} representing cold directories,
    * to be populated during recursive traversal, and to be drained by {@link TreeProcessor}.
@@ -564,9 +567,9 @@ public class AnalyzeJob {
     }
 
     /**
-     * Reads from the .dst_only file for paths that no longer exist on the source namespace,
+     * Reads from the {@value DST_ONLY_SUFFIX} file for paths that no longer exist on the source namespace,
      * then checks new cold dirs if they exist on source ns or not. If not, removes from the
-     * list of cold dirs and writes to .dst_only file.
+     * list of cold dirs and writes to {@value DST_ONLY_SUFFIX} file.
      * @return list of cold dirs that exist on source namespace
      */
     private SortedMap<ResultNode, ResultNode> getColdDirsOnSrc()
@@ -575,13 +578,15 @@ public class AnalyzeJob {
           root.getAllLeafNodes(new TreeMap<>(), new ArrayList<>());
       Set<String> toRemove = new HashSet<>();
 
-      Path dstOnlyFilePath = new Path(output.getParent(), output.getName() + ".dst_only");
+      Path dstOnlyFilePath = new Path(output.getParent(), output.getName() + DST_ONLY_SUFFIX);
       if (srcFs.exists(dstOnlyFilePath)) {
         // Paths are sorted by modified time, from newest to oldest
         for (Path path : MigrationUtils.loadPathsFromDfs(srcFs, null, dstOnlyFilePath)) {
           toRemove.add(path.toUri().getPath());
         }
       }
+
+      toRemove.addAll(getIgnoredPaths(srcFs, output));
 
       List<Future<Void>> futures = new ArrayList<>();
       for (ResultNode coldDir : allColdDirs.keySet()) {
@@ -675,13 +680,37 @@ public class AnalyzeJob {
       Path outputFile) throws IOException {
     DistributedFileSystem srcFs =
         (DistributedFileSystem) FileSystem.get(URI.create("hdfs://" + srcNs), conf);
-    Path path = new Path(pathStr);
-    RemoteIterator<LocatedFileStatus> ite = srcFs.listFiles(path, true);
+
+    Set<String> ignoredPaths = getIgnoredPaths(srcFs, outputFile);
+
+    RemoteIterator<LocatedFileStatus> ite = srcFs.listFiles(new Path(pathStr), true);
     try (FSDataOutputStream os = srcFs.create(outputFile)) {
       while (ite.hasNext()) {
-        os.writeBytes(ite.next().getPath().toUri().getPath() + "\n");
+        String path = ite.next().getPath().toUri().getPath();
+        if (ignoredPaths.contains(path)) {
+          continue;
+        }
+        os.writeBytes(path + "\n");
       }
     }
+  }
+
+  /**
+   * Gets paths that contain corrupt files from the {@value IGNORE_SUFFIX} file on source namespace.
+   * These paths are removed from the cold dir list and won't be migrated since they were already
+   * migrated once, sans the corrupt files.
+   */
+  private static Set<String> getIgnoredPaths(DistributedFileSystem srcFs, Path outputFile)
+      throws IOException {
+    Set<String> ignoredPaths = new HashSet<>();
+    Path ignorePath = new Path(outputFile.getParent(), outputFile.getName() + IGNORE_SUFFIX);
+    if (srcFs.exists(ignorePath)) {
+      for (Path path : MigrationUtils.loadPathsFromDfs(srcFs, null, ignorePath)) {
+        LOG.info("Ignoring path with corrupt file {}", path);
+        ignoredPaths.add(path.toUri().getPath());
+      }
+    }
+    return ignoredPaths;
   }
 
   private static int[] copyAndAppend(int[] originalArray, int newElement) {
