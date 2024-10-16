@@ -325,6 +325,7 @@ public class ReplicaDispatcher {
     if (MOVER_MANAGER == null) {
       MOVER_MANAGER = new MoverManager(conf);
       METRICS = ReplicaDispatcherMetrics.create();
+      LOG.info("Init Mover Manager");
     }
   }
 
@@ -334,6 +335,7 @@ public class ReplicaDispatcher {
         MOVER_MANAGER.shutdown();
         MOVER_MANAGER = null;
         METRICS = null;
+        LOG.info("Shut down Mover Manager");
       }
     }
   }

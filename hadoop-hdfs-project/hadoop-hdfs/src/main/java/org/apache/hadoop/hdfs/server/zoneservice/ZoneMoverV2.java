@@ -86,6 +86,7 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -541,10 +542,7 @@ public class ZoneMoverV2 {
   protected void stopCoordinatorAndPreMigration() {
     try {
       // Stop and wait for preMigration to finish.
-      if (preMigrationChecker != null) {
-        preMigrationChecker.stopPreMigrationChecker();
-        preMigrationChecker.join();
-      }
+      waitPreMigrationCheckerCompletion();
 
       // Stop and wait for coordinator to finish
       coordinator.waitForCheckCompletion();
@@ -558,6 +556,20 @@ public class ZoneMoverV2 {
       }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
+    }
+  }
+
+  private void waitPreMigrationCheckerCompletion() throws InterruptedException {
+    if (preMigrationChecker != null) {
+      while (!preMigrationChecker.preMigrationFileQueue.isEmpty()) {
+        try {
+          Thread.sleep(1000);
+        } catch (InterruptedException e) {
+          break;
+        }
+      }
+      preMigrationChecker.setShouldServiceStop();
+      preMigrationChecker.join();
     }
   }
 
@@ -820,7 +832,8 @@ public class ZoneMoverV2 {
       return new ArrayList<>();
     }
 
-    List<Node> excludedNodes = new ArrayList<>(Arrays.asList(lb.getLocations()));
+    // Avoid case ConcurrentModificationException.
+    List<Node> excludedNodes = new CopyOnWriteArrayList<>(Arrays.asList(lb.getLocations()));
     List<MoveItemTask> moveTasks = new ArrayList<>();
     for (ZoneMoveItem moveItem : moveItems) {
       for (short i = 0; i < moveItem.getNum(); i++) {
@@ -828,13 +841,15 @@ public class ZoneMoverV2 {
         DatanodeInfo sourceDN = sourceDNs.get(0);
         sourceDNs.remove(0);
         try {
-          LOG.info("Migrate block {} from {} to {} dc for {} with excludeNode {}.",
-              lb.getBlock(), sourceDN, moveItem.getTargetDataCenter(),
-              fullPath, excludedNodes);
+          LOG.info("Migrate block {} from {} to {} dc for {}.", lb.getBlock(),
+              sourceDN, moveItem.getTargetDataCenter(), fullPath);
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Excluded nodes {} for block {}", excludedNodes, lb.getBlock());
+          }
           ReplicaDispatcher.ReplicaMoveTask task = replicaDispatcher.dispatchLocatedBlock(
               fullPath, sourceDN, lb, moveItem.getTargetDataCenter(), ecPolicy, excludedNodes);
           moveTasks.add(new MoveItemTask(task, lb, fullPath));
-        } catch (IOException e) {
+        } catch (Exception e) {
           LOG.error("Failed to migrate replica from {} to {} for block {} in {}.",
               sourceDN, moveItem.getTargetDataCenter(), lb.getBlock(), fullPath, e);
           // If build move task fails will create failed MoveItemTask for retrying.
@@ -1131,10 +1146,12 @@ public class ZoneMoverV2 {
     private volatile boolean running;
     private final BlockingQueue<PreMigrationFile> preMigrationFileQueue;
     private final long preMigrationCheckInterval;
+    private volatile boolean shouldServiceStop;
 
     public PreMigrationChecker(Configuration conf, String name) {
       super(name);
       this.running = true;
+      this.shouldServiceStop = false;
       int preMigrationQueueSize = conf.getInt(
           DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_QUEUE_SIZE_KEY,
           DFSConfigKeys.DFS_ZONE_MIGRATION_PRE_MIGRATION_QUEUE_SIZE_DEFAULT);
@@ -1146,6 +1163,10 @@ public class ZoneMoverV2 {
 
     public void stopPreMigrationChecker() {
       this.running = false;
+    }
+
+    public void setShouldServiceStop() {
+      this.shouldServiceStop = true;
     }
 
     public void preMigrateFile(PreMigrationFile file)
@@ -1178,6 +1199,10 @@ public class ZoneMoverV2 {
               Thread.sleep(sleepTime);
             }
           } else {
+            if (shouldServiceStop) {
+              LOG.info("PreMigrationChecker will be stopped");
+              stopPreMigrationChecker();
+            }
             Thread.sleep(this.preMigrationCheckInterval);
           }
         } catch (Exception e) {

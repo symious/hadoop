@@ -333,7 +333,7 @@ public class ZoneMover {
    * @return the corresponding rule
    */
   ReplicationRule getPathRule(String path) throws IllegalArgumentException {
-    if (enableDR || (pathRuleMap.isEmpty() && enableMigrationDC)) {
+    if (enableDR || enableMigrationDC) {
       return null;
     }
     String matchPath = "";

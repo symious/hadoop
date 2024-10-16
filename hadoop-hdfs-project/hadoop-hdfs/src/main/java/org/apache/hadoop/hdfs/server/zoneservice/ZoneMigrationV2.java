@@ -50,7 +50,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -66,7 +65,7 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
   private final String sourceDC;
   private final String targetDC;
   private final boolean isDecrease;
-  private volatile Map<String, ReplicationRule> blackList = new HashMap<>();
+  private volatile List<String> blackList = new ArrayList<>();
   private BlackListUpdater blackListUpdater = null;
 
   public ZoneMigrationV2(Configuration conf, URI nameNode, List<Path> paths,
@@ -174,14 +173,13 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
   @Override
   public boolean doesSkipPath(String path) {
     String matchPath = "";
-    for (Map.Entry<String, ReplicationRule> entry : blackList.entrySet()) {
-      String key = entry.getKey();
-      if (path.startsWith(key)) {
+    for (String str : blackList) {
+      if (path.startsWith(str)) {
         // A sub path may have different a rule with its parent path.
         // For example, if "/test" and "/test/abc" have different rules,
         // "/test/abc/1.txt" should use the rule of "/test/abc".
-        if (key.length() > matchPath.length()) {
-          matchPath = key;
+        if (str.length() > matchPath.length()) {
+          matchPath = str;
         }
       }
     }
@@ -453,28 +451,28 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
       LOG.info("BlackListUpdater is starting...");
       while (shouldRun) {
         try {
-          // For Zone Migration: Update records to the filteredPathRuleMap.
-          updatePathRuleForZoneMover();
+          // For Zone Migration: Update records to the blackList.
+          updateBlackList();
           // Wait for the specified interval before continuing execution.
           Thread.sleep(checkUpdateInterval * 1000L);
         } catch (IOException e) {
           LOG.error("There are some errors happen when BlackListUpdater updates path-rule pairs.", e);
         } catch (InterruptedException e) {
-          LOG.warn("Monitor path rule map process is interrupted!");
+          LOG.warn("Monitor BlackListUpdater process is interrupted!");
           break;
         }
       }
     }
 
-    private void updatePathRuleForZoneMover() throws IOException {
+    private void updateBlackList() throws IOException {
       if (driver == null) {
         return;
       }
-      updatePathRuleMap(driver, namenode.getAuthority());
+      updateBlackList(driver, namenode.getAuthority());
     }
 
-    private void updatePathRuleMap(StoreDriver driver, String nameSpace) throws IOException {
-      Map<String, ReplicationRule> tmpBlackList = new HashMap<>();
+    private void updateBlackList(StoreDriver driver, String nameSpace) throws IOException {
+      List<String> tmpBlackList = new ArrayList<>();
       List<MigrationRecord> records = driver.getAll(MigrationRecord.class).getRecords();
       for (MigrationRecord record : records) {
         // Process only records in "monitor" mode and the specified name space.
@@ -485,14 +483,14 @@ public class ZoneMigrationV2 extends ZoneMoverV2 {
             LOG.warn("Failed adding record: {} , due replication rule as null will skip.", record);
             continue;
           }
-          ReplicationRule parsedRule = ReplicationRule.parseFromString(record.getRule());
-          // For Zone Mover: Add records to the filteredPathRuleMap.
-          LOG.debug("Adding record: {} to the filteredPathRuleMap for Zone Mover.", record);
-          tmpBlackList.put(record.getPath(), parsedRule);
+
+          // For Zone Mover: Add record to the blacklist.
+          LOG.debug("Adding record: {} to the blacklist for Zone Mover.", record);
+          tmpBlackList.add(record.getPath());
         }
       }
 
-      // Update the filteredPathRulesFromZS for Zone Mover.
+      // Update the blackList for Zone Mover.
       blackList = tmpBlackList;
     }
   }

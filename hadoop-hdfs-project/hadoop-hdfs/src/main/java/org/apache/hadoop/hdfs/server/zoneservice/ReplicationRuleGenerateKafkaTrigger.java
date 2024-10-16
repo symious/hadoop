@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.zoneservice;
 
+import org.apache.commons.io.Charsets;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
 import org.apache.hadoop.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.conf.Configuration;
@@ -38,11 +39,17 @@ import org.codehaus.jettison.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Semaphore;
 
@@ -75,6 +82,8 @@ public class ReplicationRuleGenerateKafkaTrigger {
   private final Thread monitorServer;
   private final ExecutorService executor;
   private final Set<String> filterPaths = Collections.synchronizedSet(new HashSet<String>());
+  // paths in this set will be skipped from processing.
+  private Set<String> blacklistPaths = new HashSet<>();
   private Semaphore rateLimiter;
   private final Configuration conf;
 
@@ -232,11 +241,70 @@ public class ReplicationRuleGenerateKafkaTrigger {
     maxRateLimit = conf.getInt(DFSConfigKeys.DFS_ZONE_GENERATE_REPLICATION_RULE_MAX_RATE_LIMIET_KEY,
         DFSConfigKeys.DFS_ZONE_GENERATE_REPLICATION_RULE_MAX_RATE_LIMIET_DEFAULT);
 
+    loadBlacklist(conf);
+
     LOG.info("Init ReplicationRuleParam with ruleGenerateKey = {}, pathSizeLimit = {}, "
             + "minCrossReadSize = {}, pollTimeOut = {}, capacityLimit = {} , "
             + "supportMigrateReplica = {}, validDataCenters = {}, maxRateLimit = {} ",
         ruleGenerateKey, pathSizeLimit, minCrossReadSize, pollTimeOut,
         capacityLimit, supportMigrateReplica, validDataCenters, maxRateLimit);
+  }
+
+  private void loadBlacklist(Configuration conf) {
+    String blacklistFile = conf.get(
+        DFSConfigKeys.DFS_ZONE_GENERATE_REPLICATION_RULE_BLACKLIST_FILE_KEY);
+    if (blacklistFile == null || blacklistFile.isEmpty()) {
+      LOG.warn( "{} not configured.",
+          DFSConfigKeys.DFS_ZONE_GENERATE_REPLICATION_RULE_BLACKLIST_FILE_KEY);
+      return;
+    }
+    File file = new File(blacklistFile);
+    try {
+      loadBlacklistInternal(file);
+    } catch (IOException e) {
+      LOG.error("Error load blacklist paths.", e);
+    }
+  }
+
+  private void loadBlacklistInternal(File file) throws IOException {
+    if (!file.exists()) {
+      LOG.warn("{} does not exist.", file);
+      return;
+    }
+    // new set.
+    Set<String> newLinesSet = new HashSet<>();
+    LOG.info("Loading new lines from file: {}.", file);
+    try (BufferedReader reader = new BufferedReader(
+        new InputStreamReader(new FileInputStream(file), Charsets.UTF_8))) {
+      String line;
+      while ((line = reader.readLine()) != null) {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Loading new lines from file: handle {}.", line);
+        }
+
+        // skip empty line and comment
+        line = line.trim();
+        if (line.isEmpty() || line.startsWith("#")) {
+          continue;
+        }
+
+        if (!line.endsWith("/")) {
+          line += "/";
+        }
+
+        newLinesSet.add(line);
+      }
+    }
+
+    LOG.info("Loaded {} from {}.", newLinesSet.size(), file);
+    if (newLinesSet.size() == 0) {
+      LOG.warn("Lines set is empty.");
+    }
+    this.blacklistPaths = newLinesSet;
+  }
+
+  private boolean skipPath(String path) {
+    return blacklistPaths.stream().anyMatch(path::startsWith);
   }
 
   private class Monitor implements Runnable {
@@ -262,6 +330,10 @@ public class ReplicationRuleGenerateKafkaTrigger {
         String ns = jsonObject.getString("ns");
         String path = jsonObject.getString("path");
         long crossReadSize = jsonObject.getLong("size");
+        if (skipPath(path)) {
+          LOG.info("{} will be skipped.", path);
+          return;
+        }
         if (!validDataCenters.contains(clientDC) || !validDataCenters.contains(dnDC)) {
           LOG.warn("Can not add invalid replication rule: {}.", record);
           return;
@@ -288,7 +360,7 @@ public class ReplicationRuleGenerateKafkaTrigger {
             // to the number of replicas. Here, for the compatibility of code implementation,
             // replicationRule is set to the default value.
             // Refer to SPDI-137059.
-            String replicationRule = "/defaultDC";
+            String replicationRule = "/migrateDC:1";
             LOG.info("{} {} add replication rule: {} with clientDC: {} and dnDC:{} " +
                     "start for migration.", ns, path, replicationRule, clientDC, dnDC);
             ResultCode resultCode =
