@@ -687,6 +687,10 @@ public class MigrationJob {
     String[] args = new String[] { "-fastCopyEnable", "-prbugpcaxte", src, dst };
 
     Configuration config = new Configuration(conf);
+    if (context.localDistcp) {
+      config.set("mapreduce.framework.name", "local");
+      config.set("mapreduce.cluster.local.dir", "/tmp/local_distcp");
+    }
     if (context.jobID.isEmpty()) {
       DistCp distCp = new DistCp(config, OptionsParser.parse(args));
       return submitDistCpJobWithRetry(distCp);
