@@ -822,6 +822,8 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
   public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTP_BIND_HOST_KEY = "dfs.zoneservice.auto.balancer.http-bind-host";
   public static final String  DFS_ZONESERVICE_AUTO_BALANCER_HTTPS_BIND_HOST_KEY = "dfs.zoneservice.auto.balancer.https-bind-host";
 
+  public static final String  DFS_ZONEMOVER_HTTP_ENABLED_KEY= "dfs.zonemover.http-enabled";
+  public static final boolean  DFS_ZONEMOVER_HTTP_ENABLED_DEFAULT = true;
   public static final String  DFS_ZONEMOVER_HTTP_ADDRESS_KEY = "dfs.zonemover.http-address";
   public static final String  DFS_ZONEMOVER_HTTP_ADDRESS_DEFAULT = "0.0.0.0:50060";
   public static final String  DFS_ZONEMOVER_HTTPS_ADDRESS_KEY = "dfs.zonemover.https-address";

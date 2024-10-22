@@ -6685,6 +6685,15 @@
   </property>
 
   <property>
+    <name>dfs.zonemover.http-enabled</name>
+    <value>true</value>
+    <description>
+      This parameter controls whether the ZoneMover HTTP server is enabled.
+      If set to "true", the HTTP server will be started, otherwise will disabled.
+    </description>
+  </property>
+
+  <property>
     <name>dfs.zonemover.http-address</name>
     <value>0.0.0.0:50060</value>
     <description>

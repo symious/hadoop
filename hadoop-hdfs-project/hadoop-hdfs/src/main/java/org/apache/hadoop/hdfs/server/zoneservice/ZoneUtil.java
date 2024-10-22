@@ -41,6 +41,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONEMOVER_HTTP_ENABLED_DEFAULT;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_ZONEMOVER_HTTP_ENABLED_KEY;
+
 public class ZoneUtil {
   protected static final String DC_SEPARATOR = ",";
   protected static final String ROOT = "/";
@@ -182,6 +185,9 @@ public class ZoneUtil {
 
   public static ZoneMoverHttpServer startHttpServer(final Configuration conf) throws
       IOException {
+    if (!conf.getBoolean(DFS_ZONEMOVER_HTTP_ENABLED_KEY, DFS_ZONEMOVER_HTTP_ENABLED_DEFAULT)) {
+      return null;
+    }
     ZoneMoverHttpServer httpServer = new ZoneMoverHttpServer(conf, getHttpServerBindAddress(conf));
     httpServer.start();
     return httpServer;
