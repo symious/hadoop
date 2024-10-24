@@ -250,8 +250,8 @@ public class ZoneProgressTracker {
         + "Average setReplication time: %d ms\n"
         + "Average coordinator sleep time: %d ms.\n";
     double filesRate = fileCountSnapshot / elapsedForFile * 1000;
-    double blocksRate = blockCountSnapshot / elapsedForByte * 1000;
-    double bytesRate = byteCountSnapshot / elapsedForBlock * 1000;
+    double blocksRate = blockCountSnapshot / elapsedForBlock * 1000;
+    double bytesRate = byteCountSnapshot / elapsedForByte * 1000;
     double estimatedTimeToComplete =
         totalFiles == UNTRACKED_DUMMY ? -1 : (totalFiles - fileCountSnapshot) / filesRate;
     LOG.info(String.format(msg,
