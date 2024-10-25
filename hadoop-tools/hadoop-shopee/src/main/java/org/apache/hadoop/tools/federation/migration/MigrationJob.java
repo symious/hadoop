@@ -35,7 +35,9 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.tuple.Pair;
@@ -225,6 +227,9 @@ public class MigrationJob {
     ExecutorService threadPool = HadoopExecutors.newFixedThreadPool(concurrency);
     Semaphore active = new Semaphore(concurrency);
     AtomicInteger done = new AtomicInteger(0);
+    AtomicInteger lastLoggedDone = new AtomicInteger(-1);
+    AtomicLong lastLog = new AtomicLong(-1);
+    AtomicBoolean shouldLogNow = new AtomicBoolean(true);
     for (Map.Entry<Path, Pair<Integer, Long>> entry : paths.entrySet()) {
       active.acquire();
       Path singlePath = entry.getKey();
@@ -265,18 +270,26 @@ public class MigrationJob {
         } finally {
           active.release();
           done.incrementAndGet();
+          // Rate limit logging
+          long now = Time.monotonicNow();
+          shouldLogNow.set(now - lastLog.get() > 10000 && done.get() > lastLoggedDone.get());
+          if (shouldLogNow.get()) {
+            synchronized (shouldLogNow) {
+              if (shouldLogNow.get()) {
+                int doneSnapshot = done.get();
+                LOG.info("{}/{} jobs done.", doneSnapshot, totalPaths);
+                lastLoggedDone.set(doneSnapshot);
+                lastLog.set(Time.monotonicNow());
+                shouldLogNow.set(false);
+              }
+            }
+          }
         }
       });
     }
 
-    int lastChecked = -1;
     while (done.get() < totalPaths) {
       Thread.sleep(10000);
-      int snapshot = done.get();
-      if (snapshot > lastChecked) {
-        lastChecked = snapshot;
-        LOG.info("{}/{} jobs done.", snapshot, totalPaths);
-      }
     }
   }
 
