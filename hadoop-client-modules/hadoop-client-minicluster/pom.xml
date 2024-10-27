@@ -193,8 +193,12 @@
           <artifactId>slf4j-log4j12</artifactId>
         </exclusion>
         <exclusion>
-          <groupId>log4j</groupId>
-          <artifactId>log4j</artifactId>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-reload4j</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>ch.qos.reload4j</groupId>
+          <artifactId>reload4j</artifactId>
         </exclusion>
         <exclusion>
           <groupId>com.fasterxml.jackson.core</groupId>
@@ -419,29 +423,25 @@
       <optional>true</optional>
     </dependency>
     <dependency>
-      <groupId>com.sun.jersey</groupId>
+      <groupId>com.github.pjfanning</groupId>
       <artifactId>jersey-json</artifactId>
       <optional>true</optional>
       <exclusions>
         <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-databind</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.jaxrs</groupId>
+          <artifactId>jackson-jaxrs-json-provider</artifactId>
+        </exclusion>
+        <exclusion>
           <groupId>javax.xml.bind</groupId>
           <artifactId>jaxb-api</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-core-asl</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-mapper-asl</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-jaxrs</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.codehaus.jackson</groupId>
-          <artifactId>jackson-xc</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
@@ -451,9 +451,23 @@
       <optional>true</optional>
     </dependency>
     <dependency>
-          <groupId>com.sun.jersey</groupId>
-          <artifactId>jersey-servlet</artifactId>
+      <groupId>com.sun.jersey</groupId>
+      <artifactId>jersey-servlet</artifactId>
       <optional>true</optional>
+      <exclusions>
+        <exclusion>
+          <groupId>javax.servlet</groupId>
+          <artifactId>servlet-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>javax.enterprise</groupId>
+          <artifactId>cdi-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>ch.qos.cal10n</groupId>
+          <artifactId>cal10n-api</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <!-- skip org.apache.avro:avro-ipc because it doesn't look like hadoop-common actually uses it -->
     <dependency>
@@ -683,7 +697,7 @@
                       <exclude>commons-logging:commons-logging</exclude>
                       <exclude>junit:junit</exclude>
                       <exclude>com.google.code.findbugs:jsr305</exclude>
-                      <exclude>log4j:log4j</exclude>
+                      <exclude>ch.qos.reload4j:reload4j</exclude>
                       <exclude>org.eclipse.jetty.websocket:websocket-common</exclude>
                       <exclude>org.eclipse.jetty.websocket:websocket-api</exclude>
                       <!-- We need a filter that matches just those things that are included in the above artiacts -->
