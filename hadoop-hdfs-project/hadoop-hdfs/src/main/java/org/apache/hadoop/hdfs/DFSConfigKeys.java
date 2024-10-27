@@ -368,6 +368,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       "dfs.namenode.audit.log.add.blocks.enabled";
   public static final boolean DFS_NAMENODE_AUDIT_LOG_ADD_BLOCKS_ENABLED_DEFAULT = false;
 
+  public static final String DFS_NAMENODE_REDUNDANCY_MONITOR_EXIT_ON_EXCEPTION_ENABLED =
+      "dfs.namenode.redundancy.monitor.exit.on.exception";
+  public static final boolean DFS_NAMENODE_REDUNDANCY_MONITOR_EXIT_ON_EXCEPTION_ENABLED_DEFAULT = true;
+
   @Deprecated
   public static final String  DFS_WEBHDFS_USER_PATTERN_KEY =
       HdfsClientConfigKeys.DFS_WEBHDFS_USER_PATTERN_KEY;

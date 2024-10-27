@@ -99,6 +99,8 @@ public class NameNodeMetrics {
   MutableGaugeLong totalECFileCount;
   @Metric("Number of total Replica file")
   MutableGaugeLong totalReplicaCount;
+  @Metric("Number of Runtime exceptions RedundancyMonitor encountered during processing")
+  MutableGaugeLong runtimeExceptionCount;
 
   @Metric("Number of file system operations")
   public long totalFileOps(){
@@ -551,5 +553,9 @@ public class NameNodeMetrics {
 
   public void incrementInsufficientTargetSelections() {
     insufficientTargetSelections.incr();
+  }
+
+  public void incrementRuntimeExceptionCount() {
+    runtimeExceptionCount.incr();
   }
 }

@@ -216,6 +216,11 @@ public class BlockManager implements BlockStatsMXBean {
   private final BlockReportLeaseManager blockReportLeaseManager;
   private ObjectName mxBeanName;
 
+  /**
+   * RedundancyMonitor Whether to exit the thread after encountering runtime exception.
+   */
+  private volatile boolean isRedundancyMonitorExitOnException;
+
   /** Used by metrics */
   public long getPendingReconstructionBlocksCount() {
     return pendingReconstructionBlocksCount;
@@ -776,6 +781,10 @@ public class BlockManager implements BlockStatsMXBean {
     this.batchedScanLimit = conf.getInt(DFS_NAMENODE_BATCHED_SCAN_LIMIT,
         DFS_NAMENODE_BATCHER_SCAN_LIMIT_DEFAULT);
 
+    this.isRedundancyMonitorExitOnException = conf.getBoolean(
+        DFS_NAMENODE_REDUNDANCY_MONITOR_EXIT_ON_EXCEPTION_ENABLED,
+        DFS_NAMENODE_REDUNDANCY_MONITOR_EXIT_ON_EXCEPTION_ENABLED_DEFAULT);
+
     LOG.info("defaultReplication         = {}", defaultReplication);
     LOG.info("maxReplication             = {}", maxReplication);
     LOG.info("minReplication             = {}", minReplication);
@@ -784,6 +793,7 @@ public class BlockManager implements BlockStatsMXBean {
     LOG.info("encryptDataTransfer        = {}", encryptDataTransfer);
     LOG.info("maxNumBlocksToLog          = {}", maxNumBlocksToLog);
     LOG.info("ignoreMissReplica          = {}", ignoreMissReplica);
+    LOG.info("isRedundancyMonitorExitOnException  = {}", isRedundancyMonitorExitOnException);
   }
 
   public void setFaultyDCRecheckIntervalMs(long newInterval) {
@@ -1429,6 +1439,17 @@ public class BlockManager implements BlockStatsMXBean {
     LOG.info("Changing the removeCorruptedBlocks from {} to {}.",
         this.removeCorruptedBlocks, removeCorruptedBlocks);
     this.removeCorruptedBlocks = removeCorruptedBlocks;
+  }
+
+  public void setRedundancyMonitorExitOnException(boolean redundancyMonitorExitOnException) {
+    LOG.info("Changing the isRedundancyMonitorExitOnException from {} to {}.",
+        this.isRedundancyMonitorExitOnException, redundancyMonitorExitOnException);
+    isRedundancyMonitorExitOnException = redundancyMonitorExitOnException;
+  }
+
+  @VisibleForTesting
+  public boolean isRedundancyMonitorExitOnException() {
+    return isRedundancyMonitorExitOnException;
   }
 
   public int getDefaultStorageNum(BlockInfo block) {
@@ -6079,10 +6100,17 @@ public class BlockManager implements BlockStatsMXBean {
           } else if (!checkNSRunning && t instanceof InterruptedException) {
             LOG.info("Stopping RedundancyMonitor for testing.");
             break;
+          } else if (!isRedundancyMonitorExitOnException) {
+            LOG.warn("RedundancyMonitor thread skip Runtime exception will continue run.", t);
+            NameNodeMetrics metrics = NameNode.getNameNodeMetrics();
+            if (metrics != null) {
+              metrics.incrementRuntimeExceptionCount();
+            }
+          } else {
+            LOG.error("RedundancyMonitor thread received Runtime exception. ",
+                t);
+            terminate(1, t);
           }
-          LOG.error("RedundancyMonitor thread received Runtime exception. ",
-              t);
-          terminate(1, t);
         }
       }
     }

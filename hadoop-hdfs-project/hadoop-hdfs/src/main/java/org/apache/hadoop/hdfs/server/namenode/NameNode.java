@@ -161,6 +161,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOCK_WAIT_THRESH
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_LOCK_WAIT_THRESHOLD_MS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_MONITOR_EXIT_ON_EXCEPTION_ENABLED;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_DEFAULT;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_DEFAULT;
@@ -503,7 +504,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_DR_BLACKLIST_PATHS,
           DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY,
           DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY,
-          DFS_BLOCK_IGNORE_MISS_REPLICA_KEY));
+          DFS_BLOCK_IGNORE_MISS_REPLICA_KEY,
+          DFS_NAMENODE_REDUNDANCY_MONITOR_EXIT_ON_EXCEPTION_ENABLED));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2616,6 +2618,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigureFaultyDCNumberThreshold(newVal);
     } else if (property.equals(DFS_BLOCK_IGNORE_MISS_REPLICA_KEY)) {
       return reconfigureIgnoreMissReplica(newVal);
+    } else if (property.equals(DFS_NAMENODE_REDUNDANCY_MONITOR_EXIT_ON_EXCEPTION_ENABLED)) {
+      return reconfigureRedundancyMonitorExitOnException(newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -2711,6 +2715,17 @@ public class NameNode extends ReconfigurableBase implements
     }
     this.namesystem.getBlockManager().setIgnoreMissReplica(ignoreMissReplica);
     return String.valueOf(ignoreMissReplica);
+  }
+
+  private String reconfigureRedundancyMonitorExitOnException(String newVal) {
+    boolean enable;
+    if (newVal == null) {
+      enable = DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_MONITOR_EXIT_ON_EXCEPTION_ENABLED_DEFAULT;
+    } else {
+      enable = Boolean.parseBoolean(newVal);
+    }
+    this.namesystem.getBlockManager().setRedundancyMonitorExitOnException(enable);
+    return String.valueOf(enable);
   }
 
   private int adjustNewVal(int defaultVal, String newVal) {

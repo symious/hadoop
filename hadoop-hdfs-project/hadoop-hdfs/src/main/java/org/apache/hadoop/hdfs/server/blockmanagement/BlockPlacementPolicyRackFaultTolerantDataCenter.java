@@ -141,9 +141,11 @@ public class BlockPlacementPolicyRackFaultTolerantDataCenter extends
       long blocksize, final BlockStoragePolicy storagePolicy,
       EnumSet<AddBlockFlag> flags, boolean notEnoughRack) {
 
-    if (notEnoughRack) {
-      return chooseTarget(srcPath, numOfReplicas, writer,
-          chosenNodes, returnChosenNodes, excludedNodes, blocksize, storagePolicy, flags);
+    if (notEnoughRack || rule == null) {
+      List<DatanodeStorageInfo> chosenNodesInDC = NetworkTopologyUtil.
+          getStoragesInDataCenter(chosenNodes, NetworkTopologyUtil.getDataCenter(writer));
+      return chooseTarget(srcPath, numOfReplicas, writer, chosenNodesInDC,
+          returnChosenNodes, excludedNodes, blocksize, storagePolicy, flags);
     }
 
     final Map<String, List<DatanodeStorageInfo>> dcMap = new HashMap<>();
@@ -313,6 +315,13 @@ public class BlockPlacementPolicyRackFaultTolerantDataCenter extends
       }
       numOfReplicas = Math.min(totalReplicaExpected - results.size(),
           (maxNodesPerRack -1) * numOfRacks - (results.size() - excess));
+      if (numOfReplicas < 0) {
+        LOG.warn("Failed to choose replicas on data center:{}, " +
+                "total expected replicas: {}, already placed replicas: {}, " +
+                "additional replicas needed: {}. ",
+            dataCenter, totalReplicaExpected, results.size(), numOfReplicas);
+        return writer;
+      }
       // Try to spread the replicas as evenly as possible across racks.
       // This is done by first placing with (maxNodesPerRack-1), then spreading
       // the remainder by calling again with maxNodesPerRack.

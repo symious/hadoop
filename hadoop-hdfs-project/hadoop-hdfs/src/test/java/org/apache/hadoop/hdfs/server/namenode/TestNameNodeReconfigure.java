@@ -69,6 +69,7 @@ import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREA
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_QUOTA_INIT_THREADS_MAXIMUM;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_READ_LOCK_REPORTING_THRESHOLD_MS_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_FAULTY_DC_KEY;
+import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_REDUNDANCY_MONITOR_EXIT_ON_EXCEPTION_ENABLED;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_SYMLINKS_ENABLED_KEY;
 import static org.apache.hadoop.hdfs.DFSConfigKeys.DFS_NAMENODE_WRITE_LOCK_REPORTING_THRESHOLD_MS_KEY;
 import static org.junit.Assert.*;
@@ -1166,4 +1167,15 @@ public class TestNameNodeReconfigure {
     assertTrue(nameNode.getNamesystem().getBlockManager().isIgnoreMissReplica());
   }
 
+  @Test
+  public void testReconfigureRedundancyMonitorExitOnException()
+      throws ReconfigurationException {
+    NameNode nameNode = cluster.getNameNode(0);
+    BlockManager bm = nameNode.getNamesystem().getBlockManager();
+    // verify default value.
+    assertTrue(bm.isRedundancyMonitorExitOnException());
+    nameNode.reconfigureProperty(DFS_NAMENODE_REDUNDANCY_MONITOR_EXIT_ON_EXCEPTION_ENABLED,
+        Boolean.toString(false));
+    assertFalse(bm.isRedundancyMonitorExitOnException());
+  }
 }

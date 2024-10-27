@@ -1275,6 +1275,15 @@
 </property>
 
 <property>
+  <name>dfs.namenode.redundancy.monitor.exit.on.exception</name>
+  <value>true</value>
+  <description>
+    If true, RedundancyMonitor will exit the thread after encountering runtime exception.
+    Otherwise, it will not exit and continue to execute.
+  </description>
+</property>
+
+<property>
   <name>dfs.namenode.accesstime.precision</name>
   <value>3600000</value>
   <description>The access time for HDFS file is precise upto this value. 

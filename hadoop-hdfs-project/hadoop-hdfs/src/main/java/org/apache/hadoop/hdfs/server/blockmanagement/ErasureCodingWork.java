@@ -39,6 +39,7 @@ class ErasureCodingWork extends BlockReconstructionWork {
   private final byte[] excludeReconstructedIndices;
   private final String blockPoolId;
   private boolean adjustTargetNodes = false;
+  private int sourceIndex = -1;
 
   public ErasureCodingWork(String blockPoolId, BlockInfo block,
       BlockCollection bc,
@@ -75,25 +76,37 @@ class ErasureCodingWork extends BlockReconstructionWork {
     // BlockCommand.NO_ACK (LONG.MAX_VALUE) . This kind of block we don't need
     // to send for replication or reconstruction
     if (!getBlock().isDeleted()) {
-      if (rule != null) {
-        DatanodeDescriptor source;
-        if (hasNotEnoughRack()) {
-          // If there are not enough racks, choose a source for simple replication.
-          source = getSrcNodes()[chooseSource4SimpleReplication()];
-        } else {
-          source = getSrcNodes()[0];
+      DatanodeDescriptor source;
+      if (hasNotEnoughRack()) {
+        // If there are not enough racks, choose a source for simple replication.
+        // If exist multiple DCs will iterate over each dc to choose,
+        // if found valid dn targets will exit the loop.
+        Map<String, Map<String, List<Integer>>> dcMap = getNodesByDC();
+        for (String dc : dcMap.keySet()) {
+          sourceIndex = chooseSource4SimpleReplication(dcMap.get(dc));
+          if (sourceIndex == -1) {
+            continue;
+          }
+          source = getSrcNodes()[sourceIndex];
+          chosenTargets = blockplacement.chooseTarget(
+              getSrcPath(), getAdditionalReplRequired(), rule, source,
+              getLiveReplicaStorages(), false,
+              excludedNodes, getBlockSize(),
+              storagePolicySuite.getPolicy(getStoragePolicyID()), null, hasNotEnoughRack());
+          if (chosenTargets != null && chosenTargets.length > 0) {
+            break;
+          }
         }
+      } else {
+        source = getSrcNodes()[0];
         chosenTargets = blockplacement.chooseTarget(
             getSrcPath(), getAdditionalReplRequired(), rule, source,
             getLiveReplicaStorages(), false,
             excludedNodes, getBlockSize(),
             storagePolicySuite.getPolicy(getStoragePolicyID()), null, hasNotEnoughRack());
+      }
+      if (rule != null) {
         setAdjustTargetNodes(true);
-      } else {
-        chosenTargets = blockplacement.chooseTarget(
-            getSrcPath(), getAdditionalReplRequired(), getSrcNodes()[0],
-            getLiveReplicaStorages(), false, excludedNodes, getBlockSize(),
-            storagePolicySuite.getPolicy(getStoragePolicyID()), null);
       }
     } else {
       LOG.warn("ErasureCodingWork could not need choose targets for {}", getBlock());
@@ -140,19 +153,10 @@ class ErasureCodingWork extends BlockReconstructionWork {
    * to do decoding but only simply make an extra copy of an internal block. In
    * this scenario, use this method to choose the source datanode for simple
    * replication.
+   * @param map a datacenter to racks and their corresponding datanode indices.
    * @return The index of the source datanode.
    */
-  private int chooseSource4SimpleReplication() {
-    Map<String, List<Integer>> map = new HashMap<>();
-    for (int i = 0; i < getSrcNodes().length; i++) {
-      final String rack = getSrcNodes()[i].getNetworkLocation();
-      List<Integer> dnList = map.get(rack);
-      if (dnList == null) {
-        dnList = new ArrayList<>();
-        map.put(rack, dnList);
-      }
-      dnList.add(i);
-    }
+  private int chooseSource4SimpleReplication(Map<String, List<Integer>> map) {
     List<Integer> max = null;
     for (Map.Entry<String, List<Integer>> entry : map.entrySet()) {
       if (max == null || entry.getValue().size() > max.size()) {
@@ -161,6 +165,19 @@ class ErasureCodingWork extends BlockReconstructionWork {
     }
     assert max != null;
     return max.get(0);
+  }
+
+  private Map<String, Map<String, List<Integer>>> getNodesByDC() {
+    // Map to maintain datacenter-level mapping of data nodes.
+    Map<String, Map<String, List<Integer>>> dcMap = new HashMap<>();
+    for (int i = 0; i < getSrcNodes().length; i++) {
+      String rack = getSrcNodes()[i].getNetworkLocation();
+      String dc = NetworkTopologyUtil.getDataCenter(rack);
+      Map<String, List<Integer>> rackMap = dcMap.computeIfAbsent(dc, k -> new HashMap<>());
+      List<Integer> dnList = rackMap.computeIfAbsent(rack, k -> new ArrayList<>());
+      dnList.add(i);
+    }
+    return dcMap;
   }
 
   @Override
@@ -172,7 +189,6 @@ class ErasureCodingWork extends BlockReconstructionWork {
     if (hasNotEnoughRack()) {
       // if we already have all the internal blocks, but not enough racks,
       // we only need to replicate one internal block to a new rack
-      int sourceIndex = chooseSource4SimpleReplication();
       createReplicationWork(sourceIndex, targets[0]);
     } else if ((numberReplicas.decommissioning() > 0 ||
         numberReplicas.liveEnteringMaintenanceReplicas() > 0) &&
