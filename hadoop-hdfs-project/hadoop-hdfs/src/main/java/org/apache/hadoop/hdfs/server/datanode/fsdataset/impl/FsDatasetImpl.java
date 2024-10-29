@@ -2415,7 +2415,10 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
   }
 
   public void checkAndHandleAbnormalVolume(FsVolumeSpi abnormalVolume, Exception e) {
-    if (e.getMessage().contains(EIO_ERROR) && abnormalVolume != null) {
+    String exceptionMessage = e.getMessage();
+    if (exceptionMessage == null) {
+      LOG.debug("Found an exception without message. ", e);
+    } else if (exceptionMessage.contains(EIO_ERROR) && abnormalVolume != null) {
       datanode.getMetrics().incrNumInputOutputError();
       volumes.handleAbnormalVolumes(abnormalVolume);
     }
