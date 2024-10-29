@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.mover;
 
-import com.google.common.base.Preconditions;
+import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementStatus;
 import org.apache.hadoop.hdfs.server.blockmanagement.utils.UpgradeDomainUtil;
@@ -608,10 +608,14 @@ public class Mover {
       final List<MLocation> locations = MLocation.toLocations(lb);
       Collections.shuffle(locations);
       final DBlock db = newDBlock(lb, locations, ecPolicy);
-      final PendingMove pm = source.addPendingMove(db, target);
-      if (pm != null) {
-        dispatcher.executePendingMove(pm);
-        return true;
+      if (source != null) {
+        final PendingMove pm = source.addPendingMove(db, target);
+        if (pm != null) {
+          dispatcher.executePendingMove(pm);
+          return true;
+        }
+      } else {
+        LOG.warn("Cannot find source datanode {} for {}.", srcDN, lb);
       }
       return false;
     }
