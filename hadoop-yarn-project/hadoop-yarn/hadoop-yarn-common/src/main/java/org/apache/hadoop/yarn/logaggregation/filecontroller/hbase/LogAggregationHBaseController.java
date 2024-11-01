@@ -211,11 +211,8 @@ public class LogAggregationHBaseController
   }
 
   public static TableName getTableName(Configuration conf) {
-    String tableSchemaPrefix =
-        conf.get(YarnConfiguration.TIMELINE_SERVICE_HBASE_SCHEMA_PREFIX_NAME,
-            YarnConfiguration.DEFAULT_TIMELINE_SERVICE_HBASE_SCHEMA_PREFIX);
     String tableName = conf.get(TABLE_NAME_CONF_NAME, DEFAULT_TABLE_NAME);
-    return TableName.valueOf(tableSchemaPrefix + tableName);
+    return TableName.valueOf(tableName);
   }
 
   public static Configuration getHBaseConf(Configuration conf)
@@ -225,15 +222,15 @@ public class LogAggregationHBaseController
     }
 
     Configuration hbaseConf;
-    String timelineServiceHBaseConfFilePath =
-        conf.get(YarnConfiguration.TIMELINE_SERVICE_HBASE_CONFIGURATION_FILE);
+    String logAggregationHBaseConfFilePath =
+        conf.get(YarnConfiguration.LOG_AGGREGATION_HBASE_CONFIGURATION_FILE);
 
-    if (timelineServiceHBaseConfFilePath != null
-        && timelineServiceHBaseConfFilePath.length() > 0) {
+    if (logAggregationHBaseConfFilePath != null
+        && logAggregationHBaseConfFilePath.length() > 0) {
       // create a clone so that we don't mess with out input one
       hbaseConf = new Configuration(conf);
       Configuration plainHBaseConf = new Configuration(false);
-      Path hbaseConfigPath = new Path(timelineServiceHBaseConfFilePath);
+      Path hbaseConfigPath = new Path(logAggregationHBaseConfFilePath);
       try (FileSystem fs = FileSystem
           .newInstance(hbaseConfigPath.toUri(), conf); FSDataInputStream in = fs
           .open(hbaseConfigPath)) {
@@ -279,16 +276,17 @@ public class LogAggregationHBaseController
 
   public static class HBaseReader {
     private Connection conn;
-    private Table table;
+    private TableName tableName;
 
     public HBaseReader(Configuration conf) throws IOException {
       Configuration hbaseConf = getHBaseConf(conf);
       conn = ConnectionFactory.createConnection(hbaseConf);
-      table = conn.getTable(getTableName(hbaseConf));
+      tableName = getTableName(hbaseConf);
     }
 
     public byte[] get(byte[] rowKey, byte[] cf, byte[] qualifier)
         throws IOException {
+      Table table = conn.getTable(tableName);
       Get get = new Get(rowKey);
       get.addColumn(cf, qualifier);
       Result result = table.get(get);

@@ -5158,6 +5158,9 @@ public class YarnConfiguration extends Configuration {
   public static final String DEFAULT_YARN_WORKFLOW_ID_TAG_PREFIX =
       "workflowid:";
 
+  public static final String LOG_AGGREGATION_HBASE_CONFIGURATION_FILE =
+      "yarn.log.aggregation.hbase.configuration.file";
+
   public YarnConfiguration() {
     super();
   }
