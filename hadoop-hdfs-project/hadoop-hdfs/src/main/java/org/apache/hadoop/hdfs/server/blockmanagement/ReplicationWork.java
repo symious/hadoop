@@ -65,7 +65,8 @@ class ReplicationWork extends BlockReconstructionWork {
               storagePolicySuite.getPolicy(getStoragePolicyID()), null);
         }
       } else {
-        LOG.warn("ReplicationWork could not need choose targets for {}", getBlock());
+        LOG.warn("ReplicationWork could not need choose targets for {} in priority {}",
+            getBlock(), getPriority());
       }
       setTargets(chosenTargets);
     } finally {

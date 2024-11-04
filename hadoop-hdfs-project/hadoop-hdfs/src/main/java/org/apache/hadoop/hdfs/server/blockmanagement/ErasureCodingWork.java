@@ -109,7 +109,8 @@ class ErasureCodingWork extends BlockReconstructionWork {
         setAdjustTargetNodes(true);
       }
     } else {
-      LOG.warn("ErasureCodingWork could not need choose targets for {}", getBlock());
+      LOG.warn("ErasureCodingWork could not need choose targets for {} in priority {}.",
+          getBlock(), getPriority());
     }
     setTargets(chosenTargets);
   }

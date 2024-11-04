@@ -2520,6 +2520,7 @@ public class BlockManager implements BlockStatsMXBean {
           rw.resetTargets();
           if (rw.isHighRisk()) {
             LOG.warn("Cannot choose target datanode for high-risk block {}.", rw.getBlock());
+            NameNode.getNameNodeMetrics().incNumTimesHighRiskReReplicationNotScheduled();
           }
           continue;
         }
@@ -2719,6 +2720,7 @@ public class BlockManager implements BlockStatsMXBean {
       if (priority == LowRedundancyBlocks.QUEUE_HIGHEST_PRIORITY) {
         LOG.warn("Block {} cannot be reconstructed from any node, high-risk block storages={}.",
             block, blockWithLastLocation == null ? "null" : blockWithLastLocation.getStorages());
+        NameNode.getNameNodeMetrics().incNumTimesHighRiskReReplicationNotScheduled();
       } else {
         LOG.debug("Block {} cannot be reconstructed from any node", block);
       }
@@ -2733,6 +2735,7 @@ public class BlockManager implements BlockStatsMXBean {
         if (priority == LowRedundancyBlocks.QUEUE_HIGHEST_PRIORITY) {
           LOG.warn("Block {} cannot be reconstructed due to shortage of source datanodes with {}.",
               block, blockWithLastLocation == null ? "null" : blockWithLastLocation.getStorages());
+          NameNode.getNameNodeMetrics().incNumTimesHighRiskReReplicationNotScheduled();
         } else {
           LOG.debug("Block {} cannot be reconstructed due to shortage of source datanodes ", block);
         }
@@ -2878,6 +2881,7 @@ public class BlockManager implements BlockStatsMXBean {
     // Add block to the datanode's task list
     if (!rw.addTaskToDatanode(numReplicas)) {
       if (rw.isHighRisk()) {
+        NameNode.getNameNodeMetrics().incNumTimesHighRiskReReplicationNotScheduled();
         LOG.warn("Cannot schedule high-risk blockInfo {}.", rw.getBlock());
       }
       return false;

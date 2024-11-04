@@ -71,6 +71,8 @@ public class NameNodeMetrics {
   MutableCounterLong successfulReReplications;
   @Metric ("Number of times we failed to schedule a block re-replication.")
   MutableCounterLong numTimesReReplicationNotScheduled;
+  @Metric ("Number of times we failed to schedule a high-risk block re-replication.")
+  MutableCounterLong numTimesHighRiskReReplicationNotScheduled;
   @Metric("Number of timed out block re-replications")
   MutableCounterLong timeoutReReplications;
   @Metric("Number of allowSnapshot operations")
@@ -396,6 +398,10 @@ public class NameNodeMetrics {
 
   public void incNumTimesReReplicationNotScheduled() {
     numTimesReReplicationNotScheduled.incr();
+  }
+
+  public void incNumTimesHighRiskReReplicationNotScheduled() {
+    numTimesHighRiskReReplicationNotScheduled.incr();
   }
 
   public void incTimeoutReReplications() {
