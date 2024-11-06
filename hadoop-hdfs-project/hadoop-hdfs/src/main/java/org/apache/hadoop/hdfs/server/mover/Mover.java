@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.mover;
 
+import org.apache.hadoop.fs.ContentSummary;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicy;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementStatus;
@@ -280,6 +281,7 @@ public class Mover {
   class Processor {
     private final DFSClient dfs;
     private final List<String> snapshottableDirs = new ArrayList<String>();
+    private final AtomicLong totalFiles = new AtomicLong(0);
     private final AtomicLong checkedFiles = new AtomicLong(0);
     private final AtomicLong checkedBlocks = new AtomicLong(0);
     private final AtomicLong scheduledBlocks = new AtomicLong(0);
@@ -331,6 +333,14 @@ public class Mover {
     private Result processNamespace() throws IOException {
       getSnapshottableDirs();
       Result result = new Result();
+
+      // Count the total number of files.
+      for (Path target : targetPaths) {
+        ContentSummary contentSummary = dispatcher.getDistributedFileSystem()
+            .getContentSummary(target);
+        totalFiles.addAndGet(contentSummary.getFileCount());
+      }
+
       for (Path target : targetPaths) {
         processPath(target.toUri().getPath(), result);
       }
@@ -420,9 +430,11 @@ public class Mover {
               + ". Ignore it and continue.", e);
         } finally {
           long numCheckedFiles = checkedFiles.incrementAndGet();
-          if (numCheckedFiles % 100 == 0) {
-            LOG.info("Progress of {}: {} files checked, {} blocks checked, " +
-                "{} blocks scheduled, {} failed blocks.", nsId, numCheckedFiles,
+          if (numCheckedFiles % 1000 == 0) {
+            String percentage = String.format("%.2f%%",
+                (double) numCheckedFiles / totalFiles.get() * 100);
+            LOG.info("Progress of {} is {}: {} files checked, {} blocks checked, " +
+                "{} blocks scheduled, {} failed blocks.", nsId, percentage, numCheckedFiles,
                 checkedBlocks.get(), scheduledBlocks.get(), failedBlocks.get());
           }
         }
