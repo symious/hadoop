@@ -29,6 +29,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
 import java.util.function.Supplier;
@@ -176,13 +177,13 @@ public class TestPendingReconstruction {
     //
     assertEquals("Size of pendingReconstructions ", 0, pendingReconstructions.size());
     assertEquals(15L, pendingReconstructions.getNumTimedOuts());
-    Block[] timedOut = pendingReconstructions.getTimedOutBlocks();
+    Map<BlockInfo, PendingReconstructionBlocks.PendingBlockInfo> timedOut = pendingReconstructions.getTimedOutBlocks();
     assertNotNull(timedOut);
-    assertEquals(15, timedOut.length);
+    assertEquals(15, timedOut.size());
     // Verify the number is not reset
     assertEquals(15L, pendingReconstructions.getNumTimedOuts());
-    for (Block block : timedOut) {
-      assertTrue(block.getBlockId() < 15);
+    for (Map.Entry<BlockInfo, PendingReconstructionBlocks.PendingBlockInfo> entry : timedOut.entrySet()) {
+      assertTrue(entry.getKey().getBlockId() < 15);
     }
     pendingReconstructions.stop();
   }

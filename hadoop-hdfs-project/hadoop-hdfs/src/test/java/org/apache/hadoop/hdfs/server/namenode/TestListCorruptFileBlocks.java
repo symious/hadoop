@@ -331,6 +331,12 @@ public class TestListCorruptFileBlocks {
         if (count > 30)
           break;
       }
+      // All corruptFileBlocks should contains last locations.
+      for (FSNamesystem.CorruptFileBlockInfo corrupt : corruptFileBlocks) {
+        LOG.info(corrupt.toString());
+        assert corrupt.blockWithLastLocation != null;
+      }
+
       // Validate we get all the corrupt files
       LOG.info("Namenode has bad files. " + numCorrupt);
       assertEquals(3, numCorrupt);

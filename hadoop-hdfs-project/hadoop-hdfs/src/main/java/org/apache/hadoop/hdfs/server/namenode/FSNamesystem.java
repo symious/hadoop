@@ -136,6 +136,7 @@ import org.apache.hadoop.hdfs.protocol.ErasureCodingPolicyInfo;
 import org.apache.hadoop.hdfs.protocol.HdfsLocatedFileStatus;
 import org.apache.hadoop.hdfs.protocol.LocatedStripedBlock;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoStriped;
+import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfoWithLastLocation;
 import org.apache.hadoop.hdfs.server.namenode.fgl.FSNLockManager;
 import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAState;
@@ -6231,15 +6232,29 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   static class CorruptFileBlockInfo {
     final String path;
     final Block block;
+    final BlockInfoWithLastLocation blockWithLastLocation;
     
-    public CorruptFileBlockInfo(String p, Block b) {
+    public CorruptFileBlockInfo(String p, Block b, BlockInfoWithLastLocation blockWithLastLocation) {
       path = p;
       block = b;
+      this.blockWithLastLocation = blockWithLastLocation;
     }
     
     @Override
     public String toString() {
-      return block.getBlockName() + "\t" + path;
+      String locationMessage = "";
+      if (this.blockWithLastLocation != null) {
+        final List<DatanodeStorageInfo> locations = blockWithLastLocation.getStorages();
+        if (locations != null) {
+          List<String> dns = new ArrayList<>();
+          locations.forEach(k -> {
+            dns.add(k.getDatanodeDescriptor().getInfoAddr() + ":" + k.getStorageID());
+          });
+          locationMessage = dns.toString();
+        }
+      }
+
+      return block.getBlockName() + "\t" + path + "\t" + locationMessage;
     }
   }
   /**
@@ -6291,12 +6306,13 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
 
       while (blkIterator.hasNext()) {
         BlockInfo blk = blkIterator.next();
+        BlockInfoWithLastLocation blockWithLastLocation = blockManager.getRecordedLocation(blk);
         final INodeFile inode = getBlockCollection(blk);
         skip++;
         if (inode != null) {
           String src = inode.getFullPathName();
           if (isParentEntry(src, path)) {
-            corruptFiles.add(new CorruptFileBlockInfo(src, blk));
+            corruptFiles.add(new CorruptFileBlockInfo(src, blk, blockWithLastLocation));
             count++;
             if (count >= maxCorruptFileBlocksReturn)
               break;

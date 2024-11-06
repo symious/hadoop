@@ -50,7 +50,7 @@ class PendingReconstructionBlocks {
   private static final Logger LOG = BlockManager.LOG;
 
   private final Map<BlockInfo, PendingBlockInfo> pendingReconstructions;
-  private final ArrayList<BlockInfo> timedOutItems;
+  private final Map<BlockInfo, PendingBlockInfo> timedOutItems;
   Daemon timerThread = null;
   private volatile boolean fsRunning = true;
   private long timedOutCount = 0L;
@@ -68,7 +68,7 @@ class PendingReconstructionBlocks {
       this.timeout = timeoutPeriod;
     }
     pendingReconstructions = new HashMap<>();
-    timedOutItems = new ArrayList<>();
+    timedOutItems = new HashMap<>();
   }
 
   void start() {
@@ -93,10 +93,21 @@ class PendingReconstructionBlocks {
     synchronized (pendingReconstructions) {
       PendingBlockInfo found = pendingReconstructions.get(block);
       if (found == null) {
-        pendingReconstructions.put(block, new PendingBlockInfo(targets));
+        found = new PendingBlockInfo(targets);
+        pendingReconstructions.put(block, found);
       } else {
         found.incrementReplicas(targets);
         found.setTimeStamp();
+      }
+
+      // Record the available storages as the last locations.
+      if (block.isStriped()) {
+        for (Iterator<DatanodeStorageInfo> it = block.getStorageInfos(); it.hasNext(); ) {
+          DatanodeStorageInfo source = it.next();
+          found.addSources(source);
+        }
+      } else {
+        found.addSources(block.getStorageInfo(0));
       }
     }
   }
@@ -185,14 +196,13 @@ class PendingReconstructionBlocks {
    * reconstruction requests. Returns null if no blocks have
    * timed out.
    */
-  BlockInfo[] getTimedOutBlocks() {
+  Map<BlockInfo, PendingBlockInfo> getTimedOutBlocks() {
     synchronized (timedOutItems) {
-      if (timedOutItems.size() <= 0) {
+      if (timedOutItems.isEmpty()) {
         return null;
       }
       int size = timedOutItems.size();
-      BlockInfo[] blockList = timedOutItems.toArray(
-          new BlockInfo[size]);
+      Map<BlockInfo, PendingBlockInfo> blockList = new HashMap<>(timedOutItems);
       timedOutItems.clear();
       timedOutCount += size;
       return blockList;
@@ -208,10 +218,12 @@ class PendingReconstructionBlocks {
    */
   static class PendingBlockInfo {
     private long timeStamp;
+    private final List<DatanodeStorageInfo> sources;
     private final List<DatanodeStorageInfo> targets;
 
     PendingBlockInfo(DatanodeStorageInfo[] targets) {
       this.timeStamp = monotonicNow();
+      this.sources = new ArrayList<>();
       this.targets = targets == null ? new ArrayList<DatanodeStorageInfo>()
           : new ArrayList<>(Arrays.asList(targets));
     }
@@ -234,6 +246,16 @@ class PendingReconstructionBlocks {
       }
     }
 
+    void addSources(DatanodeStorageInfo... newSources) {
+      if (newSources != null) {
+        for (DatanodeStorageInfo newSource : newSources) {
+          if (!sources.contains(newSource)) {
+            sources.add(newSource);
+          }
+        }
+      }
+    }
+
     void decrementReplicas(DatanodeStorageInfo dn) {
       Iterator<DatanodeStorageInfo> iterator = targets.iterator();
       while (iterator.hasNext()) {
@@ -250,6 +272,10 @@ class PendingReconstructionBlocks {
 
     List<DatanodeStorageInfo> getTargets() {
       return targets;
+    }
+
+    List<DatanodeStorageInfo> getSources() {
+      return sources;
     }
   }
 
@@ -286,9 +312,11 @@ class PendingReconstructionBlocks {
           if (now > pendingBlock.getTimeStamp() + timeout) {
             BlockInfo block = entry.getKey();
             synchronized (timedOutItems) {
-              timedOutItems.add(block);
+              timedOutItems.put(block, pendingBlock);
             }
-            LOG.warn("PendingReconstructionMonitor timed out " + block);
+            LOG.warn("PendingReconstructionMonitor timed out {},"
+                + " source {} and targets {}.", block,
+                pendingBlock.getSources(), pendingBlock.getTargets());
             NameNode.getNameNodeMetrics().incTimeoutReReplications();
             iter.remove();
           }

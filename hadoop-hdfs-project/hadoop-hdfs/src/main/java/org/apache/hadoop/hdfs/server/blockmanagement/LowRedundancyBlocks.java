@@ -22,6 +22,8 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
@@ -97,6 +99,15 @@ class LowRedundancyBlocks implements Iterable<BlockInfo> {
       = new LongAdder();
   private final LongAdder highestPriorityLowRedundancyECBlocks
       = new LongAdder();
+
+  /**
+   * This Map is used to store high-risk and corrupted blocks with last locations.
+   * The block will be removed from {@link LowRedundancyBlocks#priorityQueues} with
+   * {@link LowRedundancyBlocks#remove(BlockInfo, int, int)} and
+   * added with {@link LowRedundancyBlocks#QUEUE_HIGHEST_PRIORITY}
+   * and {@link LowRedundancyBlocks#QUEUE_WITH_CORRUPT_BLOCKS} priorities.
+   */
+  public Map<BlockInfo, BlockInfoWithLastLocation> blocksWithLocation = new ConcurrentHashMap<>();
 
   /** Create an object. */
   LowRedundancyBlocks() {
@@ -288,9 +299,22 @@ class LowRedundancyBlocks implements Iterable<BlockInfo> {
   synchronized boolean add(BlockInfo block,
       int curReplicas, int readOnlyReplicas,
       int outOfServiceReplicas, int expectedReplicas) {
+    return add(block, null, curReplicas, readOnlyReplicas,
+        outOfServiceReplicas, expectedReplicas);
+  }
+
+  synchronized boolean add(BlockInfo block, List<DatanodeStorageInfo> locations,
+      int curReplicas, int readOnlyReplicas,
+      int outOfServiceReplicas, int expectedReplicas) {
     final int priLevel = getPriority(block, curReplicas, readOnlyReplicas,
         outOfServiceReplicas, expectedReplicas);
-    if(add(block, priLevel, expectedReplicas)) {
+
+    BlockInfoWithLastLocation corruptedLocations = null;
+    // A corrupted block may be added from PendingReconstructionBlocks.
+    if (priLevel == QUEUE_WITH_CORRUPT_BLOCKS && locations != null && !locations.isEmpty()) {
+      corruptedLocations = new BlockInfoWithLastLocation(block, locations);
+    }
+    if (add(block, priLevel, expectedReplicas, corruptedLocations)) {
       NameNode.blockStateChangeLog.debug(
           "BLOCK* NameSystem.LowRedundancyBlock.add: {}"
               + " has only {} replicas and need {} replicas so is added to"
@@ -302,8 +326,36 @@ class LowRedundancyBlocks implements Iterable<BlockInfo> {
     return false;
   }
 
-  private boolean add(BlockInfo blockInfo, int priLevel, int expectedReplicas) {
+  /**
+   * Record the BlockInfoWithLastLocation of the input block.
+   */
+  private void recordBlockLocation(BlockInfo block, BlockInfoWithLastLocation location) {
+    blocksWithLocation.put(block, location);
+  }
+
+  /**
+   * Clear the recorded locations of the block when the block is removed from LowRedundancyBlocks.
+   */
+  private void clearRecordedLocation(BlockInfo block) {
+    blocksWithLocation.remove(block);
+  }
+
+  public BlockInfoWithLastLocation getRecordedLocation(BlockInfo block) {
+    return blocksWithLocation.get(block);
+  }
+
+  private boolean add(BlockInfo blockInfo, int priLevel,
+      int expectedReplicas, BlockInfoWithLastLocation corruptedLocations) {
     if (priorityQueues.get(priLevel).add(blockInfo)) {
+      // Record the last locations of the high-risk blocks.
+      // Typically, these high-risk blocks are not currently corrupted.
+      if (priLevel == QUEUE_HIGHEST_PRIORITY) {
+        BlockInfoWithLastLocation highRiskLocations = new BlockInfoWithLastLocation(blockInfo);
+        recordBlockLocation(blockInfo, highRiskLocations);
+      } else if (priLevel == QUEUE_WITH_CORRUPT_BLOCKS && corruptedLocations != null
+          && getRecordedLocation(blockInfo) == null) {
+        recordBlockLocation(blockInfo, corruptedLocations);
+      }
       incrementBlockStat(blockInfo, priLevel, expectedReplicas);
       return true;
     }
@@ -372,6 +424,8 @@ class LowRedundancyBlocks implements Iterable<BlockInfo> {
   }
 
   boolean remove(BlockInfo block, int priLevel, int oldExpectedReplicas) {
+    // Clean the recorded locations of the block.
+    clearRecordedLocation(block);
     if(priLevel >= 0 && priLevel < LEVEL
         && priorityQueues.get(priLevel).remove(block)) {
       NameNode.blockStateChangeLog.debug(
@@ -461,10 +515,17 @@ class LowRedundancyBlocks implements Iterable<BlockInfo> {
         " curPri  " + curPri +
         " oldPri  " + oldPri);
     }
+    BlockInfoWithLastLocation corruptedLocations = null;
+    if (curPri == QUEUE_WITH_CORRUPT_BLOCKS) {
+      // Get the recorded locations of the corrupted block,
+      // as it will be removed in the following Remove method.
+      corruptedLocations = getRecordedLocation(block);
+    }
     // oldPri is mostly correct, but not always. If not found with oldPri,
     // other levels will be searched until the block is found & removed.
     remove(block, oldPri, oldExpectedReplicas);
-    if(add(block, curPri, curExpectedReplicas)) {
+
+    if (add(block, curPri, curExpectedReplicas, corruptedLocations)) {
       NameNode.blockStateChangeLog.debug(
           "BLOCK* NameSystem.LowRedundancyBlock.update: {} has only {} "
               + "replicas and needs {} replicas so is added to "

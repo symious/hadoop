@@ -1198,8 +1198,8 @@ public class BlockManager implements BlockStatsMXBean {
     synchronized (neededReconstruction) {
       out.println("Metasave: Blocks waiting for reconstruction: "
           + neededReconstruction.getLowRedundancyBlockCount());
-      for (int i = 0; i < neededReconstruction.LEVEL; i++) {
-        if (i != neededReconstruction.QUEUE_WITH_CORRUPT_BLOCKS) {
+      for (int i = 0; i < LowRedundancyBlocks.LEVEL; i++) {
+        if (i != LowRedundancyBlocks.QUEUE_WITH_CORRUPT_BLOCKS) {
           for (Iterator<BlockInfo> it = neededReconstruction.iterator(i);
                it.hasNext();) {
             Block block = it.next();
@@ -1213,7 +1213,7 @@ public class BlockManager implements BlockStatsMXBean {
       out.println("Metasave: Blocks currently missing: " +
           neededReconstruction.getCorruptBlockSize());
       for (Iterator<BlockInfo> it = neededReconstruction.
-          iterator(neededReconstruction.QUEUE_WITH_CORRUPT_BLOCKS);
+          iterator(LowRedundancyBlocks.QUEUE_WITH_CORRUPT_BLOCKS);
            it.hasNext();) {
         Block block = it.next();
         dumpBlockMeta(block, out);
@@ -2518,6 +2518,9 @@ public class BlockManager implements BlockStatsMXBean {
         final DatanodeStorageInfo[] targets = rw.getTargets();
         if (targets == null || targets.length == 0) {
           rw.resetTargets();
+          if (rw.isHighRisk()) {
+            LOG.warn("Cannot choose target datanode for high-risk block {}.", rw.getBlock());
+          }
           continue;
         }
 
@@ -2709,9 +2712,16 @@ public class BlockManager implements BlockStatsMXBean {
         liveBlockIndices, liveBusyBlockIndices, excludeReconstructed, priority);
     short requiredRedundancy = getExpectedLiveRedundancyNum(block,
         numReplicas);
+    BlockInfoWithLastLocation blockWithLastLocation =
+        neededReconstruction.getRecordedLocation(block);
     if(srcNodes == null || srcNodes.length == 0) {
       // block can not be reconstructed from any node
-      LOG.debug("Block {} cannot be reconstructed from any node", block);
+      if (priority == LowRedundancyBlocks.QUEUE_HIGHEST_PRIORITY) {
+        LOG.warn("Block {} cannot be reconstructed from any node, high-risk block storages={}.",
+            block, blockWithLastLocation == null ? "null" : blockWithLastLocation.getStorages());
+      } else {
+        LOG.debug("Block {} cannot be reconstructed from any node", block);
+      }
       NameNode.getNameNodeMetrics().incNumTimesReReplicationNotScheduled();
       return null;
     }
@@ -2720,9 +2730,12 @@ public class BlockManager implements BlockStatsMXBean {
     if (block.isStriped()) {
       BlockInfoStriped stripedBlock = (BlockInfoStriped) block;
       if (stripedBlock.getRealDataBlockNum() > srcNodes.length) {
-        LOG.debug(
-            "Block {} cannot be reconstructed due to shortage of source datanodes ",
-            block);
+        if (priority == LowRedundancyBlocks.QUEUE_HIGHEST_PRIORITY) {
+          LOG.warn("Block {} cannot be reconstructed due to shortage of source datanodes with {}.",
+              block, blockWithLastLocation == null ? "null" : blockWithLastLocation.getStorages());
+        } else {
+          LOG.debug("Block {} cannot be reconstructed due to shortage of source datanodes ", block);
+        }
         NameNode.getNameNodeMetrics().incNumTimesReReplicationNotScheduled();
         return null;
       }
@@ -2864,6 +2877,9 @@ public class BlockManager implements BlockStatsMXBean {
 
     // Add block to the datanode's task list
     if (!rw.addTaskToDatanode(numReplicas)) {
+      if (rw.isHighRisk()) {
+        LOG.warn("Cannot schedule high-risk blockInfo {}.", rw.getBlock());
+      }
       return false;
     }
     DatanodeStorageInfo.incrementBlocksScheduled(targets);
@@ -3152,25 +3168,29 @@ public class BlockManager implements BlockStatsMXBean {
    * and put them back into the neededReconstruction queue
    */
   void processPendingReconstructions() {
-    BlockInfo[] timedOutItems = pendingReconstruction.getTimedOutBlocks();
+    Map<BlockInfo, PendingBlockInfo> timedOutItems = pendingReconstruction.getTimedOutBlocks();
     if (timedOutItems != null) {
       // TODO: Change to readLock(FSNamesystemLockMode.BM)
       //  since neededReconstruction is thread safe.
       namesystem.writeLock(FSNamesystemLockMode.BM,
           OperationName.PROCESS_PENDING_RECONSTRUCTIONS);
       try {
-        for (int i = 0; i < timedOutItems.length; i++) {
+        for (Map.Entry<BlockInfo, PendingBlockInfo> entry : timedOutItems.entrySet()) {
+          BlockInfo blockInfo = entry.getKey();
+          List<DatanodeStorageInfo> locations = entry.getValue().getSources();
           /*
            * Use the blockinfo from the blocksmap to be certain we're working
            * with the most up-to-date block information (e.g. genstamp).
            */
-          BlockInfo bi = blocksMap.getStoredBlock(timedOutItems[i]);
+          BlockInfo bi = blocksMap.getStoredBlock(blockInfo);
           if (bi == null || bi.isDeleted()) {
             continue;
           }
-          NumberReplicas num = countNodes(timedOutItems[i]);
+          NumberReplicas num = countNodes(blockInfo);
           if (isNeededReconstruction(bi, num)) {
-            neededReconstruction.add(bi, num.liveReplicas(),
+            // TimeOutItem BlockInfo may be a corrupted block,
+            // so locations should be got from PendingBlockInfo.
+            neededReconstruction.add(bi, locations, num.liveReplicas(),
                 num.readOnlyReplicas(), num.outOfServiceReplicas(),
                 getExpectedRedundancyNum(bi));
           }
@@ -5994,6 +6014,10 @@ public class BlockManager implements BlockStatsMXBean {
   public Iterator<BlockInfo> getCorruptReplicaBlockIterator() {
     return neededReconstruction.iterator(
         LowRedundancyBlocks.QUEUE_WITH_CORRUPT_BLOCKS);
+  }
+
+  public BlockInfoWithLastLocation getRecordedLocation(BlockInfo blockInfo) {
+    return neededReconstruction.getRecordedLocation(blockInfo);
   }
 
   /**

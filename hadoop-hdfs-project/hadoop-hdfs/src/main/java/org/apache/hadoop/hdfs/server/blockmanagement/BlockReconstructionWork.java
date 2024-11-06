@@ -99,6 +99,10 @@ abstract class BlockReconstructionWork {
     return priority;
   }
 
+  public boolean isHighRisk() {
+    return this.priority == LowRedundancyBlocks.QUEUE_HIGHEST_PRIORITY;
+  }
+
   public BlockInfo getBlock() {
     return block;
   }
