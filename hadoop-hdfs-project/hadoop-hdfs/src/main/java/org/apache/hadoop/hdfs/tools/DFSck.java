@@ -26,6 +26,7 @@ import java.net.URI;
 import java.net.URL;
 import java.net.URLConnection;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.PrivilegedExceptionAction;
 
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -79,6 +80,7 @@ public class DFSck extends Configured implements Tool {
 
   private static final String USAGE = "Usage: hdfs fsck <path> "
       + "[-list-corruptfileblocks | "
+      + "[-list-highriskblocks] | "
       + "[-move | -delete | -openforwrite] "
       + "[-files [-blocks [-locations | -racks | -replicaDetails | " +
           "-upgradedomains]]]] "
@@ -95,6 +97,7 @@ public class DFSck extends Configured implements Tool {
       + "snapshottable directories under it\n"
       + "\t-list-corruptfileblocks\tprint out list of missing "
       + "blocks and files they belong to\n"
+      + "\t-list-highriskblocks\tprint out list of high-risk blocks\n"
       + "\t-files -blocks\tprint out block report\n"
       + "\t-files -blocks -locations\tprint out locations for every block\n"
       + "\t-files -blocks -racks" 
@@ -174,13 +177,13 @@ public class DFSck extends Configured implements Tool {
    * To get the list, we need to call iteratively until the server says
    * there is no more left.
    */
-  private Integer listCorruptFileBlocks(String dir, String baseUrl)
+  private Integer listBlocks(String dir, String baseUrl, String message)
       throws IOException {
     int errCode = -1;
-    int numCorrupt = 0;
+    int numBlocks = 0;
     int cookie = 0;
-    final String noCorruptLine = "has no CORRUPT files";
-    final String noMoreCorruptLine = "has no more CORRUPT files";
+    final String noLine = "has no "  + message + " files";
+    final String noMoreLine = "has no more "  + message + " files";
     final String cookiePrefix = "Cookie:";
     boolean allDone = false;
     while (!allDone) {
@@ -210,8 +213,8 @@ public class DFSck extends Configured implements Tool {
             }
             continue;
           }
-          if ((line.endsWith(noCorruptLine)) ||
-              (line.endsWith(noMoreCorruptLine)) ||
+          if ((line.endsWith(noLine)) ||
+              (line.endsWith(noMoreLine)) ||
               (line.endsWith(NamenodeFsck.NONEXISTENT_STATUS))) {
             allDone = true;
             break;
@@ -226,9 +229,9 @@ public class DFSck extends Configured implements Tool {
               || (line.startsWith("FSCK ended at"))
               || (line.startsWith("The filesystem under path")))
             continue;
-          numCorrupt++;
-          if (numCorrupt == 1) {
-            out.println("The list of corrupt blocks under path '"
+          numBlocks++;
+          if (numBlocks == 1) {
+            out.println("The list of " +  message + " blocks under path '"
                 + dir + "' are:");
           }
           out.println(line);
@@ -238,12 +241,11 @@ public class DFSck extends Configured implements Tool {
       }
     }
     out.println("The filesystem under path '" + dir + "' has " 
-        + numCorrupt + " CORRUPT blocks");
-    if (numCorrupt == 0)
+        + numBlocks + " " + message + " blocks");
+    if (numBlocks == 0)
       errCode = 0;
     return errCode;
   }
-  
 
   private Path getResolvedPath(String dir) throws IOException {
     Configuration conf = getConf();
@@ -279,6 +281,7 @@ public class DFSck extends Configured implements Tool {
     url.append("/fsck?ugi=").append(ugi.getShortUserName());
     String dir = null;
     boolean doListCorruptFileBlocks = false;
+    boolean doListHighRiskBlocks = false;
     for (int idx = 0; idx < args.length; idx++) {
       if (args[idx].equals("-move")) { url.append("&move=1"); }
       else if (args[idx].equals("-delete")) { url.append("&delete=1"); }
@@ -298,6 +301,10 @@ public class DFSck extends Configured implements Tool {
       } else if (args[idx].equals("-list-corruptfileblocks")) {
         url.append("&listcorruptfileblocks=1");
         doListCorruptFileBlocks = true;
+      } else if (args[idx].equals("-list-highriskblocks")) {
+        url.append("&locations=1");
+        url.append("&listhighriskblocks=1");
+        doListHighRiskBlocks = true;
       } else if (args[idx].equals("-includeSnapshots")) {
         url.append("&includeSnapshots=1");
       } else if (args[idx].equals("-maintenance")) {
@@ -357,8 +364,11 @@ public class DFSck extends Configured implements Tool {
         Path.getPathWithoutSchemeAndAuthority(dirpath).toString(), "UTF-8"));
     System.err.println("Connecting to namenode via " + url.toString());
 
+    if (doListHighRiskBlocks) {
+      return listBlocks(dir, url.toString(), "HIGH-RISK");
+    }
     if (doListCorruptFileBlocks) {
-      return listCorruptFileBlocks(dir, url.toString());
+      return listBlocks(dir, url.toString(), "CORRUPT");
     }
     URL path = new URL(url.toString());
     URLConnection connection;

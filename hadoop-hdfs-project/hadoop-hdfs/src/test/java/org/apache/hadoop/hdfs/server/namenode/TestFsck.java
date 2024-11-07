@@ -784,6 +784,56 @@ public class TestFsck {
   }
 
   @Test
+  public void testHighRiskBlocks() throws Exception {
+    Configuration conf = new Configuration();
+    conf.setLong(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY, 1000);
+    conf.setInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY, 1); // datanode scans
+    // directories
+    FileSystem fs;
+    MiniDFSCluster cluster = null;
+    try {
+      cluster = new MiniDFSCluster.Builder(conf).build();
+      cluster.waitActive();
+      fs = cluster.getFileSystem();
+      DFSTestUtil util = new DFSTestUtil.Builder().
+          setName("testHighRiskBlocks").setNumFiles(1).setMaxLevels(1).
+          setMaxSize(1024).build();
+
+      // Create a file with 3 replica factor, but there is only one data node in cluster.
+      // So this block will be marked as high-risk block after it is completed.
+      util.createFiles(fs, "/highRiskBlocks");
+
+      final NameNode namenode = cluster.getNameNode();
+      int count = 0;
+      List<BlockInfo> highRiskBlocks = namenode.getNamesystem().listHighRiskBlocks(null);
+      while (highRiskBlocks.isEmpty()) {
+        Thread.sleep(1000);
+        highRiskBlocks = namenode.getNamesystem().listHighRiskBlocks(null);
+        count++;
+        if (count > 30)
+          break;
+      }
+
+      for (BlockInfo highRiskBlock : highRiskBlocks) {
+        LOG.info(highRiskBlock.toString());
+      }
+
+      String outStr = runFsck(conf, -1, true,
+          "/", "-list-highriskblocks");
+
+      assertTrue(outStr.contains("The filesystem under path '/' has 1 HIGH-RISK blocks"));
+      assertFalse(outStr.contains(NamenodeFsck.HEALTHY_STATUS));
+
+      util.cleanup(fs, "/highRiskBlocks");
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
+
+
+  @Test
   public void testCorruptBlock() throws Exception {
     conf.setLong(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY, 1000);
     // Set short retry timeouts so this test runs faster

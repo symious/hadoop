@@ -151,6 +151,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
   private boolean showRacks = false;
   private boolean showStoragePolcies = false;
   private boolean showCorruptFileBlocks = false;
+  private boolean showHighRiskBlocks = false;
 
   private boolean showReplicaDetails = false;
   private boolean showUpgradeDomains = false;
@@ -262,6 +263,8 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
         this.showOpenFiles = true;
       } else if (key.equals("listcorruptfileblocks")) {
         this.showCorruptFileBlocks = true;
+      } else if (key.equals("listhighriskblocks")) {
+        this.showHighRiskBlocks = true;
       } else if (key.equals("startblockafter")) {
         this.currentCookie[0] = pmap.get("startblockafter")[0];
       } else if (key.equals("includeSnapshots")) {
@@ -496,6 +499,10 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
 
       final HdfsFileStatus file = namenode.getRpcServer().getFileInfo(path);
       if (file != null) {
+        if (showHighRiskBlocks) {
+          listHighRiskBlocks();
+          return;
+        }
 
         if (showCorruptFileBlocks) {
           listCorruptFileBlocks();
@@ -560,6 +567,27 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
     } finally {
       out.close();
     }
+  }
+
+  private void listHighRiskBlocks() throws IOException {
+    final List<BlockInfo> highRiskBlocks = namenode.getNamesystem()
+        .listHighRiskBlocks(currentCookie);
+    int numberHighRiskBlocks = highRiskBlocks.size();
+    String filler;
+    if (numberHighRiskBlocks > 0) {
+      filler = Integer.toString(numberHighRiskBlocks);
+    } else if (currentCookie[0].equals("0")) {
+      filler = "no";
+    } else {
+      filler = "no more";
+    }
+    out.println("Cookie:\t" + currentCookie[0]);
+    for (BlockInfo block : highRiskBlocks) {
+      out.println(block + " with " + getReplicaInfo(block));
+    }
+    out.println("\n\nThe filesystem under path '" + path + "' has " + filler
+        + " HIGH-RISK files");
+    out.println();
   }
 
   private void listCorruptFileBlocks() throws IOException {

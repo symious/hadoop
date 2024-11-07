@@ -87,6 +87,7 @@ public class OperationName {
   public static String LIST_CACHE_DIRECTIVES = "listCacheDirectives";
   public static String LIST_CACHE_POOLS = "listCachePools";
   public static String LIST_CORRUPT_FILE_BLOCKS = "listCorruptFileBlocks";
+  public static String LIST_HIGH_RISK_BLOCKS = "listHighRiskBlocks";
   public static String LIST_ENCRYPTION_ZONES = "listEncryptionZones";
   public static String LIST_OPEN_FILES = "listOpenFiles";
   public static String LIST_XATTRS = "listXAttrs";

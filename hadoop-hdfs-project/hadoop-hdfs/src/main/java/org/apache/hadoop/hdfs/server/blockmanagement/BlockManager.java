@@ -6016,6 +6016,13 @@ public class BlockManager implements BlockStatsMXBean {
         LowRedundancyBlocks.QUEUE_WITH_CORRUPT_BLOCKS);
   }
 
+  /**
+   * Return an iterator over the set of blocks for the highest priority.
+   */
+  public Iterator<BlockInfo> getHighRiskBlockIterator() {
+    return neededReconstruction.iterator(LowRedundancyBlocks.QUEUE_HIGHEST_PRIORITY);
+  }
+
   public BlockInfoWithLastLocation getRecordedLocation(BlockInfo blockInfo) {
     return neededReconstruction.getRecordedLocation(blockInfo);
   }

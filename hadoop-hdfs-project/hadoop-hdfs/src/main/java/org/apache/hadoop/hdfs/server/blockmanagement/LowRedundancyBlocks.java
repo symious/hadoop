@@ -67,7 +67,7 @@ import org.apache.hadoop.hdfs.util.LightWeightLinkedSet;
  *   blocks that are not corrupt higher priority.</li>
  * </ol>
  */
-class LowRedundancyBlocks implements Iterable<BlockInfo> {
+public class LowRedundancyBlocks implements Iterable<BlockInfo> {
   /** The total number of queues : {@value} */
   static final int LEVEL = 5;
   /** The queue with the highest priority: {@value} */

@@ -6328,6 +6328,57 @@ public class FSNamesystem implements Namesystem, FSNamesystemMBean,
   }
 
   /**
+   * List HighRisk blocks from LowRedundancyBlocks.
+   */
+  List<BlockInfo> listHighRiskBlocks(String[] cookieTab) throws IOException {
+    checkSuperuserPrivilege();
+    checkOperation(OperationCategory.READ);
+
+    int count = 0;
+    ArrayList<BlockInfo> highRiskBlocks = new ArrayList<>();
+    if (cookieTab == null) {
+      cookieTab = new String[] { null };
+    }
+
+    // Do a quick check if there are any corrupt files without taking the lock
+    if ((blockManager.getHighestPriorityReplicatedBlockCount() +
+        blockManager.getHighestPriorityECBlockCount()) == 0) {
+      if (cookieTab[0] == null) {
+        cookieTab[0] = String.valueOf(getIntCookie(null));
+      }
+      return highRiskBlocks;
+    }
+
+    readLock(FSNamesystemLockMode.BM, OperationName.LIST_HIGH_RISK_BLOCKS);
+    try {
+      checkOperation(OperationCategory.READ);
+      if (!blockManager.isPopulatingReplQueues()) {
+        throw new IOException("Cannot run listHighRiskBlocks because " +
+            "replication queues have not been initialized.");
+      }
+      final Iterator<BlockInfo> blkIterator = blockManager.getHighRiskBlockIterator();
+
+      int skip = getIntCookie(cookieTab[0]);
+      for (int i = 0; i < skip && blkIterator.hasNext(); i++) {
+        blkIterator.next();
+      }
+
+      while (blkIterator.hasNext()) {
+        BlockInfo blk = blkIterator.next();
+        highRiskBlocks.add(blk);
+        skip++;
+        if (count >= maxCorruptFileBlocksReturn) {
+          break;
+        }
+      }
+      cookieTab[0] = String.valueOf(skip);
+      return highRiskBlocks;
+    } finally {
+      readUnlock(FSNamesystemLockMode.BM, OperationName.LIST_HIGH_RISK_BLOCKS);
+    }
+  }
+
+  /**
    * Convert string cookie to integer.
    */
   private static int getIntCookie(String cookie){
