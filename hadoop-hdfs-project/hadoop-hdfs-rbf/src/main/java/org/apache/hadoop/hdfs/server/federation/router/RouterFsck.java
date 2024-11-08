@@ -28,13 +28,18 @@ import java.net.URLConnection;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.hdfs.server.federation.resolver.FederationNamenodeServiceState;
+import org.apache.hadoop.hdfs.server.federation.resolver.PathLocation;
+import org.apache.hadoop.hdfs.server.federation.resolver.RemoteLocation;
 import org.apache.hadoop.hdfs.server.federation.store.MembershipStore;
 import org.apache.hadoop.hdfs.server.federation.store.StateStoreService;
 import org.apache.hadoop.hdfs.server.federation.store.protocol.GetNamenodeRegistrationsRequest;
@@ -68,6 +73,60 @@ public class RouterFsck {
     this.pmap = pmap;
   }
 
+  /**
+   * Redirect the request to all active downstream NameNode if parameter is null
+   * or can't resolve target namespace.
+   */
+  private Map<MembershipState, String> getMemberships(
+      final List<MembershipState> memberships) {
+    Map<MembershipState, String> msToDestination = new HashMap<>();
+    for (MembershipState membershipState : memberships) {
+      msToDestination.put(membershipState, "");
+    }
+    return msToDestination;
+  }
+
+  /**
+   * Redirect the request to certain active downstream NameNode if resolve
+   * target namespace otherwise redirect the requests to all active
+   * downstream NameNodes.
+   */
+  private Map<MembershipState, String> getMembershipsForPath(
+      final String[] paths, final List<MembershipState> memberships)
+      throws IOException {
+    if (paths == null || paths.length == 0) {
+      return getMemberships(memberships);
+    }
+    String path = paths[0];
+    PathLocation pathLocation = router.getSubclusterResolver().
+        getDestinationForPath(path);
+    if (path == null || pathLocation == null ||
+        pathLocation.getNamespaces().isEmpty()) {
+      return getMemberships(memberships);
+    } else {
+      Map<MembershipState, String> msToDestination = new HashMap<>();
+      List<RemoteLocation> remoteLocations = pathLocation.getDestinations();
+      Set<String> remainingNss = new HashSet<>();
+      for (RemoteLocation loc : remoteLocations) {
+        remainingNss.add(loc.getNameserviceId());
+      }
+      for (RemoteLocation remoteLocation : remoteLocations) {
+        for (MembershipState ms : memberships) {
+          if (ms.getState() == FederationNamenodeServiceState.ACTIVE &&
+              remoteLocation.getNameserviceId().equals(ms.getNameserviceId())) {
+            msToDestination.put(ms, remoteLocation.getDest());
+            remainingNss.remove(remoteLocation.getNameserviceId());
+          }
+        }
+      }
+      if (!remainingNss.isEmpty()) {
+        out.println(
+            "No active namenodes found for namespaces " + String.join(",", remainingNss) + "\n");
+      }
+      return msToDestination;
+    }
+  }
+
   public void fsck() {
     final long startTime = Time.monotonicNow();
     try {
@@ -91,12 +150,18 @@ public class RouterFsck {
           membership.getNamenodeRegistrations(request);
       List<MembershipState> memberships = response.getNamenodeMemberships();
       Collections.sort(memberships);
-      for (MembershipState nn : memberships) {
+      String[] paths = pmap.get("path");
+      Map<MembershipState, String> targetMsToPath =
+          getMembershipsForPath(paths, memberships);
+
+      for (Map.Entry<MembershipState, String> entry :
+          targetMsToPath.entrySet()) {
+        MembershipState nn = entry.getKey();
         if (nn.getState() == FederationNamenodeServiceState.ACTIVE) {
           try {
             String webAddress = nn.getWebAddress();
             out.write("Checking " + nn + " at " + webAddress + "\n");
-            remoteFsck(nn);
+            remoteFsck(nn, entry.getValue());
           } catch (IOException ioe) {
             out.println("Cannot query " + nn + ": " + ioe.getMessage() + "\n");
           }
@@ -121,12 +186,14 @@ public class RouterFsck {
    * Perform FSCK in a remote Namenode.
    *
    * @param nn The state of the remote NameNode
+   * @param dstPath The destination path of fsck for remote NameNode
    * @throws IOException Failed to fsck in a remote NameNode
    */
-  private void remoteFsck(MembershipState nn) throws IOException {
+  private void remoteFsck(MembershipState nn, String dstPath)
+      throws IOException {
     final String scheme = nn.getWebScheme();
     final String webAddress = nn.getWebAddress();
-    final String args = getURLArguments(pmap);
+    final String args = getURLArguments(pmap, dstPath);
     final URL url = new URL(scheme + "://" + webAddress + "/fsck?" + args);
 
     // Connect to the Namenode and output
@@ -148,7 +215,8 @@ public class RouterFsck {
    * @param map Original map of arguments.
    * @return Arguments ready to be attached to the URL.
    */
-  private static String getURLArguments(Map<String, String[]> map) {
+  private static String getURLArguments(Map<String, String[]> map,
+                                        String dstPath) {
     StringBuilder sb = new StringBuilder();
     for (Entry<String, String[]> entry : map.entrySet()) {
       String key = entry.getKey();
@@ -158,7 +226,11 @@ public class RouterFsck {
       }
       sb.append(key);
       sb.append("=");
-      sb.append(value[0]);
+      if (key.equals("path")) {
+        sb.append(dstPath);
+      } else {
+        sb.append(value[0]);
+      }
     }
     return sb.toString();
   }

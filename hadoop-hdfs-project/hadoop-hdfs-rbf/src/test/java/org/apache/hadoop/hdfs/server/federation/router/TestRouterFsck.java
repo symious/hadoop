@@ -80,7 +80,7 @@ public class TestRouterFsck {
   @BeforeClass
   public static void globalSetUp() throws Exception {
     // Build and start a federated cluster
-    cluster = new StateStoreDFSCluster(false, 2);
+    cluster = new StateStoreDFSCluster(false, 3);
     Configuration conf = new RouterConfigBuilder()
         .stateStore()
         .admin()
@@ -149,18 +149,24 @@ public class TestRouterFsck {
 
   @Test
   public void testFsck() throws Exception {
-    MountTable addEntry = MountTable.newInstance("/testdir",
-        Collections.singletonMap("ns0", "/testdir"));
+    MountTable addEntry = MountTable.newInstance("/testdirsrc",
+        Collections.singletonMap("ns0", "/testdirdst"));
     assertTrue(addMountTable(addEntry));
-    addEntry = MountTable.newInstance("/testdir2",
-        Collections.singletonMap("ns1", "/testdir2"));
+    addEntry = MountTable.newInstance("/testdirsrc2",
+        Collections.singletonMap("ns1", "/testdirdst2"));
+    assertTrue(addMountTable(addEntry));
+    addEntry = MountTable.newInstance("/testdirsrc3",
+        Collections.singletonMap("ns2", "/testdirdst3"));
     assertTrue(addMountTable(addEntry));
     // create 1 file on ns0
-    routerFs.createNewFile(new Path("/testdir/testfile"));
+    routerFs.createNewFile(new Path("/testdirsrc/testfile"));
     // create 3 files on ns1
-    routerFs.createNewFile(new Path("/testdir2/testfile2"));
-    routerFs.createNewFile(new Path("/testdir2/testfile3"));
-    routerFs.createNewFile(new Path("/testdir2/testfile4"));
+    routerFs.createNewFile(new Path("/testdirsrc2/testfile2"));
+    routerFs.createNewFile(new Path("/testdirsrc2/testfile3"));
+    routerFs.createNewFile(new Path("/testdirsrc2/testfile4"));
+    // create 2 files on ns2
+    routerFs.createNewFile(new Path("/testdirsrc3/testfile5"));
+    routerFs.createNewFile(new Path("/testdirsrc3/testfile6"));
 
     try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
       // TODO: support https
@@ -173,10 +179,11 @@ public class TestRouterFsck {
             httpResponse.getEntity(), StandardCharsets.UTF_8);
         LOG.info(out);
         assertTrue(out.contains("Federated FSCK started"));
-        // assert 1 file exists in a cluster and 3 files exist
-        // in another cluster
+        // assert 1 file exists in a cluster, 3 files exist
+        // in another cluster and 0 file exist in another cluster.
         assertTrue(out.contains("Total files:\t1"));
         assertTrue(out.contains("Total files:\t3"));
+        assertTrue(out.contains("Total files:\t2"));
         assertTrue(out.contains("Federated FSCK ended"));
         int nnCount = 0;
         for (MembershipState nn : memberships) {
@@ -186,12 +193,12 @@ public class TestRouterFsck {
             nnCount++;
           }
         }
-        assertEquals(2, nnCount);
+        assertEquals(3, nnCount);
       }
 
       // check if the argument is passed correctly
       httpGet = new HttpGet("http://" + webAddress.getHostName() +
-              ":" + webAddress.getPort() + "/fsck?path=/testdir");
+              ":" + webAddress.getPort() + "/fsck?path=/testdirsrc");
       try (CloseableHttpResponse httpResponse = httpClient.execute(httpGet)) {
         assertEquals(HttpStatus.SC_OK,
             httpResponse.getStatusLine().getStatusCode());
@@ -202,16 +209,46 @@ public class TestRouterFsck {
         assertTrue(out.contains("Total files:\t1"));
         // ns1 does not have files under /testdir
         assertFalse(out.contains("Total files:\t3"));
+        // ns2 does not have files under /testdir
+        assertFalse(out.contains("Total files:\t2"));
         assertTrue(out.contains("Federated FSCK ended"));
         int nnCount = 0;
         for (MembershipState nn : memberships) {
-          if (nn.getState() == FederationNamenodeServiceState.ACTIVE) {
-            assertTrue(out.contains(
-                "Checking " + nn + " at " + nn.getWebAddress() + "\n"));
+          if (nn.getState() == FederationNamenodeServiceState.ACTIVE &&
+              out.contains("Checking " + nn + " at " + nn.getWebAddress()
+                  + "\n")) {
             nnCount++;
           }
         }
-        assertEquals(2, nnCount);
+        assertEquals(1, nnCount);
+      }
+
+      // Check if request is passed to default nameservice only when
+      // no corresponding mount point.
+      mountTable.setDefaultNameService("ns3");
+      // check if the argument is passed correctly
+      httpGet = new HttpGet("http://" + webAddress.getHostName() +
+          ":" + webAddress.getPort() + "/fsck?path=/testdirsrc4");
+      try (CloseableHttpResponse httpResponse = httpClient.execute(httpGet)) {
+        assertEquals(HttpStatus.SC_OK,
+            httpResponse.getStatusLine().getStatusCode());
+        String out = EntityUtils.toString(
+            httpResponse.getEntity(), StandardCharsets.UTF_8);
+        LOG.info(out);
+        assertTrue(out.contains("Federated FSCK started"));
+        // No corresponding mount point for /testdir3 and default nameservice
+        // without any files under /testdir3.
+        assertFalse(out.contains("Total files:"));
+        assertTrue(out.contains("Federated FSCK ended"));
+        int nnCount = 0;
+        for (MembershipState nn : memberships) {
+          if (nn.getState() == FederationNamenodeServiceState.ACTIVE &&
+              out.contains("Checking " + nn + " at " + nn.getWebAddress()
+                  + "\n")) {
+            nnCount++;
+          }
+        }
+        assertEquals(0, nnCount);
       }
     }
   }
