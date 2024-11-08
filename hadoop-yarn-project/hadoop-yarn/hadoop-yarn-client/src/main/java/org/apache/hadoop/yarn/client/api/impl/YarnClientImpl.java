@@ -309,6 +309,9 @@ public class YarnClientImpl extends YarnClient {
       appContext.getAMContainerSpec().getEnvironment()
           .put("HADOOP_USER_RPCPASSWORD",
               SdiCredentialsUtil.getSdiUserRpcPassword());
+      appContext.getAMContainerSpec().getEnvironment()
+          .put("HADOOP_USER_TOKEN",
+              SdiCredentialsUtil.getSdiUserToken());
     }
     SubmitApplicationRequest request =
         Records.newRecord(SubmitApplicationRequest.class);

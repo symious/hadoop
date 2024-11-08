@@ -117,6 +117,10 @@ public class RpcMetrics {
   MutableCounterLong rpcAuthenticationFailures;
   @Metric("Number of authentication successes")
   MutableCounterLong rpcAuthenticationSuccesses;
+  @Metric("Number of token authentication failures")
+  MutableCounterLong rpcTokenAuthenticationFailures;
+  @Metric("Number of token authentication successes")
+  MutableCounterLong rpcTokenAuthenticationSuccesses;
   @Metric("Number of authorization failures")
   MutableCounterLong rpcAuthorizationFailures;
   @Metric("Number of authorization successes")
@@ -208,6 +212,14 @@ public class RpcMetrics {
   //@Override
   public void incrAuthenticationSuccesses() {
     rpcAuthenticationSuccesses.incr();
+  }
+
+  public void incrTokenAuthenticationFailures() {
+    rpcTokenAuthenticationFailures.incr();
+  }
+
+  public void incrTokenAuthenticationSuccesses() {
+    rpcTokenAuthenticationSuccesses.incr();
   }
 
   /**

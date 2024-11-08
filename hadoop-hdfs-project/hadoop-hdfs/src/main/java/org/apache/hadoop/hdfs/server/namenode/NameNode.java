@@ -133,6 +133,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_SERVER_RPC_CATEGO
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_UNIFIED_AUTH_CLIENT_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY;
@@ -505,7 +506,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_DR_COLD_DATA_THRESHOLD_MS_KEY,
           DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY,
           DFS_BLOCK_IGNORE_MISS_REPLICA_KEY,
-          DFS_NAMENODE_REDUNDANCY_MONITOR_EXIT_ON_EXCEPTION_ENABLED));
+          DFS_NAMENODE_REDUNDANCY_MONITOR_EXIT_ON_EXCEPTION_ENABLED,
+          HADOOP_SECURITY_UNIFIED_AUTH_CLIENT_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2620,6 +2622,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigureIgnoreMissReplica(newVal);
     } else if (property.equals(DFS_NAMENODE_REDUNDANCY_MONITOR_EXIT_ON_EXCEPTION_ENABLED)) {
       return reconfigureRedundancyMonitorExitOnException(newVal);
+    } else if (property.equals(HADOOP_SECURITY_UNIFIED_AUTH_CLIENT_KEY)) {
+      return reconfigureTokenAuthClient(newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -3526,6 +3530,11 @@ public class NameNode extends ReconfigurableBase implements
     } catch (IllegalArgumentException e){
       throw new ReconfigurationException(property, newVal, getConf().get(property), e);
     }
+  }
+
+  private String reconfigureTokenAuthClient(String newVal) {
+    this.rpcServer.getClientRpcServer().updateSdiTokenClient(newVal);
+    return newVal;
   }
 
   @Override  // ReconfigurableBase

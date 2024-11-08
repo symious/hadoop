@@ -1347,5 +1347,13 @@ public class CommonConfigurationKeysPublic {
   public static final String FAILOVER_SKIP_INFO_LOGGING_THRESHOLD =
       "ipc.client.failover.logging.threshold";
   public static final int FAILOVER_SKIP_INFO_LOGGING_THRESHOLD_DEFAULT = 2;
+
+  /**
+   * @see
+   * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">
+   * core-default.xml</a>
+   */
+  public static final String HADOOP_SECURITY_UNIFIED_AUTH_CLIENT_KEY =
+      "hadoop.security.unified.auth.client.key";
 }
 

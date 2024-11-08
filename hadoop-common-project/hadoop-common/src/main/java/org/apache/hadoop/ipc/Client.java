@@ -982,11 +982,17 @@ public class Client implements AutoCloseable {
                                         AuthMethod authMethod)
                                             throws IOException {
       String sdiUserRpcPassword = null;
+      String sdiToken = null;
       if (remoteId.ticket != null) {
         if (remoteId.ticket.getRealUser() != null) {
           sdiUserRpcPassword = remoteId.ticket.getRealUser().getSdiUserRpcPassword();
         } else {
           sdiUserRpcPassword = remoteId.ticket.getSdiUserRpcPassword();
+        }
+        if (remoteId.ticket.getRealUser() != null) {
+          sdiToken = remoteId.ticket.getRealUser().getSdiToken();
+        } else {
+          sdiToken = remoteId.ticket.getSdiToken();
         }
       }
       // Write out the ConnectionHeader
@@ -994,7 +1000,8 @@ public class Client implements AutoCloseable {
           RPC.getProtocolName(remoteId.getProtocol()),
           remoteId.getTicket(),
           authMethod,
-          sdiUserRpcPassword);
+          sdiUserRpcPassword,
+          sdiToken);
       RpcRequestHeaderProto connectionContextHeader = ProtoUtil
           .makeRpcRequestHeader(RpcKind.RPC_PROTOCOL_BUFFER,
               OperationProto.RPC_FINAL_PACKET, CONNECTION_CONTEXT_CALL_ID,

@@ -29,11 +29,11 @@ import static org.apache.hadoop.security.sdi.SDICredentialsProvider.SDI_CREDENTI
 import static org.apache.hadoop.util.PlatformName.IBM_JAVA;
 import static org.apache.hadoop.util.StringUtils.getTrimmedStringCollection;
 
+import org.apache.hadoop.security.sdi.SDICredentialsProvider;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.lang.reflect.UndeclaredThrowableException;
 import java.nio.charset.StandardCharsets;
 import java.security.AccessControlContext;
@@ -52,9 +52,9 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -236,11 +236,21 @@ public class UserGroupInformation {
         LOG.debug("User entry: \"{}\"", userEntry);
 
         subject.getPrincipals().add(userEntry);
+
+        Credentials credentials = new Credentials();
+
+        String sdiToken = SdiCredentialsUtil.getSdiUserToken();
+        if (sdiToken != null && !sdiToken.isEmpty()) {
+          credentials.addSecretKey(SdiCredentialsUtil.HADOOP_USER_TOKEN_TEXT,
+              sdiToken.getBytes(StandardCharsets.UTF_8));
+        }
         String rpcPassword = SdiCredentialsUtil.getSdiUserRpcPassword();
         if (rpcPassword != null && !rpcPassword.isEmpty()) {
-          Credentials credentials = new Credentials();
-          credentials.addSecretKey(new Text(SDI_CREDENTIAL_ENV_VAR),
-                  rpcPassword.getBytes(StandardCharsets.UTF_8));
+          credentials.addSecretKey(SDICredentialsProvider.SDI_CREDENTIAL_ENV_VAR_TEXT,
+              rpcPassword.getBytes(StandardCharsets.UTF_8));
+        }
+
+        if (!credentials.getAllSecretKeys().isEmpty()) {
           subject.getPrivateCredentials().add(credentials);
         }
         return true;
@@ -615,8 +625,9 @@ public class UserGroupInformation {
     } else if (user == null) {
       return getCurrentUser();
     } else {
-      return createRemoteUser(user, SdiCredentialsUtil.getSdiUserRpcPassword());
-    }    
+      return createRemoteUser(user, SdiCredentialsUtil.getSdiUserRpcPassword(),
+          SdiCredentialsUtil.getSdiUserToken());
+    }
   }
 
   /**
@@ -1428,7 +1439,7 @@ public class UserGroupInformation {
   @InterfaceAudience.Public
   @InterfaceStability.Evolving
   public static UserGroupInformation createRemoteUser(String user, String rpcPassword) {
-    return createRemoteUser(user, AuthMethod.SIMPLE, rpcPassword);
+    return createRemoteUser(user, AuthMethod.SIMPLE, null, rpcPassword);
   }
 
   /**
@@ -1440,28 +1451,34 @@ public class UserGroupInformation {
   @InterfaceAudience.Public
   @InterfaceStability.Evolving
   public static UserGroupInformation createRemoteUser(String user, AuthMethod authMethod) {
-    return createRemoteUser(user, authMethod, null);
+    return createRemoteUser(user, authMethod, null, null);
   }
 
-  /**
-   * Create a user from a login name. It is intended to be used for remote
-   * users in RPC, since it won't have any credentials.
-   * @param user the full user principal name, must not be empty or null
-   * @return the UserGroupInformation for the remote user.
-   */
   @InterfaceAudience.Public
   @InterfaceStability.Evolving
-  public static UserGroupInformation createRemoteUser(String user,
-      AuthMethod authMethod, String rpcPassword) {
+  public static UserGroupInformation createRemoteUser(String user, String sdiToken,
+      String rpcPassword) {
+    return createRemoteUser(user, AuthMethod.SIMPLE, sdiToken, rpcPassword);
+  }
+
+  @InterfaceAudience.Public
+  @InterfaceStability.Evolving
+  public static UserGroupInformation createRemoteUser(String user, AuthMethod authMethod,
+      String sdiToken, String rpcPassword) {
     if (user == null || user.isEmpty()) {
       throw new IllegalArgumentException("Null user");
     }
     Subject subject = new Subject();
     subject.getPrincipals().add(new User(user));
+    Credentials credentials = new Credentials();
+    if (sdiToken != null && !sdiToken.isEmpty()) {
+      credentials.addSecretKey(SdiCredentialsUtil.HADOOP_USER_TOKEN_TEXT, sdiToken.getBytes(StandardCharsets.UTF_8));
+    }
     if (rpcPassword != null && !rpcPassword.isEmpty()) {
-      Credentials credentials = new Credentials();
       credentials.addSecretKey(new Text(SDI_CREDENTIAL_ENV_VAR),
-              rpcPassword.getBytes(StandardCharsets.UTF_8));
+          rpcPassword.getBytes(StandardCharsets.UTF_8));
+    }
+    if (!credentials.getAllSecretKeys().isEmpty()) {
       subject.getPrivateCredentials().add(credentials);
     }
     UserGroupInformation result = new UserGroupInformation(subject);
@@ -1778,6 +1795,15 @@ public class UserGroupInformation {
     }
     return new String(credentials.getSecretKey(SDI_CREDENTIAL_ENV_VAR_TEXT),
         StandardCharsets.UTF_8);
+  }
+
+  public String getSdiToken() {
+    Credentials credentials = getCredentials();
+    if (credentials == null || credentials.getAllSecretKeys().isEmpty()
+        || credentials.getSecretKey(SdiCredentialsUtil.HADOOP_USER_TOKEN_TEXT) == null) {
+      return null;
+    }
+    return new String(credentials.getSecretKey(SdiCredentialsUtil.HADOOP_USER_TOKEN_TEXT), StandardCharsets.UTF_8);
   }
 
   /**

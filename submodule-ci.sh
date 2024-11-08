@@ -421,8 +421,8 @@ hadoop-hdfs-2:
   $REBUILD_BEFORE_SCRIPT
   script:
     - cd hadoop-hdfs-project/hadoop-hdfs
-    - export _JAVA_OPTIONS="$_JAVA_OPTIONS -Djava.net.preferIPv4Stack=true"
-    - mvn test -P parallel-tests -DforkCount=6 -Dtest=$TEST_INCLUDE_PARAM
+    - export _JAVA_OPTIONS="$_JAVA_OPTIONS -Xmx6g -Djava.net.preferIPv4Stack=true"
+    - mvn test -P parallel-tests -DforkCount=5 -Dtest=$TEST_INCLUDE_PARAM
     - cat target/site/jacoco/index.html | grep -o 'Total[^%]*%'
     - cd target/surefire-reports
   after_script:

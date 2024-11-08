@@ -83,9 +83,9 @@ public abstract class ProtoUtil {
    * the effective and real users are set based on the auth method.
    *
    */
-  public static IpcConnectionContextProto makeIpcConnectionContext(
-      final String protocol,
-      final UserGroupInformation ugi, final AuthMethod authMethod, final String rpcPassword) {
+  public static IpcConnectionContextProto makeIpcConnectionContext(final String protocol,
+      final UserGroupInformation ugi, final AuthMethod authMethod, final String rpcPassword,
+      final String sdiToken) {
     IpcConnectionContextProto.Builder result = IpcConnectionContextProto.newBuilder();
     if (protocol != null) {
       result.setProtocol(protocol);
@@ -113,6 +113,9 @@ public abstract class ProtoUtil {
         if (rpcPassword != null) {
           ugiProto.setRpcPassword(rpcPassword);
         }
+        if (sdiToken != null) {
+          ugiProto.setSdiToken(sdiToken);
+        }
       }
     }   
     result.setUserInfo(ugiProto);
@@ -122,7 +125,7 @@ public abstract class ProtoUtil {
   public static UserGroupInformation getUgi(IpcConnectionContextProto context) {
     if (context.hasUserInfo()) {
       UserInformationProto userInfo = context.getUserInfo();
-        return getUgi(userInfo);
+      return getUgi(userInfo);
     } else {
       return null;
     }
@@ -134,30 +137,14 @@ public abstract class ProtoUtil {
         .getEffectiveUser() : null;
     String realUser = userInfo.hasRealUser() ? userInfo.getRealUser() : null;
     String rpcPassword = userInfo.hasRpcPassword() ? userInfo.getRpcPassword() : null;
-    if (rpcPassword != null) {
-      if (effectiveUser != null) {
-        if (realUser != null) {
-          UserGroupInformation realUserUgi = UserGroupInformation
-                  .createRemoteUser(realUser, rpcPassword);
-          ugi = UserGroupInformation
-                  .createProxyUser(effectiveUser, realUserUgi);
-        } else {
-          ugi = org.apache.hadoop.security.UserGroupInformation
-                  .createRemoteUser(effectiveUser, rpcPassword);
-        }
-      }
-
-    }else {
-      if (effectiveUser != null) {
-        if (realUser != null) {
-          UserGroupInformation realUserUgi = UserGroupInformation
-                  .createRemoteUser(realUser);
-          ugi = UserGroupInformation
-                  .createProxyUser(effectiveUser, realUserUgi);
-        } else {
-          ugi = org.apache.hadoop.security.UserGroupInformation
-                  .createRemoteUser(effectiveUser);
-        }
+    String sdiToken = userInfo.hasSdiToken() ? userInfo.getSdiToken() : null;
+    if (effectiveUser != null) {
+      if (realUser != null) {
+        UserGroupInformation realUserUgi =
+            UserGroupInformation.createRemoteUser(realUser, sdiToken, rpcPassword);
+        ugi = UserGroupInformation.createProxyUser(effectiveUser, realUserUgi);
+      } else {
+        ugi = UserGroupInformation.createRemoteUser(effectiveUser, sdiToken, rpcPassword);
       }
     }
     return ugi;

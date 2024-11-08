@@ -34,6 +34,7 @@ message UserInformationProto {
   optional string effectiveUser = 1;
   optional string realUser = 2;
   optional string rpcPassword = 3;
+  optional string sdiToken = 4;
 }
 
 /**

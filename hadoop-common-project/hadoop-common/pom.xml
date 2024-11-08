@@ -403,6 +403,11 @@
       <artifactId>lz4-java</artifactId>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>com.shopee.di</groupId>
+      <artifactId>auth-client-token</artifactId>
+      <version>3.0.9-SNAPSHOT</version>
+    </dependency>
   </dependencies>
 
   <build>

@@ -80,6 +80,10 @@ import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
 
+import com.shopee.di.datasuite.auth.client.exception.OAuthException;
+import com.shopee.di.datasuite.auth.client.exception.TokenExpiredException;
+import com.shopee.di.datasuite.auth.client.token.JWTHelper;
+import com.shopee.di.datasuite.auth.client.token.TokenInfo;
 import org.apache.hadoop.fs.protocolPB.PBHelper;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.ExceptionReconstructProto;
 import org.apache.hadoop.security.IPUsersBlacklist;
@@ -159,6 +163,7 @@ public abstract class Server {
   private final boolean ignoreSDIAuthenticate;
   private final boolean authorize;
   private List<AuthMethod> enabledAuthMethods;
+  private volatile TokenClient tokenClient;
   private RpcSaslProto negotiateResponse;
   private ExceptionsHandler exceptionsHandler = new ExceptionsHandler();
   private Tracer tracer;
@@ -3154,42 +3159,29 @@ public abstract class Server {
         // authenticate proxy user
         String userName;
         String rpcPassword;
+        String sdiToken;
         if (user != null) {
           if (user.getRealUser() != null) {
             userName = user.getRealUser().getUserName();
             rpcPassword = user.getRealUser().getSdiUserRpcPassword();
+            sdiToken = user.getRealUser().getSdiToken();
           } else {
             userName = user.getUserName();
             rpcPassword = user.getSdiUserRpcPassword();
+            sdiToken = user.getSdiToken();
           }
-          if (rpcPassword == null) {
-            LOG.info("[SDICredential] RpcPassword not set for {}.", userName);
+          if (rpcPassword == null && sdiToken == null) {
+            LOG.info("[SDICredential] RpcPassword and token not set for {}.", userName);
           }
         } else {
           throw new AuthenticationException("Illegal user error.");
         }
 
-        UserGroupInformation remoteUGI = UserGroupInformation
-            .createRemoteUser(userName);
-        if (!remoteUGI.isBypassUser()) {
-          final String hashedRpcPassword = remoteUGI.queryRpcPassword();
-          if (hashedRpcPassword == null) {
-            throw new AuthenticationException(
-                "No rpcPassword record on server side for user: " + userName);
-          }
-          if (rpcPassword == null) {
-            throw new AuthenticationException("Rpc password empty from client side " +
-                "for user: " + userName);
-          }
-
-          Callable<Boolean> passwordMatchedLoader =
-              () -> passwordEncoder.matches(rpcPassword, hashedRpcPassword);
-          if (!passwordMatchedCache.get(
-              new PasswordMatchEntry(userName, rpcPassword, hashedRpcPassword),
-              passwordMatchedLoader)) {
-            throw new AuthenticationException(
-                "Rpc Authentication failed for user: " + userName);
-          }
+        final TokenClient clientRef = tokenClient;
+        if (clientRef != null && sdiToken != null) {
+          authenticateWithSdiToken(clientRef, userName, sdiToken);
+        } else {
+          authenticateWithUserPassword(userName, rpcPassword);
         }
         rpcMetrics.incrAuthenticationSuccesses();
       } catch (ExecutionException e) {
@@ -3205,6 +3197,72 @@ public abstract class Server {
         if (!isSdiAuthSilentMode) {
           throw new FatalRpcServerException(
               RpcErrorCodeProto.FATAL_RPC_UNAUTHENTICATED, ie);
+        }
+      }
+    }
+
+    /**
+     * Authenticates using token. Throws exception if auth fails.
+     */
+    private void authenticateWithSdiToken(final TokenClient clientRef, final String userName,
+        final String token)
+        throws AuthenticationException {
+      assert token != null;
+      TokenInfo stResult;
+      try {
+        stResult = clientRef.decrypt(token);
+      } catch (TokenExpiredException tee) {
+        rpcMetrics.incrTokenAuthenticationFailures();
+        throw new AuthenticationException(
+            "Failed to authenticate using token for user: " + user + ", token expired: "
+                + tee.getMessage());
+      } catch (OAuthException oae) {
+        rpcMetrics.incrTokenAuthenticationFailures();
+        throw new AuthenticationException(
+            "Failed to authenticate using token for user: " + user + ", auth failure: "
+                + oae.getMessage());
+      } catch (Exception e) {
+        rpcMetrics.incrTokenAuthenticationFailures();
+        throw new AuthenticationException(
+            "Failed to authenticate using token for user: " + user + ", unknown failure: "
+                + e.getMessage());
+      }
+      if (stResult == null) {
+        rpcMetrics.incrTokenAuthenticationFailures();
+        throw new AuthenticationException(
+            "Failed to authenticate using token for user: " + user + ", null ticket.");
+      }
+      String ticketUser = stResult.getUserId();
+      if (userName != null && userName.equals(ticketUser)) {
+        LOG.debug("Token auth success, user={}", ticketUser);
+        rpcMetrics.incrTokenAuthenticationSuccesses();
+      } else {
+        rpcMetrics.incrTokenAuthenticationFailures();
+        throw new AuthenticationException(
+            "Failed to authenticate using token for user: " + user + ", ticket: " + ticketUser);
+      }
+    }
+
+    private void authenticateWithUserPassword(String userName, String rpcPassword)
+        throws AuthenticationException, ExecutionException {
+      UserGroupInformation remoteUGI = UserGroupInformation.createRemoteUser(userName);
+      if (!remoteUGI.isBypassUser()) {
+        final String hashedRpcPassword = remoteUGI.queryRpcPassword();
+        if (hashedRpcPassword == null) {
+          throw new AuthenticationException(
+              "No rpcPassword record on server side for user: " + userName);
+        }
+        if (rpcPassword == null) {
+          throw new AuthenticationException(
+              "Rpc password empty from client side " + "for user: " + userName);
+        }
+
+        Callable<Boolean> passwordMatchedLoader =
+            () -> passwordEncoder.matches(rpcPassword, hashedRpcPassword);
+        if (!passwordMatchedCache.get(
+            new PasswordMatchEntry(userName, rpcPassword, hashedRpcPassword),
+            passwordMatchedLoader)) {
+          throw new AuthenticationException("Rpc Authentication failed for user: " + userName);
         }
       }
     }
@@ -3614,6 +3672,9 @@ public abstract class Server {
     this.exceptionsHandler.addTerseLoggingExceptions(StandbyException.class);
     this.exceptionsHandler.addTerseLoggingExceptions(
         HealthCheckFailedException.class);
+
+    updateSdiTokenClient(
+        conf.get(CommonConfigurationKeysPublic.HADOOP_SECURITY_UNIFIED_AUTH_CLIENT_KEY));
   }
 
   public synchronized void addAuxiliaryListener(int auxiliaryPort)
@@ -4441,5 +4502,35 @@ public abstract class Server {
 
   public DeepHandlerManager getDeepHandlerManager() {
     return deepHandlerManager;
+  }
+
+  public static class TokenClient {
+    JWTHelper jWTHelper;
+    final String prefix = "Bearer ";
+
+    TokenClient(String decryptKey) {
+      jWTHelper = JWTHelper.get(decryptKey);
+    }
+
+    public TokenInfo decrypt(String ticket) {
+      return jWTHelper.parseAuthorization(prefix + ticket);
+    }
+  }
+
+  @VisibleForTesting
+  public void setSdiTokenClientForTesting(TokenClient testClient) {
+    tokenClient = testClient;
+  }
+
+  public void updateSdiTokenClient(String decryptKey) {
+    if (decryptKey != null && !decryptKey.isEmpty()) {
+      try {
+        tokenClient = new TokenClient(decryptKey);
+      } catch (Exception e) {
+        LOG.warn("Failed to create token client.", e);
+      }
+    } else if (tokenClient != null) {
+      tokenClient = null;
+    }
   }
 }
