@@ -53,6 +53,10 @@ public final class RouterMetrics {
   private MutableGaugeInt numMultipleAppsFailedRetrieved;
   @Metric("# of applicationAttempt reports failed to be retrieved")
   private MutableGaugeInt numAppAttemptsFailedRetrieved;
+  @Metric("# of deleteFederationApplication failed to be retrieved")
+  private MutableGaugeInt numDeleteFederationApplicationFailedRetrieved;
+  @Metric("Total number of successful Retrieved DeleteFederationApplication and latency(ms)")
+  private MutableRate totalSucceededDeleteFederationApplicationFailedRetrieved;
 
   // Aggregate metrics are shared, and don't have to be looked up per call
   @Metric("Total number of successful Submitted apps and latency(ms)")
@@ -98,6 +102,7 @@ public final class RouterMetrics {
   private MutableQuantiles getApplicationsReportLatency;
   private MutableQuantiles getApplicationAttemptReportLatency;
   private MutableQuantiles getQueueInfoLatency;
+  private MutableQuantiles deleteFederationApplicationLatency;
 
   private static volatile RouterMetrics INSTANCE = null;
   private static MetricsRegistry registry;
@@ -124,6 +129,10 @@ public final class RouterMetrics {
     getQueueInfoLatency =
         registry.newQuantiles("getQueueInfoLatency",
             "latency of get queue info timeouts", "ops", "latency", 10);
+
+    deleteFederationApplicationLatency = registry.newQuantiles(
+        "deleteFederationApplicationLatency",
+        "latency of delete FederationApplication timeouts", "ops", "latency", 10);
   }
 
   public static RouterMetrics getMetrics() {
@@ -332,5 +341,28 @@ public final class RouterMetrics {
 
   public void incrGetQueueInfoFailedRetrieved() {
     numGetQueueInfoFailedRetrieved.incr();
+  }
+
+  public int getDeleteFederationApplicationFailedRetrieved() {
+    return numDeleteFederationApplicationFailedRetrieved.value();
+  }
+
+  public void incrDeleteFederationApplicationFailedRetrieved() {
+    numDeleteFederationApplicationFailedRetrieved.incr();
+  }
+
+  public void succeededDeleteFederationApplicationFailedRetrieved(long duration) {
+    totalSucceededDeleteFederationApplicationFailedRetrieved.add(duration);
+    deleteFederationApplicationLatency.add(duration);
+  }
+
+  @VisibleForTesting
+  public long getNumSucceededDeleteFederationApplicationFailedRetrieved() {
+    return totalSucceededDeleteFederationApplicationFailedRetrieved.lastStat().numSamples();
+  }
+
+  @VisibleForTesting
+  public double getLatencySucceededDeleteFederationApplicationFailedRetrieved() {
+    return totalSucceededDeleteFederationApplicationFailedRetrieved.lastStat().mean();
   }
 }

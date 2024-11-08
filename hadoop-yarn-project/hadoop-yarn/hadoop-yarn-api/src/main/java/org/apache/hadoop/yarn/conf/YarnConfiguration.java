@@ -4388,6 +4388,24 @@ public class YarnConfiguration extends Configuration {
 
   public static final int DEFAULT_ROUTER_USER_CLIENT_THREADS_SIZE = 5;
 
+  /**
+   * This configurable is used to set the keepAliveTime of the thread pool of the interceptor.
+   *
+   * keepAliveTime when the number of threads is greater than the core,
+   * this is the maximum time that excess idle threads will wait for new tasks before terminating.
+   */
+  public static final String ROUTER_USER_CLIENT_THREAD_POOL_KEEP_ALIVE_TIME =
+      ROUTER_PREFIX + "interceptor.user-thread-pool.keep-alive-time";
+
+  /**
+   * This configurable is used to set the default time of keepAliveTime
+   * of the thread pool of the interceptor.
+   *
+   * the default value is 0s.
+   */
+  public static final long DEFAULT_ROUTER_USER_CLIENT_THREAD_POOL_KEEP_ALIVE_TIME =
+      TimeUnit.SECONDS.toMillis(0); // 0s
+
   /** The address of the Router web application. */
   public static final String ROUTER_WEBAPP_ADDRESS =
       ROUTER_WEBAPP_PREFIX + "address";

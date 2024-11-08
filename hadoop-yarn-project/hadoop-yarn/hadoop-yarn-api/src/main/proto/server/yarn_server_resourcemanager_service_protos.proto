@@ -152,6 +152,17 @@ message NodesToAttributesMappingRequestProto {
 
 message NodesToAttributesMappingResponseProto {
 }
+
+
+message DeleteFederationApplicationRequestProto {
+  optional string application = 1;
+  optional string subClusterId = 2;
+}
+
+message DeleteFederationApplicationResponseProto {
+  optional string message = 1;
+}
+
 //////////////////////////////////////////////////////////////////
 ///////////// RM Failover related records ////////////////////////
 //////////////////////////////////////////////////////////////////

@@ -52,6 +52,8 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceReque
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateNodeResourceResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdateRMConfigResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.DeleteFederationApplicationRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords.DeleteFederationApplicationResponse;
 
 /**
  * Mock intercepter that does not do anything other than forwarding it to the
@@ -160,6 +162,12 @@ public class PassThroughRMAdminRequestInterceptor
       NodesToAttributesMappingRequest request)
       throws YarnException, IOException {
     return getNextInterceptor().mapAttributesToNodes(request);
+  }
+
+  @Override
+  public DeleteFederationApplicationResponse deleteFederationApplication(
+      DeleteFederationApplicationRequest request) throws YarnException, IOException {
+    return getNextInterceptor().deleteFederationApplication(request);
   }
 
 }
