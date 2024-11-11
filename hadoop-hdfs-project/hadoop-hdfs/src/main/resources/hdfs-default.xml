@@ -6806,4 +6806,12 @@
       Determine whether to collect the numbers of ec and replica files.
     </description>
   </property>
+  <property>
+    <name>dfs.namenode.block.recovery.trigger.time.threshold</name>
+    <value>180000</value>
+    <description>
+      The DataNodeBlockRecoveryTriggerHandler will reject new requests
+      if the last trigger time is within this interval.
+    </description>
+  </property>
 </configuration>

@@ -60,6 +60,8 @@ import java.util.TreeSet;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
+import org.apache.hadoop.hdfs.server.blockmanagement.DataNodeBlockRecoveryTriggerHandler;
+import org.apache.hadoop.hdfs.server.datanode.fsdataset.impl.DatanodeVolumeRefreshHandler;
 import org.apache.hadoop.hdfs.server.protocol.InvalidBlockReportLeaseException;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 
@@ -659,6 +661,14 @@ public class NameNodeRpcServer implements NamenodeProtocols {
         this.clientRpcServer.addAuxiliaryListener(auxiliaryPort);
       }
     }
+
+    if (namesystem.getBlockManager() != null &&
+        namesystem.getBlockManager().getDatanodeManager() != null) {
+      RefreshRegistry.defaultRegistry().register(
+          DataNodeBlockRecoveryTriggerHandler.DATANODE_BLOCK_RECOVERY_TRIGGER,
+          new DataNodeBlockRecoveryTriggerHandler(conf,
+              namesystem.getBlockManager().getDatanodeManager()));
+    }
   }
 
   public void resetDisableECFeature(boolean disableECFeature) {
@@ -743,6 +753,8 @@ public class NameNodeRpcServer implements NamenodeProtocols {
     if (msyncRpcServer != null) {
       msyncRpcServer.stop();
     }
+    RefreshRegistry.defaultRegistry().unregisterAll(
+        DataNodeBlockRecoveryTriggerHandler.DATANODE_BLOCK_RECOVERY_TRIGGER);
   }
 
   InetSocketAddress getLifelineRpcAddress() {

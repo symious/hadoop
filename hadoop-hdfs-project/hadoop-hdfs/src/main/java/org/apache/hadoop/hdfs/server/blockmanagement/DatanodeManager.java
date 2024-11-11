@@ -1094,17 +1094,20 @@ public class DatanodeManager {
    * Remove a datanode
    * @throws UnregisteredNodeException 
    */
-  public void removeDatanode(final DatanodeID node)
+  public boolean removeDatanode(final DatanodeID node)
       throws UnregisteredNodeException {
     namesystem.writeLock(FSNamesystemLockMode.BM, OperationName.REMOVE_DATANODE);
     try {
       final DatanodeDescriptor descriptor = getDatanode(node);
       if (descriptor != null) {
         removeDatanode(descriptor, true);
+        NameNode.stateChangeLog.info("BLOCK* removeDatanode: removed datanode {}.", descriptor);
+        return true;
       } else {
         NameNode.stateChangeLog.warn("BLOCK* removeDatanode: "
                                      + node + " does not exist");
       }
+      return false;
     } finally {
       namesystem.writeUnlock(FSNamesystemLockMode.BM, OperationName.REMOVE_DATANODE);
     }

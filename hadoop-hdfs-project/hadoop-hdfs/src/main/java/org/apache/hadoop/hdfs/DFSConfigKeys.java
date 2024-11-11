@@ -1272,6 +1272,10 @@ public class DFSConfigKeys extends CommonConfigurationKeys {
       DFS_NAMENODE_DECOMMISSION_MONITOR_CLASS_DEFAULT =
       "org.apache.hadoop.hdfs.server.blockmanagement."+
           "DatanodeAdminDefaultMonitor";
+  public static final String DFS_NAMENODE_BLOCK_RECOVERY_TRIGGER_TIME_THRESHOLD_KEY =
+      "dfs.namenode.block.recovery.trigger.time.threshold";
+  public static final long DFS_NAMENODE_BLOCK_RECOVERY_TRIGGER_TIME_THRESHOLD_DEFAULT =
+      TimeUnit.MINUTES.toMillis(3);
   public static final String
       DFS_NAMENODE_DECOMMISSION_BACKOFF_MONITOR_PENDING_LIMIT
       = "dfs.namenode.decommission.backoff.monitor.pending.limit";
