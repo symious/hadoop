@@ -185,6 +185,7 @@ public class TimelineAppStateChecker extends AbstractService {
       context.setUserId(splits[1]);
       context.setFlowName(splits[2]);
       context.setFlowRunId(Long.parseLong(splits[3]));
+      context.setAppId(entity.getId());
       TimelineEntities entities = new TimelineEntities();
       entity
           .addInfo(ApplicationMetricsConstants.STATE_EVENT_INFO, expectedState);
