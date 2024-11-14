@@ -142,7 +142,7 @@
       </exclusions>
     </dependency>
 
-    <dependency>
+<!--    <dependency>
       <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-server</artifactId>
       <scope>provided</scope>
@@ -188,7 +188,7 @@
           <artifactId>jetty-http</artifactId>
         </exclusion>
       </exclusions>
-    </dependency>
+    </dependency>-->
 
     <dependency>
       <groupId>junit</groupId>
