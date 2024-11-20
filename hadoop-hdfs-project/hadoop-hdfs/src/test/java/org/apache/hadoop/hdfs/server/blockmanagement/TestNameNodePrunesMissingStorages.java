@@ -22,6 +22,7 @@ import java.util.function.Supplier;
 import java.util.ArrayList;
 import java.util.Collection;
 
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -39,7 +40,6 @@ import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
 import org.apache.hadoop.hdfs.server.datanode.StorageLocation;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi.FsVolumeReferences;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeRegistration;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorage;
 import org.apache.hadoop.hdfs.server.protocol.SlowDiskReports;
@@ -185,7 +185,7 @@ public class TestNameNodePrunesMissingStorages {
         DataNodeTestUtils.triggerBlockReport(dn);
       }
       ExtendedBlock block = DFSTestUtil.getFirstBlock(fs, new Path("/foo1"));
-      cluster.getNamesystem().writeLock(FSNamesystemLockMode.BM, "testRemovingStorageDoesNotProduceZombies");
+      cluster.getNamesystem().writeLock(RwLockMode.BM, "testRemovingStorageDoesNotProduceZombies");
       final String storageIdToRemove;
       String datanodeUuid;
       // Find the first storage which this block is in.
@@ -201,7 +201,7 @@ public class TestNameNodePrunesMissingStorages {
         storageIdToRemove = info.getStorageID();
         datanodeUuid = info.getDatanodeDescriptor().getDatanodeUuid();
       } finally {
-        cluster.getNamesystem().writeUnlock(FSNamesystemLockMode.BM, "testRemovingStorageDoesNotProduceZombies");
+        cluster.getNamesystem().writeUnlock(RwLockMode.BM, "testRemovingStorageDoesNotProduceZombies");
       }
       // Find the DataNode which holds that first storage.
       final DataNode datanodeToRemoveStorageFrom;
@@ -346,7 +346,7 @@ public class TestNameNodePrunesMissingStorages {
       GenericTestUtils.waitFor(new Supplier<Boolean>() {
         @Override
         public Boolean get() {
-          cluster.getNamesystem().writeLock(FSNamesystemLockMode.BM, "testRenamingStorageIds");
+          cluster.getNamesystem().writeLock(RwLockMode.BM, "testRenamingStorageIds");
           try {
             Iterator<DatanodeStorageInfo> storageInfoIter =
                 cluster.getNamesystem().getBlockManager().
@@ -368,7 +368,7 @@ public class TestNameNodePrunesMissingStorages {
             LOG.info("Successfully found " + block.getBlockName() + " in " +
                 "be in storage id " + newStorageId);
           } finally {
-            cluster.getNamesystem().writeUnlock(FSNamesystemLockMode.BM, "testRenamingStorageIds");
+            cluster.getNamesystem().writeUnlock(RwLockMode.BM, "testRenamingStorageIds");
           }
           return true;
         }

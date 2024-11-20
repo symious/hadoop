@@ -25,6 +25,7 @@ import static org.junit.Assert.assertTrue;
 import java.io.IOException;
 import java.util.EnumSet;
 
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -35,7 +36,6 @@ import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeStorageInfo;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
 import org.apache.hadoop.io.EnumSetWritable;
 import org.junit.After;
@@ -93,7 +93,7 @@ public class TestAddBlockRetry {
     // start first addBlock()
     LOG.info("Starting first addBlock for " + src);
     LocatedBlock[] onRetryBlock = new LocatedBlock[1];
-    ns.readLock(FSNamesystemLockMode.GLOBAL, "validateAddBlock");
+    ns.readLock(RwLockMode.GLOBAL, "validateAddBlock");
     FSDirWriteFileOp.ValidateAddBlockResult r;
     FSPermissionChecker pc = Mockito.mock(FSPermissionChecker.class);
     try {
@@ -101,7 +101,7 @@ public class TestAddBlockRetry {
                                             HdfsConstants.GRANDFATHER_INODE_ID,
                                             "clientName", null, onRetryBlock);
     } finally {
-      ns.readUnlock(FSNamesystemLockMode.GLOBAL, "validateAddBlock");
+      ns.readUnlock(RwLockMode.GLOBAL, "validateAddBlock");
     }
     DatanodeStorageInfo targets[] = FSDirWriteFileOp.chooseTargetForNewBlock(
         ns.getBlockManager(), src, null, null, null, r);
@@ -119,13 +119,13 @@ public class TestAddBlockRetry {
     assertEquals("Wrong replication", REPLICATION, lb2.getLocations().length);
 
     // continue first addBlock()
-    ns.writeLock(FSNamesystemLockMode.GLOBAL, "testRetryAddBlockWhileInChooseTarget");
+    ns.writeLock(RwLockMode.GLOBAL, "testRetryAddBlockWhileInChooseTarget");
     LocatedBlock newBlock;
     try {
       newBlock = FSDirWriteFileOp.storeAllocatedBlock(ns, src,
           HdfsConstants.GRANDFATHER_INODE_ID, "clientName", null, targets);
     } finally {
-      ns.writeUnlock(FSNamesystemLockMode.GLOBAL, "testRetryAddBlockWhileInChooseTarget");
+      ns.writeUnlock(RwLockMode.GLOBAL, "testRetryAddBlockWhileInChooseTarget");
     }
     assertEquals("Blocks are not equal", lb2.getBlock(), newBlock.getBlock());
 
@@ -139,11 +139,11 @@ public class TestAddBlockRetry {
 
   boolean checkFileProgress(String src, boolean checkall) throws IOException {
     final FSNamesystem ns = cluster.getNamesystem();
-    ns.readLock(FSNamesystemLockMode.GLOBAL, "checkFileProgress");
+    ns.readLock(RwLockMode.GLOBAL, "checkFileProgress");
     try {
       return ns.checkFileProgress(src, ns.dir.getINode(src).asFile(), checkall);
     } finally {
-      ns.readUnlock(FSNamesystemLockMode.GLOBAL, "checkFileProgress");
+      ns.readUnlock(RwLockMode.GLOBAL, "checkFileProgress");
     }
   }
 

@@ -29,6 +29,7 @@ import java.util.Set;
 import java.util.concurrent.Semaphore;
 
 import org.apache.hadoop.fs.Options;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -52,7 +53,6 @@ import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeDescriptor;
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeStorageInfo;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.InternalDataNodeTestUtils;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.SnapshotTestHelper;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.Node;
@@ -472,7 +472,7 @@ public class TestDeleteRace {
         } catch (InterruptedException e) {
         }
       });
-      fsn.writeLock(FSNamesystemLockMode.GLOBAL, "testOpenRenameRace");
+      fsn.writeLock(RwLockMode.GLOBAL, "testOpenRenameRace");
       open.start();
       openSem.acquire();
       Thread.yield();
@@ -480,7 +480,7 @@ public class TestDeleteRace {
       rename.start();
       renameSem.acquire();
       Thread.yield();
-      fsn.writeUnlock(FSNamesystemLockMode.GLOBAL, "testOpenRenameRace");
+      fsn.writeUnlock(RwLockMode.GLOBAL, "testOpenRenameRace");
 
       // wait open and rename threads finish.
       open.join();

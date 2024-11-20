@@ -21,7 +21,7 @@ import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeFaultInjector;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.base.Joiner;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableList;
 import org.apache.hadoop.thirdparty.com.google.common.collect.LinkedListMultimap;
@@ -164,10 +164,10 @@ public class TestBlockManager {
     conf.set(DFSConfigKeys.NET_TOPOLOGY_SCRIPT_FILE_NAME_KEY,
              "need to set a dummy value here so it assumes a multi-rack cluster");
     fsn = Mockito.mock(FSNamesystem.class);
-    Mockito.doReturn(true).when(fsn).hasWriteLock(FSNamesystemLockMode.GLOBAL);
-    Mockito.doReturn(true).when(fsn).hasReadLock(FSNamesystemLockMode.GLOBAL);
-    Mockito.doReturn(true).when(fsn).hasWriteLock(FSNamesystemLockMode.BM);
-    Mockito.doReturn(true).when(fsn).hasReadLock(FSNamesystemLockMode.BM);
+    Mockito.doReturn(true).when(fsn).hasWriteLock(RwLockMode.GLOBAL);
+    Mockito.doReturn(true).when(fsn).hasReadLock(RwLockMode.GLOBAL);
+    Mockito.doReturn(true).when(fsn).hasWriteLock(RwLockMode.BM);
+    Mockito.doReturn(true).when(fsn).hasReadLock(RwLockMode.BM);
     Mockito.doReturn(true).when(fsn).isRunning();
     //Make shouldPopulaeReplQueues return true
     HAContext haContext = Mockito.mock(HAContext.class);
@@ -1620,7 +1620,7 @@ public class TestBlockManager {
       }
       failedStorageDataNode.updateHeartbeat(reports.toArray(StorageReport
           .EMPTY_ARRAY), 0L, 0L, 0, 0, null);
-      ns.writeLock(FSNamesystemLockMode.BM, "open");
+      ns.writeLock(RwLockMode.BM, "open");
       DatanodeStorageInfo corruptStorageInfo= null;
       for(int i=0; i<corruptStorageDataNode.getStorageInfos().length; i++) {
         corruptStorageInfo = corruptStorageDataNode.getStorageInfos()[i];
@@ -1634,16 +1634,16 @@ public class TestBlockManager {
       blockManager.findAndMarkBlockAsCorrupt(blk, corruptStorageDataNode,
           corruptStorageInfo.getStorageID(),
           CorruptReplicasMap.Reason.ANY.toString());
-      ns.writeUnlock(FSNamesystemLockMode.BM, "open");
+      ns.writeUnlock(RwLockMode.BM, "open");
       BlockInfo[] blockInfos = new BlockInfo[] {blockInfo};
-      ns.readLock(FSNamesystemLockMode.BM, "open");
+      ns.readLock(RwLockMode.BM, "open");
       LocatedBlocks locatedBlocks =
           blockManager.createLocatedBlocks(blockInfos, 3L, false, 0L, 3L,
               false, false, null, null);
       assertTrue("Located Blocks should exclude corrupt" +
               "replicas and failed storages",
           locatedBlocks.getLocatedBlocks().size() == 1);
-      ns.readUnlock(FSNamesystemLockMode.BM, "open");
+      ns.readUnlock(RwLockMode.BM, "open");
     } finally {
       if (cluster != null) {
         cluster.shutdown();

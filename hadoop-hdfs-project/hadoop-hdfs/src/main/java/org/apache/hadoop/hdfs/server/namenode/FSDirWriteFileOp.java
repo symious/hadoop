@@ -18,7 +18,7 @@
 package org.apache.hadoop.hdfs.server.namenode;
 
 import org.apache.hadoop.hdfs.OperationName;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.HadoopIllegalArgumentException;
 import org.apache.hadoop.fs.XAttrSetFlag;
@@ -111,7 +111,7 @@ class FSDirWriteFileOp {
    */
   static void persistBlocks(
       FSDirectory fsd, String path, INodeFile file, boolean logRetryCache) {
-    assert fsd.getFSNamesystem().hasWriteLock(FSNamesystemLockMode.FS);
+    assert fsd.getFSNamesystem().hasWriteLock(RwLockMode.FS);
     Preconditions.checkArgument(file.isUnderConstruction());
     fsd.getEditLog().logUpdateBlocks(path, file, logRetryCache);
     if(NameNode.stateChangeLog.isDebugEnabled()) {
@@ -371,7 +371,7 @@ class FSDirWriteFileOp {
       boolean shouldReplicate, String ecPolicyName, String storagePolicy,
       boolean logRetryEntry)
       throws IOException {
-    assert fsn.hasWriteLock(FSNamesystemLockMode.FS);
+    assert fsn.hasWriteLock(RwLockMode.FS);
     boolean overwrite = flag.contains(CreateFlag.OVERWRITE);
     boolean isLazyPersist = flag.contains(CreateFlag.LAZY_PERSIST);
 
@@ -379,7 +379,7 @@ class FSDirWriteFileOp {
     FSDirectory fsd = fsn.getFSDirectory();
 
     if (iip.getLastINode() != null) {
-      fsn.writeLock(FSNamesystemLockMode.BM, OperationName.CREATE);
+      fsn.writeLock(RwLockMode.BM, OperationName.CREATE);
       try {
         if (overwrite) {
           List<INode> toRemoveINodes = new ChunkedArrayList<>();
@@ -399,7 +399,7 @@ class FSDirWriteFileOp {
               clientMachine + " already exists");
         }
       } finally {
-        fsn.writeUnlock(FSNamesystemLockMode.BM, OperationName.CREATE);
+        fsn.writeUnlock(RwLockMode.BM, OperationName.CREATE);
       }
     }
     fsn.checkFsObjectLimit();
@@ -611,7 +611,7 @@ class FSDirWriteFileOp {
       FSNamesystem fsn, INodesInPath iip, long fileId, String clientName,
       ExtendedBlock previous, LocatedBlock[] onRetryBlock)
       throws IOException {
-    assert fsn.hasReadLock(FSNamesystemLockMode.GLOBAL);
+    assert fsn.hasReadLock(RwLockMode.GLOBAL);
     String src = iip.getPath();
     checkBlock(fsn, previous);
     onRetryBlock[0] = null;
@@ -709,7 +709,7 @@ class FSDirWriteFileOp {
       FSNamesystem fsn, INodesInPath iip,
       String holder, Block last, long fileId)
       throws IOException {
-    assert fsn.hasWriteLock(FSNamesystemLockMode.GLOBAL);
+    assert fsn.hasWriteLock(RwLockMode.GLOBAL);
     final String src = iip.getPath();
     final INodeFile pendingFile;
     INode inode = null;
@@ -793,7 +793,7 @@ class FSDirWriteFileOp {
   static void saveAllocatedBlock(FSNamesystem fsn, String src,
       INodesInPath inodesInPath, Block newBlock, DatanodeStorageInfo[] targets,
       BlockType blockType) throws IOException {
-    assert fsn.hasWriteLock(FSNamesystemLockMode.GLOBAL);
+    assert fsn.hasWriteLock(RwLockMode.GLOBAL);
     BlockInfo b = addBlock(fsn.dir, src, inodesInPath, newBlock, targets,
         blockType);
     logAllocatedBlock(src, b);

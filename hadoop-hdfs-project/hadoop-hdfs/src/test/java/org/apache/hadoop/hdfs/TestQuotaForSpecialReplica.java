@@ -28,8 +28,8 @@ import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.INode;
 import org.apache.hadoop.hdfs.server.namenode.INodeDirectory;
 import org.apache.hadoop.hdfs.server.namenode.QuotaCounts;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.test.LambdaTestUtils;
 import org.junit.AfterClass;
@@ -464,11 +464,11 @@ public class TestQuotaForSpecialReplica {
 
   private void updateCountForQuota(int i) {
     FSNamesystem fsn = cluster.getNamesystem();
-    fsn.writeLock(FSNamesystemLockMode.FS, "updateCountForQuota");
+    fsn.writeLock(RwLockMode.FS, "updateCountForQuota");
     try {
       cluster.getNamesystem(0).getFSDirectory().updateCountForQuota(i);
     } finally {
-      fsn.writeUnlock(FSNamesystemLockMode.FS, "updateCountForQuota");
+      fsn.writeUnlock(RwLockMode.FS, "updateCountForQuota");
     }
   }
 

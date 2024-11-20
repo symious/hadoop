@@ -101,7 +101,6 @@ import org.apache.hadoop.hdfs.server.namenode.INode.BlocksMapUpdateInfo;
 import org.apache.hadoop.hdfs.server.namenode.INodeFile;
 import org.apache.hadoop.hdfs.server.namenode.INodesInPath;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.namenode.ha.HAContext;
 import org.apache.hadoop.hdfs.server.namenode.metrics.NameNodeMetrics;
 import org.apache.hadoop.hdfs.server.namenode.sps.StoragePolicySatisfyManager;
@@ -127,6 +126,7 @@ import org.apache.hadoop.hdfs.server.namenode.CacheManager;
 import static org.apache.hadoop.hdfs.util.StripedBlockUtil.getInternalBlockLength;
 
 import org.apache.hadoop.hdfs.util.LightWeightHashSet;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.metrics2.util.MBeans;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.net.Node;
@@ -1080,7 +1080,7 @@ public class BlockManager implements BlockStatsMXBean {
    * Set or clear faulty DC.
    */
   public void setFaultyDC(String faultyDC) {
-    this.namesystem.writeLock(FSNamesystemLockMode.BM, "SetFaultyDC");
+    this.namesystem.writeLock(RwLockMode.BM, "SetFaultyDC");
     try {
       LOG.info("Changing the faulty DC from {} to {}.", this.faultyDC, faultyDC);
       String oldFaultyDC = this.faultyDC;
@@ -1092,7 +1092,7 @@ public class BlockManager implements BlockStatsMXBean {
         getDatanodeManager().markDNsUnderFaultyDCMaintenance(this.faultyDC);
       }
     } finally {
-     this.namesystem.writeUnlock(FSNamesystemLockMode.BM, "SetFaultyDC");
+     this.namesystem.writeUnlock(RwLockMode.BM, "SetFaultyDC");
     }
   }
 
@@ -1184,7 +1184,7 @@ public class BlockManager implements BlockStatsMXBean {
 
   /** Dump meta data to out. */
   public void metaSave(PrintWriter out) {
-    assert namesystem.hasReadLock(FSNamesystemLockMode.BM);
+    assert namesystem.hasReadLock(RwLockMode.BM);
     final List<DatanodeDescriptor> live = new ArrayList<DatanodeDescriptor>();
     final List<DatanodeDescriptor> dead = new ArrayList<DatanodeDescriptor>();
     datanodeManager.fetchDatanodes(live, dead, false);
@@ -1916,7 +1916,7 @@ public class BlockManager implements BlockStatsMXBean {
       final boolean inSnapshot, FileEncryptionInfo feInfo,
       ErasureCodingPolicy ecPolicy)
       throws IOException {
-    assert namesystem.hasReadLock(FSNamesystemLockMode.BM);
+    assert namesystem.hasReadLock(RwLockMode.BM);
     if (blocks == null) {
       return null;
     } else if (blocks.length == 0) {
@@ -2129,7 +2129,7 @@ public class BlockManager implements BlockStatsMXBean {
 
   /** Remove the blocks associated to the given DatanodeStorageInfo. */
   void removeBlocksAssociatedTo(final DatanodeStorageInfo storageInfo) {
-    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
+    assert namesystem.hasWriteLock(RwLockMode.BM);
     final Iterator<BlockInfo> it = storageInfo.getBlockIterator();
     DatanodeDescriptor node = storageInfo.getDatanodeDescriptor();
     while(it.hasNext()) {
@@ -2147,14 +2147,14 @@ public class BlockManager implements BlockStatsMXBean {
 
   /** Remove the blocks to the given DatanodeDescriptor from InvalidateBlocks. */
   void removeBlocksFromInvalidateBlocks(final DatanodeDescriptor node) {
-    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
+    assert namesystem.hasWriteLock(RwLockMode.BM);
     invalidateBlocks.remove(node);
   }
 
   /** Remove the blocks to the given DatanodeDescriptor from excessRedundancyMap. */
   LightWeightHashSet<Block> removeBlocksFromExcessRedundancyMap(
       final DatanodeDescriptor node) {
-    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
+    assert namesystem.hasWriteLock(RwLockMode.BM);
     return excessRedundancyMap.remove(node);
   }
 
@@ -2213,7 +2213,7 @@ public class BlockManager implements BlockStatsMXBean {
    */
   public void findAndMarkBlockAsCorrupt(final ExtendedBlock blk,
       final DatanodeInfo dn, String storageID, String reason) throws IOException {
-    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
+    assert namesystem.hasWriteLock(RwLockMode.BM);
     final Block reportedBlock = blk.getLocalBlock();
     final BlockInfo storedBlock = getStoredBlock(reportedBlock);
     if (storedBlock == null) {
@@ -2414,9 +2414,9 @@ public class BlockManager implements BlockStatsMXBean {
    */
   int computeBlockReconstructionWork(int blocksToProcess) {
     List<List<BlockInfo>> blocksToReconstruct = null;
-    // TODO: Change it to readLock(FSNamesystemLockMode.BM)
+    // TODO: Change it to readLock(RwLockMode.BM)
     //  since chooseLowRedundancyBlocks is thread safe.
-    namesystem.writeLock(FSNamesystemLockMode.BM,
+    namesystem.writeLock(RwLockMode.BM,
         OperationName.COMPUTE_BLOCK_RECONSTRUCTION_WORK);
     try {
       boolean reset = false;
@@ -2432,7 +2432,7 @@ public class BlockManager implements BlockStatsMXBean {
       blocksToReconstruct = neededReconstruction
           .chooseLowRedundancyBlocks(blocksToProcess, reset);
     } finally {
-      namesystem.writeUnlock(FSNamesystemLockMode.BM,
+      namesystem.writeUnlock(RwLockMode.BM,
           OperationName.COMPUTE_BLOCK_RECONSTRUCTION_WORK);
     }
     return computeReconstructionWorkForBlocks(blocksToReconstruct);
@@ -2452,9 +2452,9 @@ public class BlockManager implements BlockStatsMXBean {
     List<BlockReconstructionWork> reconWork = new ArrayList<>();
 
     // Step 1: categorize at-risk blocks into replication and EC tasks
-    // TODO: Change to readLock(FSNamesystemLockMode.GLOBAL)
+    // TODO: Change to readLock(RwLockMode.GLOBAL)
     //  since neededReconstruction is thread safe.
-    namesystem.writeLock(FSNamesystemLockMode.GLOBAL,
+    namesystem.writeLock(RwLockMode.GLOBAL,
         OperationName.COMPUTE_BLOCK_RECONSTRUCTION_WORK_FOR_BLOCKS);
     try {
       synchronized (neededReconstruction) {
@@ -2470,7 +2470,7 @@ public class BlockManager implements BlockStatsMXBean {
         }
       }
     } finally {
-      namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL,
+      namesystem.writeUnlock(RwLockMode.GLOBAL,
           OperationName.COMPUTE_BLOCK_RECONSTRUCTION_WORK_FOR_BLOCKS);
     }
 
@@ -2509,9 +2509,9 @@ public class BlockManager implements BlockStatsMXBean {
     }
 
     // Step 3: add tasks to the DN
-    // TODO: Change to readLock(FSNamesystemLockMode.BM)
+    // TODO: Change to readLock(RwLockMode.BM)
     //  since pendingReconstruction and neededReconstruction are thread safe.
-    namesystem.writeLock(FSNamesystemLockMode.BM,
+    namesystem.writeLock(RwLockMode.BM,
         OperationName.COMPUTE_BLOCK_RECONSTRUCTION_WORK_FOR_BLOCKS);
     try {
       for (BlockReconstructionWork rw : reconWork) {
@@ -2532,7 +2532,7 @@ public class BlockManager implements BlockStatsMXBean {
         }
       }
     } finally {
-      namesystem.writeUnlock(FSNamesystemLockMode.BM,
+      namesystem.writeUnlock(RwLockMode.BM,
           OperationName.COMPUTE_BLOCK_RECONSTRUCTION_WORK_FOR_BLOCKS);
     }
 
@@ -3174,9 +3174,9 @@ public class BlockManager implements BlockStatsMXBean {
   void processPendingReconstructions() {
     Map<BlockInfo, PendingBlockInfo> timedOutItems = pendingReconstruction.getTimedOutBlocks();
     if (timedOutItems != null) {
-      // TODO: Change to readLock(FSNamesystemLockMode.BM)
+      // TODO: Change to readLock(RwLockMode.BM)
       //  since neededReconstruction is thread safe.
-      namesystem.writeLock(FSNamesystemLockMode.BM,
+      namesystem.writeLock(RwLockMode.BM,
           OperationName.PROCESS_PENDING_RECONSTRUCTIONS);
       try {
         for (Map.Entry<BlockInfo, PendingBlockInfo> entry : timedOutItems.entrySet()) {
@@ -3200,7 +3200,7 @@ public class BlockManager implements BlockStatsMXBean {
           }
         }
       } finally {
-        namesystem.writeUnlock(FSNamesystemLockMode.BM,
+        namesystem.writeUnlock(RwLockMode.BM,
             OperationName.PROCESS_PENDING_RECONSTRUCTIONS);
       }
       /* If we know the target datanodes where the replication timedout,
@@ -3210,7 +3210,7 @@ public class BlockManager implements BlockStatsMXBean {
   }
 
   public long requestBlockReportLeaseId(DatanodeRegistration nodeReg) {
-    assert namesystem.hasReadLock(FSNamesystemLockMode.BM);
+    assert namesystem.hasReadLock(RwLockMode.BM);
     DatanodeDescriptor node = null;
     try {
       node = datanodeManager.getDatanode(nodeReg);
@@ -3232,7 +3232,7 @@ public class BlockManager implements BlockStatsMXBean {
 
   public void registerDatanode(DatanodeRegistration nodeReg)
       throws IOException {
-    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
+    assert namesystem.hasWriteLock(RwLockMode.BM);
     datanodeManager.registerDatanode(nodeReg);
     bmSafeMode.checkSafeMode();
   }
@@ -3282,7 +3282,7 @@ public class BlockManager implements BlockStatsMXBean {
    *               list of blocks that need to be removed from blocksMap
    */
   public void removeBlocksAndUpdateSafemodeTotal(BlocksMapUpdateInfo blocks) {
-    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
+    assert namesystem.hasWriteLock(RwLockMode.BM);
     // In the case that we are a Standby tailing edits from the
     // active while in safe-mode, we need to track the total number
     // of blocks and safe blocks in the system.
@@ -3407,7 +3407,7 @@ public class BlockManager implements BlockStatsMXBean {
       final DatanodeStorage storage,
       final BlockListAsLongs newReport,
       BlockReportContext context) throws IOException {
-    namesystem.writeLock(FSNamesystemLockMode.GLOBAL, OperationName.PROCESS_REPORT);
+    namesystem.writeLock(RwLockMode.GLOBAL, OperationName.PROCESS_REPORT);
     final long startTime = Time.monotonicNow(); //after acquiring write lock
     final long endTime;
     DatanodeDescriptor node;
@@ -3463,7 +3463,7 @@ public class BlockManager implements BlockStatsMXBean {
       storageInfo.receivedBlockReport();
     } finally {
       endTime = Time.monotonicNow();
-      namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.PROCESS_REPORT);
+      namesystem.writeUnlock(RwLockMode.GLOBAL, OperationName.PROCESS_REPORT);
     }
 
     if(blockLog.isDebugEnabled()) {
@@ -3507,7 +3507,7 @@ public class BlockManager implements BlockStatsMXBean {
 
   public void removeBRLeaseIfNeeded(final DatanodeID nodeID,
       final BlockReportContext context) throws IOException {
-    namesystem.writeLock(FSNamesystemLockMode.BM, OperationName.REMOVE_BR_LEASE_IF_NEEDED);
+    namesystem.writeLock(RwLockMode.BM, OperationName.REMOVE_BR_LEASE_IF_NEEDED);
     DatanodeDescriptor node;
     try {
       node = datanodeManager.getDatanode(nodeID);
@@ -3524,7 +3524,7 @@ public class BlockManager implements BlockStatsMXBean {
             context.getTotalRpcs(), Long.toHexString(context.getReportId()));
       }
     } finally {
-      namesystem.writeUnlock(FSNamesystemLockMode.BM, OperationName.REMOVE_BR_LEASE_IF_NEEDED);
+      namesystem.writeUnlock(RwLockMode.BM, OperationName.REMOVE_BR_LEASE_IF_NEEDED);
     }
   }
 
@@ -3535,7 +3535,7 @@ public class BlockManager implements BlockStatsMXBean {
     if (getPostponedMisreplicatedBlocksCount() == 0) {
       return;
     }
-    namesystem.writeLock(FSNamesystemLockMode.GLOBAL,
+    namesystem.writeLock(RwLockMode.GLOBAL,
         OperationName.RESCAN_POSTPONED_MISREPLICATED_BLOCKS);
     long startTime = Time.monotonicNow();
     long startSize = postponedMisreplicatedBlocks.size();
@@ -3564,7 +3564,7 @@ public class BlockManager implements BlockStatsMXBean {
       postponedMisreplicatedBlocks.addAll(rescannedMisreplicatedBlocks);
       rescannedMisreplicatedBlocks.clear();
       long endSize = postponedMisreplicatedBlocks.size();
-      namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL,
+      namesystem.writeUnlock(RwLockMode.GLOBAL,
           OperationName.RESCAN_POSTPONED_MISREPLICATED_BLOCKS);
       LOG.info("Rescan of postponedMisreplicatedBlocks completed in {}" +
           " msecs. {} blocks are left. {} blocks were removed.",
@@ -3581,7 +3581,7 @@ public class BlockManager implements BlockStatsMXBean {
     while (!this.pendingScanDNs.isEmpty() && loopCount <= batchedScanLimit) {
       DatanodeDescriptor descriptor = this.pendingScanDNs.poll();
       if (descriptor != null) {
-        namesystem.writeLock(FSNamesystemLockMode.GLOBAL, "ProcessPendingScanDataNodes");
+        namesystem.writeLock(RwLockMode.GLOBAL, "ProcessPendingScanDataNodes");
         try {
           DatanodeDescriptor storedDN = getDatanodeManager()
               .getDatanode(descriptor.getDatanodeUuid());
@@ -3589,7 +3589,7 @@ public class BlockManager implements BlockStatsMXBean {
             processExtraRedundancyBlocksOnInService(storedDN);
           }
         } finally {
-          namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL, "ProcessPendingScanDataNodes");
+          namesystem.writeUnlock(RwLockMode.GLOBAL, "ProcessPendingScanDataNodes");
         }
         loopCount++;
       }
@@ -3607,7 +3607,7 @@ public class BlockManager implements BlockStatsMXBean {
     if (excessRedundancyMap.size() == 0 || !excessRedundancyTimeoutCheckEnabled) {
       return;
     }
-    namesystem.writeLock(FSNamesystemLockMode.BM, OperationName.PROCESS_TIME_OUT_EXCESS_BLOCKS);
+    namesystem.writeLock(RwLockMode.BM, OperationName.PROCESS_TIME_OUT_EXCESS_BLOCKS);
     long now = Time.monotonicNow();
     int processed = 0;
     try {
@@ -3661,7 +3661,7 @@ public class BlockManager implements BlockStatsMXBean {
         }
       }
     } finally {
-      namesystem.writeUnlock(FSNamesystemLockMode.BM, OperationName.PROCESS_TIME_OUT_EXCESS_BLOCKS);
+      namesystem.writeUnlock(RwLockMode.BM, OperationName.PROCESS_TIME_OUT_EXCESS_BLOCKS);
       LOG.info("processTimedOutExcessBlocks {} msecs.", (Time.monotonicNow() - now));
     }
   }
@@ -3717,7 +3717,7 @@ public class BlockManager implements BlockStatsMXBean {
       BlockInfo block,
       long oldGenerationStamp, long oldNumBytes, 
       DatanodeStorageInfo[] newStorages) throws IOException {
-    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
+    assert namesystem.hasWriteLock(RwLockMode.BM);
     BlockToMarkCorrupt b = null;
     if (block.getGenerationStamp() != oldGenerationStamp) {
       b = new BlockToMarkCorrupt(oldBlock, block, oldGenerationStamp,
@@ -3765,7 +3765,7 @@ public class BlockManager implements BlockStatsMXBean {
       final DatanodeStorageInfo storageInfo,
       final BlockListAsLongs report) throws IOException {
     if (report == null) return;
-    assert namesystem.hasWriteLock(FSNamesystemLockMode.GLOBAL);
+    assert namesystem.hasWriteLock(RwLockMode.GLOBAL);
     assert (storageInfo.getBlockReportCount() == 0);
 
     for (BlockReportReplica iblk : report) {
@@ -4214,7 +4214,7 @@ public class BlockManager implements BlockStatsMXBean {
   private void addStoredBlockImmediate(BlockInfo storedBlock, Block reported,
       DatanodeStorageInfo storageInfo)
   throws IOException {
-    assert (storedBlock != null && namesystem.hasWriteLock(FSNamesystemLockMode.GLOBAL));
+    assert (storedBlock != null && namesystem.hasWriteLock(RwLockMode.GLOBAL));
     if (!namesystem.isInStartupSafeMode()
         || isPopulatingReplQueues()) {
       addStoredBlock(storedBlock, reported, storageInfo, null, false);
@@ -4249,7 +4249,7 @@ public class BlockManager implements BlockStatsMXBean {
                                DatanodeDescriptor delNodeHint,
                                boolean logEveryBlock)
   throws IOException {
-    assert block != null && namesystem.hasWriteLock(FSNamesystemLockMode.GLOBAL);
+    assert block != null && namesystem.hasWriteLock(RwLockMode.GLOBAL);
     BlockInfo storedBlock;
     DatanodeDescriptor node = storageInfo.getDatanodeDescriptor();
     if (!block.isComplete()) {
@@ -4530,7 +4530,7 @@ public class BlockManager implements BlockStatsMXBean {
    * extra or low redundancy. Place it into the respective queue.
    */
   public void processMisReplicatedBlocks() {
-    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
+    assert namesystem.hasWriteLock(RwLockMode.BM);
     stopReconstructionInitializer();
     neededReconstruction.clear();
     reconstructionQueuesInitializer = new Daemon() {
@@ -4636,7 +4636,7 @@ public class BlockManager implements BlockStatsMXBean {
 
     while (namesystem.isRunning() && !Thread.currentThread().isInterrupted()) {
       int processed = 0;
-      namesystem.writeLockInterruptibly(FSNamesystemLockMode.GLOBAL);
+      namesystem.writeLockInterruptibly(RwLockMode.GLOBAL);
       try {
         while (processed < numBlocksPerIteration && blocksItr.hasNext()) {
           BlockInfo block = blocksItr.next();
@@ -4693,7 +4693,7 @@ public class BlockManager implements BlockStatsMXBean {
           break;
         }
       } finally {
-        namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.PROCESS_MISREPLICATES_ASYNC);
+        namesystem.writeUnlock(RwLockMode.GLOBAL, OperationName.PROCESS_MISREPLICATES_ASYNC);
         // Make sure it is out of the write lock for sufficiently long time.
         Thread.sleep(sleepDuration);
       }
@@ -4715,7 +4715,7 @@ public class BlockManager implements BlockStatsMXBean {
 
     while (namesystem.isRunning() && !Thread.currentThread().isInterrupted()) {
       int processed = 0;
-      namesystem.readLock(FSNamesystemLockMode.BM, OperationName.SCANNER_MISREPLICATES_ASYNC);
+      namesystem.readLock(RwLockMode.BM, OperationName.SCANNER_MISREPLICATES_ASYNC);
       try {
         while (processed < numBlocksPerIteration && blocksItr.hasNext()) {
           BlockInfo block = blocksItr.next();
@@ -4736,7 +4736,7 @@ public class BlockManager implements BlockStatsMXBean {
           break;
         }
       } finally {
-        namesystem.readUnlock(FSNamesystemLockMode.BM, OperationName.SCANNER_MISREPLICATES_ASYNC);
+        namesystem.readUnlock(RwLockMode.BM, OperationName.SCANNER_MISREPLICATES_ASYNC);
         // Make sure it is out of the read lock for sufficiently long time.
         Thread.sleep(sleepDuration);
       }
@@ -4781,7 +4781,7 @@ public class BlockManager implements BlockStatsMXBean {
               && !Thread.currentThread().isInterrupted()
               && iter.hasNext()) {
         int limit = processed + numBlocksPerIteration;
-        namesystem.writeLockInterruptibly(FSNamesystemLockMode.GLOBAL);
+        namesystem.writeLockInterruptibly(RwLockMode.GLOBAL);
         try {
           while (iter.hasNext() && processed < limit) {
             BlockInfo blk = iter.next();
@@ -4791,7 +4791,7 @@ public class BlockManager implements BlockStatsMXBean {
                     "Re-scanned block {}, result is {}", blk, r);
           }
         } finally {
-          namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL, "processMisReplicatedBlocks");
+          namesystem.writeUnlock(RwLockMode.GLOBAL, "processMisReplicatedBlocks");
         }
       }
     } catch (InterruptedException ex) {
@@ -4889,7 +4889,7 @@ public class BlockManager implements BlockStatsMXBean {
   private void processExtraRedundancyBlock(final BlockInfo block,
       final short replication, final DatanodeDescriptor addedNode,
       DatanodeDescriptor delNodeHint, Collection<String> delRedundantDataCenters) {
-    assert namesystem.hasWriteLock(FSNamesystemLockMode.GLOBAL);
+    assert namesystem.hasWriteLock(RwLockMode.GLOBAL);
     if (addedNode == delNodeHint) {
       delNodeHint = null;
     }
@@ -4940,9 +4940,9 @@ public class BlockManager implements BlockStatsMXBean {
       DatanodeDescriptor delNodeHint,
       Collection<String> delRedundantDataCenters) {
     // bc.getStoragePolicyID() needs FSReadLock.
-    // TODO: Change to hasReadLock(FSNamesystemLockMode.GLOBAL)
+    // TODO: Change to hasReadLock(RwLockMode.GLOBAL)
     //  since chooseExcessRedundancyContiguous is thread safe.
-    assert namesystem.hasWriteLock(FSNamesystemLockMode.GLOBAL);
+    assert namesystem.hasWriteLock(RwLockMode.GLOBAL);
     // first form a rack to datanodes map and
     BlockCollection bc = getBlockCollection(storedBlock);
     ReplicationRule rule = null;
@@ -5154,7 +5154,7 @@ public class BlockManager implements BlockStatsMXBean {
    */
   public void removeStoredBlock(BlockInfo storedBlock, DatanodeDescriptor node) {
     blockLog.debug("BLOCK* removeStoredBlock: {} from {}", storedBlock, node);
-    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
+    assert namesystem.hasWriteLock(RwLockMode.BM);
     if (storedBlock == null || !blocksMap.removeNode(storedBlock, node)) {
       blockLog.debug("BLOCK* removeStoredBlock: {} has already been" +
           " removed from node {}", storedBlock, node);
@@ -5356,7 +5356,7 @@ public class BlockManager implements BlockStatsMXBean {
    */
   public void processIncrementalBlockReport(final DatanodeID nodeID,
       final StorageReceivedDeletedBlocks srdb) throws IOException {
-    assert namesystem.hasWriteLock(FSNamesystemLockMode.GLOBAL);
+    assert namesystem.hasWriteLock(RwLockMode.GLOBAL);
     final DatanodeDescriptor node = datanodeManager.getDatanode(nodeID);
     if (node == null || !node.isRegistered()) {
       blockLog.warn("BLOCK* processIncrementalBlockReport"
@@ -5609,15 +5609,15 @@ public class BlockManager implements BlockStatsMXBean {
       // When called by tests like TestDefaultBlockPlacementPolicy.
       // testPlacementWithLocalRackNodesDecommissioned, it is not protected by
       // lock, only when called by DatanodeManager.refreshNodes have writeLock
-      if (namesystem.hasWriteLock(FSNamesystemLockMode.GLOBAL)) {
-        namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL,
+      if (namesystem.hasWriteLock(RwLockMode.GLOBAL)) {
+        namesystem.writeUnlock(RwLockMode.GLOBAL,
             "processExtraRedundancyBlocksOnInService");
         try {
           Thread.sleep(1);
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
         }
-        namesystem.writeLock(FSNamesystemLockMode.GLOBAL, "processExtraRedundancyBlocksOnInService");
+        namesystem.writeLock(RwLockMode.GLOBAL, "processExtraRedundancyBlocksOnInService");
       }
     }
     LOG.info("Invalidated {} extra redundancy blocks on {} after "
@@ -5694,7 +5694,7 @@ public class BlockManager implements BlockStatsMXBean {
   }
 
   public void removeBlock(BlockInfo block) {
-    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
+    assert namesystem.hasWriteLock(RwLockMode.BM);
     // No need to ACK blocks that are being removed entirely
     // from the namespace, since the removal of the associated
     // file already removes them from the block map below.
@@ -5737,9 +5737,9 @@ public class BlockManager implements BlockStatsMXBean {
   /** updates a block in needed reconstruction queue. */
   private void updateNeededReconstructions(final BlockInfo block,
       final int curReplicasDelta, int expectedReplicasDelta) {
-    // TODO: Change to readLock(FSNamesystemLockMode.BM)
+    // TODO: Change to readLock(RwLockMode.BM)
     //  since pendingReconstruction and neededReconstruction are thread safe.
-    namesystem.writeLock(FSNamesystemLockMode.BM, OperationName.UPDATE_NEEDED_RECONSTRUCTIONS);
+    namesystem.writeLock(RwLockMode.BM, OperationName.UPDATE_NEEDED_RECONSTRUCTIONS);
     try {
       if (!isPopulatingReplQueues() || !block.isComplete()) {
         return;
@@ -5758,7 +5758,7 @@ public class BlockManager implements BlockStatsMXBean {
             repl.outOfServiceReplicas(), oldExpectedReplicas);
       }
     } finally {
-      namesystem.writeUnlock(FSNamesystemLockMode.BM, OperationName.UPDATE_NEEDED_RECONSTRUCTIONS);
+      namesystem.writeUnlock(RwLockMode.BM, OperationName.UPDATE_NEEDED_RECONSTRUCTIONS);
     }
   }
 
@@ -5791,8 +5791,8 @@ public class BlockManager implements BlockStatsMXBean {
   private int invalidateWorkForOneNode(DatanodeInfo dn) {
     final List<Block> toInvalidate;
 
-    // TODO: Change to readLock(FSNamesystemLockMode.BM) since invalidateBlocks is thread safe.
-    namesystem.writeLock(FSNamesystemLockMode.BM, OperationName.INVALIDATE_WORK_FOR_ONE_NODE);
+    // TODO: Change to readLock(RwLockMode.BM) since invalidateBlocks is thread safe.
+    namesystem.writeLock(RwLockMode.BM, OperationName.INVALIDATE_WORK_FOR_ONE_NODE);
     try {
       // blocks should not be replicated or removed if safe mode is on
       if (namesystem.isInSafeMode()) {
@@ -5816,7 +5816,7 @@ public class BlockManager implements BlockStatsMXBean {
         return 0;
       }
     } finally {
-      namesystem.writeUnlock(FSNamesystemLockMode.BM, OperationName.INVALIDATE_WORK_FOR_ONE_NODE);
+      namesystem.writeUnlock(RwLockMode.BM, OperationName.INVALIDATE_WORK_FOR_ONE_NODE);
     }
     blockLog.debug("BLOCK* {}: ask {} to delete {}", getClass().getSimpleName(),
         dn, toInvalidate);
@@ -6065,7 +6065,7 @@ public class BlockManager implements BlockStatsMXBean {
    * Check if faultyDC exists, and set the faultyDC if it exists.
    */
   void checkAndSetFaultyDC() {
-    namesystem.writeLock(FSNamesystemLockMode.BM, "CheckAndSetFaultyDC");
+    namesystem.writeLock(RwLockMode.BM, "CheckAndSetFaultyDC");
     try {
       String faultyDC = this.getDatanodeManager().checkFaultyDC(
           this.faultyDCTimeThresholdMs, this.faultyDCNumberThreshold);
@@ -6073,7 +6073,7 @@ public class BlockManager implements BlockStatsMXBean {
         setFaultyDC(faultyDC);
       }
     } finally {
-      namesystem.writeUnlock(FSNamesystemLockMode.BM, "CheckAndSetFaultyDC");
+      namesystem.writeUnlock(RwLockMode.BM, "CheckAndSetFaultyDC");
     }
   }
 
@@ -6177,12 +6177,12 @@ public class BlockManager implements BlockStatsMXBean {
 
     // Update counters
     // TODO: Make corruptReplicas thread safe to remove this lock.
-    namesystem.writeLock(FSNamesystemLockMode.BM, OperationName.COMPUTE_DATANODE_WORK);
+    namesystem.writeLock(RwLockMode.BM, OperationName.COMPUTE_DATANODE_WORK);
     try {
       this.updateState();
       this.scheduledReplicationBlocksCount = workFound;
     } finally {
-      namesystem.writeUnlock(FSNamesystemLockMode.BM, OperationName.COMPUTE_DATANODE_WORK);
+      namesystem.writeUnlock(RwLockMode.BM, OperationName.COMPUTE_DATANODE_WORK);
     }
     workFound += this.computeInvalidateWork(nodesToProcess);
     return workFound;
@@ -6414,7 +6414,7 @@ public class BlockManager implements BlockStatsMXBean {
           // batch as many operations in the write lock until the queue
           // runs dry, or the max lock hold is reached.
           int processed = 0;
-          namesystem.writeLock(FSNamesystemLockMode.GLOBAL, "processQueue");
+          namesystem.writeLock(RwLockMode.GLOBAL, "processQueue");
           metrics.setBlockOpsQueued(queue.size() + 1);
           try {
             long start = Time.monotonicNow();
@@ -6427,7 +6427,7 @@ public class BlockManager implements BlockStatsMXBean {
               action = queue.poll();
             } while (action != null);
           } finally {
-            namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL, "processQueue");
+            namesystem.writeUnlock(RwLockMode.GLOBAL, "processQueue");
             metrics.addBlockOpsBatched(processed - 1);
           }
         } catch (InterruptedException e) {

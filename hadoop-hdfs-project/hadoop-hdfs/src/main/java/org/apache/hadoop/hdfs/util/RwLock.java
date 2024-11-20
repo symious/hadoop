@@ -17,38 +17,36 @@
  */
 package org.apache.hadoop.hdfs.util;
 
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
-
 /** Read-write lock interface for FSNamesystem. */
 public interface RwLock {
   /** Acquire read lock. */
   @Deprecated
   default void readLock() {
-    readLock(FSNamesystemLockMode.GLOBAL, "OTHER");
+    readLock(RwLockMode.GLOBAL, "OTHER");
   }
 
   /** Acquire read lock. */
   @Deprecated
   default void readLock(String opName) {
-    readLock(FSNamesystemLockMode.GLOBAL, opName);
+    readLock(RwLockMode.GLOBAL, opName);
   }
 
   /** Acquire read lock. */
-  void readLock(FSNamesystemLockMode lockMode, String opName);
+  void readLock(RwLockMode lockMode, String opName);
 
   /** Acquire read lock, unless interrupted while waiting.  */
   @Deprecated
   default void readLockInterruptibly() throws InterruptedException {
-    readLockInterruptibly(FSNamesystemLockMode.GLOBAL);
+    readLockInterruptibly(RwLockMode.GLOBAL);
   }
 
   /** Acquire read lock, unless interrupted while waiting.  */
-  void readLockInterruptibly(FSNamesystemLockMode lockMode) throws InterruptedException;
+  void readLockInterruptibly(RwLockMode lockMode) throws InterruptedException;
 
   /** Release read lock. */
   @Deprecated
   default void readUnlock() {
-    readUnlock(FSNamesystemLockMode.GLOBAL, "OTHER");
+    readUnlock(RwLockMode.GLOBAL, "OTHER");
   }
 
   /**
@@ -57,28 +55,28 @@ public interface RwLock {
    */
   @Deprecated
   default void readUnlock(String opName) {
-    readUnlock(FSNamesystemLockMode.GLOBAL, opName);
+    readUnlock(RwLockMode.GLOBAL, opName);
   }
 
   /**
    * Release read lock with operation name.
    * @param opName Option name.
    */
-  void readUnlock(FSNamesystemLockMode lockMode, String opName);
+  void readUnlock(RwLockMode lockMode, String opName);
 
   /** Check if the current thread holds read lock. */
   @Deprecated
   default boolean hasReadLock() {
-    return hasReadLock(FSNamesystemLockMode.GLOBAL);
+    return hasReadLock(RwLockMode.GLOBAL);
   }
 
   /** Check if the current thread holds read lock. */
-  boolean hasReadLock(FSNamesystemLockMode lockMode);
+  boolean hasReadLock(RwLockMode lockMode);
 
   /** Acquire write lock. */
   @Deprecated
   default void writeLock() {
-    writeLock(FSNamesystemLockMode.GLOBAL, "OTHER");
+    writeLock(RwLockMode.GLOBAL, "OTHER");
   }
 
   /**
@@ -87,25 +85,25 @@ public interface RwLock {
    */
   @Deprecated
   default void writeLock(String opName) {
-    writeLock(FSNamesystemLockMode.GLOBAL, opName);
+    writeLock(RwLockMode.GLOBAL, opName);
   }
 
   /** Acquire write lock. */
-  void writeLock(FSNamesystemLockMode lockMode, String opName);
+  void writeLock(RwLockMode lockMode, String opName);
 
   /** Acquire write lock, unless interrupted while waiting.  */
   @Deprecated
   default void writeLockInterruptibly() throws InterruptedException {
-    writeLockInterruptibly(FSNamesystemLockMode.GLOBAL);
+    writeLockInterruptibly(RwLockMode.GLOBAL);
   }
 
   /** Acquire write lock, unless interrupted while waiting.  */
-  void writeLockInterruptibly(FSNamesystemLockMode lockMode) throws InterruptedException;
+  void writeLockInterruptibly(RwLockMode lockMode) throws InterruptedException;
 
   /** Release write lock. */
   @Deprecated
   default void writeUnlock() {
-    writeUnlock(FSNamesystemLockMode.GLOBAL, "OTHER");
+    writeUnlock(RwLockMode.GLOBAL, "OTHER");
   }
 
   /**
@@ -114,21 +112,21 @@ public interface RwLock {
    */
   @Deprecated
   default void writeUnlock(String opName) {
-    writeUnlock(FSNamesystemLockMode.GLOBAL, opName);
+    writeUnlock(RwLockMode.GLOBAL, opName);
   }
 
   /**
    * Release write lock with operation name.
    * @param opName Option name.
    */
-  void writeUnlock(FSNamesystemLockMode lockMode, String opName);
+  void writeUnlock(RwLockMode lockMode, String opName);
 
   /** Check if the current thread holds write lock. */
   @Deprecated
   default boolean hasWriteLock() {
-    return hasWriteLock(FSNamesystemLockMode.GLOBAL);
+    return hasWriteLock(RwLockMode.GLOBAL);
   }
 
   /** Check if the current thread holds write lock. */
-  boolean hasWriteLock(FSNamesystemLockMode lockMode);
+  boolean hasWriteLock(RwLockMode lockMode);
 }

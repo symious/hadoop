@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.hdfs.server.namenode;
 
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
@@ -29,7 +30,6 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.hadoop.hdfs.XAttrHelper;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.zoneservice.ReplicationRule;
 import org.apache.hadoop.util.StringUtils;
 import org.junit.Assert;
@@ -74,7 +74,7 @@ public class TestFSDirXAttrReplicationRuleOp {
         (short) 1, 128L);
     cluster = new MiniDFSCluster.Builder(getConf()).numDataNodes(1).build();
     FSDirectory fsd = new FSDirectory(cluster.getNamesystem(), getConf());
-    cluster.getNamesystem().readLock(FSNamesystemLockMode.FS, "testGetRuleFromXAttr");
+    cluster.getNamesystem().readLock(RwLockMode.FS, "testGetRuleFromXAttr");
     Assert.assertNull(FSDirXAttrReplicationRuleOp.getRuleFromInodeFile(fsd, iNodeFile));
 
     iNodeFile.addXAttrFeature(getFeature(rule.toString()));
@@ -83,7 +83,7 @@ public class TestFSDirXAttrReplicationRuleOp {
         (short) 1, 128L);
     iNodeFile.addXAttrFeature(getFeature(invalidRule));
     Assert.assertNull(FSDirXAttrReplicationRuleOp.getRuleFromInodeFile(fsd, iNodeFile));
-    cluster.getNamesystem().readUnlock(FSNamesystemLockMode.FS, "testGetRuleFromXAttr");
+    cluster.getNamesystem().readUnlock(RwLockMode.FS, "testGetRuleFromXAttr");
   }
 
   @Test
@@ -92,11 +92,11 @@ public class TestFSDirXAttrReplicationRuleOp {
         (short) 1, 128L);
     cluster = new MiniDFSCluster.Builder(getConf()).numDataNodes(1).build();
     FSDirectory fsd = new FSDirectory(cluster.getNamesystem(), getConf());
-    cluster.getNamesystem().readLock(FSNamesystemLockMode.FS, "testHasRuleInXAttr");
+    cluster.getNamesystem().readLock(RwLockMode.FS, "testHasRuleInXAttr");
     Assert.assertFalse(FSDirXAttrReplicationRuleOp.hasRuleInXAttr(fsd, iNodeFile));
 
     iNodeFile.addXAttrFeature(getFeature(rule.toString()));
     Assert.assertTrue(FSDirXAttrReplicationRuleOp.hasRuleInXAttr(fsd, iNodeFile));
-    cluster.getNamesystem().readUnlock(FSNamesystemLockMode.FS, "testHasRuleInXAttr");
+    cluster.getNamesystem().readUnlock(RwLockMode.FS, "testHasRuleInXAttr");
   }
 }

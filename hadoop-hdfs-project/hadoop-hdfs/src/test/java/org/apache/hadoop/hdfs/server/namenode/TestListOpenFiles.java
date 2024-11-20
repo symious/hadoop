@@ -32,6 +32,7 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -47,7 +48,6 @@ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.OpenFileEntry;
 import org.apache.hadoop.hdfs.protocol.OpenFilesIterator;
 import org.apache.hadoop.hdfs.protocol.OpenFilesIterator.OpenFilesType;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.namenode.ha.HATestUtil;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
@@ -339,7 +339,7 @@ public class TestListOpenFiles {
     FSDirectory dir = fsNamesystem.getFSDirectory();
     List<INode> removedINodes = new ChunkedArrayList<>();
     removedINodes.add(dir.getINode(path));
-    fsNamesystem.writeLock(FSNamesystemLockMode.FS, "testListOpenFilesWithDeletedPath");
+    fsNamesystem.writeLock(RwLockMode.FS, "testListOpenFilesWithDeletedPath");
     try {
       dir.removeFromInodeMap(removedINodes);
       openFileEntryBatchedEntries = nnRpc
@@ -350,7 +350,7 @@ public class TestListOpenFiles {
     } catch (NullPointerException e) {
       Assert.fail("Should not throw NPE when the file is deleted but has lease!");
     } finally {
-      fsNamesystem.writeUnlock(FSNamesystemLockMode.FS, "testListOpenFilesWithDeletedPath");
+      fsNamesystem.writeUnlock(RwLockMode.FS, "testListOpenFilesWithDeletedPath");
     }
   }
 }

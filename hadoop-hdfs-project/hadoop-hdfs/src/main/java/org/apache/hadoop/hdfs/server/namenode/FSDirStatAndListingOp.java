@@ -18,7 +18,7 @@
 
 package org.apache.hadoop.hdfs.server.namenode;
 
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 
 import org.apache.hadoop.fs.ContentSummary;
@@ -473,7 +473,7 @@ class FSDirStatAndListingOp {
       }
       // ComputeFileSize and needLocation need BM lock.
       if (needLocation) {
-        fsd.getFSNamesystem().readLock(FSNamesystemLockMode.BM, "createFileStatus");
+        fsd.getFSNamesystem().readLock(RwLockMode.BM, "createFileStatus");
         try {
           final boolean inSnapshot = snapshot != Snapshot.CURRENT_STATE_ID;
           final boolean isUc = !inSnapshot && fileNode.isUnderConstruction();
@@ -486,7 +486,7 @@ class FSDirStatAndListingOp {
             loc = new LocatedBlocks();
           }
         } finally {
-          fsd.getFSNamesystem().readUnlock(FSNamesystemLockMode.BM, "createFileStatus");
+          fsd.getFSNamesystem().readUnlock(RwLockMode.BM, "createFileStatus");
         }
       }
     } else if (node.isDirectory()) {

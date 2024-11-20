@@ -18,7 +18,7 @@
 package org.apache.hadoop.hdfs.server.namenode;
 
 import org.apache.hadoop.hdfs.OperationName;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
@@ -435,7 +435,7 @@ public final class ReencryptionUpdater implements Runnable {
 
     boolean shouldRetry;
     do {
-      dir.getFSNamesystem().writeLock(FSNamesystemLockMode.FS, OperationName.REENCRYPTION_UPDATER);
+      dir.getFSNamesystem().writeLock(RwLockMode.FS, OperationName.REENCRYPTION_UPDATER);
       try {
         throttleTimerLocked.start();
         processTask(task);
@@ -453,7 +453,7 @@ public final class ReencryptionUpdater implements Runnable {
         task.processed = true;
         shouldRetry = false;
       } finally {
-        dir.getFSNamesystem().writeUnlock(FSNamesystemLockMode.FS,
+        dir.getFSNamesystem().writeUnlock(RwLockMode.FS,
             OperationName.REENCRYPTION_UPDATER);
         throttleTimerLocked.stop();
       }
@@ -502,7 +502,7 @@ public final class ReencryptionUpdater implements Runnable {
 
   private synchronized void checkPauseForTesting() throws InterruptedException {
     assert !dir.hasWriteLock();
-    assert !dir.getFSNamesystem().hasWriteLock(FSNamesystemLockMode.FS);
+    assert !dir.getFSNamesystem().hasWriteLock(RwLockMode.FS);
     if (pauseAfterNthCheckpoint != 0) {
       ZoneSubmissionTracker tracker =
           handler.unprotectedGetTracker(pauseZoneId);

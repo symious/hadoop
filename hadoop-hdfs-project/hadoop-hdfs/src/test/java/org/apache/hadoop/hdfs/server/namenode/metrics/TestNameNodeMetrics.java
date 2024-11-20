@@ -50,7 +50,7 @@ import java.util.List;
 import java.util.Random;
 
 import org.apache.hadoop.hdfs.server.namenode.NameNodeRpcServer;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.ipc.metrics.RpcDetailedMetrics;
 import org.apache.hadoop.thirdparty.com.google.common.collect.ImmutableList;
 
@@ -550,12 +550,12 @@ public class TestNameNodeMetrics {
     // Corrupt first replica of the block
     LocatedBlock block = NameNodeAdapter.getBlockLocations(
         cluster.getNameNode(), file.toString(), 0, 1).get(0);
-    cluster.getNamesystem().writeLock(FSNamesystemLockMode.BM, "testCorruptBlock");
+    cluster.getNamesystem().writeLock(RwLockMode.BM, "testCorruptBlock");
     try {
       bm.findAndMarkBlockAsCorrupt(block.getBlock(), block.getLocations()[0],
           "STORAGE_ID", "TEST");
     } finally {
-      cluster.getNamesystem().writeUnlock(FSNamesystemLockMode.BM, "testCorruptBlock");
+      cluster.getNamesystem().writeUnlock(RwLockMode.BM, "testCorruptBlock");
     }
 
     BlockManagerTestUtil.updateState(bm);
@@ -642,12 +642,12 @@ public class TestNameNodeMetrics {
     assert lbs.get(0) instanceof LocatedStripedBlock;
     LocatedStripedBlock bg = (LocatedStripedBlock) (lbs.get(0));
 
-    cluster.getNamesystem().writeLock(FSNamesystemLockMode.BM, "testStripedFileCorruptBlocks");
+    cluster.getNamesystem().writeLock(RwLockMode.BM, "testStripedFileCorruptBlocks");
     try {
       bm.findAndMarkBlockAsCorrupt(bg.getBlock(), bg.getLocations()[0],
           "STORAGE_ID", "TEST");
     } finally {
-      cluster.getNamesystem().writeUnlock(FSNamesystemLockMode.BM, "testStripedFileCorruptBlocks");
+      cluster.getNamesystem().writeUnlock(RwLockMode.BM, "testStripedFileCorruptBlocks");
     }
 
     BlockManagerTestUtil.updateState(bm);
@@ -738,12 +738,12 @@ public class TestNameNodeMetrics {
     // Corrupt the only replica of the block to result in a missing block
     LocatedBlock block = NameNodeAdapter.getBlockLocations(
         cluster.getNameNode(), file.toString(), 0, 1).get(0);
-    cluster.getNamesystem().writeLock(FSNamesystemLockMode.BM, "testMissingBlock");
+    cluster.getNamesystem().writeLock(RwLockMode.BM, "testMissingBlock");
     try {
       bm.findAndMarkBlockAsCorrupt(block.getBlock(), block.getLocations()[0],
           "STORAGE_ID", "TEST");
     } finally {
-      cluster.getNamesystem().writeUnlock(FSNamesystemLockMode.BM, "testMissingBlock");
+      cluster.getNamesystem().writeUnlock(RwLockMode.BM, "testMissingBlock");
     }
     Thread.sleep(1000); // Wait for block to be marked corrupt
     MetricsRecordBuilder rb = getMetrics(NS_METRICS);

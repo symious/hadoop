@@ -18,7 +18,7 @@
 package org.apache.hadoop.hdfs.server.namenode;
 
 import org.apache.hadoop.hdfs.OperationName;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -120,26 +120,26 @@ public class ContentSummaryComputationContext {
 
     boolean hadDirReadLock = dir.hasReadLock();
     boolean hadDirWriteLock = dir.hasWriteLock();
-    boolean hadFsnReadLock = fsn.hasReadLock(FSNamesystemLockMode.GLOBAL);
-    boolean hadFsnWriteLock = fsn.hasWriteLock(FSNamesystemLockMode.GLOBAL);
+    boolean hadFsnReadLock = fsn.hasReadLock(RwLockMode.GLOBAL);
+    boolean hadFsnWriteLock = fsn.hasWriteLock(RwLockMode.GLOBAL);
 
     // sanity check.
     if (!hadDirReadLock || !hadFsnReadLock || hadDirWriteLock ||
-        hadFsnWriteLock || fsn.getReadHoldCount(FSNamesystemLockMode.GLOBAL) != 1) {
+        hadFsnWriteLock || fsn.getReadHoldCount(RwLockMode.GLOBAL) != 1) {
       // cannot relinquish
       return false;
     }
 
     // unlock
     dir.readUnlock();
-    fsn.readUnlock(FSNamesystemLockMode.GLOBAL, OperationName.CONTENT_SUMMARY);
+    fsn.readUnlock(RwLockMode.GLOBAL, OperationName.CONTENT_SUMMARY);
 
     try {
       Thread.sleep(sleepMilliSec, sleepNanoSec);
     } catch (InterruptedException ie) {
     } finally {
       // reacquire
-      fsn.readLock(FSNamesystemLockMode.GLOBAL, OperationName.CONTENT_SUMMARY);
+      fsn.readLock(RwLockMode.GLOBAL, OperationName.CONTENT_SUMMARY);
       dir.readLock();
     }
     yieldCount++;

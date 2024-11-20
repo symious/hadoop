@@ -20,7 +20,6 @@ package org.apache.hadoop.hdfs.server.namenode;
 import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockInfo;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockManager;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.protocol.SlowDiskReports;
 
 import static org.mockito.Mockito.doAnswer;
@@ -54,6 +53,7 @@ import org.apache.hadoop.hdfs.server.protocol.HeartbeatResponse;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeCommand;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeRegistration;
 import org.apache.hadoop.hdfs.server.protocol.SlowPeerReports;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.ipc.StandbyException;
 import org.apache.hadoop.security.AccessControlException;
@@ -95,13 +95,13 @@ public class NameNodeAdapter {
     // consistent with FSNamesystem#getFileInfo()
     final String operationName = needBlockToken ? "open" : "getfileinfo";
     FSPermissionChecker.setOperationType(operationName);
-    namenode.getNamesystem().readLock(FSNamesystemLockMode.FS, "getFileInfo");
+    namenode.getNamesystem().readLock(RwLockMode.FS, "getFileInfo");
     try {
       return FSDirStatAndListingOp.getFileInfo(namenode.getNamesystem()
           .getFSDirectory(), pc, src, resolveLink, needLocation,
           needBlockToken, 0);
     } finally {
-      namenode.getNamesystem().readUnlock(FSNamesystemLockMode.FS, "getFileInfo");
+      namenode.getNamesystem().readUnlock(RwLockMode.FS, "getFileInfo");
     }
   }
   
@@ -214,11 +214,11 @@ public class NameNodeAdapter {
    */
   public static DatanodeDescriptor getDatanode(final FSNamesystem ns,
       DatanodeID id) throws IOException {
-    ns.readLock(FSNamesystemLockMode.BM, "getDatanode");
+    ns.readLock(RwLockMode.BM, "getDatanode");
     try {
       return ns.getBlockManager().getDatanodeManager().getDatanode(id);
     } finally {
-      ns.readUnlock(FSNamesystemLockMode.BM, "getDatanode");
+      ns.readUnlock(RwLockMode.BM, "getDatanode");
     }
   }
   
@@ -242,7 +242,7 @@ public class NameNodeAdapter {
   public static BlockInfo addBlockNoJournal(final FSNamesystem fsn,
       final String src, final DatanodeStorageInfo[] targets)
       throws IOException {
-    fsn.writeLock(FSNamesystemLockMode.GLOBAL, "addBlockNoJournal");
+    fsn.writeLock(RwLockMode.GLOBAL, "addBlockNoJournal");
     try {
       INodeFile file = (INodeFile)fsn.getFSDirectory().getINode(src);
       Block newBlock = fsn.createNewBlock(BlockType.CONTIGUOUS);
@@ -251,17 +251,17 @@ public class NameNodeAdapter {
           fsn, src, inodesInPath, newBlock, targets, BlockType.CONTIGUOUS);
       return file.getLastBlock();
     } finally {
-      fsn.writeUnlock(FSNamesystemLockMode.GLOBAL, "addBlockNoJournal");
+      fsn.writeUnlock(RwLockMode.GLOBAL, "addBlockNoJournal");
     }
   }
 
   public static void persistBlocks(final FSNamesystem fsn,
       final String src, final INodeFile file) throws IOException {
-    fsn.writeLock(FSNamesystemLockMode.FS, "persistBlocks");
+    fsn.writeLock(RwLockMode.FS, "persistBlocks");
     try {
       FSDirWriteFileOp.persistBlocks(fsn.getFSDirectory(), src, file, true);
     } finally {
-      fsn.writeUnlock(FSNamesystemLockMode.FS, "persistBlocks");
+      fsn.writeUnlock(RwLockMode.FS, "persistBlocks");
     }
   }
 
@@ -273,8 +273,8 @@ public class NameNodeAdapter {
   public static FSNamesystem spyOnNamesystem(NameNode nn) {
     FSNamesystem fsnSpy = Mockito.spy(nn.getNamesystem());
     FSNamesystem fsnOld = nn.namesystem;
-    fsnOld.writeLock(FSNamesystemLockMode.GLOBAL, "spyOnNamesystem");
-    fsnSpy.writeLock(FSNamesystemLockMode.GLOBAL, "spyOnNamesystem");
+    fsnOld.writeLock(RwLockMode.GLOBAL, "spyOnNamesystem");
+    fsnSpy.writeLock(RwLockMode.GLOBAL, "spyOnNamesystem");
     nn.namesystem = fsnSpy;
     try {
       FieldUtils.writeDeclaredField(
@@ -292,8 +292,8 @@ public class NameNodeAdapter {
     } catch (IllegalAccessException e) {
       throw new RuntimeException("Cannot set spy FSNamesystem", e);
     } finally {
-      fsnSpy.writeUnlock(FSNamesystemLockMode.GLOBAL, "spyOnNamesystem");
-      fsnOld.writeUnlock(FSNamesystemLockMode.GLOBAL, "spyOnNamesystem");
+      fsnSpy.writeUnlock(RwLockMode.GLOBAL, "spyOnNamesystem");
+      fsnOld.writeUnlock(RwLockMode.GLOBAL, "spyOnNamesystem");
     }
     return fsnSpy;
   }

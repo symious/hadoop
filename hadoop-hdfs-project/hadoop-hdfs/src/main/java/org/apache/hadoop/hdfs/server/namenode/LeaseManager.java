@@ -35,7 +35,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
 
 import org.apache.commons.lang3.StringUtils;
@@ -144,7 +144,7 @@ public class LeaseManager {
    * calling this method.
    */
   synchronized long getNumUnderConstructionBlocks() {
-    assert this.fsnamesystem.hasReadLock(FSNamesystemLockMode.GLOBAL) :
+    assert this.fsnamesystem.hasReadLock(RwLockMode.GLOBAL) :
         "The FSNamesystem read lock wasn't acquired before counting under construction blocks";
     long numUCBlocks = 0;
     for (Long id : getINodeIdWithLeases()) {
@@ -216,7 +216,7 @@ public class LeaseManager {
    */
   public Set<INodesInPath> getINodeWithLeases(final INodeDirectory
       ancestorDir) throws IOException {
-    assert fsnamesystem.hasReadLock(FSNamesystemLockMode.FS);
+    assert fsnamesystem.hasReadLock(RwLockMode.FS);
     final long startTimeMs = Time.monotonicNow();
     Set<INodesInPath> iipSet = new HashSet<>();
     final INode[] inodes = getINodesWithLease();
@@ -293,7 +293,7 @@ public class LeaseManager {
    */
   public BatchedListEntries<OpenFileEntry> getUnderConstructionFiles(
       final long prevId, final String path) throws IOException {
-    assert fsnamesystem.hasReadLock(FSNamesystemLockMode.FS);
+    assert fsnamesystem.hasReadLock(RwLockMode.FS);
     SortedMap<Long, Lease> remainingLeases;
     synchronized (this) {
       remainingLeases = leasesById.tailMap(prevId, false);
@@ -551,13 +551,13 @@ public class LeaseManager {
             continue;
           }
 
-          fsnamesystem.writeLockInterruptibly(FSNamesystemLockMode.GLOBAL);
+          fsnamesystem.writeLockInterruptibly(RwLockMode.GLOBAL);
           try {
             if (!fsnamesystem.isInSafeMode()) {
               needSync = checkLeases(candidates);
             }
           } finally {
-            fsnamesystem.writeUnlock(FSNamesystemLockMode.GLOBAL,"leaseManager");
+            fsnamesystem.writeUnlock(RwLockMode.GLOBAL,"leaseManager");
             // lease reassignments should to be sync'ed.
             if (needSync) {
               fsnamesystem.getEditLog().logSync();
@@ -582,7 +582,7 @@ public class LeaseManager {
 
   private synchronized boolean checkLeases(Collection<Lease> leasesToCheck) {
     boolean needSync = false;
-    assert fsnamesystem.hasWriteLock(FSNamesystemLockMode.GLOBAL);
+    assert fsnamesystem.hasWriteLock(RwLockMode.GLOBAL);
 
     long start = monotonicNow();
     for (Lease leaseToCheck : leasesToCheck) {

@@ -29,9 +29,9 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hdfs.OperationName;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
 import org.apache.hadoop.hdfs.util.ReadOnlyList;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.util.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -129,7 +129,7 @@ public abstract class FSTreeTraverser {
       List<byte[]> startAfters, final TraverseInfo traverseInfo)
       throws IOException, InterruptedException {
     assert dir.hasReadLock();
-    assert dir.getFSNamesystem().hasReadLock(FSNamesystemLockMode.FS);
+    assert dir.getFSNamesystem().hasReadLock(RwLockMode.FS);
     long lockStartTime = timer.monotonicNow();
     Preconditions.checkNotNull(curr, "Current inode can't be null");
     checkINodeReady(startId);
@@ -263,13 +263,13 @@ public abstract class FSTreeTraverser {
   }
 
   protected void readLock() {
-    dir.getFSNamesystem().readLock(FSNamesystemLockMode.FS, OperationName.FS_TREE_TRAVERSER);
+    dir.getFSNamesystem().readLock(RwLockMode.FS, OperationName.FS_TREE_TRAVERSER);
     dir.readLock();
   }
 
   protected void readUnlock() {
     dir.readUnlock();
-    dir.getFSNamesystem().readUnlock(FSNamesystemLockMode.FS, OperationName.FS_TREE_TRAVERSER);
+    dir.getFSNamesystem().readUnlock(RwLockMode.FS, OperationName.FS_TREE_TRAVERSER);
   }
 
 

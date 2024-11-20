@@ -35,7 +35,7 @@ import org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyWithDat
 import org.apache.hadoop.hdfs.server.blockmanagement.DatanodeManager;
 import org.apache.hadoop.hdfs.server.namenode.FSDirectory.DirOp;
 import org.apache.hadoop.hdfs.server.namenode.NameNode.OperationCategory;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.net.StaticMapping;
 import org.junit.Assert;
@@ -91,14 +91,14 @@ public class TestGetBlockLocations {
       @Override
       public Void answer(InvocationOnMock invocation) throws Throwable {
         if(!deleted[0]) {
-          fsn.writeLock(FSNamesystemLockMode.GLOBAL, "testGetBlockLocationsRacingWithDelete");
+          fsn.writeLock(RwLockMode.GLOBAL, "testGetBlockLocationsRacingWithDelete");
           try {
             INodesInPath iip = fsd.getINodesInPath(FILE_PATH, DirOp.READ);
             FSDirDeleteOp.delete(fsd, iip, new INode.BlocksMapUpdateInfo(),
                                  new ArrayList<INode>(), new ArrayList<Long>(),
                                  now());
           } finally {
-            fsn.writeUnlock(FSNamesystemLockMode.GLOBAL, "testGetBlockLocationsRacingWithDelete");
+            fsn.writeUnlock(RwLockMode.GLOBAL, "testGetBlockLocationsRacingWithDelete");
           }
           deleted[0] = true;
         }
@@ -125,14 +125,14 @@ public class TestGetBlockLocations {
       @Override
       public Void answer(InvocationOnMock invocation) throws Throwable {
         if (!renamed[0]) {
-          fsn.writeLock(FSNamesystemLockMode.FS, "testGetBlockLocationsRacingWithRename");
+          fsn.writeLock(RwLockMode.FS, "testGetBlockLocationsRacingWithRename");
           try {
             FSDirRenameOp.renameTo(fsd, fsd.getPermissionChecker(), FILE_PATH,
                                    DST_PATH, new INode.BlocksMapUpdateInfo(),
                                    false);
             renamed[0] = true;
           } finally {
-            fsn.writeUnlock(FSNamesystemLockMode.FS, "testGetBlockLocationsRacingWithRename");
+            fsn.writeUnlock(RwLockMode.FS, "testGetBlockLocationsRacingWithRename");
           }
         }
         invocation.callRealMethod();
@@ -161,13 +161,13 @@ public class TestGetBlockLocations {
         perm, 1, 1, new BlockInfo[] {}, (short) 1,
         DFS_BLOCK_SIZE_DEFAULT);
 
-    fsn.writeLock(FSNamesystemLockMode.FS, "setupFileSystem");
+    fsn.writeLock(RwLockMode.FS, "setupFileSystem");
     try {
       final FSDirectory fsd = fsn.getFSDirectory();
       INodesInPath iip = fsd.getINodesInPath("/", DirOp.READ);
       fsd.addINode(iip, file, null);
     } finally {
-      fsn.writeUnlock(FSNamesystemLockMode.FS, "setupFileSystem");
+      fsn.writeUnlock(RwLockMode.FS, "setupFileSystem");
     }
     return fsn;
   }

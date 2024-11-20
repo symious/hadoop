@@ -30,7 +30,7 @@ import java.util.NavigableMap;
 import java.util.TreeMap;
 
 import org.apache.hadoop.hdfs.OperationName;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Lists;
@@ -189,12 +189,12 @@ public class EncryptionZoneManager {
       final int count) throws IOException {
     INodesInPath iip;
     final FSPermissionChecker pc = dir.getPermissionChecker();
-    dir.getFSNamesystem().readLock(FSNamesystemLockMode.FS,
+    dir.getFSNamesystem().readLock(RwLockMode.FS,
         OperationName.PAUSE_FOR_TESTING_AFTER_NTH_CHECKPOINT);
     try {
       iip = dir.resolvePath(pc, zone, DirOp.READ);
     } finally {
-      dir.getFSNamesystem().readUnlock(FSNamesystemLockMode.FS,
+      dir.getFSNamesystem().readUnlock(RwLockMode.FS,
           OperationName.PAUSE_FOR_TESTING_AFTER_NTH_CHECKPOINT);
     }
     reencryptionHandler
@@ -216,7 +216,7 @@ public class EncryptionZoneManager {
       throws IOException {
     final FSPermissionChecker pc = dir.getPermissionChecker();
     final INode inode;
-    dir.getFSNamesystem().readLock(FSNamesystemLockMode.FS, OperationName.GET_ZONE_STATUS);
+    dir.getFSNamesystem().readLock(RwLockMode.FS, OperationName.GET_ZONE_STATUS);
     dir.readLock();
     try {
       final INodesInPath iip = dir.resolvePath(pc, zone, DirOp.READ);
@@ -227,7 +227,7 @@ public class EncryptionZoneManager {
       return getReencryptionStatus().getZoneStatus(inode.getId());
     } finally {
       dir.readUnlock();
-      dir.getFSNamesystem().readUnlock(FSNamesystemLockMode.FS, OperationName.GET_ZONE_STATUS);
+      dir.getFSNamesystem().readUnlock(RwLockMode.FS, OperationName.GET_ZONE_STATUS);
     }
   }
 
@@ -284,11 +284,11 @@ public class EncryptionZoneManager {
     if (getProvider() == null || reencryptionHandler == null) {
       return;
     }
-    dir.getFSNamesystem().writeLock(FSNamesystemLockMode.FS, OperationName.STOP_REENCRYPT_THREAD);
+    dir.getFSNamesystem().writeLock(RwLockMode.FS, OperationName.STOP_REENCRYPT_THREAD);
     try {
       reencryptionHandler.stopThreads();
     } finally {
-      dir.getFSNamesystem().writeUnlock(FSNamesystemLockMode.FS,
+      dir.getFSNamesystem().writeUnlock(RwLockMode.FS,
           OperationName.STOP_REENCRYPT_THREAD);
     }
     if (reencryptHandlerExecutor != null) {

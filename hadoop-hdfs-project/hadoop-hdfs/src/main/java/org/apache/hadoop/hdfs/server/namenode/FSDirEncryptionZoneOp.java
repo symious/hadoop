@@ -51,7 +51,7 @@ import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos.ZoneEncryptionInfoProto;
 import org.apache.hadoop.hdfs.protocolPB.PBHelperClient;
 import org.apache.hadoop.hdfs.server.namenode.FSDirectory.DirOp;
 import org.apache.hadoop.hdfs.server.namenode.ReencryptionUpdater.FileEdekInfo;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.security.SecurityUtil;
 
 import org.apache.hadoop.thirdparty.com.google.common.base.Preconditions;
@@ -85,8 +85,8 @@ final class FSDirEncryptionZoneOp {
   private static EncryptedKeyVersion generateEncryptedDataEncryptionKey(
       final FSDirectory fsd, final String ezKeyName) throws IOException {
     // must not be holding lock during this operation
-    assert !fsd.getFSNamesystem().hasReadLock(FSNamesystemLockMode.FS);
-    assert !fsd.getFSNamesystem().hasWriteLock(FSNamesystemLockMode.FS);
+    assert !fsd.getFSNamesystem().hasReadLock(RwLockMode.FS);
+    assert !fsd.getFSNamesystem().hasWriteLock(RwLockMode.FS);
     if (ezKeyName == null) {
       return null;
     }
@@ -383,7 +383,7 @@ final class FSDirEncryptionZoneOp {
    */
   static void saveFileXAttrsForBatch(FSDirectory fsd,
       List<FileEdekInfo> batch) {
-    assert fsd.getFSNamesystem().hasWriteLock(FSNamesystemLockMode.FS);
+    assert fsd.getFSNamesystem().hasWriteLock(RwLockMode.FS);
     if (batch != null && !batch.isEmpty()) {
       for (FileEdekInfo entry : batch) {
         final INode inode = fsd.getInode(entry.getInodeId());
@@ -657,13 +657,13 @@ final class FSDirEncryptionZoneOp {
     Preconditions.checkNotNull(ezKeyName);
 
     // Generate EDEK while not holding the fsn lock.
-    fsn.writeUnlock(FSNamesystemLockMode.FS, "getEncryptionKeyInfo");
+    fsn.writeUnlock(RwLockMode.FS, "getEncryptionKeyInfo");
     try {
       EncryptionFaultInjector.getInstance().startFileBeforeGenerateKey();
       return new EncryptionKeyInfo(protocolVersion, suite, ezKeyName,
           generateEncryptedDataEncryptionKey(fsd, ezKeyName));
     } finally {
-      fsn.writeLock(FSNamesystemLockMode.FS, "getEncryptionKeyInfo");
+      fsn.writeLock(RwLockMode.FS, "getEncryptionKeyInfo");
       EncryptionFaultInjector.getInstance().startFileAfterGenerateKey();
     }
   }
@@ -728,13 +728,13 @@ final class FSDirEncryptionZoneOp {
       final FSPermissionChecker pc, final String zone) throws IOException {
     assert dir.getProvider() != null;
     final INodesInPath iip;
-    dir.getFSNamesystem().readLock(FSNamesystemLockMode.FS, OperationName.GET_KEY_NAME_FOR_ZONE);
+    dir.getFSNamesystem().readLock(RwLockMode.FS, OperationName.GET_KEY_NAME_FOR_ZONE);
     try {
       iip = dir.resolvePath(pc, zone, DirOp.READ);
       dir.ezManager.checkEncryptionZoneRoot(iip.getLastINode(), zone);
       return dir.ezManager.getKeyName(iip);
     } finally {
-      dir.getFSNamesystem().readUnlock(FSNamesystemLockMode.FS, OperationName.GET_KEY_NAME_FOR_ZONE);
+      dir.getFSNamesystem().readUnlock(RwLockMode.FS, OperationName.GET_KEY_NAME_FOR_ZONE);
     }
   }
 }

@@ -40,7 +40,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.hdfs.OperationName;
 import org.apache.hadoop.hdfs.server.blockmanagement.BlockUnderConstructionFeature;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -301,7 +301,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
       return;
     }
 
-    namenode.getNamesystem().readLock(FSNamesystemLockMode.GLOBAL, OperationName.FSCK);
+    namenode.getNamesystem().readLock(RwLockMode.GLOBAL, OperationName.FSCK);
     try {
       //get blockInfo
       Block block = new Block(Block.getBlockId(blockId));
@@ -365,7 +365,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
       out.print("\n\n" + errMsg);
       LOG.warn("Error in looking up block", e);
     } finally {
-      namenode.getNamesystem().readUnlock(FSNamesystemLockMode.GLOBAL, OperationName.FSCK);
+      namenode.getNamesystem().readUnlock(RwLockMode.GLOBAL, OperationName.FSCK);
     }
   }
 
@@ -375,7 +375,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
       return;
     }
 
-    namenode.getNamesystem().readLock(FSNamesystemLockMode.GLOBAL, OperationName.FSCK);
+    namenode.getNamesystem().readLock(RwLockMode.GLOBAL, OperationName.FSCK);
     try {
       // Get datanode
       DatanodeDescriptor dn = namenode.getNamesystem().getBlockManager()
@@ -416,7 +416,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
       out.print("\n\n" + errMsg);
       LOG.warn("Error in looking up datanode", e);
     } finally {
-      namenode.getNamesystem().readUnlock(FSNamesystemLockMode.GLOBAL, OperationName.FSCK);
+      namenode.getNamesystem().readUnlock(RwLockMode.GLOBAL, OperationName.FSCK);
     }
   }
 
@@ -680,7 +680,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
     final FSNamesystem fsn = namenode.getNamesystem();
     FSPermissionChecker.setOperationType(OperationName.FSCK_GET_BLOCK_LOCATIONS);
     FSPermissionChecker pc = fsn.getPermissionChecker();
-    fsn.readLock(FSNamesystemLockMode.GLOBAL, OperationName.FSCK_GET_BLOCK_LOCATIONS);
+    fsn.readLock(RwLockMode.GLOBAL, OperationName.FSCK_GET_BLOCK_LOCATIONS);
     try {
       blocks = FSDirStatAndListingOp.getBlockLocations(
           fsn.getFSDirectory(), pc, path, HdfsConstants.INVALIDATE_INODE_ID,
@@ -689,7 +689,7 @@ public class NamenodeFsck implements DataEncryptionKeyFactory {
     } catch (FileNotFoundException fnfe) {
       blocks = null;
     } finally {
-      fsn.readUnlock(FSNamesystemLockMode.GLOBAL, OperationName.FSCK_GET_BLOCK_LOCATIONS);
+      fsn.readUnlock(RwLockMode.GLOBAL, OperationName.FSCK_GET_BLOCK_LOCATIONS);
     }
     return blocks;
   }

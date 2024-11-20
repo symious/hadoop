@@ -27,6 +27,7 @@ import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
 
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -105,7 +106,6 @@ import org.apache.hadoop.hdfs.server.namenode.FSEditLogOp
 import org.apache.hadoop.hdfs.server.namenode.INode.BlocksMapUpdateInfo;
 import org.apache.hadoop.hdfs.server.namenode.LeaseManager.Lease;
 import org.apache.hadoop.hdfs.server.namenode.NNStorage.NameNodeFile;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.Phase;
 import org.apache.hadoop.hdfs.server.namenode.startupprogress.StartupProgress;
@@ -170,7 +170,7 @@ public class FSEditLogLoader {
     StartupProgress prog = NameNode.getStartupProgress();
     Step step = createStartupProgressStep(edits);
     prog.beginStep(Phase.LOADING_EDITS, step);
-    fsNamesys.writeLock(FSNamesystemLockMode.GLOBAL, "loadFSEdits");
+    fsNamesys.writeLock(RwLockMode.GLOBAL, "loadFSEdits");
     try {
       long startTime = timer.monotonicNow();
       LogAction preLogAction = loadEditsLogHelper.record("pre", startTime);
@@ -195,7 +195,7 @@ public class FSEditLogLoader {
       return numEdits;
     } finally {
       edits.close();
-      fsNamesys.writeUnlock(FSNamesystemLockMode.GLOBAL, "loadFSEdits");
+      fsNamesys.writeUnlock(RwLockMode.GLOBAL, "loadFSEdits");
       prog.endStep(Phase.LOADING_EDITS, step);
     }
   }
@@ -217,7 +217,7 @@ public class FSEditLogLoader {
       LOG.trace("Acquiring write lock to replay edit log");
     }
 
-    fsNamesys.writeLock(FSNamesystemLockMode.GLOBAL, "loadEditRecords");
+    fsNamesys.writeLock(RwLockMode.GLOBAL, "loadEditRecords");
     FSDirectory fsDir = fsNamesys.dir;
     fsDir.writeLock();
 
@@ -341,7 +341,7 @@ public class FSEditLogLoader {
         in.close();
       }
       fsDir.writeUnlock();
-      fsNamesys.writeUnlock(FSNamesystemLockMode.GLOBAL, "loadEditRecords");
+      fsNamesys.writeUnlock(RwLockMode.GLOBAL, "loadEditRecords");
 
       if (LOG.isTraceEnabled()) {
         LOG.trace("replaying edit log finished");

@@ -43,9 +43,9 @@ import org.apache.hadoop.hdfs.protocol.SystemErasureCodingPolicies;
 import org.apache.hadoop.hdfs.server.datanode.DataNode;
 import org.apache.hadoop.hdfs.server.datanode.DataNodeTestUtils;
 import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.net.StaticMapping;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
@@ -437,12 +437,12 @@ public class TestBlockPlacementPolicyRackFaultTolerantDataCenter {
 
     //test if decommission succeeded
     DatanodeDescriptor dnd3 = dnm.getDatanode(cluster.getDataNodes().get(3).getDatanodeId());
-    cluster.getNamesystem().writeLock(FSNamesystemLockMode.BM,
+    cluster.getNamesystem().writeLock(RwLockMode.BM,
         "testPlacementWithOnlyOneNodeInRackDecommission");
     try {
       dm.getDatanodeAdminManager().startDecommission(dnd3);
     } finally {
-      cluster.getNamesystem().writeUnlock(FSNamesystemLockMode.BM,
+      cluster.getNamesystem().writeUnlock(RwLockMode.BM,
           "testPlacementWithOnlyOneNodeInRackDecommission");
     }
 

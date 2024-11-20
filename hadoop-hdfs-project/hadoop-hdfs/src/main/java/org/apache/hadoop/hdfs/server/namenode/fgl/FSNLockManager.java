@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.server.namenode.fgl;
 
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -27,33 +28,33 @@ public interface FSNLockManager {
    * Acquire read lock for an operation according to the lock mode.
    * @param lockMode locking mode
    */
-  void readLock(FSNamesystemLockMode lockMode, String opName);
+  void readLock(RwLockMode lockMode, String opName);
 
   /**
    * Acquire read lock according to the lock mode, unless interrupted while waiting.
    * @param lockMode locking mode
    */
-  void readLockInterruptibly(FSNamesystemLockMode lockMode) throws InterruptedException;
+  void readLockInterruptibly(RwLockMode lockMode) throws InterruptedException;
 
   /**
    * Release read lock for the operation according to the lock mode.
    * @param lockMode locking mode
    * @param opName operation name
    */
-  void readUnlock(FSNamesystemLockMode lockMode, String opName);
+  void readUnlock(RwLockMode lockMode, String opName);
 
   /**
    * Acquire write lock for an operation according to the lock mode.
    * @param lockMode locking mode
    */
-  void writeLock(FSNamesystemLockMode lockMode, String opName);
+  void writeLock(RwLockMode lockMode, String opName);
 
   /**
    * Release write lock for the operation according to the lock mode.
    * @param lockMode locking mode
    * @param opName operation name
    */
-  void writeUnlock(FSNamesystemLockMode lockMode, String opName);
+  void writeUnlock(RwLockMode lockMode, String opName);
 
   /**
    * Release write lock for the operation according to the lock mode.
@@ -62,24 +63,24 @@ public interface FSNLockManager {
    * @param suppressWriteLockReport When false, event of write lock being held
    * for long time will be logged in logs and metrics.
    */
-  void writeUnlock(FSNamesystemLockMode lockMode, String opName,
+  void writeUnlock(RwLockMode lockMode, String opName,
       boolean suppressWriteLockReport);
 
-  void writeLockInterruptibly(FSNamesystemLockMode lockMode) throws InterruptedException;
+  void writeLockInterruptibly(RwLockMode lockMode) throws InterruptedException;
 
   /**
    * Check if the current thread holds write lock according to the lock mode.
    * @param lockMode locking mode
    * @return true if the current thread is holding the write-lock, else false.
    */
-  boolean hasWriteLock(FSNamesystemLockMode lockMode);
+  boolean hasWriteLock(RwLockMode lockMode);
 
   /**
    * Check if the current thread holds read lock according to the lock mode.
    * @param lockMode locking mode
    * @return true if the current thread is holding the read-lock, else false.
    */
-  boolean hasReadLock(FSNamesystemLockMode lockMode);
+  boolean hasReadLock(RwLockMode lockMode);
 
   /**
    * Queries the number of reentrant read holds on this lock by the
@@ -90,7 +91,7 @@ public interface FSNLockManager {
    * @return the number of holds on the read lock by the current thread,
    *         or zero if the read lock is not held by the current thread
    */
-  int getReadHoldCount(FSNamesystemLockMode lockMode);
+  int getReadHoldCount(RwLockMode lockMode);
 
   /**
    * Returns the QueueLength of waiting threads.
@@ -99,7 +100,7 @@ public interface FSNLockManager {
    * @param lockMode locking mode
    * @return int - Number of threads waiting on this lock
    */
-  int getQueueLength(FSNamesystemLockMode lockMode);
+  int getQueueLength(RwLockMode lockMode);
 
   /**
    * Returns the number of time the read lock
@@ -109,7 +110,7 @@ public interface FSNLockManager {
    * @return long - Number of time the read lock
    * has been held longer than the threshold
    */
-  long getNumOfReadLockLongHold(FSNamesystemLockMode lockMode);
+  long getNumOfReadLockLongHold(RwLockMode lockMode);
 
   /**
    * Returns the number of time the write-lock
@@ -119,7 +120,7 @@ public interface FSNLockManager {
    * @return long - Number of time the write-lock
    * has been held longer than the threshold.
    */
-  long getNumOfWriteLockLongHold(FSNamesystemLockMode lockMode);
+  long getNumOfWriteLockLongHold(RwLockMode lockMode);
 
   /**
    * Check if the metrics is enabled.

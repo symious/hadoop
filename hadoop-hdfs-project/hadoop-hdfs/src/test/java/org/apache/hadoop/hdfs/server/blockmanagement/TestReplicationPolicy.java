@@ -66,8 +66,8 @@ import org.apache.hadoop.hdfs.server.namenode.FSNamesystem;
 import org.apache.hadoop.hdfs.server.namenode.INodeFile;
 import org.apache.hadoop.hdfs.server.namenode.Namesystem;
 import org.apache.hadoop.hdfs.server.namenode.TestINodeFile;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorage;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.log4j.Level;
@@ -1403,12 +1403,12 @@ public class TestReplicationPolicy extends BaseReplicationPolicyTest {
   public void testAddStoredBlockDoesNotCauseSkippedReplication()
       throws IOException {
     FSNamesystem mockNS = mock(FSNamesystem.class);
-    when(mockNS.hasWriteLock(FSNamesystemLockMode.GLOBAL)).thenReturn(true);
-    when(mockNS.hasReadLock(FSNamesystemLockMode.GLOBAL)).thenReturn(true);
-    when(mockNS.hasWriteLock(FSNamesystemLockMode.BM)).thenReturn(true);
-    when(mockNS.hasReadLock(FSNamesystemLockMode.BM)).thenReturn(true);
-    when(mockNS.hasWriteLock(FSNamesystemLockMode.FS)).thenReturn(true);
-    when(mockNS.hasReadLock(FSNamesystemLockMode.FS)).thenReturn(true);
+    when(mockNS.hasWriteLock(RwLockMode.GLOBAL)).thenReturn(true);
+    when(mockNS.hasReadLock(RwLockMode.GLOBAL)).thenReturn(true);
+    when(mockNS.hasWriteLock(RwLockMode.BM)).thenReturn(true);
+    when(mockNS.hasReadLock(RwLockMode.BM)).thenReturn(true);
+    when(mockNS.hasWriteLock(RwLockMode.FS)).thenReturn(true);
+    when(mockNS.hasReadLock(RwLockMode.FS)).thenReturn(true);
     BlockManager bm = new BlockManager(mockNS, false, new HdfsConfiguration());
     LowRedundancyBlocks lowRedundancyBlocks = bm.neededReconstruction;
 
@@ -1457,7 +1457,7 @@ public class TestReplicationPolicy extends BaseReplicationPolicyTest {
       testConvertLastBlockToUnderConstructionDoesNotCauseSkippedReplication()
           throws IOException {
     FSNamesystem mockNS = mock(FSNamesystem.class);
-    when(mockNS.hasWriteLock(FSNamesystemLockMode.BM)).thenReturn(true);
+    when(mockNS.hasWriteLock(RwLockMode.BM)).thenReturn(true);
 
     BlockManager bm = new BlockManager(mockNS, false, new HdfsConfiguration());
     LowRedundancyBlocks lowRedundancyBlocks = bm.neededReconstruction;
@@ -1529,7 +1529,7 @@ public class TestReplicationPolicy extends BaseReplicationPolicyTest {
   public void testupdateNeededReplicationsDoesNotCauseSkippedReplication()
       throws IOException {
     FSNamesystem mockNS = mock(FSNamesystem.class);
-    when(mockNS.hasReadLock(FSNamesystemLockMode.BM)).thenReturn(true);
+    when(mockNS.hasReadLock(RwLockMode.BM)).thenReturn(true);
 
     BlockManager bm = new BlockManager(mockNS, false, new HdfsConfiguration());
     LowRedundancyBlocks lowRedundancyBlocks = bm.neededReconstruction;

@@ -22,7 +22,7 @@ import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.TestBlockStoragePolicy;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.net.Node;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -81,7 +81,7 @@ public class TestReplicationPolicyExcludeSlowNodes
    */
   @Test
   public void testChooseTargetExcludeSlowNodes() throws Exception {
-    namenode.getNamesystem().writeLock(FSNamesystemLockMode.BM, "testChooseTargetExcludeSlowNodes");
+    namenode.getNamesystem().writeLock(RwLockMode.BM, "testChooseTargetExcludeSlowNodes");
     try {
       // add nodes
       for (int i = 0; i < dataNodes.length; i++) {
@@ -125,7 +125,7 @@ public class TestReplicationPolicyExcludeSlowNodes
             .getDatanodeUuid()));
       }
     } finally {
-      namenode.getNamesystem().writeUnlock(FSNamesystemLockMode.BM, "testChooseTargetExcludeSlowNodes");
+      namenode.getNamesystem().writeUnlock(RwLockMode.BM, "testChooseTargetExcludeSlowNodes");
     }
     NameNode.LOG.info("Done working on it");
   }

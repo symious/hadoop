@@ -28,8 +28,8 @@ import static org.apache.hadoop.util.Time.monotonicNow;
 
 import org.apache.hadoop.hdfs.OperationName;
 import org.apache.hadoop.hdfs.net.NetworkTopologyUtil;
-import org.apache.hadoop.hdfs.server.namenode.fgl.FSNamesystemLockMode;
 import org.apache.hadoop.hdfs.server.namenode.handler.DatanodeManagerRefreshHandler;
+import org.apache.hadoop.hdfs.util.RwLockMode;
 import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.ipc.RefreshRegistry;
 import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
@@ -1075,7 +1075,7 @@ public class DatanodeManager {
    */
   private void removeDatanode(DatanodeDescriptor nodeInfo,
       boolean removeBlocksFromBlocksMap) {
-    assert namesystem.hasWriteLock(FSNamesystemLockMode.BM);
+    assert namesystem.hasWriteLock(RwLockMode.BM);
     heartbeatManager.removeDatanode(nodeInfo);
     if (removeBlocksFromBlocksMap) {
       blockManager.removeBlocksAssociatedTo(nodeInfo);
@@ -1096,7 +1096,7 @@ public class DatanodeManager {
    */
   public boolean removeDatanode(final DatanodeID node)
       throws UnregisteredNodeException {
-    namesystem.writeLock(FSNamesystemLockMode.BM, OperationName.REMOVE_DATANODE);
+    namesystem.writeLock(RwLockMode.BM, OperationName.REMOVE_DATANODE);
     try {
       final DatanodeDescriptor descriptor = getDatanode(node);
       if (descriptor != null) {
@@ -1109,7 +1109,7 @@ public class DatanodeManager {
       }
       return false;
     } finally {
-      namesystem.writeUnlock(FSNamesystemLockMode.BM, OperationName.REMOVE_DATANODE);
+      namesystem.writeUnlock(RwLockMode.BM, OperationName.REMOVE_DATANODE);
     }
   }
 
@@ -1586,7 +1586,7 @@ public class DatanodeManager {
             break;
           }
           if (!oldNetWorkLocation.equals(newNetWorkLocation)) {
-            namesystem.writeLock(FSNamesystemLockMode.BM, "refreshTopology");
+            namesystem.writeLock(RwLockMode.BM, "refreshTopology");
             try {
               // This datanode's network location changes.
               // 1. Remove the old network location in NetworkTopology.
@@ -1596,7 +1596,7 @@ public class DatanodeManager {
               datanode.setNetworkLocation(newNetWorkLocation);
               networktopology.add(datanode);
             } finally {
-              namesystem.writeUnlock(FSNamesystemLockMode.BM, "refreshTopology");
+              namesystem.writeUnlock(RwLockMode.BM, "refreshTopology");
             }
           }
           break;
@@ -1624,7 +1624,7 @@ public class DatanodeManager {
     dnsToSwitchMapping.resolve(refreshIpList);
     dnsToSwitchMappingForMetric.resolve(refreshIpList);
     // processExtraRedundancyBlocksOnInService involves FS in stopMaintenance and stopDecommission.
-    namesystem.writeLock(FSNamesystemLockMode.GLOBAL, OperationName.REFRESH_NODES);
+    namesystem.writeLock(RwLockMode.GLOBAL, OperationName.REFRESH_NODES);
     try {
       // Refresh DN topology info
       LOG.info("Refresh datanode admin monitor as well!");
@@ -1632,7 +1632,7 @@ public class DatanodeManager {
       refreshDatanodes();
       countSoftwareVersions();
     } finally {
-      namesystem.writeUnlock(FSNamesystemLockMode.GLOBAL, OperationName.REFRESH_NODES);
+      namesystem.writeUnlock(RwLockMode.GLOBAL, OperationName.REFRESH_NODES);
     }
   }
 
