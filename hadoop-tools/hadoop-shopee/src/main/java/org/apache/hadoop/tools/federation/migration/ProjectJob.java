@@ -203,15 +203,13 @@ public class ProjectJob {
   public void execute() throws Exception {
     if (stopThreshold != 0) {
       int cycle = 1;
-      LOG.info("Starting cold cycle {}", cycle);
       // Ensure at least 1 cold cycle before checking for stop condition
-      coldCycle();
+      coldCycle(cycle);
       while (!shouldStop()) {
         // Rate limit cycles
         Thread.sleep(60000);
         cycle++;
-        LOG.info("Starting cold cycle {}", cycle);
-        coldCycle();
+        coldCycle(cycle);
       }
       srcFs.create(coldContextDoneFilePath).close();
       return;
@@ -244,9 +242,10 @@ public class ProjectJob {
     return content.getFileAndDirectoryCount() <= stopThreshold;
   }
 
-  private void coldCycle() throws Exception {
+  private void coldCycle(int coldCycle) throws Exception {
+    LOG.info("Starting cold cycle {}", coldCycle);
     startAnalyzeJobIfNecessary();
-    startBatchJob();
+    startBatchJob(coldCycle);
     cleanPathsFiles();
   }
 
@@ -291,37 +290,43 @@ public class ProjectJob {
   /**
    * Reads the input + output files, start batch jobs. Skip if already in hot phase.
    */
-  private void startBatchJob() throws Exception {
+  private void startBatchJob(int coldCycle) throws Exception {
     if (srcFs.exists(hotContextFilePath)) {
       LOG.info("Hot context file detected, either resume the hot migration or "
           + "make sure it's finished and delete the context file then retry cold migration.");
       System.exit(0);
     }
     srcFs.create(coldContextFilePath, true).close();
-    LinkedHashMap<Path, Pair<Integer, Long>> allPaths =
-        MigrationUtils.loadPathsWithCountFromDfs(srcFs, inputPathsFilePath);
-    Set<Path> donePaths = MigrationUtils.loadPathsFromDfs(srcFs, path, donePathsFilePath);
-    for (Path donePath : donePaths) {
-      allPaths.remove(donePath);
-    }
-    if (allPaths.isEmpty()) {
-      LOG.info("There's nothing to migrate.");
-      emptyColdCycle++;
-      srcFs.delete(coldContextFilePath);
-      return;
-    }
-    Set<String> corruptFiles = new HashSet<>();
-    if (ignoreCorrupt) {
-      RemoteIterator<Path> corruptFilesIte = srcFs.listCorruptFileBlocks(path);
-      while (corruptFilesIte.hasNext()) {
-        corruptFiles.add(corruptFilesIte.next().toUri().getPath());
+
+    for (int subColdCycle = 1; subColdCycle <= 3; subColdCycle++) {
+      LinkedHashMap<Path, Pair<Integer, Long>> allPaths =
+          MigrationUtils.loadPathsWithCountFromDfs(srcFs, inputPathsFilePath);
+      Set<Path> donePaths = MigrationUtils.loadPathsFromDfs(srcFs, path, donePathsFilePath);
+      for (Path donePath : donePaths) {
+        allPaths.remove(donePath);
       }
+      if (allPaths.isEmpty()) {
+        LOG.info("There's nothing to migrate.");
+        emptyColdCycle++;
+        srcFs.delete(coldContextFilePath);
+        return;
+      }
+      Set<String> corruptFiles = new HashSet<>();
+      if (ignoreCorrupt) {
+        RemoteIterator<Path> corruptFilesIte = srcFs.listCorruptFileBlocks(path);
+        while (corruptFilesIte.hasNext()) {
+          corruptFiles.add(corruptFilesIte.next().toUri().getPath());
+        }
+      }
+      // Reset emptyColdCycle if some data to migration is found
+      emptyColdCycle = 0;
+      LOG.info("Starting sub cold cycle {}-{} with {} paths", coldCycle, subColdCycle,
+          allPaths.size());
+      MigrationJob.runBatchJob(conf, String.valueOf(workerThreads), allPaths, srcNs, dstNs,
+          routerAddr, false, ignorePathsFilePath, donePathsFilePath, false, fileLimit, sizeLimit,
+          corruptFiles);
+      // Do not quit immediately, check again if there was any failed path, retry with next sub cold cycle if there was.
     }
-    // Reset emptyColdCycle if some data to migration is found
-    emptyColdCycle = 0;
-    MigrationJob.runBatchJob(conf, String.valueOf(workerThreads), allPaths, srcNs, dstNs,
-        routerAddr, false, ignorePathsFilePath, donePathsFilePath, false, fileLimit, sizeLimit,
-        corruptFiles);
     srcFs.delete(coldContextFilePath);
   }
 

@@ -703,6 +703,9 @@ public class MigrationJob {
     if (context.localDistcp) {
       config.set("mapreduce.framework.name", "local");
       config.set("mapreduce.cluster.local.dir", "/tmp/local_distcp");
+      config.set("mapreduce.map.speculative", "false");
+      config.set("mapreduce.reduce.speculative", "false");
+      config.set("yarn.app.mapreduce.am.staging-dir", "hdfs://tl0/user/mapred/staging");
     }
     if (context.jobID.isEmpty()) {
       DistCp distCp = new DistCp(config, OptionsParser.parse(args));
