@@ -72,6 +72,7 @@ public class IPUsersBlacklist {
   private MD5Hash lastMd5Hash = null;
   private String blacklistFile;
   private long refreshInterval;
+  private volatile boolean isStopped = false;
 
   private final ScheduledExecutorService scheduledExecutor =
       HadoopExecutors.newSingleThreadScheduledExecutor(
@@ -99,13 +100,20 @@ public class IPUsersBlacklist {
             "and blacklistFile: {}.", refreshInterval, blacklistFile);
   }
 
-  public static synchronized IPUsersBlacklist getIPUsersBlacklistService(
-      Configuration conf) {
+  public static synchronized IPUsersBlacklist getIPUsersBlacklistService(Configuration conf) {
     if (ipUsersBlacklist == null) {
       LOG.info("Create new IPUsersBlacklist object");
       ipUsersBlacklist = new IPUsersBlacklist(conf);
     }
     return ipUsersBlacklist;
+  }
+
+  public static synchronized void shutdown() {
+    if (ipUsersBlacklist != null) {
+      ipUsersBlacklist.stop();
+      ipUsersBlacklist = null;
+      LOG.info("Clear IPUsersBlacklist object");
+    }
   }
 
   // Metrics
@@ -131,9 +139,36 @@ public class IPUsersBlacklist {
     }
   }
 
+  /**
+   * Stops the refresh service.
+   */
+  private synchronized void stop() {
+    if (!isStopped) {
+      isStopped = true;
+      if (refreshTask != null) {
+        refreshTask.cancel(true);
+      }
+      scheduledExecutor.shutdown();
+      try {
+        if (!scheduledExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+          scheduledExecutor.shutdownNow();
+        }
+      } catch (InterruptedException e) {
+        LOG.warn("Interrupted while shutting down scheduledExecutor.", e);
+        scheduledExecutor.shutdownNow();
+        Thread.currentThread().interrupt();
+      }
+      LOG.info("Stopped IPUsersBlacklist refresh service.");
+    }
+  }
+
   class IPUsersRefreshService implements Runnable {
     @Override
     public void run() {
+      if (isStopped) {
+        LOG.warn("IPUsersRefreshService is stopped.");
+        return;
+      }
       refreshFile();
     }
 

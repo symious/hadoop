@@ -31,6 +31,7 @@ import org.junit.Test;
 import org.junit.Before;
 import org.junit.After;
 
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_THRESHOLD_MS_KEY;
@@ -1177,5 +1178,33 @@ public class TestNameNodeReconfigure {
     nameNode.reconfigureProperty(DFS_NAMENODE_REDUNDANCY_MONITOR_EXIT_ON_EXCEPTION_ENABLED,
         Boolean.toString(false));
     assertFalse(bm.isRedundancyMonitorExitOnException());
+  }
+
+  @Test
+  public void testReconfigureUserIpBlacklist() throws ReconfigurationException {
+    final NameNode nameNode = cluster.getNameNode(0);
+    final NameNodeRpcServer nnrs = (NameNodeRpcServer) nameNode.getRpcServer();
+    // verify default value.
+    assertFalse(nnrs.getClientRpcServer().isUserIpBlacklistEnabled());
+    assertNull(nnrs.getClientRpcServer().getIpUsersBlacklist());
+    // try invalid value.
+    try {
+      nameNode.reconfigurePropertyImpl(HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_KEY, "non-boolean");
+      fail("should not reach here");
+    } catch (ReconfigurationException e) {
+      assertEquals(
+          "Could not change property hadoop.security.rpc.blacklist.enabled from 'false' " +
+              "to 'non-boolean'", e.getMessage());
+    }
+
+    // try correct value.
+    nameNode.reconfigurePropertyImpl(HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_KEY, "True");
+    assertTrue(nnrs.getClientRpcServer().isUserIpBlacklistEnabled());
+    assertNotNull(nnrs.getClientRpcServer().getIpUsersBlacklist());
+
+    // revert to defaults.
+    nameNode.reconfigurePropertyImpl(HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_KEY, null);
+    assertFalse(nnrs.getClientRpcServer().isUserIpBlacklistEnabled());
+    assertNull(nnrs.getClientRpcServer().getIpUsersBlacklist());
   }
 }

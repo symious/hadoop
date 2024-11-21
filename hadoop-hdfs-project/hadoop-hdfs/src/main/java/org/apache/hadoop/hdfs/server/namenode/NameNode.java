@@ -133,6 +133,8 @@ import static org.apache.hadoop.fs.CommonConfigurationKeys.IPC_SERVER_RPC_CATEGO
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.FS_TRASH_INTERVAL_KEY;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_UNIFIED_AUTH_CLIENT_KEY;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC;
 import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_DEFAULT;
@@ -507,7 +509,8 @@ public class NameNode extends ReconfigurableBase implements
           DFS_NAMENODE_DR_REPLICATION_RULE_COLD_DATA_KEY,
           DFS_BLOCK_IGNORE_MISS_REPLICA_KEY,
           DFS_NAMENODE_REDUNDANCY_MONITOR_EXIT_ON_EXCEPTION_ENABLED,
-          HADOOP_SECURITY_UNIFIED_AUTH_CLIENT_KEY));
+          HADOOP_SECURITY_UNIFIED_AUTH_CLIENT_KEY,
+          HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_KEY));
 
   private static final String USAGE = "Usage: hdfs namenode ["
       + StartupOption.BACKUP.getName() + "] | \n\t["
@@ -2624,6 +2627,8 @@ public class NameNode extends ReconfigurableBase implements
       return reconfigureRedundancyMonitorExitOnException(newVal);
     } else if (property.equals(HADOOP_SECURITY_UNIFIED_AUTH_CLIENT_KEY)) {
       return reconfigureTokenAuthClient(newVal);
+    } else if (property.equals(HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_KEY)) {
+      return reconfigureUserIpBlacklist(newVal);
     } else {
       throw new ReconfigurationException(property, newVal, getConf().get(
           property));
@@ -3333,6 +3338,31 @@ public class NameNode extends ReconfigurableBase implements
       return result;
     } catch (IllegalArgumentException e) {
       throw new ReconfigurationException(property, newVal, getConf().get(property), e);
+    }
+  }
+
+  String reconfigureUserIpBlacklist(String newVal) throws ReconfigurationException {
+    String result;
+    try {
+      if (newVal != null && !newVal.equalsIgnoreCase("true") &&
+          !newVal.equalsIgnoreCase("false")) {
+        throw new IllegalArgumentException(newVal + " is not boolean value");
+      }
+      boolean enable = (newVal == null ? HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_DEFAULT :
+          Boolean.parseBoolean(newVal));
+      rpcServer.getClientRpcServer().setUserIpBlacklistEnabled(enable);
+      if (rpcServer.getServiceRpcServer() != null) {
+        rpcServer.getServiceRpcServer().setUserIpBlacklistEnabled(enable);
+      }
+      if (rpcServer.getLifelineRpcServer() != null) {
+        rpcServer.getLifelineRpcServer().setUserIpBlacklistEnabled(enable);
+      }
+      result = Boolean.toString(enable);
+      LOG.info("RECONFIGURE* changed reconfigureUserIpBlacklist to {}", result);
+      return result;
+    } catch (IllegalArgumentException e) {
+      throw new ReconfigurationException(HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_KEY, newVal,
+          getConf().get(HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_KEY), e);
     }
   }
 

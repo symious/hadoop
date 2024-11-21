@@ -584,8 +584,8 @@ public abstract class Server {
   private boolean monitorCpuUsage = false;
   private int samplesPerMin;
 
-  private boolean userIpBlacklistEnabled;
-  private IPUsersBlacklist ipUsersBlacklist = null;
+  private volatile boolean userIpBlacklistEnabled;
+  private volatile IPUsersBlacklist ipUsersBlacklist = null;
 
   /**
    * Checks if LogSlowRPC is set true.
@@ -614,12 +614,26 @@ public abstract class Server {
         convert(logSlowRPCThresholdMs, TimeUnit.MILLISECONDS);
   }
 
-  public void setUserIpBlacklistEnabled(boolean userIpBlacklistEnabled) {
-    this.userIpBlacklistEnabled = userIpBlacklistEnabled;
+  public synchronized void setUserIpBlacklistEnabled(boolean enableUserIpBlacklist) {
+    this.userIpBlacklistEnabled = enableUserIpBlacklist;
+    if (this.userIpBlacklistEnabled) {
+      this.ipUsersBlacklist = IPUsersBlacklist.getIPUsersBlacklistService(conf);
+    } else {
+      if (this.ipUsersBlacklist != null) {
+        this.ipUsersBlacklist = null;
+        IPUsersBlacklist.shutdown();
+      }
+    }
   }
 
+  @VisibleForTesting
   public boolean isUserIpBlacklistEnabled() {
     return userIpBlacklistEnabled;
+  }
+
+  @VisibleForTesting
+  public IPUsersBlacklist getIpUsersBlacklist() {
+    return ipUsersBlacklist;
   }
 
   /**
@@ -2819,8 +2833,13 @@ public abstract class Server {
         }
       }
 
-      if (userIpBlacklistEnabled && ipUsersBlacklist != null) {
-        checkBlacklist();
+      if (userIpBlacklistEnabled) {
+        IPUsersBlacklist localBlacklist = ipUsersBlacklist;
+        if (localBlacklist != null) {
+          checkBlacklist(localBlacklist);
+        } else {
+          LOG.warn("IPUsersBlacklist object as null will skip blacklist check.");
+        }
       }
 
       if (authProtocol == AuthProtocol.NONE && isRpcPasswordAuthenticate() && !ignoreSDIAuthenticate) {
@@ -2834,7 +2853,7 @@ public abstract class Server {
       }
     }
 
-    private void checkBlacklist() throws FatalRpcServerException {
+    private void checkBlacklist(IPUsersBlacklist ipUsersBlacklist) throws FatalRpcServerException {
       try {
         String userName = (user != null && user.getRealUser() != null) ?
             user.getRealUser().getUserName() :
@@ -3562,7 +3581,6 @@ public abstract class Server {
     this.rpcRequestClass = rpcRequestClass; 
     this.handlerCount = handlerCount;
     this.areDeepHandlersEnabled = areDeepHandlersEnabled;
-    this.userIpBlacklistEnabled = userIpBlacklistEnabled;
     this.socketSendBufferSize = 0;
     this.serverName = serverName;
     this.auxiliaryListenerMap = null;
@@ -3646,12 +3664,11 @@ public abstract class Server {
         .recordStats()
         .build();
 
-    if (!userIpBlacklistEnabled) {
-      this.userIpBlacklistEnabled = conf.getBoolean(
-          CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_KEY,
-          CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_DEFAULT);
-    }
-    if (userIpBlacklistEnabled) {
+    boolean configBlacklistEnabled = conf.getBoolean(
+        CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_KEY,
+        CommonConfigurationKeysPublic.HADOOP_SECURITY_RPC_BLACKLIST_ENABLED_DEFAULT);
+    this.userIpBlacklistEnabled = userIpBlacklistEnabled || configBlacklistEnabled;
+    if (this.userIpBlacklistEnabled) {
       this.ipUsersBlacklist = IPUsersBlacklist.getIPUsersBlacklistService(conf);
     }
 
