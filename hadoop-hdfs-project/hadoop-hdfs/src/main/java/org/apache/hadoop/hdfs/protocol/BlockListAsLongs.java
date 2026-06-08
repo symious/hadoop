@@ -253,6 +253,15 @@ public abstract class BlockListAsLongs implements Iterable<BlockReportReplica> {
    */
   abstract public long[] getBlockListAsLongs();
 
+  public long[] getReportedBlockIds() {
+    long[] ids = new long[getNumberOfBlocks()];
+    int i = 0;
+    for (BlockReportReplica blk : this) {
+      ids[i++] = blk.getBlockId();
+    }
+    return ids;
+  }
+
   /**
    * Returns a singleton iterator over blocks in the block report.  Do not
    * add the returned blocks to a collection.

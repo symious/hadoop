@@ -3355,49 +3355,47 @@ public class BlockManager implements BlockStatsMXBean {
       Collection<StatefulBlockInfo> toUC) { // add to under-construction list
 
     long t0 = Time.monotonicNow();
-
-    // place a delimiter in the list which separates blocks
-    // that have been reported from those that have not
     DatanodeDescriptor dn = storageInfo.getDatanodeDescriptor();
-    Block delimiterBlock = new Block();
-    BlockInfo delimiter = new BlockInfoContiguous(delimiterBlock,
-        (short) 1);
-    AddBlockResult result = storageInfo.addBlock(delimiter, delimiterBlock);
-    assert result == AddBlockResult.ADDED
-        : "Delimiting block cannot be present in the node";
-    int headIndex = 0; //currently the delimiter is in the head of the list
-    int curIndex;
 
     if (newReport == null) {
       newReport = BlockListAsLongs.EMPTY;
     }
-    // scan the report and process newly reported blocks
+
+    // Collect existing block IDs as a sorted primitive array (one pass, no barriers).
+    long[] existingIds = storageInfo.getBlockIds();
+    Arrays.sort(existingIds);
+
+    // Collect reported block IDs as a sorted primitive array.
+    long[] reportedIds = newReport.getReportedBlockIds();
+    Arrays.sort(reportedIds);
+
+    // Process each reported block (state classification, toAdd/toInvalidate/etc).
     for (BlockReportReplica iblk : newReport) {
       ReplicaState iState = iblk.getState();
       removeQueuedBlock(storageInfo, iblk);
       LOG.debug("Reported block {} on {} size {} replicaState = {}", iblk, dn,
           iblk.getNumBytes(), iState);
-      BlockInfo storedBlock = processReportedBlock(storageInfo,
-          iblk, iState, toAdd, toInvalidate, toCorrupt, toUC);
+      processReportedBlock(storageInfo, iblk, iState, toAdd, toInvalidate,
+          toCorrupt, toUC);
+    }
 
-      // move block to the head of the list
-      if (storedBlock != null) {
-        curIndex = storedBlock.findStorageInfo(storageInfo);
-        if (curIndex >= 0) {
-          headIndex =
-              storageInfo.moveBlockToHead(storedBlock, curIndex, headIndex);
+    // Set difference via merge: existingIds \ reportedIds → toRemove.
+    // All primitive comparisons, zero load/store barriers.
+    int i = 0, j = 0;
+    while (i < existingIds.length) {
+      if (j >= reportedIds.length || existingIds[i] < reportedIds[j]) {
+        BlockInfo bi = blocksMap.getStoredBlock(existingIds[i]);
+        if (bi != null) {
+          toRemove.add(bi);
         }
+        i++;
+      } else if (existingIds[i] == reportedIds[j]) {
+        i++;
+        j++;
+      } else {
+        j++;
       }
     }
-
-    // collect blocks that have not been reported
-    // all of them are next to the delimiter
-    Iterator<BlockInfo> it =
-        storageInfo.new BlockIterator(delimiter.getNext(0));
-    while (it.hasNext()) {
-      toRemove.add(it.next());
-    }
-    storageInfo.removeBlock(delimiter);
     long elapsed = Time.monotonicNow() - t0;
     LOG.info("reportDiff storage={} blocks={} elapsed={}ms",
         storageInfo.getStorageID(),

@@ -146,6 +146,10 @@ class BlocksMap {
     return blocks.get(b);
   }
 
+  BlockInfo getStoredBlock(long blockId) {
+    return blocks.get(new Block(blockId));
+  }
+
   /**
    * Searches for the block in the BlocksMap and 
    * returns {@link Iterable} of the storages the block belongs to.

@@ -299,6 +299,18 @@ public class DatanodeStorageInfo {
     return numBlocks;
   }
 
+  long[] getBlockIds() {
+    long[] ids = new long[numBlocks];
+    int i = 0;
+    BlockInfo cur = blockList;
+    while (cur != null) {
+      ids[i++] = cur.getBlockId();
+      int dnIndex = cur.findStorageInfo(this);
+      cur = (dnIndex >= 0) ? cur.getNext(dnIndex) : null;
+    }
+    return ids;
+  }
+
   Iterator<BlockInfo> getBlockIterator() {
     return new BlockIterator(blockList);
   }
