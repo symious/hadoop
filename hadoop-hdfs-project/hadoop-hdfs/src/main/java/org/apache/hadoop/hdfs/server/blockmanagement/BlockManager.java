@@ -3354,6 +3354,8 @@ public class BlockManager implements BlockStatsMXBean {
       Collection<BlockToMarkCorrupt> toCorrupt, // add to corrupt replicas list
       Collection<StatefulBlockInfo> toUC) { // add to under-construction list
 
+    long t0 = Time.monotonicNow();
+
     // place a delimiter in the list which separates blocks
     // that have been reported from those that have not
     DatanodeDescriptor dn = storageInfo.getDatanodeDescriptor();
@@ -3396,6 +3398,11 @@ public class BlockManager implements BlockStatsMXBean {
       toRemove.add(it.next());
     }
     storageInfo.removeBlock(delimiter);
+    long elapsed = Time.monotonicNow() - t0;
+    LOG.info("reportDiff storage={} blocks={} elapsed={}ms",
+        storageInfo.getStorageID(),
+        storageInfo.numBlocks(),
+        elapsed);
   }
 
   /**
